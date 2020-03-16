@@ -457,6 +457,21 @@ int DMGCPU::executeInstruction()
         return 8;
     };
 
+    const auto call = [this](int flag = 0, bool set = true)
+    {
+        auto addr = readMem16(pc);
+        pc += 2;
+
+        if(flag == 0 || !!(reg(Reg::F) & flag) == set)
+        {
+            sp -= 2;
+            writeMem16(sp, pc);
+            pc = addr;
+        }
+
+        return 12;
+    };
+
     auto opcode = readMem(pc++);
 
     switch(opcode)
@@ -988,6 +1003,9 @@ int DMGCPU::executeInstruction()
         case 0xC3: // JP nn
             return jump();
 
+        case 0xC4: // CALL NZ,nn
+            return call(Flag_Z, false);
+
         case 0xC5: // PUSH BC
             return push(WReg::BC);
 
@@ -1007,12 +1025,7 @@ int DMGCPU::executeInstruction()
             return executeExInstruction();
 
         case 0xCD: // CALL nn
-        {
-            sp -= 2;
-            writeMem16(sp, pc + 2);
-            pc = readMem16(pc);
-            return 12;
-        }
+            return call();
 
         case 0xD0: // RET NC
             return ret(Flag_C, false);
