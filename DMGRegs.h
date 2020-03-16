@@ -3,6 +3,8 @@
 
 enum IOReg
 {
+    IO_JOYP = 0x00,
+
     IO_LCDC = 0x40,
     IO_STAT,
     IO_SCY,
@@ -18,6 +20,22 @@ enum IOReg
 
     IO_IF = 0x0F, // interrupt flag
     IO_IE = 0xFF // interrupt enable
+};
+
+enum JOYPBits
+{
+    JOYP_Right         = 1 << 0,
+    JOYP_Left          = 1 << 1,
+    JOYP_Up            = 1 << 2,
+    JOYP_Down          = 1 << 3,
+
+    JOYP_A             = 1 << 0,
+    JOYP_B             = 1 << 1,
+    JOYP_Select        = 1 << 2,
+    JOYP_Start         = 1 << 3,
+
+    JOYP_SelectDir     = 1 << 4,
+    JOYP_SelectButtons = 1 << 5
 };
 
 enum LCDCBits

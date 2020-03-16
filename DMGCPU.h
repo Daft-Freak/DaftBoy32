@@ -24,6 +24,8 @@ public:
 
     void flagInterrupt(int interrupt);
 
+    void setInputs(uint8_t inputs);
+
     uint8_t readMem(uint16_t addr) const;
     void writeMem(uint16_t addr, uint8_t data);
 
@@ -89,4 +91,7 @@ private:
 
     // callbacks
     CycleCallback cycleCallback;
+
+    // raw input data
+    uint8_t rawInputs = 0;
 };

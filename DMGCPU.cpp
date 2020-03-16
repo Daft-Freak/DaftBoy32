@@ -103,6 +103,14 @@ void DMGCPU::flagInterrupt(int interrupt)
     iohram[IO_IF] |= interrupt;
 }
 
+void DMGCPU::setInputs(uint8_t inputs)
+{
+    if(rawInputs == 0 && inputs != 0)
+        flagInterrupt(Int_Joypad);
+
+    rawInputs = inputs;
+}
+
 uint8_t DMGCPU::readMem(uint16_t addr) const
 {
     if(addr < 0x8000)
@@ -132,8 +140,16 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
         if((addr & 0xFF) == IO_STAT)
             printf("r STAT @~%x\n", pc);
 
+        // input
         if(addr == 0xFF00)
-            return iohram[addr & 0xFF] | 0xF; // input
+        {
+            int ret = iohram[addr & 0xFF] & 0xF0;
+            if(!(iohram[IO_JOYP] & JOYP_SelectDir))
+                ret |= (~rawInputs) & 0xF;
+            if(!(iohram[IO_JOYP] & JOYP_SelectButtons))
+                ret |= (~rawInputs) >> 4;
+            return ret;
+        }
 
         return iohram[addr & 0xFF];
     }

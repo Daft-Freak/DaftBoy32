@@ -176,6 +176,13 @@ void update(uint32_t time_ms)
     bool turbo = false;
     auto start = blit::now();
 
+    // translate inputs
+    uint8_t inputs = (blit::buttons & 0x7C) | // UP/DOWN/A/B match, select -> X
+                     ((blit::buttons & blit::Button::DPAD_RIGHT) >> 1) |
+                     ((blit::buttons & blit::Button::DPAD_LEFT) << 1) |
+                     ((blit::buttons & blit::Button::HOME) >> 2); // start -> home
+    cpu.setInputs(inputs);
+
     cpu.run(10);
 
     // SPEEEEEEEED
