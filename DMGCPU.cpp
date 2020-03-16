@@ -908,10 +908,21 @@ int DMGCPU::executeInstruction()
 
         case 0x90: // SUB B
             return sub(Reg::B);
-
-        case 0x96: // SUB A (HL)
+        case 0x91: // SUB C
+            return sub(Reg::C);
+        case 0x92: // SUB D
+            return sub(Reg::D);
+        case 0x93: // SUB E
+            return sub(Reg::E);
+        case 0x94: // SUB H
+            return sub(Reg::H);
+        case 0x95: // SUB L
+            return sub(Reg::L);
+        case 0x96: // SUB (HL)
             doSub(reg(Reg::A), readMem(reg(WReg::HL)));
             return 8;
+        case 0x97: // SUB A
+            return sub(Reg::A);
 
         case 0xA0: // AND B
             return bitAnd(Reg::B);
