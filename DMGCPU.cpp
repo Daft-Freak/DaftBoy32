@@ -1122,6 +1122,18 @@ int DMGCPU::executeExInstruction()
         return 12;
     };
 
+    const auto set = [this](Reg r, int bit)
+    {
+        reg(r) |= (1 << bit);
+        return 8;
+    };
+
+    const auto setHL = [this](int bit)
+    {
+        writeMem(reg(WReg::HL), readMem(reg(WReg::HL) | (1 << bit)));
+        return 12;
+    };
+
     const auto reset = [this](Reg r, int bit)
     {
         reg(r) &= ~(1 << bit);
@@ -1198,7 +1210,8 @@ int DMGCPU::executeExInstruction()
             return testBit(Reg::H, 0);
         case 0x45: // BIT 0,L
             return testBit(Reg::L, 0);
-
+        case 0x46: // BIT 0,(HL)
+            return testBitHL(0);
         case 0x47: // BIT 0,A
             return testBit(Reg::A, 0);
         case 0x48: // BIT 1,B
@@ -1213,7 +1226,8 @@ int DMGCPU::executeExInstruction()
             return testBit(Reg::H, 1);
         case 0x4D: // BIT 1,L
             return testBit(Reg::L, 1);
-
+        case 0x4E: // BIT 1,(HL)
+            return testBitHL(1);
         case 0x4F: // BIT 1,A
             return testBit(Reg::A, 1);
         case 0x50: // BIT 2,B
@@ -1228,7 +1242,8 @@ int DMGCPU::executeExInstruction()
             return testBit(Reg::H, 2);
         case 0x55: // BIT 2,L
             return testBit(Reg::L, 2);
-
+        case 0x56: // BIT 2,(HL)
+            return testBitHL(2);
         case 0x57: // BIT 2,A
             return testBit(Reg::A, 2);
         case 0x58: // BIT 3,B
@@ -1243,7 +1258,8 @@ int DMGCPU::executeExInstruction()
             return testBit(Reg::H, 3);
         case 0x5D: // BIT 3,L
             return testBit(Reg::L, 3);
-
+        case 0x5E: // BIT 3,(HL)
+            return testBitHL(3);
         case 0x5F: // BIT 3,A
             return testBit(Reg::A, 3);
         case 0x60: // BIT 4,B
@@ -1258,7 +1274,8 @@ int DMGCPU::executeExInstruction()
             return testBit(Reg::H, 4);
         case 0x65: // BIT 4,L
             return testBit(Reg::L, 4);
-
+        case 0x66: // BIT 4,(HL)
+            return testBitHL(4);
         case 0x67: // BIT 4,A
             return testBit(Reg::A, 4);
         case 0x68: // BIT 5,B
@@ -1273,7 +1290,8 @@ int DMGCPU::executeExInstruction()
             return testBit(Reg::H, 5);
         case 0x6D: // BIT 5,L
             return testBit(Reg::L, 5);
-
+        case 0x6E: // BIT 5,(HL)
+            return testBitHL(5);
         case 0x6F: // BIT 5,A
             return testBit(Reg::A, 5);
         case 0x70: // BIT 6,B
@@ -1288,7 +1306,8 @@ int DMGCPU::executeExInstruction()
             return testBit(Reg::H, 6);
         case 0x75: // BIT 6,L
             return testBit(Reg::L, 6);
-
+        case 0x76: // BIT 6,(HL)
+            return testBitHL(6);
         case 0x77: // BIT 6,A
             return testBit(Reg::A, 6);
         case 0x78: // BIT 7,B
@@ -1336,7 +1355,8 @@ int DMGCPU::executeExInstruction()
             return reset(Reg::H, 1);
         case 0x8D: // RES 1,L
             return reset(Reg::L, 1);
-
+        case 0x8E: // RES 1,(HL)
+            return resetHL(1);
         case 0x8F: // RES 1,A
             return reset(Reg::A, 1);
         case 0x90: // RES 2,B
@@ -1351,7 +1371,8 @@ int DMGCPU::executeExInstruction()
             return reset(Reg::H, 2);
         case 0x95: // RES 2,L
             return reset(Reg::L, 2);
-
+        case 0x96: // RES 2,(HL)
+            return resetHL(2);
         case 0x97: // RES 2,A
             return reset(Reg::A, 2);
         case 0x98: // RES 3,B
@@ -1366,7 +1387,8 @@ int DMGCPU::executeExInstruction()
             return reset(Reg::H, 3);
         case 0x9D: // RES 3,L
             return reset(Reg::L, 3);
-
+        case 0x9E: // RES 3,(HL)
+            return resetHL(3);
         case 0x9F: // RES 3,A
             return reset(Reg::A, 3);
         case 0xA0: // RES 4,B
@@ -1381,7 +1403,8 @@ int DMGCPU::executeExInstruction()
             return reset(Reg::H, 4);
         case 0xA5: // RES 4,L
             return reset(Reg::L, 4);
-
+        case 0xA6: // RES 4,(HL)
+            return resetHL(4);
         case 0xA7: // RES 4,A
             return reset(Reg::A, 4);
         case 0xA8: // RES 5,B
@@ -1396,7 +1419,8 @@ int DMGCPU::executeExInstruction()
             return reset(Reg::H, 5);
         case 0xAD: // RES 5,L
             return reset(Reg::L, 5);
-
+        case 0xAE: // RES 5,(HL)
+            return resetHL(5);
         case 0xAF: // RES 5,A
             return reset(Reg::A, 5);
         case 0xB0: // RES 6,B
@@ -1411,7 +1435,8 @@ int DMGCPU::executeExInstruction()
             return reset(Reg::H, 6);
         case 0xB5: // RES 6,L
             return reset(Reg::L, 6);
-
+        case 0xB6: // RES 6,(HL)
+            return resetHL(6);
         case 0xB7: // RES 6,A
             return reset(Reg::A, 6);
         case 0xB8: // RES 7,B
@@ -1426,9 +1451,139 @@ int DMGCPU::executeExInstruction()
             return reset(Reg::H, 7);
         case 0xBD: // RES 7,L
             return reset(Reg::L, 7);
-
+        case 0xBE: // RES 7,(HL)
+            return resetHL(7);
         case 0xBF: // RES 7,A
             return reset(Reg::A, 7);
+
+        case 0xC0: // SET 0,B
+            return set(Reg::B, 0);
+        case 0xC1: // SET 0,C
+            return set(Reg::C, 0);
+        case 0xC2: // SET 0,D
+            return set(Reg::D, 0);
+        case 0xC3: // SET 0,E
+            return set(Reg::E, 0);
+        case 0xC4: // SET 0,H
+            return set(Reg::H, 0);
+        case 0xC5: // SET 0,L
+            return set(Reg::L, 0);
+        case 0xC6: // SET 0,(HL)
+            return setHL(0);
+        case 0xC7: // SET 0,A
+            return set(Reg::A, 0);
+        case 0xC8: // SET 1,B
+            return set(Reg::B, 1);
+        case 0xC9: // SET 1,C
+            return set(Reg::C, 1);
+        case 0xCA: // SET 1,D
+            return set(Reg::D, 1);
+        case 0xCB: // SET 1,E
+            return set(Reg::E, 1);
+        case 0xCC: // SET 1,H
+            return set(Reg::H, 1);
+        case 0xCD: // SET 1,L
+            return set(Reg::L, 1);
+        case 0xCE: // SET 1,(HL)
+            return setHL(1);
+        case 0xCF: // SET 1,A
+            return set(Reg::A, 1);
+        case 0xD0: // SET 2,B
+            return set(Reg::B, 2);
+        case 0xD1: // SET 2,C
+            return set(Reg::C, 2);
+        case 0xD2: // SET 2,D
+            return set(Reg::D, 2);
+        case 0xD3: // SET 2,E
+            return set(Reg::E, 2);
+        case 0xD4: // SET 2,H
+            return set(Reg::H, 2);
+        case 0xD5: // SET 2,L
+            return set(Reg::L, 2);
+        case 0xD6: // SET 2,(HL)
+            return setHL(2);
+        case 0xD7: // SET 2,A
+            return set(Reg::A, 2);
+        case 0xD8: // SET 3,B
+            return set(Reg::B, 3);
+        case 0xD9: // SET 3,C
+            return set(Reg::C, 3);
+        case 0xDA: // SET 3,D
+            return set(Reg::D, 3);
+        case 0xDB: // SET 3,E
+            return set(Reg::E, 3);
+        case 0xDC: // SET 3,H
+            return set(Reg::H, 3);
+        case 0xDD: // SET 3,L
+            return set(Reg::L, 3);
+        case 0xDE: // SET 3,(HL)
+            return setHL(3);
+        case 0xDF: // SET 3,A
+            return set(Reg::A, 3);
+        case 0xE0: // SET 4,B
+            return set(Reg::B, 4);
+        case 0xE1: // SET 4,C
+            return set(Reg::C, 4);
+        case 0xE2: // SET 4,D
+            return set(Reg::D, 4);
+        case 0xE3: // SET 4,E
+            return set(Reg::E, 4);
+        case 0xE4: // SET 4,H
+            return set(Reg::H, 4);
+        case 0xE5: // SET 4,L
+            return set(Reg::L, 4);
+        case 0xE6: // SET 4,(HL)
+            return setHL(4);
+        case 0xE7: // SET 4,A
+            return set(Reg::A, 4);
+        case 0xE8: // SET 5,B
+            return set(Reg::B, 5);
+        case 0xE9: // SET 5,C
+            return set(Reg::C, 5);
+        case 0xEA: // SET 5,D
+            return set(Reg::D, 5);
+        case 0xEB: // SET 5,E
+            return set(Reg::E, 5);
+        case 0xEC: // SET 5,H
+            return set(Reg::H, 5);
+        case 0xED: // SET 5,L
+            return set(Reg::L, 5);
+        case 0xEE: // SET 5,(HL)
+            return setHL(5);
+        case 0xEF: // SET 5,A
+            return set(Reg::A, 5);
+        case 0xF0: // SET 6,B
+            return set(Reg::B, 6);
+        case 0xF1: // SET 6,C
+            return set(Reg::C, 6);
+        case 0xF2: // SET 6,D
+            return set(Reg::D, 6);
+        case 0xF3: // SET 6,E
+            return set(Reg::E, 6);
+        case 0xF4: // SET 6,H
+            return set(Reg::H, 6);
+        case 0xF5: // SET 6,L
+            return set(Reg::L, 6);
+        case 0xF6: // SET 6,(HL)
+            return setHL(6);
+        case 0xF7: // SET 6,A
+            return set(Reg::A, 6);
+        case 0xF8: // SET 7,B
+            return set(Reg::B, 7);
+        case 0xF9: // SET 7,C
+            return set(Reg::C, 7);
+        case 0xFA: // SET 7,D
+            return set(Reg::D, 7);
+        case 0xFB: // SET 7,E
+            return set(Reg::E, 7);
+        case 0xFC: // SET 7,H
+            return set(Reg::H, 7);
+        case 0xFD: // SET 7,L
+            return set(Reg::L, 7);
+        case 0xFE: // SET 7,(HL)
+            return setHL(7);
+        case 0xFF: // SET 7,A
+            return set(Reg::A, 7);
 
         default:
             printf("ex op %x @%x\n", (int)opcode, pc - 2);
