@@ -1175,6 +1175,17 @@ int DMGCPU::executeExInstruction()
         return 8;
     };
 
+    const auto rotRight = [this](Reg r)
+    {
+        bool c = reg(r) & 1;
+        auto res = (reg(r) >> 1) | ((reg(Reg::F) & Flag_C) ? 0x80 : 0);
+        reg(r) = res;
+
+        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+
+        return 8;
+    };
+
     const auto shiftLeft = [this](Reg r)
     {
         bool c = reg(r) & 0x80;
@@ -1244,6 +1255,22 @@ int DMGCPU::executeExInstruction()
 
     switch(opcode)
     {
+        case 0x18: // RR B
+            return rotRight(Reg::B);
+        case 0x19: // RR C
+            return rotRight(Reg::C);
+        case 0x1A: // RR D
+            return rotRight(Reg::D);
+        case 0x1B: // RR E
+            return rotRight(Reg::E);
+        case 0x1C: // RR H
+            return rotRight(Reg::H);
+        case 0x1D: // RR L
+            return rotRight(Reg::L);
+
+        case 0x1F: // RR A
+            return rotRight(Reg::A);
+
         case 0x20: // SLA B
             return shiftLeft(Reg::B);
         case 0x21: // SLA C
