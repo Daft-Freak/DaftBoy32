@@ -58,6 +58,12 @@ private:
         Flag_Z = (1 << 7)
     };
 
+    enum class MBCType
+    {
+        None = 0,
+        MBC1
+    };
+
     // this only works on little-endian...
     uint8_t reg(Reg r) const {return reinterpret_cast<const uint8_t *>(regs)[static_cast<int>(r) ^ 1];}
     uint8_t &reg(Reg r) {return reinterpret_cast<uint8_t *>(regs)[static_cast<int>(r) ^ 1];}
@@ -69,6 +75,8 @@ private:
 
     int executeInstruction();
     int executeExInstruction();
+
+    void writeMBC(uint16_t addr, uint8_t data);
 
     static const uint32_t clockSpeed = 4194304;
 
@@ -90,6 +98,10 @@ private:
     // cartridge
     const uint8_t *cartROM = nullptr;
     uint32_t cartROMLen = 0;
+    MBCType mbcType = MBCType::None;
+    bool mbcRAMEnabled = false;
+    int mbcROMBank = 1, mbcRAMBank = 0;
+    bool mbcRAMBankMode = false;
 
     // callbacks
     CycleCallback cycleCallback;

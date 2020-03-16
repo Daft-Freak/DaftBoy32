@@ -4,10 +4,33 @@
 #include "DMGCPU.h"
 #include "DMGRegs.h"
 
+// TODO: move memory handing out of CPU?
+
 void DMGCPU::loadCartridge(const uint8_t *rom, uint32_t romLen)
 {
     cartROM = rom;
     cartROMLen = romLen;
+
+    switch(cartROM[0x147])
+    {
+        case 0:
+            mbcType = MBCType::None;
+            break;
+        case 1:
+        case 2: // + RAM
+        case 3: // + RAM + Battery
+            mbcType = MBCType::MBC1;
+            break;
+
+        default:
+            printf("unhandled cartridge type %x\n", cartROM[0x147]);
+            mbcType = MBCType::None;
+    }
+
+    mbcRAMEnabled = false;
+    mbcROMBank = 1;
+    mbcRAMBank = 0;
+    mbcRAMBankMode = false;
 }
 
 void DMGCPU::reset()
@@ -123,7 +146,9 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
 {
     if(addr < 0x8000)
     {
-        // TODO: bank switching
+        if(addr > 0x4000) // handle banking
+            addr += (mbcROMBank - 1) * 0x4000;
+
         if(addr < cartROMLen)
             return cartROM[addr];
     }
@@ -167,7 +192,10 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
 void DMGCPU::writeMem(uint16_t addr, uint8_t data)
 {
     if(addr < 0x8000)
-    {} // cart rom
+    {
+        writeMBC(addr, data); // cart rom
+        return;
+    }
     else if(addr < 0xA000)
     {
         vram[addr - 0x8000] = data;
@@ -1633,4 +1661,39 @@ int DMGCPU::executeExInstruction()
             break;
     }
     return 0;
+}
+
+void DMGCPU::writeMBC(uint16_t addr, uint8_t data)
+{
+    if(mbcType == MBCType::None)
+        return;
+
+    // MBC1
+
+    if(addr < 0x2000)
+        mbcRAMEnabled = (data & 0xF) == 0xA;
+    else if(addr < 0x4000)
+    {
+        // low 5 bits of rom bank
+        mbcROMBank = (mbcROMBank & 0xE0) | (data & 0x1F);
+
+        if((mbcROMBank & 0x1F) == 0)
+            mbcROMBank++; // bank 0 is handled as bank 1
+    }
+    else if(addr < 0x6000)
+    {
+        // high 2 bits of rom bank / ram bank
+        if(mbcRAMBankMode)
+            mbcRAMBank = data & 0x3;
+        else
+            mbcROMBank = (mbcROMBank & 0x1F) | (data & 0xE0);
+    }
+    else // < 0x8000
+    {
+        mbcRAMBankMode = data == 1;
+        if(mbcRAMBankMode)
+            mbcROMBank &= 0x1F;
+        else
+            mbcRAMBank = 0;
+    }
 }
