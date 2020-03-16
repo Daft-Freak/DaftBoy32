@@ -2,6 +2,7 @@
 #include <cstdlib> //exit
 
 #include "DMGCPU.h"
+#include "DMGRegs.h"
 
 void DMGCPU::loadCartridge(const uint8_t *rom, uint32_t romLen)
 {

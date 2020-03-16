@@ -4,6 +4,7 @@
 #include "assets.hpp"
 
 #include "DMGCPU.h"
+#include "DMGRegs.h"
 
 //
 
