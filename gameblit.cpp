@@ -108,10 +108,12 @@ void render(uint32_t time_ms)
 
     for(int y = 0; y < 144; y++)
     {
+        auto ptr = blit::screen.ptr(80, y + 48);
         for(int x = 0; x < 160; x++)
         {
-            blit::screen.pen = blit::Pen(gbScreen[x + y * 160], gbScreen[x + y * 160], gbScreen[x + y * 160]);
-            blit::screen.pixel(blit::Point(x, y));
+            *ptr++ = gbScreen[x + y * 160];
+            *ptr++ = gbScreen[x + y * 160];
+            *ptr++ = gbScreen[x + y * 160];
         }
     }
 }
