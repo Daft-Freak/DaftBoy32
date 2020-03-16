@@ -847,6 +847,10 @@ int DMGCPU::executeInstruction()
         case 0x90: // SUB B
             return sub(Reg::B);
 
+        case 0x96: // SUB A (HL)
+            doSub(reg(Reg::A), readMem(reg(WReg::HL)));
+            return 8;
+
         case 0xA0: // AND B
             return bitAnd(Reg::B);
         case 0xA1: // AND C
@@ -910,7 +914,18 @@ int DMGCPU::executeInstruction()
             return cmp(Reg::H);
         case 0xBD: // CP L
             return cmp(Reg::L);
+        case 0xBE: // CP (HL)
+        {
+            auto a = reg(Reg::A);
+            auto b = readMem(reg(WReg::HL));
 
+            reg(Reg::F) = (a < b ? Flag_C : 0) |
+                        ((a & 0xF) < (b & 0xF) ? Flag_H : 0) |
+                        Flag_N |
+                        (a == b ? Flag_Z : 0);
+
+            return 8;
+        }
         case 0xBF: // CP A
             return cmp(Reg::A);
 
@@ -1007,6 +1022,14 @@ int DMGCPU::executeInstruction()
             writeMem(readMem16(pc), reg(Reg::A));
             pc += 2;
             return 16;
+
+        case 0xEE: // XOR #
+        {
+            auto v = reg(Reg::A) ^ readMem(pc++);
+            reg(Reg::A) = v;
+            reg(Reg::F) = (v == 0 ? Flag_Z : 0);
+            return 8;
+        }
 
         case 0xEF: // RST 28
             sp -= 2;
