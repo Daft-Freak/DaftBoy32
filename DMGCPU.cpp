@@ -825,7 +825,9 @@ int DMGCPU::executeInstruction()
             return copy8(Reg::L, Reg::H);
         case 0x6D: // LD L,L
             return copy8(Reg::L, Reg::L);
-
+        case 0x6E: // LD L,(HL)
+            reg(Reg::L) = readMem(reg(WReg::HL));
+            return 8;
         case 0x6F: // LD L,A
             return copy8(Reg::L, Reg::A);
 
@@ -952,7 +954,12 @@ int DMGCPU::executeInstruction()
             return bitXor(Reg::H);
         case 0xAD: // XOR L
             return bitXor(Reg::L);
-
+        case 0xAE: // XOR (HL)
+        {
+            auto res = reg(Reg::A) = reg(Reg::A) ^ readMem(reg(WReg::HL));
+            reg(Reg::F) = res == 0 ? Flag_Z : 0;
+            return 8;
+        }
         case 0xAF: // XOR A
             reg(Reg::A) = 0; // A ^ A == 0
             reg(Reg::F) = Flag_Z;
@@ -970,7 +977,12 @@ int DMGCPU::executeInstruction()
             return bitOr(Reg::H);
         case 0xB5: // OR L
             return bitOr(Reg::L);
-
+        case 0xB6: // OR (HL)
+        {
+            auto res = reg(Reg::A) = reg(Reg::A) | readMem(reg(WReg::HL));
+            reg(Reg::F) = res == 0 ? Flag_Z : 0;
+            return 8;
+        }
         case 0xB7: // OR A
             bitOr(Reg::A); // just a Z flag update...
             break;
@@ -1037,6 +1049,10 @@ int DMGCPU::executeInstruction()
 
         case 0xCD: // CALL nn
             return call();
+
+        case 0xCE: // ADC A,#
+            doAdd(reg(Reg::A), readMem(pc++), (reg(Reg::F) & Flag_C) ? 1 : 0);
+            return 8;
 
         case 0xD0: // RET NC
             return ret(Flag_C, false);
@@ -1129,6 +1145,13 @@ int DMGCPU::executeInstruction()
             reg(Reg::F) = res == 0 ? Flag_Z : 0;
             return 8;
         }
+
+        case 0xF8: // LDHL SP,n
+            reg(WReg::HL) = sp + (int8_t)readMem(pc++);
+            return 12;
+        case 0xF9: // LD SP,HL
+            sp = reg(WReg::HL);
+            return 8;
 
         case 0xFA: // LD A,(nn)
             reg(Reg::A) = readMem(readMem16(pc));
