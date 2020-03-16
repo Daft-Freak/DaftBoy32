@@ -5,6 +5,8 @@ enum IOReg
 {
     IO_JOYP = 0x00,
 
+    IO_DIV = 0x04,
+
     IO_LCDC = 0x40,
     IO_STAT,
     IO_SCY,

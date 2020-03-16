@@ -67,6 +67,14 @@ void DMGCPU::run(int ms)
         if(cycleCallback)
             cycleCallback(exec, iohram);
 
+        // divider
+        divCounter += exec;
+        if(divCounter >= 255)
+        {
+            divCounter -= 255;
+            iohram[IO_DIV]++;
+        }
+
         // interrupts
         if(masterInterruptEnable)
         {
@@ -133,8 +141,6 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
     {} //unusable
     else
     {
-        if((addr & 0xFF) == 0x04)
-            printf("r DIV @~%x\n", pc);
         if((addr & 0xFF) == 0x05)
             printf("r TIMA @~%x\n", pc);
         if((addr & 0xFF) == IO_STAT)
@@ -188,9 +194,6 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
     }
     else
     {
-        if((addr & 0xFF) == 0x04)
-            printf("w DIV @~%x\n", pc);
-
         if((addr & 0xFF) == 0x46)
         {
             //TODO: put this not here
@@ -199,7 +202,7 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
                 oam[i] = readMem((data << 8) + i);
         }
 
-        if((addr & 0xFF) == IO_LY)
+        if((addr & 0xFF) == IO_LY || (addr & 0xFF) == IO_DIV)
             iohram[addr & 0xFF] = 0; // clear on write
         else
             iohram[addr & 0xFF] = data;

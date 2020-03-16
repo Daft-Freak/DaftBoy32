@@ -72,8 +72,10 @@ private:
 
     static const uint32_t clockSpeed = 4194304;
 
+    // internal state
     bool stopped;
     bool masterInterruptEnable;
+    int divCounter = 0;
 
     // registers
     uint16_t regs[4];
