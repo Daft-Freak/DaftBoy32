@@ -399,16 +399,21 @@ int DMGCPU::executeInstruction()
         return 4;
     };
 
-    const auto add16 = [this](WReg r)
+    const auto doAdd16 = [this](uint16_t a, uint16_t b)
     {
-        auto a = reg(WReg::HL);
-        auto b = reg(r);
         uint32_t v = a + b;
         reg(WReg::HL) = v;
 
         reg(Reg::F) = (v > 0xFFFF ? Flag_C : 0) |
                       ((a & 0xFFF) + (b & 0xFFF) > 0xFFF ? Flag_H : 0) | //?
                       (reg(Reg::F) & Flag_Z);
+    };
+
+    const auto add16 = [this, &doAdd16](WReg r)
+    {
+        auto a = reg(WReg::HL);
+        auto b = reg(r);
+        doAdd16(a, b);
 
         return 8;
     };
@@ -684,6 +689,10 @@ int DMGCPU::executeInstruction()
             writeMem(reg(WReg::HL)--, reg(Reg::A));
             return 8;
 
+        case 0x33: // INC SP
+            sp++;
+            return 8;
+
         case 0x34: // INC (HL)
         {
             auto v = readMem(reg(WReg::HL));
@@ -715,9 +724,16 @@ int DMGCPU::executeInstruction()
         case 0x38: // JR C,n
             return jumpRel(Flag_C);
 
-        //case 0x39: // ADD HL,SP
+        case 0x39: // ADD HL,SP
+            doAdd16(reg(WReg::HL), sp);
+            return 8;
+
         case 0x3A: // LDD A,(HL)
             reg(Reg::A) = readMem(reg(WReg::HL)--);
+            return 8;
+
+        case 0x3B: // DEC SP
+            sp--;
             return 8;
 
         case 0x3C: // INC A
@@ -810,7 +826,9 @@ int DMGCPU::executeInstruction()
             return copy8(Reg::H, Reg::H);
         case 0x65: // LD H,L
             return copy8(Reg::H, Reg::L);
-
+        case 0x66: // LD H,(HL)
+            reg(Reg::H) = readMem(reg(WReg::HL));
+            return 8;
         case 0x67: // LD H,A
             return copy8(Reg::H, Reg::A);
         case 0x68: // LD L,B
@@ -1101,6 +1119,22 @@ int DMGCPU::executeInstruction()
             return 8;
         }
 
+        case 0xE8: // ADD SP,n
+        {
+            // flags are set as if this is an 8 bit op
+            auto a = sp & 0xFF;
+            auto b = readMem(pc++);
+            uint16_t v = a + b;
+            sp = sp + (int8_t)b;
+
+            auto hV = (a & 0xF) + (b & 0xF);
+
+            reg(Reg::F) = (v > 0xFF ? Flag_C : 0) |
+                        (hV > 0xF ? Flag_H : 0);
+
+            return 16;
+        }
+
         case 0xE9: // JP (HL)
             pc = reg(WReg::HL);
             return 4;
@@ -1147,8 +1181,20 @@ int DMGCPU::executeInstruction()
         }
 
         case 0xF8: // LDHL SP,n
-            reg(WReg::HL) = sp + (int8_t)readMem(pc++);
+        {
+            // flags are set as if this is an 8 bit op
+            auto a = sp & 0xFF;
+            auto b = readMem(pc++);
+            uint16_t v = a + b;
+            reg(WReg::HL) = sp + (int8_t)b;
+
+            auto hV = (a & 0xF) + (b & 0xF);
+
+            reg(Reg::F) = (v > 0xFF ? Flag_C : 0) |
+                        (hV > 0xF ? Flag_H : 0);
             return 12;
+        }
+
         case 0xF9: // LD SP,HL
             sp = reg(WReg::HL);
             return 8;
