@@ -105,22 +105,25 @@ void DMGCPU::run(int ms)
     while(!stopped && cycles > 0)
     {
         int exec = halted ? 1 : executeInstruction();
+        cycles -= exec;
+
         if(cycleCallback)
             cycleCallback(exec, iohram);
 
-        // divider
-        divCounter += exec;
-        iohram[IO_DIV] = divCounter >> 8;
+        const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
+        bool timerEnabled = iohram[IO_TAC] & TAC_Start;
+        const int timerBit = timerBits[iohram[IO_TAC] & TAC_Clock];
 
-        // timer
-        if(iohram[IO_TAC] & TAC_Start)
+        // increment the internal timer
+        for(;exec > 0; exec -= 4)
         {
-            timerCounter += exec;
-            int timCylces = timerCycles[iohram[IO_TAC] & TAC_Clock];
-            while(timerCounter >= timCylces)
-            {
-                timerCounter -= timCylces;
+            divCounter += 4;
 
+            bool val = (divCounter & timerBit) && timerEnabled; // enable is ANDed with the selected bit
+
+            // timer (incremented on falling edge)
+            if(timerOldVal && !val)
+            {
                 if(iohram[IO_TIMA] == 0xFF)
                 {
                     //overflow
@@ -130,7 +133,12 @@ void DMGCPU::run(int ms)
                 else
                     iohram[IO_TIMA]++;
             }
+
+            timerOldVal = (divCounter & timerBit) && timerEnabled;
         }
+
+        // divider
+        iohram[IO_DIV] = divCounter >> 8;
 
         // interrupts
         auto &flag = iohram[IO_IF];
@@ -156,8 +164,6 @@ void DMGCPU::run(int ms)
                 }
             }
         }
-
-        cycles -= exec;
     }
 }
 
@@ -268,7 +274,7 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
         if((addr & 0xFF) == IO_LY)
             iohram[addr & 0xFF] = 0; // clear on write
         else if((addr & 0xFF) == IO_DIV)
-            divCounter = timerCounter = 0;
+            divCounter = 0;
         else
             iohram[addr & 0xFF] = data;
         return;

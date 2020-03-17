@@ -84,7 +84,7 @@ private:
     bool stopped, halted;
     bool masterInterruptEnable;
     uint16_t divCounter = 0;
-    int timerCounter = 0;
+    bool timerOldVal = false;
 
     // registers
     uint16_t regs[4];
