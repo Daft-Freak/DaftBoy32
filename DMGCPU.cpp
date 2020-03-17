@@ -469,6 +469,14 @@ int DMGCPU::executeInstruction()
         return 12;
     };
 
+    const auto reset = [this](int addr)
+    {
+        sp -= 2;
+        writeMem16(sp, pc);
+        pc = addr;
+        return 32;
+    };
+
     const auto ret = [this](int flag = 0, bool set = true)
     {
         auto addr = readMem16(sp);
@@ -1059,6 +1067,9 @@ int DMGCPU::executeInstruction()
             doAdd(reg(Reg::A), readMem(pc++));
             return 8;
 
+        case 0xC7: // RST 0
+            return reset(0x00);
+
         case 0xC8: // RET Z
             return ret(Flag_Z);
         case 0xC9: // RET
@@ -1080,6 +1091,9 @@ int DMGCPU::executeInstruction()
             doAdd(reg(Reg::A), readMem(pc++), (reg(Reg::F) & Flag_C) ? 1 : 0);
             return 8;
 
+        case 0xCF: // RST 08
+            return reset(0x08);
+
         case 0xD0: // RET NC
             return ret(Flag_C, false);
 
@@ -1098,6 +1112,9 @@ int DMGCPU::executeInstruction()
             doSub(reg(Reg::A), readMem(pc++));
             return 8;
 
+        case 0xD7: // RST 10
+            return reset(0x10);
+
         case 0xD8: // RET C
             return ret(Flag_C);
         case 0xD9: // RETI
@@ -1109,6 +1126,9 @@ int DMGCPU::executeInstruction()
 
         case 0xDC: // CALL C,nn
             return call(Flag_C);
+
+        case 0xDF: // RST 18
+            return reset(0x18);
 
         case 0xE0: // LDH (n),A
             writeMem(0xFF00 | readMem(pc++), reg(Reg::A));
@@ -1131,6 +1151,9 @@ int DMGCPU::executeInstruction()
             reg(Reg::F) = Flag_H | (v == 0 ? Flag_Z : 0);
             return 8;
         }
+
+        case 0xE7: // RST 20
+            return reset(0x20);
 
         case 0xE8: // ADD SP,n
         {
@@ -1166,10 +1189,7 @@ int DMGCPU::executeInstruction()
         }
 
         case 0xEF: // RST 28
-            sp -= 2;
-            writeMem16(sp, pc);
-            pc = 0x28;
-            return 32;
+            return reset(0x28);
 
         case 0xF0: // LDH A,(n)
             reg(Reg::A) = readMem(0xFF00 | readMem(pc++));
@@ -1192,6 +1212,9 @@ int DMGCPU::executeInstruction()
             reg(Reg::F) = res == 0 ? Flag_Z : 0;
             return 8;
         }
+
+        case 0xF7: // RST 30
+            return reset(0x30);
 
         case 0xF8: // LDHL SP,n
         {
@@ -1234,6 +1257,9 @@ int DMGCPU::executeInstruction()
 
             return 8;
         }
+
+        case 0xFF: // RST 38
+            return reset(0x38);
 
         default:
             printf("op %x @%x\n", (int)opcode, pc - 1);
