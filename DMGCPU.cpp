@@ -345,6 +345,15 @@ int DMGCPU::executeInstruction()
         return 4;
     };
 
+    const auto subWithCarry = [this, &doSub](Reg r)
+    {
+        auto a = reg(Reg::A);
+        auto b = reg(r);
+        doSub(a, b, (reg(Reg::F) & Flag_C) ? 1 : 0);
+
+        return 4;
+    };
+
     const auto bitAnd = [this](Reg r)
     {
         auto res = reg(Reg::A) & reg(r);
@@ -967,6 +976,24 @@ int DMGCPU::executeInstruction()
         case 0x97: // SUB A
             return sub(Reg::A);
 
+        case 0x98: // SBC B
+            return subWithCarry(Reg::B);
+        case 0x99: // SBC C
+            return subWithCarry(Reg::C);
+        case 0x9A: // SBC D
+            return subWithCarry(Reg::D);
+        case 0x9B: // SBC E
+            return subWithCarry(Reg::E);
+        case 0x9C: // SBC H
+            return subWithCarry(Reg::H);
+        case 0x9D: // SBC L
+            return subWithCarry(Reg::L);
+        case 0x9E: // SBC (HL)
+            doSub(reg(Reg::A), readMem(reg(WReg::HL)), (reg(Reg::F) & Flag_C) ? 1 : 0);
+            return 8;
+        case 0x9F: // SBC A
+            return subWithCarry(Reg::A);
+
         case 0xA0: // AND B
             return bitAnd(Reg::B);
         case 0xA1: // AND C
@@ -1136,6 +1163,10 @@ int DMGCPU::executeInstruction()
 
         case 0xDC: // CALL C,nn
             return call(Flag_C);
+
+        case 0xDE: // SBC A,#
+            doSub(reg(Reg::A), readMem(pc++), (reg(Reg::F) & Flag_C) ? 1 : 0);
+            return 8;
 
         case 0xDF: // RST 18
             return reset(0x18);
