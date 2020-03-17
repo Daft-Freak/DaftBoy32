@@ -488,7 +488,10 @@ int DMGCPU::executeInstruction()
         auto addr = readMem16(pc);
         pc += 2;
         if(flag == 0 || !!(reg(Reg::F) & flag) == set)
+        {
             pc = addr;
+            return 16;
+        }
 
         return 12;
     };
@@ -497,7 +500,10 @@ int DMGCPU::executeInstruction()
     {
         int8_t off = readMem(pc++);
         if(flag == 0 || !!(reg(Reg::F) & flag) == set)
+        {
             pc += off;
+            return 12;
+        }
 
         return 8;
     };
@@ -512,6 +518,7 @@ int DMGCPU::executeInstruction()
             sp -= 2;
             writeMem16(sp, pc);
             pc = addr;
+            return 24;
         }
 
         return 12;
@@ -522,7 +529,7 @@ int DMGCPU::executeInstruction()
         sp -= 2;
         writeMem16(sp, pc);
         pc = addr;
-        return 32;
+        return 16;
     };
 
     const auto ret = [this](int flag = 0, bool set = true)
@@ -533,6 +540,8 @@ int DMGCPU::executeInstruction()
         {
             sp += 2;
             pc = addr;
+
+            return flag ? 20 : 16;
         }
 
         return 8;
