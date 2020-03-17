@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib> //exit
+#include <cstring>
 
 #include "DMGCPU.h"
 #include "DMGRegs.h"
@@ -47,6 +48,8 @@ void DMGCPU::reset()
     sp = 0xFFFE;
 
     // io regs
+    memset(iohram, 0xFF, 0x80);
+
     iohram[IO_TIMA] = 0x00; // TIMA
     iohram[IO_TMA] = 0x00; // TMA
     iohram[IO_TAC] = 0x00; // TAC
