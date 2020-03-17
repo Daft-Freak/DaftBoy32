@@ -1029,7 +1029,13 @@ int DMGCPU::executeInstruction()
             return bitAnd(Reg::H);
         case 0xA5: // AND L
             return bitAnd(Reg::L);
-
+        case 0xA6: // AND (HL)
+        {
+            auto res = reg(Reg::A) & readMem(reg(WReg::HL));
+            reg(Reg::A) = res;
+            reg(Reg::F) = Flag_H | (res == 0 ? Flag_Z : 0);
+            return 8;
+        }
         case 0xA7: // AND A
             return bitAnd(Reg::A);
 
@@ -1487,7 +1493,15 @@ int DMGCPU::executeExInstruction()
             return rotLeftNoCarry(Reg::H);
         case 0x05: // RLC L
             return rotLeftNoCarry(Reg::L);
+        case 0x06: // RLC (HL)
+        {
+            auto v = readMem(reg(WReg::HL));
+            v = (v << 1) | (v >> 7);
+            writeMem(reg(WReg::HL), v);
 
+            reg(Reg::F) = ((v & 0x1) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+            return 8;
+        }
         case 0x07: // RLC A
             return rotLeftNoCarry(Reg::A);
 
@@ -1503,7 +1517,15 @@ int DMGCPU::executeExInstruction()
             return rotRightNoCarry(Reg::H);
         case 0x0D: // RRC L
             return rotRightNoCarry(Reg::L);
+        case 0x0E: // RRC (HL)
+        {
+            auto v = readMem(reg(WReg::HL));
+            v = (v >> 1) | (v << 7);
+            writeMem(reg(WReg::HL), v);
 
+            reg(Reg::F) = ((v & 0x80) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+            return 8;
+        }
         case 0x0F: // RRC A
             return rotRightNoCarry(Reg::A);
 
@@ -1519,7 +1541,16 @@ int DMGCPU::executeExInstruction()
             return rotLeft(Reg::H);
         case 0x15: // RL L
             return rotLeft(Reg::L);
+        case 0x16: // RL (HL)
+        {
+            auto v = readMem(reg(WReg::HL));
+            bool c = v & 0x80;
+            v = (v << 1) | ((reg(Reg::F) & Flag_C) ? 0x01 : 0);
+            writeMem(reg(WReg::HL), v);
 
+            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+            return 16;
+        }
         case 0x17: // RL A
             return rotLeft(Reg::A);
 
@@ -1535,7 +1566,16 @@ int DMGCPU::executeExInstruction()
             return rotRight(Reg::H);
         case 0x1D: // RR L
             return rotRight(Reg::L);
+        case 0x1E: // RR (HL)
+        {
+            auto v = readMem(reg(WReg::HL));
+            bool c = v & 0x01;
+            v = (v >> 1) | ((reg(Reg::F) & Flag_C) ? 0x80 : 0);
+            writeMem(reg(WReg::HL), v);
 
+            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+            return 16;
+        }
         case 0x1F: // RR A
             return rotRight(Reg::A);
 
@@ -1551,7 +1591,17 @@ int DMGCPU::executeExInstruction()
             return shiftLeft(Reg::H);
         case 0x25: // SLA L
             return shiftLeft(Reg::L);
+        case 0x26: // SLA (HL)
+        {
+            auto v = readMem(reg(WReg::HL));
+            bool c = v & 0x80;
+            v = v << 1;
+            writeMem(reg(WReg::HL), v);
 
+            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+
+            return 16;
+        }
         case 0x27: // SLA A
             return shiftLeft(Reg::A);
 
@@ -1567,7 +1617,17 @@ int DMGCPU::executeExInstruction()
             return shiftRightArith(Reg::H);
         case 0x2D: // SRA L
             return shiftRightArith(Reg::L);
+        case 0x2E: // SRA (HL)
+        {
+            auto v = readMem(reg(WReg::HL));
+            bool c = v & 0x01;
+            v = v >> 1 | (v & 0x80);
+            writeMem(reg(WReg::HL), v);
 
+            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+
+            return 16;
+        }
         case 0x2F: // SRA A
             return shiftRightArith(Reg::A);
 
@@ -1583,7 +1643,16 @@ int DMGCPU::executeExInstruction()
             return swap(Reg::H);
         case 0x35: // SWAP L
             return swap(Reg::L);
-        // SWAP (HL)
+        case 0x36: // SWAP (HL)
+        {
+            auto v = readMem(reg(WReg::HL));
+            v = (v << 4) | (v >> 4);
+            writeMem(reg(WReg::HL), v);
+
+            reg(Reg::F) = (v == 0 ? Flag_Z : 0);
+
+            return 16;
+        }
         case 0x37: // SWAP A
             return swap(Reg::A);
 
@@ -1599,7 +1668,17 @@ int DMGCPU::executeExInstruction()
             return shiftRight(Reg::H);
         case 0x3D: // SRL L
             return shiftRight(Reg::L);
+        case 0x3E: // SRL (HL)
+        {
+            auto v = readMem(reg(WReg::HL));
+            bool c = v & 0x01;
+            v = v >> 1;
+            writeMem(reg(WReg::HL), v);
 
+            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+
+            return 16;
+        }
         case 0x3F: // SRL A
             return shiftRight(Reg::A);
 
@@ -1989,11 +2068,6 @@ int DMGCPU::executeExInstruction()
             return setHL(7);
         case 0xFF: // SET 7,A
             return set(Reg::A, 7);
-
-        default:
-            printf("ex op %x @%x\n", (int)opcode, pc - 2);
-            exit(0);
-            break;
     }
     return 0;
 }
