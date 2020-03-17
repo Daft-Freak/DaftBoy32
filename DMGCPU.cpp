@@ -1455,7 +1455,7 @@ int DMGCPU::executeExInstruction()
 
     const auto setHL = [this](int bit)
     {
-        writeMem(reg(WReg::HL), readMem(reg(WReg::HL) | (1 << bit)));
+        writeMem(reg(WReg::HL), readMem(reg(WReg::HL)) | (1 << bit));
         return 12;
     };
 
@@ -1467,7 +1467,7 @@ int DMGCPU::executeExInstruction()
 
     const auto resetHL = [this](int bit)
     {
-        writeMem(reg(WReg::HL), readMem(reg(WReg::HL) & ~(1 << bit)));
+        writeMem(reg(WReg::HL), readMem(reg(WReg::HL)) & ~(1 << bit));
         return 12;
     };
 
