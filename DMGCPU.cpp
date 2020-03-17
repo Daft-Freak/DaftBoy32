@@ -734,6 +734,10 @@ int DMGCPU::executeInstruction()
             writeMem(reg(WReg::HL), readMem(pc++));
             return 12;
 
+        case 0x37: // SCF
+            reg(Reg::F) = Flag_C | (reg(Reg::F) & Flag_Z);
+            return 4;
+
         case 0x38: // JR C,n
             return jumpRel(Flag_C);
 
@@ -758,6 +762,10 @@ int DMGCPU::executeInstruction()
         case 0x3E: // LD A,#
             reg(Reg::A) = readMem(pc++);
             return 8;
+
+        case 0x3F: // CCF
+            reg(Reg::F) = (~reg(Reg::F) & Flag_C) | (reg(Reg::F) & Flag_Z);
+            return 4;
 
         case 0x40: // LD B,B
             return copy8(Reg::B, Reg::B);
