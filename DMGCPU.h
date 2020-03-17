@@ -81,7 +81,7 @@ private:
     static const uint32_t clockSpeed = 4194304;
 
     // internal state
-    bool stopped;
+    bool stopped, halted;
     bool masterInterruptEnable;
     int divCounter = 0;
     int timerCounter = 0;

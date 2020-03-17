@@ -35,7 +35,7 @@ void DMGCPU::loadCartridge(const uint8_t *rom, uint32_t romLen)
 
 void DMGCPU::reset()
 {
-    stopped = false;
+    stopped = halted = false;
     masterInterruptEnable = false; //?
 
     // values after boot rom
@@ -94,7 +94,7 @@ void DMGCPU::run(int ms)
 
     while(!stopped && cycles > 0)
     {
-        int exec = executeInstruction();
+        int exec = halted ? 1 : executeInstruction();
         if(cycleCallback)
             cycleCallback(exec, iohram);
 
@@ -127,16 +127,18 @@ void DMGCPU::run(int ms)
         }
 
         // interrupts
-        if(masterInterruptEnable)
-        {
-            auto &flag = iohram[IO_IF];
-            auto enabled = iohram[IO_IE];
-            const uint16_t vectors[]{0x40, 0x48, 0x50, 0x58, 0x60};
+        auto &flag = iohram[IO_IF];
+        auto enabled = iohram[IO_IE];
+        const uint16_t vectors[]{0x40, 0x48, 0x50, 0x58, 0x60};
 
-            for(int i = 0; i < 5; i++)
+        for(int i = 0; i < 5; i++)
+        {
+            int intBit = 1 << i;
+            if((enabled & intBit) && (flag & intBit))
             {
-                int intBit = 1 << i;
-                if((enabled & intBit) && (flag & intBit))
+                halted = false; // un-halt even if interrupts are disabled
+
+                if(masterInterruptEnable)
                 {
                     masterInterruptEnable = false;
                     flag &= ~intBit;
@@ -148,6 +150,7 @@ void DMGCPU::run(int ms)
                 }
             }
         }
+
         cycles -= exec;
     }
 }
@@ -948,6 +951,10 @@ int DMGCPU::executeInstruction()
         case 0x75: // LD (HL),L
             writeMem(reg(WReg::HL), reg(Reg::L));
             return 8;
+
+        case 0x76: // HALT
+            halted = true;
+            return 4;
 
         case 0x77: // LD (HL),A
             writeMem(reg(WReg::HL), reg(Reg::A));
