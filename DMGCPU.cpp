@@ -1347,6 +1347,43 @@ int DMGCPU::executeExInstruction()
         return 8;
     };
 
+    // RLC
+    const auto rotLeftNoCarry = [this](Reg r)
+    {
+        bool c = reg(r) & 0x80;
+        uint8_t res = (reg(r) << 1) | (reg(r) >> 7);
+        reg(r) = res;
+
+        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+
+        return 8;
+    };
+
+    // RRC
+    const auto rotRightNoCarry = [this](Reg r)
+    {
+        bool c = reg(r) & 1;
+        uint8_t res = (reg(r) >> 1) | (reg(r) << 7);
+        reg(r) = res;
+
+        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+
+        return 8;
+    };
+
+    // RL
+    const auto rotLeft = [this](Reg r)
+    {
+        bool c = reg(r) & 0x80;
+        uint8_t res = (reg(r) << 1) | ((reg(Reg::F) & Flag_C) ? 0x01 : 0);
+        reg(r) = res;
+
+        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+
+        return 8;
+    };
+
+    // RR
     const auto rotRight = [this](Reg r)
     {
         bool c = reg(r) & 1;
@@ -1358,6 +1395,7 @@ int DMGCPU::executeExInstruction()
         return 8;
     };
 
+    // SLA
     const auto shiftLeft = [this](Reg r)
     {
         bool c = reg(r) & 0x80;
@@ -1369,7 +1407,17 @@ int DMGCPU::executeExInstruction()
         return 8;
     };
 
-    //...SRA
+    // SRA
+    const auto shiftRightArith = [this](Reg r)
+    {
+        bool c = reg(r) & 0x1;
+        uint8_t res = reg(r) >> 1 | (reg(r) & 0x80);
+        reg(r) = res;
+
+        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+
+        return 8;
+    };
 
     // SRL
     const auto shiftRight = [this](Reg r)
@@ -1427,6 +1475,54 @@ int DMGCPU::executeExInstruction()
 
     switch(opcode)
     {
+        case 0x00: // RLC B
+            return rotLeftNoCarry(Reg::B);
+        case 0x01: // RLC C
+            return rotLeftNoCarry(Reg::C);
+        case 0x02: // RLC D
+            return rotLeftNoCarry(Reg::D);
+        case 0x03: // RLC E
+            return rotLeftNoCarry(Reg::E);
+        case 0x04: // RLC H
+            return rotLeftNoCarry(Reg::H);
+        case 0x05: // RLC L
+            return rotLeftNoCarry(Reg::L);
+
+        case 0x07: // RLC A
+            return rotLeftNoCarry(Reg::A);
+
+        case 0x08: // RRC B
+            return rotRightNoCarry(Reg::B);
+        case 0x09: // RRC C
+            return rotRightNoCarry(Reg::C);
+        case 0x0A: // RRC D
+            return rotRightNoCarry(Reg::D);
+        case 0x0B: // RRC E
+            return rotRightNoCarry(Reg::E);
+        case 0x0C: // RRC H
+            return rotRightNoCarry(Reg::H);
+        case 0x0D: // RRC L
+            return rotRightNoCarry(Reg::L);
+
+        case 0x0F: // RRC A
+            return rotRightNoCarry(Reg::A);
+
+        case 0x10: // RL B
+            return rotLeft(Reg::B);
+        case 0x11: // RL C
+            return rotLeft(Reg::C);
+        case 0x12: // RL D
+            return rotLeft(Reg::D);
+        case 0x13: // RL E
+            return rotLeft(Reg::E);
+        case 0x14: // RL H
+            return rotLeft(Reg::H);
+        case 0x15: // RL L
+            return rotLeft(Reg::L);
+
+        case 0x17: // RL A
+            return rotLeft(Reg::A);
+
         case 0x18: // RR B
             return rotRight(Reg::B);
         case 0x19: // RR C
@@ -1458,6 +1554,22 @@ int DMGCPU::executeExInstruction()
 
         case 0x27: // SLA A
             return shiftLeft(Reg::A);
+
+        case 0x28: // SRA B
+            return shiftRightArith(Reg::B);
+        case 0x29: // SRA C
+            return shiftRightArith(Reg::C);
+        case 0x2A: // SRA D
+            return shiftRightArith(Reg::D);
+        case 0x2B: // SRA E
+            return shiftRightArith(Reg::E);
+        case 0x2C: // SRA H
+            return shiftRightArith(Reg::H);
+        case 0x2D: // SRA L
+            return shiftRightArith(Reg::L);
+
+        case 0x2F: // SRA A
+            return shiftRightArith(Reg::A);
 
         case 0x30: // SWAP B
             return swap(Reg::B);
