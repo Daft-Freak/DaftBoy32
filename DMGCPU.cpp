@@ -532,7 +532,7 @@ int DMGCPU::executeInstruction()
             v = (v << 1) | (v >> 7);
             reg(Reg::A) = v;
 
-            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+            reg(Reg::F) = (c ? Flag_C : 0);
 
             return 4;
         }
@@ -564,6 +564,18 @@ int DMGCPU::executeInstruction()
         case 0x0E: // LD C,n
             return load8(Reg::C);
 
+        case 0x0F: // RRCA
+        {
+            auto v = reg(Reg::A);
+            bool c = v & 0x01;
+            v = (v >> 1) | (v << 7);
+            reg(Reg::A) = v;
+
+            reg(Reg::F) = (c ? Flag_C : 0);
+
+            return 4;
+        }
+
         case 0x10: // STOP
             stopped = true;
             break;
@@ -586,6 +598,17 @@ int DMGCPU::executeInstruction()
 
         case 0x16: // LD D,n
             return load8(Reg::D);
+
+        case 0x17: // RLA
+        {
+            bool c = reg(Reg::A) & 0x80;
+            auto res = (reg(Reg::A) << 1) | ((reg(Reg::F) & Flag_C) ? 0x01 : 0);
+            reg(Reg::A) = res;
+
+            reg(Reg::F) = (c ? Flag_C : 0);
+
+            return 4;
+        }
 
         case 0x18: // JR m
             return jumpRel();
@@ -615,7 +638,7 @@ int DMGCPU::executeInstruction()
             auto res = (reg(Reg::A) >> 1) | ((reg(Reg::F) & Flag_C) ? 0x80 : 0);
             reg(Reg::A) = res;
 
-            reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+            reg(Reg::F) = (c ? Flag_C : 0);
 
             return 4;
         }
