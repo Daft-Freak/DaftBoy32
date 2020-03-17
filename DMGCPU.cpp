@@ -1350,7 +1350,7 @@ int DMGCPU::executeExInstruction()
     const auto rotRight = [this](Reg r)
     {
         bool c = reg(r) & 1;
-        auto res = (reg(r) >> 1) | ((reg(Reg::F) & Flag_C) ? 0x80 : 0);
+        uint8_t res = (reg(r) >> 1) | ((reg(Reg::F) & Flag_C) ? 0x80 : 0);
         reg(r) = res;
 
         reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
@@ -1361,8 +1361,8 @@ int DMGCPU::executeExInstruction()
     const auto shiftLeft = [this](Reg r)
     {
         bool c = reg(r) & 0x80;
-        auto res = reg(r) << 1;
-        reg(Reg::A) = res;
+        uint8_t res = reg(r) << 1;
+        reg(r) = res;
 
         reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
 
@@ -1375,8 +1375,8 @@ int DMGCPU::executeExInstruction()
     const auto shiftRight = [this](Reg r)
     {
         bool c = reg(r) & 0x1;
-        auto res = reg(r) >> 1;
-        reg(Reg::A) = res;
+        uint8_t res = reg(r) >> 1;
+        reg(r) = res;
 
         reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
 
