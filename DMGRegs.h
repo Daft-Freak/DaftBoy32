@@ -6,6 +6,9 @@ enum IOReg
     IO_JOYP = 0x00,
 
     IO_DIV = 0x04,
+    IO_TIMA,
+    IO_TMA,
+    IO_TAC,
 
     IO_LCDC = 0x40,
     IO_STAT,
@@ -38,6 +41,12 @@ enum JOYPBits
 
     JOYP_SelectDir     = 1 << 4,
     JOYP_SelectButtons = 1 << 5
+};
+
+enum TACBits
+{
+    TAC_Start = 1 << 2,
+    TAC_Clock = 0x3,
 };
 
 enum LCDCBits

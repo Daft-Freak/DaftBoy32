@@ -47,9 +47,9 @@ void DMGCPU::reset()
     sp = 0xFFFE;
 
     // io regs
-    iohram[0x05] = 0x00; // TIMA
-    iohram[0x06] = 0x00; // TMA
-    iohram[0x07] = 0x00; // TAC
+    iohram[IO_TIMA] = 0x00; // TIMA
+    iohram[IO_TMA] = 0x00; // TMA
+    iohram[IO_TAC] = 0x00; // TAC
     iohram[0x10] = 0x80; // NR10
     iohram[0x11] = 0xBF; // NR11
     iohram[0x12] = 0xF3; // NR12
@@ -82,6 +82,14 @@ void DMGCPU::reset()
 
 void DMGCPU::run(int ms)
 {
+    const int timerCycles[]
+    {
+        clockSpeed / 4096,
+        clockSpeed / 262144,
+        clockSpeed / 65536,
+        clockSpeed / 16384
+    };
+
     int cycles = (clockSpeed * ms) / 1000;
 
     while(!stopped && cycles > 0)
@@ -96,6 +104,26 @@ void DMGCPU::run(int ms)
         {
             divCounter -= 255;
             iohram[IO_DIV]++;
+        }
+
+        // timer
+        if(iohram[IO_TAC] & TAC_Start)
+        {
+            timerCounter += exec;
+            int timCylces = timerCycles[iohram[IO_TAC] & TAC_Clock];
+            if(timerCounter > timCylces)
+            {
+                timerCounter -= timCylces;
+
+                if(iohram[IO_TIMA] == 0xFF)
+                {
+                    //overflow
+                    iohram[IO_TIMA] = iohram[IO_TMA];
+                    flagInterrupt(Int_Timer);
+                }
+                else
+                    iohram[IO_TIMA]++;
+            }
         }
 
         // interrupts
@@ -166,8 +194,6 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
     {} //unusable
     else
     {
-        if((addr & 0xFF) == 0x05)
-            printf("r TIMA @~%x\n", pc);
         if((addr & 0xFF) == IO_STAT)
             printf("r STAT @~%x\n", pc);
 
