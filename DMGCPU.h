@@ -103,6 +103,7 @@ private:
     bool mbcRAMEnabled = false;
     int mbcROMBank = 1, mbcRAMBank = 0;
     bool mbcRAMBankMode = false;
+    uint8_t cartRam[0x2000];
 
     // callbacks
     CycleCallback cycleCallback;

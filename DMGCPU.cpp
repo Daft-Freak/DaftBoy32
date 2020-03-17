@@ -198,7 +198,7 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
     else if(addr < 0xA000)
         return vram[addr - 0x8000];
     else if(addr < 0xC000)
-    {} // cart ram
+        return cartRam[(addr - 0xA000) + mbcRAMBank * 0x2000];
     else if(addr < 0xE000)
         return wram[addr - 0xC000];
     else if(addr < 0xFE00)
@@ -243,7 +243,10 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
         return;
     }
     else if(addr < 0xC000)
-    {} // cart ram
+    {
+        cartRam[addr - 0xA000] = data;
+        return;
+    }
     else if(addr < 0xE000)
     {
         wram[addr - 0xC000] = data;
