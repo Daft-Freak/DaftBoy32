@@ -315,7 +315,7 @@ int DMGCPU::executeInstruction()
     {
         sp -= 2;
         writeMem16(sp, reg(r));
-        return 12;
+        return 16;
     };
 
     const auto pop = [this](WReg r)
