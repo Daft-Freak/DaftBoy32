@@ -285,6 +285,11 @@ int DMGCPU::executeInstruction()
     {
         reg(r) = readMem16(sp);
         sp += 2;
+
+        // low bits in F can never be set
+        if(r == WReg::AF)
+            reg(Reg::F) &= 0xF0;
+
         return 12;
     };
 
