@@ -1268,6 +1268,10 @@ int DMGCPU::executeInstruction()
         case 0xF1: // POP AF
             return pop(WReg::AF);
 
+        case 0xF2: // LDH A,(C)
+            reg(Reg::A) = readMem(0xFF00 | reg(Reg::C));
+            return 8;
+
         case 0xF3: // DI
             masterInterruptEnable = false; // TODO: after next instruction
             return 4;
