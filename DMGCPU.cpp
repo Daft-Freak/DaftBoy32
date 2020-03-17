@@ -51,9 +51,13 @@ void DMGCPU::reset()
     // io regs
     memset(iohram, 0xFF, 0x80);
 
+    iohram[IO_JOYP] = 0xC0;
+    iohram[0x01] = 0x00; // SB
+    iohram[0x02] = 0x7E; // SC
     iohram[IO_TIMA] = 0x00; // TIMA
     iohram[IO_TMA] = 0x00; // TMA
-    iohram[IO_TAC] = 0x00; // TAC
+    iohram[IO_TAC] = 0xF8; // TAC
+    iohram[IO_IF] = 0xE1;
     iohram[0x10] = 0x80; // NR10
     iohram[0x11] = 0xBF; // NR11
     iohram[0x12] = 0xF3; // NR12
@@ -73,8 +77,10 @@ void DMGCPU::reset()
     iohram[0x25] = 0xF3; // NR51
     iohram[0x26] = 0xF1; // NR52
     iohram[IO_LCDC] = 0x91; // LCDC
+    iohram[IO_STAT] = 0x80;
     iohram[IO_SCY] = 0x00; // SCY
     iohram[IO_SCX] = 0x00; // SCX
+    iohram[IO_LY] = 0x00;
     iohram[IO_LYC] = 0x00; // LYC
     iohram[IO_BGP] = 0xFC; // BGP
     iohram[IO_OBP0] = 0xFF; // OBP0
@@ -207,7 +213,7 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
             if(!(iohram[IO_JOYP] & JOYP_SelectDir))
                 ret |= (~rawInputs) & 0xF;
             if(!(iohram[IO_JOYP] & JOYP_SelectButtons))
-                ret |= (~rawInputs) >> 4;
+                ret |= ((~rawInputs) >> 4) & 0xF;
             return ret;
         }
 
