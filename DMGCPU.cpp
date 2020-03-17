@@ -298,7 +298,7 @@ int DMGCPU::executeInstruction()
         uint16_t v = a + b + c;
         reg(Reg::A) = v;
 
-        auto hV = (a & 0xF) + ((b + c) & 0xF);
+        auto hV = (a & 0xF) + (b & 0xF) + c;
 
         reg(Reg::F) = (v > 0xFF ? Flag_C : 0) |
                       (hV > 0xF ? Flag_H : 0) |
@@ -325,13 +325,15 @@ int DMGCPU::executeInstruction()
 
     const auto doSub = [this](uint8_t a, uint8_t b, uint8_t c = 0)
     {
-        auto v = a - (b + c);
-        reg(Reg::A) = v;
+        int v = a - (b + c);
+        reg(Reg::A) = v & 0xFF;
 
-        reg(Reg::F) = (a < (b + c) ? Flag_C : 0) |
-                      ((a & 0xF) < ((b + c) & 0xF) ? Flag_H : 0) |
+        int hV = (a & 0xF) - (b & 0xF) - c;
+
+        reg(Reg::F) = (v < 0 ? Flag_C : 0) |
+                      (hV < 0 ? Flag_H : 0) |
                       Flag_N |
-                      (v == 0 ? Flag_Z : 0);
+                      ((v & 0xFF) == 0 ? Flag_Z : 0);
     };
 
     const auto sub = [this, &doSub](Reg r)
