@@ -83,7 +83,7 @@ private:
     // internal state
     bool stopped, halted;
     bool masterInterruptEnable;
-    int divCounter = 0;
+    uint16_t divCounter = 0;
     int timerCounter = 0;
 
     // registers

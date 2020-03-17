@@ -38,6 +38,7 @@ void DMGCPU::reset()
 {
     stopped = halted = false;
     masterInterruptEnable = false; //?
+    divCounter = 0xABCC;
 
     // values after boot rom
     pc = 0x100;
@@ -103,11 +104,7 @@ void DMGCPU::run(int ms)
 
         // divider
         divCounter += exec;
-        if(divCounter >= 255)
-        {
-            divCounter -= 255;
-            iohram[IO_DIV]++;
-        }
+        iohram[IO_DIV] = divCounter >> 8;
 
         // timer
         if(iohram[IO_TAC] & TAC_Start)
