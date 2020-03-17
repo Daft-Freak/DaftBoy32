@@ -265,8 +265,10 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
                 oam[i] = readMem((data << 8) + i);
         }
 
-        if((addr & 0xFF) == IO_LY || (addr & 0xFF) == IO_DIV)
+        if((addr & 0xFF) == IO_LY)
             iohram[addr & 0xFF] = 0; // clear on write
+        else if((addr & 0xFF) == IO_DIV)
+            divCounter = 0;
         else
             iohram[addr & 0xFF] = data;
         return;
