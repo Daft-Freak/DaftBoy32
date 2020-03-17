@@ -117,7 +117,7 @@ void DMGCPU::run(int ms)
         {
             timerCounter += exec;
             int timCylces = timerCycles[iohram[IO_TAC] & TAC_Clock];
-            if(timerCounter > timCylces)
+            while(timerCounter >= timCylces)
             {
                 timerCounter -= timCylces;
 
@@ -268,7 +268,7 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
         if((addr & 0xFF) == IO_LY)
             iohram[addr & 0xFF] = 0; // clear on write
         else if((addr & 0xFF) == IO_DIV)
-            divCounter = 0;
+            divCounter = timerCounter = 0;
         else
             iohram[addr & 0xFF] = data;
         return;
