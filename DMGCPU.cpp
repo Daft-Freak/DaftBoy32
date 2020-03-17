@@ -454,19 +454,6 @@ int DMGCPU::executeInstruction()
         return 8;
     };
 
-    const auto ret = [this](int flag = 0, bool set = true)
-    {
-        auto addr = readMem16(sp);
-        
-        if(flag == 0 || !!(reg(Reg::F) & flag) == set)
-        {
-            sp += 2;
-            pc = addr;
-        }
-
-        return 8;
-    };
-
     const auto call = [this](int flag = 0, bool set = true)
     {
         auto addr = readMem16(pc);
@@ -480,6 +467,19 @@ int DMGCPU::executeInstruction()
         }
 
         return 12;
+    };
+
+    const auto ret = [this](int flag = 0, bool set = true)
+    {
+        auto addr = readMem16(sp);
+
+        if(flag == 0 || !!(reg(Reg::F) & flag) == set)
+        {
+            sp += 2;
+            pc = addr;
+        }
+
+        return 8;
     };
 
     auto opcode = readMem(pc++);
@@ -1070,6 +1070,9 @@ int DMGCPU::executeInstruction()
         case 0xCB: // extended ops
             return executeExInstruction();
 
+        case 0xCC: // CALL Z,nn
+            return call(Flag_Z);
+
         case 0xCD: // CALL nn
             return call();
 
@@ -1085,6 +1088,8 @@ int DMGCPU::executeInstruction()
 
         case 0xD2: // JP NC,nn
             return jump(Flag_C, false);
+        case 0xD4: // CALL NC,nn
+            return call(Flag_C, false);
 
         case 0xD5: // PUSH DE
             return push(WReg::DE);
@@ -1101,6 +1106,9 @@ int DMGCPU::executeInstruction()
 
         case 0xDA: // JP C,nn
             return jump(Flag_C);
+
+        case 0xDC: // CALL C,nn
+            return call(Flag_C);
 
         case 0xE0: // LDH (n),A
             writeMem(0xFF00 | readMem(pc++), reg(Reg::A));
