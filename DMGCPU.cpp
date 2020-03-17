@@ -1122,8 +1122,7 @@ int DMGCPU::executeInstruction()
             return 8;
         }
         case 0xB7: // OR A
-            bitOr(Reg::A); // just a Z flag update...
-            break;
+            return bitOr(Reg::A); // just a Z flag update...
 
         case 0xB8: // CP B
             return cmp(Reg::B);
