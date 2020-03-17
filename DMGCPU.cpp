@@ -1515,7 +1515,7 @@ int DMGCPU::executeExInstruction()
     const auto setHL = [this](int bit)
     {
         writeMem(reg(WReg::HL), readMem(reg(WReg::HL)) | (1 << bit));
-        return 12;
+        return 16;
     };
 
     const auto reset = [this](Reg r, int bit)
@@ -1527,7 +1527,7 @@ int DMGCPU::executeExInstruction()
     const auto resetHL = [this](int bit)
     {
         writeMem(reg(WReg::HL), readMem(reg(WReg::HL)) & ~(1 << bit));
-        return 12;
+        return 16;
     };
 
     auto opcode = readMem(pc++);
@@ -1553,7 +1553,7 @@ int DMGCPU::executeExInstruction()
             writeMem(reg(WReg::HL), v);
 
             reg(Reg::F) = ((v & 0x1) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
-            return 8;
+            return 16;
         }
         case 0x07: // RLC A
             return rotLeftNoCarry(Reg::A);
@@ -1577,7 +1577,7 @@ int DMGCPU::executeExInstruction()
             writeMem(reg(WReg::HL), v);
 
             reg(Reg::F) = ((v & 0x80) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
-            return 8;
+            return 16;
         }
         case 0x0F: // RRC A
             return rotRightNoCarry(Reg::A);
