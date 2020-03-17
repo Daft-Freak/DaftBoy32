@@ -1340,7 +1340,7 @@ int DMGCPU::executeExInstruction()
     {
         auto v = reg(r);
         v = (v >> 4) | (v << 4);
-        reg(Reg::A) = v;
+        reg(r) = v;
 
         reg(Reg::F) = v == 0 ? Flag_Z : 0;
 
