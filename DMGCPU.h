@@ -29,6 +29,8 @@ public:
     uint8_t readMem(uint16_t addr) const;
     void writeMem(uint16_t addr, uint8_t data);
 
+    uint16_t getInternalTimer() const {return divCounter;}
+
 private:
     enum class Reg
     {

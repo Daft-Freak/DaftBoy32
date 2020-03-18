@@ -10,6 +10,7 @@ include(${32BLIT_PATH}/32blit.cmake)
 #add_definitions("-DPROFILER")
 
 blit_executable(gameblit
+    DMGAPU.cpp
     DMGCPU.cpp
     gameblit.cpp
 )

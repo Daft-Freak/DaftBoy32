@@ -10,6 +10,16 @@ enum IOReg
     IO_TMA,
     IO_TAC,
 
+    IO_NR10 = 0x10, // ch1 sweep
+    IO_NR11, // ch1 len/duty
+    IO_NR12, // ch1 envelope/volume
+    IO_NR13, // ch1 freq lo
+    IO_NR14, // ch1 freq hi
+
+    IO_NR50 = 0x24, // volume
+    IO_NR51, // channel selection
+    IO_NR52, // sound on/off
+
     IO_LCDC = 0x40,
     IO_STAT,
     IO_SCY,
@@ -41,6 +51,16 @@ enum JOYPBits
 
     JOYP_SelectDir     = 1 << 4,
     JOYP_SelectButtons = 1 << 5
+};
+
+enum NR52Bits
+{
+    NR52_Ch1On  = 1 << 0,
+    NR52_Ch2On  = 1 << 1,
+    NR52_Ch3On  = 1 << 2,
+    NR52_Ch4On  = 1 << 3,
+
+    NR52_Enable = 1 << 7
 };
 
 enum TACBits

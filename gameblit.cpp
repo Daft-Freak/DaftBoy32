@@ -3,12 +3,15 @@
 #include "gameblit.hpp"
 #include "assets.hpp"
 
+#include "DMGAPU.h"
 #include "DMGCPU.h"
 #include "DMGRegs.h"
 
 //
 
 DMGCPU cpu;
+DMGAPU apu;
+bool turbo = false;
 
 // tmp display
 
@@ -27,6 +30,8 @@ bool awfulScale = false;
 
 void onCyclesExeceuted(int cycles, uint8_t *ioRegs)
 {
+    apu.update(cycles, cpu);
+
     // display
     const uint8_t lcdc = ioRegs[IO_LCDC];
     bool displayEnabled = lcdc & LCDC_DisplayEnable;
@@ -144,9 +149,32 @@ void onCyclesExeceuted(int cycles, uint8_t *ioRegs)
     }
 }
 
+void updateAudio(void *arg)
+{
+    if(apu.getNumSamples() < 64)
+    {
+        //underrun
+        memset(blit::channels[0].wave_buffer, 0, 64 * 2);
+        return;
+    }
+
+    for(int i = 0; i < 64; i++)
+        blit::channels[0].wave_buffer[i] = apu.getSample();
+}
+
 void init()
 {
     blit::set_screen_mode(blit::ScreenMode::hires);
+
+    blit::channels[0].waveforms = blit::Waveform::WAVE;
+    blit::channels[0].volume = 0xFF;
+    blit::channels[0].callback_waveBufferRefresh = &updateAudio;
+
+    if(!turbo)
+    {
+        blit::channels[0].adsr = 0xFFFF00;
+        blit::channels[0].trigger_sustain();
+    }
 
     cpu.loadCartridge(test_rom, test_rom_length);
     cpu.setCycleCallback(onCyclesExeceuted);
@@ -203,7 +231,6 @@ void update(uint32_t time_ms)
 
     auto changedButtons = blit::buttons ^ lastButtonState;
 
-    bool turbo = false;
     auto start = blit::now();
 
     // translate inputs
@@ -217,11 +244,19 @@ void update(uint32_t time_ms)
     if((changedButtons & blit::Button::Y) && !(blit::buttons & blit::Button::Y))
         awfulScale = !awfulScale;
 
-    cpu.run(10);
+    if(apu.getNumSamples() < 1024 - 225) // single update generates ~220 samples
+        cpu.run(10);
+    else
+        printf("CPU stalled, no audio room!\n");
 
     // SPEEEEEEEED
     while(turbo && blit::now() - start < 9)
+    {
+        // discard audio
+        while(apu.getNumSamples())
+            apu.getSample();
         cpu.run(1);
+    }
 
     lastButtonState = blit::buttons;
 }
