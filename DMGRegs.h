@@ -16,6 +16,22 @@ enum IOReg
     IO_NR13, // ch1 freq lo
     IO_NR14, // ch1 freq hi
 
+    IO_NR21 = 0x16, // ch2 len/duty
+    IO_NR22, // ch2 envelope/volume
+    IO_NR23, // ch2 freq lo
+    IO_NR24, // ch2 freq hi
+
+    IO_NR30 = 0x1A, // ch3 on/off
+    IO_NR31, // ch3 len
+    IO_NR32, // ch3 out level
+    IO_NR33, // ch3 freq lo
+    IO_NR34, // ch3 freq hi
+
+    IO_NR41 = 0x20, // ch4 len
+    IO_NR42, // ch4 envelope/volume
+    IO_NR43, // ch4
+    IO_NR44, // ch4
+
     IO_NR50 = 0x24, // volume
     IO_NR51, // channel selection
     IO_NR52, // sound on/off

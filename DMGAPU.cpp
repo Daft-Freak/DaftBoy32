@@ -101,3 +101,56 @@ int DMGAPU::getNumSamples() const
 
     return avail;
 }
+
+uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
+{
+    if(addr < 0xFF00)
+        return val;
+
+    // unsued bits/lengths/freqs read as 1
+    switch(addr & 0xFF)
+    {
+        case IO_NR10:
+            return val | 0x80;
+
+        case IO_NR11:
+        case IO_NR21:
+            return val | 0x3F;
+
+        case IO_NR13:
+        case 0x15: // NR20, if that was a thing
+        case IO_NR23:
+        case IO_NR31:
+        case IO_NR33:
+        case 0x1F: // NR40
+        case IO_NR41:
+        case 0x27: // unused \/
+        case 0x28:
+        case 0x29:
+        case 0x2A:
+        case 0x2B:
+        case 0x2C:
+        case 0x2D:
+        case 0x2E:
+        case 0x2F:
+            return 0xFF;
+
+        case IO_NR14:
+        case IO_NR24:
+        case IO_NR34:
+        case IO_NR44:
+            return val | 0xBF;
+
+        case IO_NR30:
+            return val | 0x7F;
+
+        case IO_NR32:
+            return val | 0x9F;
+
+        case IO_NR52:
+            return val | 0x70;
+    }
+
+
+    return val;
+}

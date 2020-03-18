@@ -11,6 +11,8 @@ public:
     int16_t getSample();
     int getNumSamples() const;
 
+    uint8_t readReg(uint16_t addr, uint8_t val);
+
 private:
     uint8_t frameSeqClock = 0;
 
