@@ -23,6 +23,7 @@ enum SpriteFlags
 const int scanlineCycles = 456;
 int remainingScanlineCycles = scanlineCycles;
 uint8_t gbScreen[160*144];
+bool awfulScale = false;
 
 void onCyclesExeceuted(int cycles, uint8_t *ioRegs)
 {
@@ -157,14 +158,41 @@ void render(uint32_t time_ms)
     blit::screen.pen = blit::Pen(20, 30, 40);
     blit::screen.clear();
 
-    for(int y = 0; y < 144; y++)
+    if(awfulScale)
     {
-        auto ptr = blit::screen.ptr(80, y + 48);
-        for(int x = 0; x < 160; x++)
+        int oy = 0;
+
+        auto copyLine = [](int y, int y1, int oy)
         {
-            *ptr++ = gbScreen[x + y * 160];
-            *ptr++ = gbScreen[x + y * 160];
-            *ptr++ = gbScreen[x + y * 160];
+            auto ptr = blit::screen.ptr(40, oy++ + 12);
+            for(int x = 0; x < 160; x += 2)
+            {
+                auto v1 = (gbScreen[x + y * 160] + gbScreen[x + y1 * 160]) / 2;
+                auto v2 = (gbScreen[(x + 1) + y * 160] + gbScreen[(x + 1) + y1 * 160]) / 2;
+
+                *ptr++ = v1; *ptr++ = v1; *ptr++ = v1;
+                *ptr++ = (v1 + v2) / 2; *ptr++ = (v1 + v2) / 2; *ptr++ = (v1 + v2) / 2;
+                *ptr++ = v2; *ptr++ = v2; *ptr++ = v2;
+            }
+        };
+        for(int y = 0; y < 144; y += 2)
+        {
+            copyLine(y, y, oy++);
+            copyLine(y, y + 1, oy++);
+            copyLine(y + 1, y + 1, oy++);
+        }
+    }
+    else
+    {
+        for(int y = 0; y < 144; y++)
+        {
+            auto ptr = blit::screen.ptr(80, y + 48);
+            for(int x = 0; x < 160; x++)
+            {
+                *ptr++ = gbScreen[x + y * 160];
+                *ptr++ = gbScreen[x + y * 160];
+                *ptr++ = gbScreen[x + y * 160];
+            }
         }
     }
 }
@@ -172,6 +200,8 @@ void render(uint32_t time_ms)
 void update(uint32_t time_ms)
 {
     static uint32_t lastButtonState = 0;
+
+    auto changedButtons = blit::buttons ^ lastButtonState;
 
     bool turbo = false;
     auto start = blit::now();
@@ -182,6 +212,10 @@ void update(uint32_t time_ms)
                      ((blit::buttons & blit::Button::DPAD_LEFT) << 1) |
                      ((blit::buttons & blit::Button::HOME) >> 2); // start -> home
     cpu.setInputs(inputs);
+
+    // toggle the awful 1.5x scale
+    if((changedButtons & blit::Button::Y) && !(blit::buttons & blit::Button::Y))
+        awfulScale = !awfulScale;
 
     cpu.run(10);
 
