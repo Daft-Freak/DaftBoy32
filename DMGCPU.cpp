@@ -240,6 +240,11 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
     return 0;
 }
 
+uint8_t DMGCPU::readIORegRaw(uint8_t addr) const
+{
+    return iohram[addr];
+}
+
 void DMGCPU::writeMem(uint16_t addr, uint8_t data)
 {
     if(addr < 0x8000)
