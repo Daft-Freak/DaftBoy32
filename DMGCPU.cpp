@@ -172,6 +172,11 @@ void DMGCPU::setCycleCallback(CycleCallback cycleCallback)
     this->cycleCallback = cycleCallback;
 }
 
+void DMGCPU::setReadCallback(ReadCallback readCallback)
+{
+    this->readCallback = readCallback;
+}
+
 void DMGCPU::flagInterrupt(int interrupt)
 {
     iohram[IO_IF] |= interrupt;
@@ -223,7 +228,12 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
             return ret;
         }
 
-        return iohram[addr & 0xFF];
+        uint8_t val = iohram[addr & 0xFF];
+
+        if(readCallback)
+            val = readCallback(addr, val);
+
+        return val;
     }
 
     printf("read %x @%x\n", addr, pc);
