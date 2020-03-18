@@ -5,10 +5,12 @@
 #include "DMGCPU.h"
 #include "DMGRegs.h"
 
-void DMGAPU::update(int cycles, DMGCPU &cpu)
+DMGAPU::DMGAPU(DMGCPU &cpu) : cpu(cpu)
+{}
+
+void DMGAPU::update(int cycles)
 {
     const uint8_t dutyPatterns[]{0b00000001, 0b10000001, 0b10000111, 0b01111110};
-
     // this gets called before the timer is incremented
     auto oldDiv = cpu.getInternalTimer();
 

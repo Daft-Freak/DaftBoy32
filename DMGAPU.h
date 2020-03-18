@@ -6,7 +6,9 @@ class DMGCPU;
 class DMGAPU
 {
 public:
-    void update(int cycles, DMGCPU &cpu);
+    DMGAPU(DMGCPU &cpu);
+
+    void update(int cycles);
 
     int16_t getSample();
     int getNumSamples() const;
@@ -14,6 +16,8 @@ public:
     uint8_t readReg(uint16_t addr, uint8_t val);
 
 private:
+    DMGCPU &cpu;
+
     uint8_t frameSeqClock = 0;
 
     uint8_t channelEnabled = 0;

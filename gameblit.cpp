@@ -10,7 +10,7 @@
 //
 
 DMGCPU cpu;
-DMGAPU apu;
+DMGAPU apu(cpu);
 bool turbo = false;
 
 // tmp display
@@ -30,7 +30,7 @@ bool awfulScale = false;
 
 void onCyclesExeceuted(int cycles, uint8_t *ioRegs)
 {
-    apu.update(cycles, cpu);
+    apu.update(cycles);
 
     // display
     const uint8_t lcdc = ioRegs[IO_LCDC];
