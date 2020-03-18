@@ -69,6 +69,13 @@ enum JOYPBits
     JOYP_SelectButtons = 1 << 5
 };
 
+// common bits for all channels
+enum NRx4Bits
+{
+    NRx4_Counter = 1 << 6,
+    NRx4_Trigger = 1 << 7
+};
+
 enum NR52Bits
 {
     NR52_Ch1On  = 1 << 0,

@@ -16,6 +16,8 @@ public:
 private:
     uint8_t frameSeqClock = 0;
 
+    uint8_t channelEnabled = 0;
+
     // channel 1
     int ch1FreqTimer = 0;
     int ch1DutyStep = 0;
