@@ -11,12 +11,16 @@ void DMGAPU::update(int cycles, DMGCPU &cpu)
     // regs
     auto ch1LenDuty = cpu.readMem(0xFF00 | IO_NR11);
     auto ch1EnvVol = cpu.readMem(0xFF00 | IO_NR12);
+    auto sndOnOff = cpu.readMem(0xFF00 | IO_NR52);
 
     bool ch1En = false;
 
-    if(!(cpu.readMem(0xFF00 | IO_NR52) & NR52_Enable))
+    if(!(sndOnOff & NR52_Enable))
     {
         // disabled
+        for(int i = IO_NR10; i < IO_NR52; i++)
+            cpu.writeMem(0xFF00 | i, 0);
+
         frameSeqClock = 0;
     }
     else
