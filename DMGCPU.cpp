@@ -177,6 +177,11 @@ void DMGCPU::setReadCallback(ReadCallback readCallback)
     this->readCallback = readCallback;
 }
 
+void DMGCPU::setWriteCallback(WriteCallback writeCallback)
+{
+    this->writeCallback = writeCallback;
+}
+
 void DMGCPU::flagInterrupt(int interrupt)
 {
     iohram[IO_IF] |= interrupt;
@@ -288,6 +293,9 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
             for(int i = 0; i < 0xA0; i++)
                 oam[i] = readMem((data << 8) + i);
         }
+
+        if(writeCallback)
+            writeCallback(addr, data);
 
         if((addr & 0xFF) == IO_LY)
             iohram[addr & 0xFF] = 0; // clear on write
