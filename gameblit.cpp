@@ -154,6 +154,11 @@ uint8_t onRead(uint16_t addr, uint8_t val)
     return apu.readReg(addr, val);
 }
 
+void onWrite(uint16_t addr, uint8_t val)
+{
+    apu.writeReg(addr, val);
+}
+
 void updateAudio(void *arg)
 {
     if(apu.getNumSamples() < 64)
@@ -184,6 +189,7 @@ void init()
     cpu.loadCartridge(test_rom, test_rom_length);
     cpu.setCycleCallback(onCyclesExeceuted);
     cpu.setReadCallback(onRead);
+    cpu.setWriteCallback(onWrite);
     cpu.reset();
 }
 

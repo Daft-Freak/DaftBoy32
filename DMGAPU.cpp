@@ -10,39 +10,34 @@ DMGAPU::DMGAPU(DMGCPU &cpu) : cpu(cpu)
 
 void DMGAPU::update(int cycles)
 {
-    const uint8_t dutyPatterns[]{0b00000001, 0b10000001, 0b10000111, 0b01111110};
-    // this gets called before the timer is incremented
-    auto oldDiv = cpu.getInternalTimer();
-
     // regs
-    auto ch1LenDuty = cpu.readIORegRaw(IO_NR11);
-    auto ch1EnvVol = cpu.readIORegRaw(IO_NR12);
-    auto ch1FreqHi = cpu.readIORegRaw(IO_NR14);
+    const auto ch1EnvVol = cpu.readIORegRaw(IO_NR12);
+    const auto ch1FreqHi = cpu.readIORegRaw(IO_NR14);
 
-    auto ch2LenDuty = cpu.readIORegRaw(IO_NR21);
-    auto ch2EnvVol = cpu.readIORegRaw(IO_NR22);
-    auto ch2FreqHi = cpu.readIORegRaw(IO_NR24);
+    const auto ch2EnvVol = cpu.readIORegRaw(IO_NR22);
+    const auto ch2FreqHi = cpu.readIORegRaw(IO_NR24);
 
-    auto ch3Len = cpu.readIORegRaw(IO_NR31);
-    auto ch3FreqHi = cpu.readIORegRaw(IO_NR34);
+    const auto ch3FreqHi = cpu.readIORegRaw(IO_NR34);
 
-    auto ch4Len = cpu.readIORegRaw(IO_NR41);
-    auto ch4EnvVol = cpu.readIORegRaw(IO_NR42);
-    auto ch4FreqHi = cpu.readIORegRaw(IO_NR44);
+    const auto ch4EnvVol = cpu.readIORegRaw(IO_NR42);
+    const auto ch4FreqHi = cpu.readIORegRaw(IO_NR44);
 
-    auto sndOnOff = cpu.readIORegRaw(IO_NR52);
+    const auto sndOnOff = cpu.readIORegRaw(IO_NR52);
 
     if(!(sndOnOff & NR52_Enable))
     {
         // disabled
         for(int i = IO_NR10; i < IO_NR52; i++)
-            cpu.writeMem(0xFF00 | i, 0);
-            
+            cpu.writeIORegRaw(i, 0);
+
         channelEnabled = 0;
         frameSeqClock = 0;
     }
     else
     {
+        // this gets called before the timer is incremented
+        auto oldDiv = cpu.getInternalTimer();
+
         // update frame sequencer clock
         for(int c = cycles; c > 0; c -= 4)
         {
@@ -56,6 +51,11 @@ void DMGAPU::update(int cycles)
                 if((frameSeqClock & 1) == 0)
                 {
                     // length
+                    auto ch1LenDuty = cpu.readIORegRaw(IO_NR11);
+                    auto ch2LenDuty = cpu.readIORegRaw(IO_NR21);
+                    auto ch3Len = cpu.readIORegRaw(IO_NR31);
+                    auto ch4Len = cpu.readIORegRaw(IO_NR41);
+
                     if(ch1FreqHi & NRx4_Counter)
                     {
                         int newLen = (64 - (ch1LenDuty & 0x3F)) - 1;
@@ -95,6 +95,11 @@ void DMGAPU::update(int cycles)
                         // write back
                         ch4Len = ((64 - newLen) & 0x3F);
                     }
+
+                    cpu.writeIORegRaw(IO_NR11, ch1LenDuty);
+                    cpu.writeIORegRaw(IO_NR21, ch2LenDuty);
+                    cpu.writeIORegRaw(IO_NR31, ch3Len);
+                    cpu.writeIORegRaw(IO_NR41, ch4Len);
                 } 
 
                 if(frameSeqClock == 7)
@@ -106,20 +111,8 @@ void DMGAPU::update(int cycles)
         }
 
         // channel 1
-        if(ch1FreqHi & NRx4_Trigger)
-        {
-            channelEnabled |= (1 << 0);
-            ch1FreqHi &= ~NRx4_Trigger;
-        }
-
-        // disable if DAC off
-        if((ch1EnvVol & 0xF8) == 0)
-            channelEnabled &= ~(1 << 0);
-
-        ch1DutyPattern = dutyPatterns[ch1LenDuty >> 6];
-
         ch1FreqTimer += cycles;
-        auto freq = cpu.readIORegRaw(IO_NR13) | ((cpu.readIORegRaw(IO_NR14) & 0x7) << 8);
+        auto freq = cpu.readIORegRaw(IO_NR13) | ((ch1FreqHi & 0x7) << 8);
         auto timerPeriod = (2048 - freq) * 4;
 
         while(ch1FreqTimer > timerPeriod)
@@ -130,16 +123,8 @@ void DMGAPU::update(int cycles)
         }
 
         // channel 2
-        if(ch2FreqHi & NRx4_Trigger)
-        {
-            channelEnabled |= (1 << 1);
-            ch2FreqHi &= ~NRx4_Trigger;
-        }
-
-        ch2DutyPattern = dutyPatterns[ch2LenDuty >> 6];
-
         ch2FreqTimer += cycles;
-        freq = cpu.readIORegRaw(IO_NR23) | ((cpu.readIORegRaw(IO_NR24) & 0x7) << 8);
+        freq = cpu.readIORegRaw(IO_NR23) | ((ch2FreqHi & 0x7) << 8);
         timerPeriod = (2048 - freq) * 4;
 
         while(ch2FreqTimer > timerPeriod)
@@ -149,28 +134,10 @@ void DMGAPU::update(int cycles)
             ch2DutyStep &= 7;
         }
 
-        if((ch2EnvVol & 0xF8) == 0)
-            channelEnabled &= ~(1 << 1);
-
         // channel 3
-        if(ch3FreqHi & NRx4_Trigger)
-        {
-            channelEnabled |= (1 << 2);
-            ch3FreqHi &= ~NRx4_Trigger;
-        }
-
-        if(!(cpu.readIORegRaw(IO_NR30) & 0x80))
-            channelEnabled &= ~(1 << 2);
 
         // channel 4
-        if(ch4FreqHi & NRx4_Trigger)
-        {
-            channelEnabled |= (1 << 3);
-            ch4FreqHi &= ~NRx4_Trigger;
-        }
 
-        if((ch4EnvVol & 0xF8) == 0)
-            channelEnabled &= ~(1 << 3);
     }
 
     // output clock - attempt to get close to 22050Hz
@@ -205,20 +172,6 @@ void DMGAPU::update(int cycles)
         sampleData[writeOff] = sample * 0x444;
         writeOff = (writeOff + 1) % bufferSize;
     }
-
-    // update
-    if(!(sndOnOff & NR52_Enable))
-        return;
-
-    cpu.writeMem(0xFF00 | IO_NR11, ch1LenDuty);
-    cpu.writeMem(0xFF00 | IO_NR14, ch1FreqHi);
-    cpu.writeMem(0xFF00 | IO_NR21, ch2LenDuty);
-    cpu.writeMem(0xFF00 | IO_NR24, ch2FreqHi);
-    cpu.writeMem(0xFF00 | IO_NR31, ch3Len);
-    cpu.writeMem(0xFF00 | IO_NR34, ch3FreqHi);
-    cpu.writeMem(0xFF00 | IO_NR41, ch4Len);
-    cpu.writeMem(0xFF00 | IO_NR44, ch4FreqHi);
-    cpu.writeMem(0xFF00 | IO_NR52, (sndOnOff & 0xF0) | channelEnabled);
 }
 
 int16_t DMGAPU::getSample()
@@ -285,9 +238,87 @@ uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
             return val | 0x9F;
 
         case IO_NR52:
-            return val | 0x70;
+            return (val & 0xF0) | 0x70 | channelEnabled; // enabled channels is read only
     }
 
 
     return val;
+}
+
+void DMGAPU::writeReg(uint16_t addr, uint8_t data)
+{
+    const uint8_t dutyPatterns[]{0b00000001, 0b10000001, 0b10000111, 0b01111110};
+
+    if(addr < 0xFF00)
+        return;
+
+    switch(addr & 0xFF)
+    {
+        case IO_NR11: // length/duty
+            ch1DutyPattern = dutyPatterns[data >> 6];
+            break;
+
+        case IO_NR12: // envelope/volume
+            // disable if DAC off
+            if((data & 0xF8) == 0)
+                channelEnabled &= ~(1 << 0);
+            break;
+
+        case IO_NR14: // freq hi/trigger/counter
+            if(data & NRx4_Trigger)
+            {
+                if(cpu.readIORegRaw(IO_NR12) & 0xF8)
+                    channelEnabled |= (1 << 0);
+            }
+            break;
+
+        case IO_NR21: // length/duty
+            ch2DutyPattern = dutyPatterns[data >> 6];
+            break;
+
+        case IO_NR22: // envelope/volume
+            // disable if DAC off
+            if((data & 0xF8) == 0)
+                channelEnabled &= ~(1 << 1);
+            break;
+
+        case IO_NR24: // freq hi/trigger/counter
+            if(data & NRx4_Trigger)
+            {
+                if(cpu.readIORegRaw(IO_NR22) & 0xF8)
+                    channelEnabled |= (1 << 1);
+            }
+            break;
+
+        case IO_NR30: // enable
+            // disable if DAC off
+            if(!(data & 0x80))
+                channelEnabled &= ~(1 << 2);
+            break;
+
+        case IO_NR34: // freq hi/trigger/counter
+            if(data & NRx4_Trigger)
+            {
+                if(cpu.readIORegRaw(IO_NR30) & 0x80)
+                    channelEnabled |= (1 << 2);
+            }
+            break;
+
+        case IO_NR42: // envelope/volume
+            // disable if DAC off
+            if((data & 0xF8) == 0)
+                channelEnabled &= ~(1 << 3);
+            break;
+
+        case IO_NR44: // freq hi/trigger/counter
+            if(data & NRx4_Trigger)
+            {
+                if(cpu.readIORegRaw(IO_NR42) & 0xF8)
+                    channelEnabled |= (1 << 3);
+            }
+            break;
+    }
+
+    // make sure enabled flags are up to date
+    cpu.writeIORegRaw(IO_NR52, (cpu.readIORegRaw(IO_NR52) & 0xF0) | channelEnabled);
 }

@@ -14,6 +14,7 @@ public:
     int getNumSamples() const;
 
     uint8_t readReg(uint16_t addr, uint8_t val);
+    void writeReg(uint16_t addr, uint8_t data);
 
 private:
     DMGCPU &cpu;
