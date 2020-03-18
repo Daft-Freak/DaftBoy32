@@ -134,6 +134,19 @@ void DMGAPU::update(int cycles, DMGCPU &cpu)
             ch2FreqHi &= ~NRx4_Trigger;
         }
 
+        ch2DutyPattern = dutyPatterns[ch2LenDuty >> 6];
+
+        ch2FreqTimer += cycles;
+        freq = cpu.readIORegRaw(IO_NR23) | ((cpu.readIORegRaw(IO_NR24) & 0x7) << 8);
+        timerPeriod = (2048 - freq) * 4;
+
+        while(ch2FreqTimer > timerPeriod)
+        {
+            ch2FreqTimer -= timerPeriod;
+            ch2DutyStep++;
+            ch2DutyStep &= 7;
+        }
+
         if((ch2EnvVol & 0xF8) == 0)
             channelEnabled &= ~(1 << 1);
 
@@ -172,15 +185,22 @@ void DMGAPU::update(int cycles, DMGCPU &cpu)
         auto outputSelect = cpu.readIORegRaw(IO_NR51);
 
         auto vol = ch1EnvVol >> 4;
-
         auto ch1Val = (channelEnabled & 1) && (ch1DutyPattern & (1 << ch1DutyStep)) ? vol : -vol;
+
+        vol = ch2EnvVol >> 4;
+        auto ch2Val = (channelEnabled & 2) && (ch2DutyPattern & (1 << ch2DutyStep)) ? vol : -vol;
 
         int32_t sample = 0;
         
         if(outputSelect & 1)
-            sample += ch1Val * 0x888;
+            sample += ch1Val;
 
-        sampleData[writeOff] = sample;
+        if(outputSelect & 2)
+            sample += ch2Val;
+
+        // TODO SO2?
+
+        sampleData[writeOff] = sample * 0x444;
         writeOff = (writeOff + 1) % bufferSize;
     }
 

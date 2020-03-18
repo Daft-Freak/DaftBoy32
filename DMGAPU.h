@@ -23,6 +23,11 @@ private:
     int ch1DutyStep = 0;
     uint8_t ch1DutyPattern = 0;
 
+    // channel 2
+    int ch2FreqTimer = 0;
+    int ch2DutyStep = 0;
+    uint8_t ch2DutyPattern = 0;
+
     // output
     int sampleClock = 0;
     static const int bufferSize = 1024;
