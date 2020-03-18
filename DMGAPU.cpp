@@ -7,6 +7,8 @@
 
 void DMGAPU::update(int cycles, DMGCPU &cpu)
 {
+    const uint8_t dutyPatterns[]{0b00000001, 0b10000001, 0b10000111, 0b01111110};
+
     // this gets called before the timer is incremented
     auto oldDiv = cpu.getInternalTimer();
 
@@ -112,6 +114,8 @@ void DMGAPU::update(int cycles, DMGCPU &cpu)
         if((ch1EnvVol & 0xF8) == 0)
             channelEnabled &= ~(1 << 0);
 
+        ch1DutyPattern = dutyPatterns[ch1LenDuty >> 6];
+
         ch1FreqTimer += cycles;
         auto freq = cpu.readIORegRaw(IO_NR13) | ((cpu.readIORegRaw(IO_NR14) & 0x7) << 8);
         auto timerPeriod = (2048 - freq) * 4;
@@ -169,7 +173,7 @@ void DMGAPU::update(int cycles, DMGCPU &cpu)
 
         auto vol = ch1EnvVol >> 4;
 
-        auto ch1Val = (channelEnabled & 1) && ch1DutyStep > 3 ? vol : -vol;
+        auto ch1Val = (channelEnabled & 1) && (ch1DutyPattern & (1 << ch1DutyStep)) ? vol : -vol;
 
         int32_t sample = 0;
         

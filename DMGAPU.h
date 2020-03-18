@@ -21,6 +21,7 @@ private:
     // channel 1
     int ch1FreqTimer = 0;
     int ch1DutyStep = 0;
+    uint8_t ch1DutyPattern = 0;
 
     // output
     int sampleClock = 0;
