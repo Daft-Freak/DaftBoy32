@@ -309,6 +309,11 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
     printf("write %x = %x @%x\n", addr, data, pc);
 }
 
+void DMGCPU::writeIORegRaw(uint8_t addr, uint8_t val)
+{
+    iohram[addr] = val;
+}
+
 uint16_t DMGCPU::readMem16(uint16_t addr) const
 {
     return readMem(addr) | (readMem(addr + 1) << 8);

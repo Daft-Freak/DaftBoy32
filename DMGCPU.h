@@ -34,6 +34,7 @@ public:
     uint8_t readMem(uint16_t addr) const;
     uint8_t readIORegRaw(uint8_t addr) const;
     void writeMem(uint16_t addr, uint8_t data);
+    void writeIORegRaw(uint8_t addr, uint8_t val);
 
     uint16_t getInternalTimer() const {return divCounter;}
 
