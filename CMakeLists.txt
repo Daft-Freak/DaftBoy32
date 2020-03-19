@@ -12,6 +12,7 @@ include(${32BLIT_PATH}/32blit.cmake)
 blit_executable(gameblit
     DMGAPU.cpp
     DMGCPU.cpp
+    DMGDisplay.cpp
     DMGMemory.cpp
     gameblit.cpp
 )
