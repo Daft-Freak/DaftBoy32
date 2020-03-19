@@ -38,6 +38,11 @@ void DMGMemory::loadCartridge(const uint8_t *rom, uint32_t romLen)
     mbcRAMBankMode = false;
 }
 
+void DMGMemory::loadCartridgeRAM(const uint8_t *ram, uint32_t len)
+{
+    memcpy(cartRam, ram, len);
+}
+
 void DMGMemory::reset()
 {
     // io regs

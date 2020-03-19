@@ -8,6 +8,7 @@ public:
     using WriteCallback = void(*)(uint16_t, uint8_t val);
 
     void loadCartridge(const uint8_t *rom, uint32_t romLen);
+    void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
     void reset();
 
     // only covers io registers
@@ -43,7 +44,7 @@ private:
     bool mbcRAMEnabled = false;
     int mbcROMBank = 1, mbcRAMBank = 0;
     bool mbcRAMBankMode = false;
-    uint8_t cartRam[0x2000];
+    uint8_t cartRam[0x8000];
 
     ReadCallback readCallback;
     WriteCallback writeCallback;
