@@ -136,6 +136,9 @@ void DMGDisplay::drawScanLine(int y)
 
             for(int x = 0; x < 8; x++)
             {
+                if(x + spriteX < 0 || x + spriteX >= screenWidth)
+                    continue;
+
                 int xShift = 7 - (x % 8); // TODO: flip
                 int palIndex = ((d1 >> xShift) & 1) | (((d2 >> xShift) & 1) << 1);
 
