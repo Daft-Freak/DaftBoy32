@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "DMGDisplay.h"
 
 #include "DMGCPU.h"
@@ -139,8 +141,13 @@ void DMGDisplay::drawScanLine(int y)
 
         for(int i = 0; i < numSprites; i++)
         {
-            const int spriteX = oam[i * 4 + 1] - 8;
             const int spriteY = oam[i * 4] - 16;
+
+            // not on this line
+            if(y < spriteY || y >= spriteY + 8)
+                continue;
+
+            const int spriteX = oam[i * 4 + 1] - 8;
             const int tileId = oam[i * 4 + 2];
             const int attrs = oam[i * 4 + 3];
 
@@ -148,11 +155,6 @@ void DMGDisplay::drawScanLine(int y)
 
             // TODO: 8x16
             // TODO: priority
-
-            // not on this line
-            if(y < spriteY || y >= spriteY + 8)
-                continue;
-
 
             int ty = y - spriteY;
 
@@ -164,16 +166,14 @@ void DMGDisplay::drawScanLine(int y)
             uint8_t d1 = spriteDataPtr[tileAddr + ty * 2];
             uint8_t d2 = spriteDataPtr[tileAddr + ty * 2 + 1];
 
-            for(int x = 0; x < 8; x++)
+            int end = std::min(8, screenWidth - spriteX);
+            for(int x = std::max(0, -spriteX); x < end; x++)
             {
-                if(x + spriteX < 0 || x + spriteX >= screenWidth)
-                    continue;
-
                 // background has priority
                 if((attrs & Sprite_BGPriority) && bgRaw[x + spriteX])
                     continue;
 
-                int xShift = (x % 8);
+                int xShift = x;
                 if(!(attrs & Sprite_XFlip))
                     xShift = 7 - xShift;
 
