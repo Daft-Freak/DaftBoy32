@@ -13,21 +13,7 @@ void DMGAPU::update(int cycles)
 {
     auto &mem = cpu.getMem();
 
-    // regs
-    const auto ch1EnvVol = mem.readIOReg(IO_NR12);
-    const auto ch1FreqHi = mem.readIOReg(IO_NR14);
-
-    const auto ch2EnvVol = mem.readIOReg(IO_NR22);
-    const auto ch2FreqHi = mem.readIOReg(IO_NR24);
-
-    const auto ch3FreqHi = mem.readIOReg(IO_NR34);
-
-    const auto ch4EnvVol = mem.readIOReg(IO_NR42);
-    const auto ch4FreqHi = mem.readIOReg(IO_NR44);
-
-    const auto sndOnOff = mem.readIOReg(IO_NR52);
-
-    if(!(sndOnOff & NR52_Enable))
+    if(!enabled)
     {
         // disabled
         for(int i = IO_NR10; i < IO_NR52; i++)
@@ -48,6 +34,11 @@ void DMGAPU::update(int cycles)
         if(wasSet && !(oldDiv & (1 << 12)))
         {
             frameSeqClock = (frameSeqClock + 1) % 8;
+
+            const auto ch1FreqHi = mem.readIOReg(IO_NR14);
+            const auto ch2FreqHi = mem.readIOReg(IO_NR24);
+            const auto ch3FreqHi = mem.readIOReg(IO_NR34);
+            const auto ch4FreqHi = mem.readIOReg(IO_NR44);
 
             if((frameSeqClock & 1) == 0)
             {
@@ -143,6 +134,10 @@ void DMGAPU::update(int cycles)
 
     if(sampleClock >= clocksPerSample)
     {
+        const auto ch1EnvVol = mem.readIOReg(IO_NR12);
+        const auto ch2EnvVol = mem.readIOReg(IO_NR22);
+        const auto ch4EnvVol = mem.readIOReg(IO_NR42);
+
         sampleClock -= clocksPerSample;
 
         // wait for the audio thread/interrupt to catch up
@@ -339,6 +334,10 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 if(mem.readIOReg(IO_NR42) & 0xF8)
                     channelEnabled |= (1 << 3);
             }
+            break;
+
+        case IO_NR52:
+            enabled = data & NR52_Enable;
             break;
     }
 

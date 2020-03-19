@@ -19,6 +19,8 @@ public:
 private:
     DMGCPU &cpu;
 
+    bool enabled = true;
+
     uint8_t frameSeqClock = 0;
 
     uint8_t channelEnabled = 0;
