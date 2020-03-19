@@ -115,24 +115,21 @@ void DMGAPU::update(int cycles)
 
         // channel 1
         ch1FreqTimer += cycles;
-        auto freq = mem.readIOReg(IO_NR13) | ((ch1FreqHi & 0x7) << 8);
-        auto timerPeriod = (2048 - freq) * 4;
 
-        while(ch1FreqTimer > timerPeriod)
+        while(ch1FreqTimer > ch1FreqTimerPeriod)
         {
-            ch1FreqTimer -= timerPeriod;
+            ch1FreqTimer -= ch1FreqTimerPeriod;
             ch1DutyStep++;
             ch1DutyStep &= 7;
         }
 
         // channel 2
         ch2FreqTimer += cycles;
-        freq = mem.readIOReg(IO_NR23) | ((ch2FreqHi & 0x7) << 8);
-        timerPeriod = (2048 - freq) * 4;
-
-        while(ch2FreqTimer > timerPeriod)
+    
+        while(ch2FreqTimer > ch2FreqTimerPeriod)
         {
-            ch2FreqTimer -= timerPeriod;
+            ch2DutyStep += ch2FreqTimer / ch2FreqTimerPeriod;
+            ch2FreqTimer -= ch2FreqTimerPeriod;
             ch2DutyStep++;
             ch2DutyStep &= 7;
         }
@@ -269,13 +266,25 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 channelEnabled &= ~(1 << 0);
             break;
 
+        case IO_NR13: // freq lo
+        {
+            auto freq = data | ((mem.readIOReg(IO_NR14) & 0x7) << 8);
+            ch1FreqTimerPeriod = (2048 - freq) * 4;
+            break;
+        }
+
         case IO_NR14: // freq hi/trigger/counter
+        {
+            auto freq = mem.readIOReg(IO_NR13) | ((data & 0x7) << 8);
+            ch1FreqTimerPeriod = (2048 - freq) * 4;
+
             if(data & NRx4_Trigger)
             {
                 if(mem.readIOReg(IO_NR12) & 0xF8)
                     channelEnabled |= (1 << 0);
             }
             break;
+        }
 
         case IO_NR21: // length/duty
             ch2DutyPattern = dutyPatterns[data >> 6];
@@ -287,13 +296,25 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 channelEnabled &= ~(1 << 1);
             break;
 
+        case IO_NR23: // freq lo
+        {
+            auto freq = data | ((mem.readIOReg(IO_NR24) & 0x7) << 8);
+            ch2FreqTimerPeriod = (2048 - freq) * 4;
+            break;
+        }
+
         case IO_NR24: // freq hi/trigger/counter
+        {
+            auto freq = mem.readIOReg(IO_NR23) | ((data & 0x7) << 8);
+            ch2FreqTimerPeriod = (2048 - freq) * 4;
+
             if(data & NRx4_Trigger)
             {
                 if(mem.readIOReg(IO_NR22) & 0xF8)
                     channelEnabled |= (1 << 1);
             }
             break;
+        }
 
         case IO_NR30: // enable
             // disable if DAC off
