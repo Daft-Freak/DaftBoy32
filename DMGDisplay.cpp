@@ -59,6 +59,8 @@ void DMGDisplay::drawScanLine(int y)
     auto tileDataPtr = mem.mapAddress(addr) + addr;
     addr = (lcdc & LCDC_BGTileMap9C00) ? 0x9C00 : 0x9800;
     auto bgMapPtr = mem.mapAddress(addr) + addr;
+    addr = (lcdc & LCDC_WindowTileMap9C00) ? 0x9C00 : 0x9800;
+    auto winMapPtr = mem.mapAddress(addr) + addr;
 
     addr = 0x8000;
     auto spriteDataPtr = mem.mapAddress(addr) + addr;
@@ -69,32 +71,49 @@ void DMGDisplay::drawScanLine(int y)
 
     const int numSprites = 40;
 
-    int tileY = y / 8;
-
     uint8_t bgRaw[screenWidth]{0};
+
+    auto windowY = mem.readIOReg(IO_WY);
+    bool yIsWin = (lcdc & LCDC_WindowEnable) && y >= windowY;
 
     // active scanline
     if(lcdc & LCDC_BGDisp)
     {
-        // bg
-        // TODO: window
+        auto windowX = mem.readIOReg(IO_WX) - 7;
+        auto scrollX = mem.readIOReg(IO_SCX);
+        auto scrollY = mem.readIOReg(IO_SCY);
+
+        // bg/window
         for(int x = 0; x < screenWidth; x++)
         {
-            int tileId = (x / 8) + tileY * screenSizeTiles;
+            int tileId;
+            uint8_t tx;
+            uint8_t ty;
 
-            // tile id is signed if addr == 0x8800
-            tileId = (lcdc & LCDC_TileData8000) ? bgMapPtr[tileId] : (int8_t)bgMapPtr[tileId] + 128;
+            if(yIsWin && x >= windowX)
+            {
+                tx = x - windowX;
+                ty = y - windowY;
+                tileId = (tx / 8) + (ty / 8) * screenSizeTiles;
+                tileId = (lcdc & LCDC_TileData8000) ? winMapPtr[tileId] : (int8_t)winMapPtr[tileId] + 128;
+            }
+            else
+            {
+                tx = x + scrollX;
+                ty = y + scrollY;
+                tileId = (tx / 8) + (ty / 8) * screenSizeTiles;
 
-            // TODO x/y pos
+                // tile id is signed if addr == 0x8800
+                tileId = (lcdc & LCDC_TileData8000) ? bgMapPtr[tileId] : (int8_t)bgMapPtr[tileId] + 128;
+            }
 
             auto tileAddr = tileId * tileDataSize;
 
             // get the two tile data bytes for this line
-            uint8_t d1 = tileDataPtr[tileAddr + (y % 8) * 2];
-            uint8_t d2 = tileDataPtr[tileAddr + (y % 8) * 2 + 1];
+            uint8_t d1 = tileDataPtr[tileAddr + (ty & 7) * 2];
+            uint8_t d2 = tileDataPtr[tileAddr + (ty & 7) * 2 + 1];
 
-            //int xBit = 1 << (7 - (x % 8));
-            int xShift = 7 - (x % 8);
+            int xShift = 7 - (tx & 7);
             int palIndex = ((d1 >> xShift) & 1) | (((d2 >> xShift) & 1) << 1);
 
             bgRaw[x] = palIndex;
