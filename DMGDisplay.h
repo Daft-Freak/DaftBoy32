@@ -14,6 +14,8 @@ public:
     const uint8_t *getData() {return screenData;}
 
 private:
+    void drawScanLine(int y);
+
     DMGCPU &cpu;
     DMGMemory &mem;
 
