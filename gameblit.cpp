@@ -5,11 +5,13 @@
 
 #include "DMGAPU.h"
 #include "DMGCPU.h"
+#include "DMGMemory.h"
 #include "DMGRegs.h"
 
 //
 
-DMGCPU cpu;
+DMGMemory mem;
+DMGCPU cpu(mem);
 DMGAPU apu(cpu);
 bool turbo = false;
 

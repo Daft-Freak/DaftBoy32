@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 
+class DMGMemory;
+
 enum Interrupts
 {
     Int_VBlank  = 1 << 0,
@@ -13,6 +15,8 @@ enum Interrupts
 class DMGCPU final
 {
 public:
+    DMGCPU(DMGMemory &mem);
+
     using CycleCallback = void(*)(int, uint8_t *);
     using ReadCallback = uint8_t(*)(uint16_t, uint8_t val);
     using WriteCallback = void(*)(uint16_t, uint8_t val);
@@ -67,12 +71,6 @@ private:
         Flag_Z = (1 << 7)
     };
 
-    enum class MBCType
-    {
-        None = 0,
-        MBC1
-    };
-
     // this only works on little-endian...
     uint8_t reg(Reg r) const {return reinterpret_cast<const uint8_t *>(regs)[static_cast<int>(r) ^ 1];}
     uint8_t &reg(Reg r) {return reinterpret_cast<uint8_t *>(regs)[static_cast<int>(r) ^ 1];}
@@ -100,19 +98,7 @@ private:
     uint16_t pc, sp;
 
     // RAM
-    uint8_t vram[0x2000]; // 8k @ 0x8000
-    uint8_t wram[0x2000]; // 8k @ 0xC000
-    uint8_t oam[0xA0]; // @ 0xFE00
-    uint8_t iohram[0x100]; // io @ 0xFF00, hram @ 0xFF80, ie & 0xFFFF
-
-    // cartridge
-    const uint8_t *cartROM = nullptr;
-    uint32_t cartROMLen = 0;
-    MBCType mbcType = MBCType::None;
-    bool mbcRAMEnabled = false;
-    int mbcROMBank = 1, mbcRAMBank = 0;
-    bool mbcRAMBankMode = false;
-    uint8_t cartRam[0x2000];
+    DMGMemory &mem;
 
     // callbacks
     CycleCallback cycleCallback;

@@ -3,35 +3,15 @@
 #include <cstring>
 
 #include "DMGCPU.h"
+#include "DMGMemory.h"
 #include "DMGRegs.h"
 
-// TODO: move memory handing out of CPU?
+DMGCPU::DMGCPU(DMGMemory &mem) : mem(mem)
+{}
 
 void DMGCPU::loadCartridge(const uint8_t *rom, uint32_t romLen)
 {
-    cartROM = rom;
-    cartROMLen = romLen;
-
-    switch(cartROM[0x147])
-    {
-        case 0:
-            mbcType = MBCType::None;
-            break;
-        case 1:
-        case 2: // + RAM
-        case 3: // + RAM + Battery
-            mbcType = MBCType::MBC1;
-            break;
-
-        default:
-            printf("unhandled cartridge type %x\n", cartROM[0x147]);
-            mbcType = MBCType::None;
-    }
-
-    mbcRAMEnabled = false;
-    mbcROMBank = 1;
-    mbcRAMBank = 0;
-    mbcRAMBankMode = false;
+    mem.loadCartridge(rom, romLen);
 }
 
 void DMGCPU::reset()
@@ -48,46 +28,7 @@ void DMGCPU::reset()
     reg(WReg::HL) = 0x01D4;
     sp = 0xFFFE;
 
-    // io regs
-    memset(iohram, 0xFF, 0x80);
-
-    iohram[IO_JOYP] = 0xC0;
-    iohram[0x01] = 0x00; // SB
-    iohram[0x02] = 0x7E; // SC
-    iohram[IO_TIMA] = 0x00; // TIMA
-    iohram[IO_TMA] = 0x00; // TMA
-    iohram[IO_TAC] = 0xF8; // TAC
-    iohram[IO_IF] = 0xE1;
-    iohram[0x10] = 0x80; // NR10
-    iohram[0x11] = 0xBF; // NR11
-    iohram[0x12] = 0xF3; // NR12
-    iohram[0x14] = 0xBF; // NR14
-    iohram[0x16] = 0x3F; // NR21
-    iohram[0x17] = 0x00; // NR22
-    iohram[0x19] = 0xBF; // NR24
-    iohram[0x1A] = 0x7F; // NR30
-    iohram[0x1B] = 0xFF; // NR31
-    iohram[0x1C] = 0x9F; // NR32
-    iohram[0x1E] = 0xBF; // NR33
-    iohram[0x20] = 0xFF; // NR41
-    iohram[0x21] = 0x00; // NR42
-    iohram[0x22] = 0x00; // NR43
-    iohram[0x23] = 0xBF; // NR30
-    iohram[0x24] = 0x77; // NR50
-    iohram[0x25] = 0xF3; // NR51
-    iohram[0x26] = 0xF1; // NR52
-    iohram[IO_LCDC] = 0x91; // LCDC
-    iohram[IO_STAT] = 0x80;
-    iohram[IO_SCY] = 0x00; // SCY
-    iohram[IO_SCX] = 0x00; // SCX
-    iohram[IO_LY] = 0x00;
-    iohram[IO_LYC] = 0x00; // LYC
-    iohram[IO_BGP] = 0xFC; // BGP
-    iohram[IO_OBP0] = 0xFF; // OBP0
-    iohram[IO_OBP1] = 0xFF; // OBP1
-    iohram[IO_WY] = 0x00; // WY
-    iohram[IO_WX] = 0x00; // WX
-    iohram[IO_IE] = 0x00; // IE
+    mem.reset();
 }
 
 void DMGCPU::run(int ms)
@@ -108,11 +49,12 @@ void DMGCPU::run(int ms)
         cycles -= exec;
 
         if(cycleCallback)
-            cycleCallback(exec, iohram);
+            cycleCallback(exec, mem.getIORegs());
 
         const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
-        bool timerEnabled = iohram[IO_TAC] & TAC_Start;
-        const int timerBit = timerBits[iohram[IO_TAC] & TAC_Clock];
+        const auto tac = mem.readIOReg(IO_TAC);
+        bool timerEnabled = tac & TAC_Start;
+        const int timerBit = timerBits[tac & TAC_Clock];
 
         // increment the internal timer
         for(;exec > 0; exec -= 4)
@@ -124,25 +66,26 @@ void DMGCPU::run(int ms)
             // timer (incremented on falling edge)
             if(timerOldVal && !val)
             {
-                if(iohram[IO_TIMA] == 0xFF)
+                const auto tima = mem.readIOReg(IO_TIMA);
+                if(tima == 0xFF)
                 {
                     //overflow
-                    iohram[IO_TIMA] = iohram[IO_TMA];
+                    mem.writeIOReg(IO_TIMA,  mem.readIOReg(IO_TMA));
                     flagInterrupt(Int_Timer);
                 }
                 else
-                    iohram[IO_TIMA]++;
+                    mem.writeIOReg(IO_TIMA, tima + 1);
             }
 
             timerOldVal = (divCounter & timerBit) && timerEnabled;
         }
 
         // divider
-        iohram[IO_DIV] = divCounter >> 8;
+        mem.writeIOReg(IO_DIV, divCounter >> 8);
 
         // interrupts
-        auto &flag = iohram[IO_IF];
-        auto enabled = iohram[IO_IE];
+        auto flag = mem.readIOReg(IO_IF);
+        const auto enabled = mem.readIOReg(IO_IE);
         const uint16_t vectors[]{0x40, 0x48, 0x50, 0x58, 0x60};
 
         for(int i = 0; i < 5; i++)
@@ -156,6 +99,7 @@ void DMGCPU::run(int ms)
                 {
                     masterInterruptEnable = false;
                     flag &= ~intBit;
+                    mem.writeIOReg(IO_IF, flag);
 
                     // call vector
                     sp -= 2;
@@ -184,7 +128,7 @@ void DMGCPU::setWriteCallback(WriteCallback writeCallback)
 
 void DMGCPU::flagInterrupt(int interrupt)
 {
-    iohram[IO_IF] |= interrupt;
+    mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
 }
 
 void DMGCPU::setInputs(uint8_t inputs)
@@ -197,43 +141,24 @@ void DMGCPU::setInputs(uint8_t inputs)
 
 uint8_t DMGCPU::readMem(uint16_t addr) const
 {
-    if(addr < 0x8000)
-    {
-        if(addr > 0x4000) // handle banking
-            addr += (mbcROMBank - 1) * 0x4000;
-
-        if(addr < cartROMLen)
-            return cartROM[addr];
-    }
-    else if(addr < 0xA000)
-        return vram[addr - 0x8000];
-    else if(addr < 0xC000)
-        return cartRam[(addr - 0xA000) + mbcRAMBank * 0x2000];
-    else if(addr < 0xE000)
-        return wram[addr - 0xC000];
-    else if(addr < 0xFE00)
-    {} // echo
-    else if(addr < 0xFEA0)
-        return oam[addr - 0xFE00];
-    else if(addr < 0xFF00)
-    {} //unusable
-    else
+    if(addr >= 0xFF00)
     {
         if((addr & 0xFF) == IO_STAT)
             printf("r STAT @~%x\n", pc);
 
+        uint8_t val = mem.readIOReg(addr);
+
+
         // input
-        if(addr == 0xFF00)
+        if((addr & 0xFF) == IO_JOYP)
         {
-            int ret = iohram[addr & 0xFF] & 0xF0;
-            if(!(iohram[IO_JOYP] & JOYP_SelectDir))
+            int ret = val & 0xF0;
+            if(!(val & JOYP_SelectDir))
                 ret |= (~rawInputs) & 0xF;
-            if(!(iohram[IO_JOYP] & JOYP_SelectButtons))
+            if(!(val & JOYP_SelectButtons))
                 ret |= ((~rawInputs) >> 4) & 0xF;
             return ret;
         }
-
-        uint8_t val = iohram[addr & 0xFF];
 
         if(readCallback)
             val = readCallback(addr, val);
@@ -241,77 +166,44 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
         return val;
     }
 
-    printf("read %x @%x\n", addr, pc);
-    return 0;
+    return mem.read(addr);
 }
 
 uint8_t DMGCPU::readIORegRaw(uint8_t addr) const
 {
-    return iohram[addr];
+    return mem.readIOReg(addr);
 }
 
 void DMGCPU::writeMem(uint16_t addr, uint8_t data)
 {
-    if(addr < 0x8000)
-    {
-        writeMBC(addr, data); // cart rom
-        return;
-    }
-    else if(addr < 0xA000)
-    {
-        vram[addr - 0x8000] = data;
-        return;
-    }
-    else if(addr < 0xC000)
-    {
-        cartRam[addr - 0xA000] = data;
-        return;
-    }
-    else if(addr < 0xE000)
-    {
-        wram[addr - 0xC000] = data;
-        return;
-    }
-    else if(addr < 0xFE00)
-    {} // echo
-    else if(addr < 0xFEA0)
-    {
-        oam[addr - 0xFE00] = data;
-        return;
-    }
-    else if(addr < 0xFF00)
-    {
-        //unusable
-        return;
-    }
-    else
+    if(addr >= 0xFF00)
     {
         if((addr & 0xFF) == 0x46)
         {
             //TODO: put this not here
             //printf("DMA from %x @~%x\n", data << 8, pc);
             for(int i = 0; i < 0xA0; i++)
-                oam[i] = readMem((data << 8) + i);
+                writeMem(0xFE00 + i, readMem((data << 8) + i));
         }
 
         if(writeCallback)
             writeCallback(addr, data);
 
         if((addr & 0xFF) == IO_LY)
-            iohram[addr & 0xFF] = 0; // clear on write
+            mem.writeIOReg(addr & 0xFF, 0); // clear on write
         else if((addr & 0xFF) == IO_DIV)
             divCounter = 0;
         else
-            iohram[addr & 0xFF] = data;
+            mem.writeIOReg(addr & 0xFF, data);
         return;
     }
 
-    printf("write %x = %x @%x\n", addr, data, pc);
+    mem.write(addr, data);
 }
 
 void DMGCPU::writeIORegRaw(uint8_t addr, uint8_t val)
 {
-    iohram[addr] = val;
+    mem.writeIOReg(addr, val);
 }
 
 uint16_t DMGCPU::readMem16(uint16_t addr) const
@@ -2160,39 +2052,4 @@ int DMGCPU::executeExInstruction()
             return set(Reg::A, 7);
     }
     return 0;
-}
-
-void DMGCPU::writeMBC(uint16_t addr, uint8_t data)
-{
-    if(mbcType == MBCType::None)
-        return;
-
-    // MBC1
-
-    if(addr < 0x2000)
-        mbcRAMEnabled = (data & 0xF) == 0xA;
-    else if(addr < 0x4000)
-    {
-        // low 5 bits of rom bank
-        mbcROMBank = (mbcROMBank & 0xE0) | (data & 0x1F);
-
-        if((mbcROMBank & 0x1F) == 0)
-            mbcROMBank++; // bank 0 is handled as bank 1
-    }
-    else if(addr < 0x6000)
-    {
-        // high 2 bits of rom bank / ram bank
-        if(mbcRAMBankMode)
-            mbcRAMBank = data & 0x3;
-        else
-            mbcROMBank = (mbcROMBank & 0x1F) | (data & 0xE0);
-    }
-    else // < 0x8000
-    {
-        mbcRAMBankMode = data == 1;
-        if(mbcRAMBankMode)
-            mbcROMBank &= 0x1F;
-        else
-            mbcRAMBank = 0;
-    }
 }
