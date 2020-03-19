@@ -18,8 +18,7 @@ DMGDisplay::DMGDisplay(DMGCPU &cpu) : cpu(cpu), mem(cpu.getMem())
 
 void DMGDisplay::update(int cycles)
 {
-    auto ioRegs = mem.getIORegs();
-    const uint8_t lcdc = ioRegs[IO_LCDC];
+    const uint8_t lcdc = mem.readIOReg(IO_LCDC);
     bool displayEnabled = lcdc & LCDC_DisplayEnable;
 
     if(!displayEnabled)
@@ -36,14 +35,15 @@ void DMGDisplay::update(int cycles)
         return;
 
     // next scanline
-    ioRegs[IO_LY]++;
     remainingScanlineCycles += scanlineCycles;
-    int y = ioRegs[IO_LY];
+    int y = mem.readIOReg(IO_LY) + 1;
 
     if(y == screenHeight)
         cpu.flagInterrupt(Int_VBlank);
-    else if(ioRegs[IO_LY] > 153)
-        y = ioRegs[IO_LY] = 0; // end vblank
+    else if(y > 153)
+        y = 0; // end vblank
+
+    mem.writeIOReg(IO_LY, y);
     
     if(y < screenHeight)
         drawScanLine(y);
