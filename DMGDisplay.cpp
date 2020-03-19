@@ -71,6 +71,8 @@ void DMGDisplay::drawScanLine(int y)
 
     int tileY = y / 8;
 
+    uint8_t bgRaw[screenWidth]{0};
+
     // active scanline
     if(lcdc & LCDC_BGDisp)
     {
@@ -94,6 +96,8 @@ void DMGDisplay::drawScanLine(int y)
             //int xBit = 1 << (7 - (x % 8));
             int xShift = 7 - (x % 8);
             int palIndex = ((d1 >> xShift) & 1) | (((d2 >> xShift) & 1) << 1);
+
+            bgRaw[x] = palIndex;
 
             int col = (bgPal >> (2 * palIndex)) & 0x3;
 
@@ -126,7 +130,7 @@ void DMGDisplay::drawScanLine(int y)
 
             int ty = y - spriteY;
 
-            //TODO: flip
+            //TODO: y flip
 
             auto tileAddr = tileId * tileDataSize;
 
@@ -139,8 +143,18 @@ void DMGDisplay::drawScanLine(int y)
                 if(x + spriteX < 0 || x + spriteX >= screenWidth)
                     continue;
 
-                int xShift = 7 - (x % 8); // TODO: flip
+                // background has priority
+                if((attrs & Sprite_BGPriority) && bgRaw[x + spriteX])
+                    continue;
+
+                int xShift = (x % 8);
+                if(!(attrs & Sprite_XFlip))
+                    xShift = 7 - xShift;
+
                 int palIndex = ((d1 >> xShift) & 1) | (((d2 >> xShift) & 1) << 1);
+
+                if(!palIndex)
+                    continue;
 
                 int col = (spritePal >> (2 * palIndex)) & 0x3;
                 screenData[(x + spriteX) + y * screenWidth] = colMap[col];
