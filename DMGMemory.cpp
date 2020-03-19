@@ -20,6 +20,13 @@ void DMGMemory::loadCartridge(const uint8_t *rom, uint32_t romLen)
             mbcType = MBCType::MBC1;
             break;
 
+        case 0x0F: // + Timer + Battery
+        case 0x11: // + Timer + RAM + Battery
+        case 0x12: // + RAM
+        case 0x13: // + RAM + Battery
+            mbcType = MBCType::MBC3;
+            break;
+
         default:
             printf("unhandled cartridge type %x\n", cartROM[0x147]);
             mbcType = MBCType::None;
@@ -212,26 +219,40 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
         mbcRAMEnabled = (data & 0xF) == 0xA;
     else if(addr < 0x4000)
     {
-        // low 5 bits of rom bank
-        mbcROMBank = (mbcROMBank & 0xE0) | (data & 0x1F);
+        if(mbcType == MBCType::MBC1) // low 5 bits of rom bank
+        {
+            mbcROMBank = (mbcROMBank & 0xE0) | (data & 0x1F);
 
-        if((mbcROMBank & 0x1F) == 0)
-            mbcROMBank++; // bank 0 is handled as bank 1
+            if((mbcROMBank & 0x1F) == 0)
+                mbcROMBank++; // bank 0 is handled as bank 1 (+ some bugs)
+        }
+        else if(mbcType == MBCType::MBC3)
+        {
+            mbcROMBank = data & 0x7F; // 7 bit rom bank
+            if(mbcROMBank == 0)
+                mbcROMBank = 1; // bank 0 is handled as bank 1
+        }
     }
     else if(addr < 0x6000)
     {
         // high 2 bits of rom bank / ram bank
-        if(mbcRAMBankMode)
+        if(mbcRAMBankMode || mbcType == MBCType::MBC3)
             mbcRAMBank = data & 0x3;
         else
             mbcROMBank = (mbcROMBank & 0x1F) | (data & 0xE0);
+
+        // TODO: MBC3 bank >= 8 maps RTC regs
     }
     else // < 0x8000
     {
-        mbcRAMBankMode = data == 1;
-        if(mbcRAMBankMode)
-            mbcROMBank &= 0x1F;
-        else
-            mbcRAMBank = 0;
+        // TODO: MBC3 clock latch
+        if(mbcType == MBCType::MBC1)
+        {
+            mbcRAMBankMode = data == 1;
+            if(mbcRAMBankMode)
+                mbcROMBank &= 0x1F;
+            else
+                mbcRAMBank = 0;
+        }
     }
 }

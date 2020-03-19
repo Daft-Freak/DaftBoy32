@@ -27,7 +27,8 @@ private:
     enum class MBCType
     {
         None = 0,
-        MBC1
+        MBC1,
+        MBC3
     };
 
     uint8_t vram[0x2000]; // 8k @ 0x8000
