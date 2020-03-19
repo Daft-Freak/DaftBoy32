@@ -38,63 +38,8 @@ void DMGCPU::run(int ms)
         if(cycleCallback)
             cycleCallback(exec);
 
-        const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
-        const auto tac = mem.readIOReg(IO_TAC);
-        bool timerEnabled = tac & TAC_Start;
-        const int timerBit = timerBits[tac & TAC_Clock];
-
-        // increment the internal timer
-        for(;exec > 0; exec -= 4)
-        {
-            divCounter += 4;
-
-            bool val = (divCounter & timerBit) && timerEnabled; // enable is ANDed with the selected bit
-
-            // timer (incremented on falling edge)
-            if(timerOldVal && !val)
-            {
-                const auto tima = mem.readIOReg(IO_TIMA);
-                if(tima == 0xFF)
-                {
-                    //overflow
-                    mem.writeIOReg(IO_TIMA,  mem.readIOReg(IO_TMA));
-                    flagInterrupt(Int_Timer);
-                }
-                else
-                    mem.writeIOReg(IO_TIMA, tima + 1);
-            }
-
-            timerOldVal = (divCounter & timerBit) && timerEnabled;
-        }
-
-        // divider
-        mem.writeIOReg(IO_DIV, divCounter >> 8);
-
-        // interrupts
-        auto flag = mem.readIOReg(IO_IF);
-        const auto enabled = mem.readIOReg(IO_IE);
-        const uint16_t vectors[]{0x40, 0x48, 0x50, 0x58, 0x60};
-
-        for(int i = 0; i < 5; i++)
-        {
-            int intBit = 1 << i;
-            if((enabled & intBit) && (flag & intBit))
-            {
-                halted = false; // un-halt even if interrupts are disabled
-
-                if(masterInterruptEnable)
-                {
-                    masterInterruptEnable = false;
-                    flag &= ~intBit;
-                    mem.writeIOReg(IO_IF, flag);
-
-                    // call vector
-                    sp -= 2;
-                    writeMem16(sp, pc);
-                    pc = vectors[i];
-                }
-            }
-        }
+        updateTimer(exec);
+        serviceInterrupts();
     }
 }
 
@@ -1989,4 +1934,67 @@ int DMGCPU::executeExInstruction()
             return set(Reg::A, 7);
     }
     return 0;
+}
+
+void DMGCPU::updateTimer(int cycles)
+{
+    const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
+    const auto tac = mem.readIOReg(IO_TAC);
+    bool timerEnabled = tac & TAC_Start;
+    const int timerBit = timerBits[tac & TAC_Clock];
+
+    // increment the internal timer
+    for(;cycles > 0; cycles -= 4)
+    {
+        divCounter += 4;
+
+        bool val = (divCounter & timerBit) && timerEnabled; // enable is ANDed with the selected bit
+
+        // timer (incremented on falling edge)
+        if(timerOldVal && !val)
+        {
+            const auto tima = mem.readIOReg(IO_TIMA);
+            if(tima == 0xFF)
+            {
+                //overflow
+                mem.writeIOReg(IO_TIMA,  mem.readIOReg(IO_TMA));
+                flagInterrupt(Int_Timer);
+            }
+            else
+                mem.writeIOReg(IO_TIMA, tima + 1);
+        }
+
+        timerOldVal = (divCounter & timerBit) && timerEnabled;
+    }
+
+    // divider
+    mem.writeIOReg(IO_DIV, divCounter >> 8);
+}
+
+void DMGCPU::serviceInterrupts()
+{
+    auto flag = mem.readIOReg(IO_IF);
+    const auto enabled = mem.readIOReg(IO_IE);
+    const uint16_t vectors[]{0x40, 0x48, 0x50, 0x58, 0x60};
+
+    for(int i = 0; i < 5; i++)
+    {
+        int intBit = 1 << i;
+        if((enabled & intBit) && (flag & intBit))
+        {
+            halted = false; // un-halt even if interrupts are disabled
+
+            if(masterInterruptEnable)
+            {
+                masterInterruptEnable = false;
+                flag &= ~intBit;
+                mem.writeIOReg(IO_IF, flag);
+
+                // call vector
+                sp -= 2;
+                writeMem16(sp, pc);
+                pc = vectors[i];
+            }
+        }
+    }
 }

@@ -74,6 +74,9 @@ private:
     int executeInstruction();
     int executeExInstruction();
 
+    void updateTimer(int cycles);
+    void serviceInterrupts();
+
     static const uint32_t clockSpeed = 4194304;
 
     // internal state
