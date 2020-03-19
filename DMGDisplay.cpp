@@ -55,9 +55,13 @@ void DMGDisplay::drawScanLine(int y)
 
     const uint8_t colMap[]{0xFF, 0xCC, 0x77, 0};
 
-    auto tileDataAddr = (lcdc & LCDC_TileData8000) ? 0x8000 : 0x8800;
-    auto bgMapAddr = (lcdc & LCDC_BGTileMap9C00) ? 0x9C00 : 0x9800;
-    auto spriteDataAddr = 0x8000;
+    uint16_t addr = (lcdc & LCDC_TileData8000) ? 0x8000 : 0x8800;
+    auto tileDataPtr = mem.mapAddress(addr) + addr;
+    addr = (lcdc & LCDC_BGTileMap9C00) ? 0x9C00 : 0x9800;
+    auto bgMapPtr = mem.mapAddress(addr) + addr;
+
+    addr = 0x8000;
+    auto spriteDataPtr = mem.mapAddress(addr) + addr;
 
     const int tileDataSize = 16;
     const int screenSizeTiles = 32; // 32x32 tiles
@@ -77,15 +81,15 @@ void DMGDisplay::drawScanLine(int y)
             int tileId = (x / 8) + tileY * screenSizeTiles;
 
             // tile id is signed if addr == 0x8800
-            tileId = tileDataAddr == 0x8800 ? (int8_t)mem.read(bgMapAddr + tileId) + 128 : mem.read(bgMapAddr + tileId);
+            tileId = (lcdc & LCDC_TileData8000) ? bgMapPtr[tileId] : (int8_t)bgMapPtr[tileId] + 128;
 
             // TODO x/y pos
 
-            auto tileAddr = tileDataAddr + tileId * tileDataSize;
+            auto tileAddr = tileId * tileDataSize;
 
             // get the two tile data bytes for this line
-            uint8_t d1 = mem.read(tileAddr + (y % 8) * 2);
-            uint8_t d2 = mem.read(tileAddr + (y % 8) * 2 + 1);
+            uint8_t d1 = tileDataPtr[tileAddr + (y % 8) * 2];
+            uint8_t d2 = tileDataPtr[tileAddr + (y % 8) * 2 + 1];
 
             //int xBit = 1 << (7 - (x % 8));
             int xShift = 7 - (x % 8);
@@ -100,13 +104,15 @@ void DMGDisplay::drawScanLine(int y)
     if(lcdc & LCDC_OBJDisp)
     {
         // sprites
+        addr = 0xFE00;
+        auto oam = mem.mapAddress(addr);
 
         for(int i = 0; i < numSprites; i++)
         {
-            const int spriteX = mem.read(0xFE00/*OAM*/ + i * 4 + 1) - 8;
-            const int spriteY = mem.read(0xFE00/*OAM*/ + i * 4) - 16;
-            const int tileId = mem.read(0xFE00/*OAM*/ + i * 4 + 2);
-            const int attrs = mem.read(0xFE00/*OAM*/ + i * 4 + 3);
+            const int spriteX = oam[i * 4 + 1] - 8;
+            const int spriteY = oam[i * 4] - 16;
+            const int tileId = oam[i * 4 + 2];
+            const int attrs = oam[i * 4 + 3];
 
             const int spritePal = mem.readIOReg((attrs & Sprite_Palette) ? IO_OBP1 : IO_OBP0);
 
@@ -122,11 +128,11 @@ void DMGDisplay::drawScanLine(int y)
 
             //TODO: flip
 
-            auto tileAddr = spriteDataAddr + tileId * tileDataSize;
+            auto tileAddr = tileId * tileDataSize;
 
             // get the two tile data bytes for this line
-            uint8_t d1 = mem.read(tileAddr + ty * 2);
-            uint8_t d2 = mem.read(tileAddr + ty * 2 + 1);
+            uint8_t d1 = spriteDataPtr[tileAddr + ty * 2];
+            uint8_t d2 = spriteDataPtr[tileAddr + ty * 2 + 1];
 
             for(int x = 0; x < 8; x++)
             {
