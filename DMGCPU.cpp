@@ -28,14 +28,6 @@ void DMGCPU::reset()
 
 void DMGCPU::run(int ms)
 {
-    const int timerCycles[]
-    {
-        clockSpeed / 4096,
-        clockSpeed / 262144,
-        clockSpeed / 65536,
-        clockSpeed / 16384
-    };
-
     int cycles = (clockSpeed * ms) / 1000;
 
     while(!stopped && cycles > 0)
