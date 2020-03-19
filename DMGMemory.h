@@ -16,9 +16,9 @@ public:
     void setWriteCallback(WriteCallback writeCallback);
 
     uint8_t read(uint16_t addr) const;
-    uint8_t readIOReg(uint8_t addr) const;
+    uint8_t readIOReg(uint8_t addr) const {return iohram[addr];}
     void write(uint16_t addr, uint8_t data);
-    void writeIOReg(uint8_t addr, uint8_t val);
+    void writeIOReg(uint8_t addr, uint8_t val) {iohram[addr] = val;}
 
     uint8_t *mapAddress(uint16_t &addr);
 

@@ -134,11 +134,6 @@ uint8_t DMGMemory::read(uint16_t addr) const
     return 0;
 }
 
-uint8_t DMGMemory::readIOReg(uint8_t addr) const
-{
-    return iohram[addr];
-}
-
 void DMGMemory::write(uint16_t addr, uint8_t data)
 {
     if(addr < 0x8000)
@@ -166,11 +161,6 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
     }
 
     printf("write %x = %x\n", addr, data);
-}
-
-void DMGMemory::writeIOReg(uint8_t addr, uint8_t val)
-{
-    iohram[addr] = val;
 }
 
 uint8_t *DMGMemory::mapAddress(uint16_t &addr)
