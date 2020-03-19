@@ -87,15 +87,15 @@ void onCyclesExeceuted(int cycles, uint8_t *ioRegs)
                 int tileId = (x / 8) + tileY * screenSizeTiles;
 
                 // tile id is signed if addr == 0x8800
-                tileId = tileDataAddr == 0x8800 ? (int8_t)cpu.readMem(bgMapAddr + tileId) + 128 : cpu.readMem(bgMapAddr + tileId);
+                tileId = tileDataAddr == 0x8800 ? (int8_t)mem.read(bgMapAddr + tileId) + 128 : mem.read(bgMapAddr + tileId);
 
                 // TODO x/y pos
 
                 auto tileAddr = tileDataAddr + tileId * tileDataSize;
 
                 // get the two tile data bytes for this line
-                uint8_t d1 = cpu.readMem(tileAddr + (y % 8) * 2);
-                uint8_t d2 = cpu.readMem(tileAddr + (y % 8) * 2 + 1);
+                uint8_t d1 = mem.read(tileAddr + (y % 8) * 2);
+                uint8_t d2 = mem.read(tileAddr + (y % 8) * 2 + 1);
 
                 //int xBit = 1 << (7 - (x % 8));
                 int xShift = 7 - (x % 8);
@@ -113,10 +113,10 @@ void onCyclesExeceuted(int cycles, uint8_t *ioRegs)
 
             for(int i = 0; i < numSprites; i++)
             {
-                const int spriteX = cpu.readMem(0xFE00/*OAM*/ + i * 4 + 1) - 8;
-                const int spriteY = cpu.readMem(0xFE00/*OAM*/ + i * 4) - 16;
-                const int tileId = cpu.readMem(0xFE00/*OAM*/ + i * 4 + 2);
-                const int attrs = cpu.readMem(0xFE00/*OAM*/ + i * 4 + 3);
+                const int spriteX = mem.read(0xFE00/*OAM*/ + i * 4 + 1) - 8;
+                const int spriteY = mem.read(0xFE00/*OAM*/ + i * 4) - 16;
+                const int tileId = mem.read(0xFE00/*OAM*/ + i * 4 + 2);
+                const int attrs = mem.read(0xFE00/*OAM*/ + i * 4 + 3);
 
                 const int spritePal = (attrs & Sprite_Palette) ? ioRegs[IO_OBP1] : ioRegs[IO_OBP0];
 
@@ -135,8 +135,8 @@ void onCyclesExeceuted(int cycles, uint8_t *ioRegs)
                 auto tileAddr = spriteDataAddr + tileId * tileDataSize;
 
                 // get the two tile data bytes for this line
-                uint8_t d1 = cpu.readMem(tileAddr + ty * 2);
-                uint8_t d2 = cpu.readMem(tileAddr + ty * 2 + 1);
+                uint8_t d1 = mem.read(tileAddr + ty * 2);
+                uint8_t d2 = mem.read(tileAddr + ty * 2 + 1);
 
                 for(int x = 0; x < 8; x++)
                 {
@@ -188,7 +188,7 @@ void init()
         blit::channels[0].trigger_sustain();
     }
 
-    cpu.loadCartridge(test_rom, test_rom_length);
+    mem.loadCartridge(test_rom, test_rom_length);
     cpu.setCycleCallback(onCyclesExeceuted);
     cpu.setReadCallback(onRead);
     cpu.setWriteCallback(onWrite);

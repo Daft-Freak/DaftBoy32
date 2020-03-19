@@ -21,7 +21,6 @@ public:
     using ReadCallback = uint8_t(*)(uint16_t, uint8_t val);
     using WriteCallback = void(*)(uint16_t, uint8_t val);
 
-    void loadCartridge(const uint8_t *rom, uint32_t romLen);
     void reset();
 
     void run(int ms);
@@ -35,10 +34,7 @@ public:
 
     void setInputs(uint8_t inputs);
 
-    uint8_t readMem(uint16_t addr) const;
-    uint8_t readIORegRaw(uint8_t addr) const;
-    void writeMem(uint16_t addr, uint8_t data);
-    void writeIORegRaw(uint8_t addr, uint8_t val);
+    DMGMemory &getMem() {return mem;}
 
     uint16_t getInternalTimer() const {return divCounter;}
 
@@ -77,7 +73,9 @@ private:
     uint16_t reg(WReg r) const {return regs[static_cast<int>(r)];}
     uint16_t &reg(WReg r) {return regs[static_cast<int>(r)];}
 
+    uint8_t readMem(uint16_t addr) const;
     uint16_t readMem16(uint16_t addr) const;
+    void writeMem(uint16_t addr, uint8_t data);
     void writeMem16(uint16_t addr, uint16_t data);
 
     int executeInstruction();

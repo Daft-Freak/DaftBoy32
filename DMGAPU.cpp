@@ -3,6 +3,7 @@
 #include "DMGAPU.h"
 
 #include "DMGCPU.h"
+#include "DMGMemory.h"
 #include "DMGRegs.h"
 
 DMGAPU::DMGAPU(DMGCPU &cpu) : cpu(cpu)
@@ -10,25 +11,27 @@ DMGAPU::DMGAPU(DMGCPU &cpu) : cpu(cpu)
 
 void DMGAPU::update(int cycles)
 {
+    auto &mem = cpu.getMem();
+
     // regs
-    const auto ch1EnvVol = cpu.readIORegRaw(IO_NR12);
-    const auto ch1FreqHi = cpu.readIORegRaw(IO_NR14);
+    const auto ch1EnvVol = mem.readIOReg(IO_NR12);
+    const auto ch1FreqHi = mem.readIOReg(IO_NR14);
 
-    const auto ch2EnvVol = cpu.readIORegRaw(IO_NR22);
-    const auto ch2FreqHi = cpu.readIORegRaw(IO_NR24);
+    const auto ch2EnvVol = mem.readIOReg(IO_NR22);
+    const auto ch2FreqHi = mem.readIOReg(IO_NR24);
 
-    const auto ch3FreqHi = cpu.readIORegRaw(IO_NR34);
+    const auto ch3FreqHi = mem.readIOReg(IO_NR34);
 
-    const auto ch4EnvVol = cpu.readIORegRaw(IO_NR42);
-    const auto ch4FreqHi = cpu.readIORegRaw(IO_NR44);
+    const auto ch4EnvVol = mem.readIOReg(IO_NR42);
+    const auto ch4FreqHi = mem.readIOReg(IO_NR44);
 
-    const auto sndOnOff = cpu.readIORegRaw(IO_NR52);
+    const auto sndOnOff = mem.readIOReg(IO_NR52);
 
     if(!(sndOnOff & NR52_Enable))
     {
         // disabled
         for(int i = IO_NR10; i < IO_NR52; i++)
-            cpu.writeIORegRaw(i, 0);
+            mem.writeIOReg(i, 0);
 
         channelEnabled = 0;
         frameSeqClock = 0;
@@ -51,10 +54,10 @@ void DMGAPU::update(int cycles)
                 if((frameSeqClock & 1) == 0)
                 {
                     // length
-                    auto ch1LenDuty = cpu.readIORegRaw(IO_NR11);
-                    auto ch2LenDuty = cpu.readIORegRaw(IO_NR21);
-                    auto ch3Len = cpu.readIORegRaw(IO_NR31);
-                    auto ch4Len = cpu.readIORegRaw(IO_NR41);
+                    auto ch1LenDuty = mem.readIOReg(IO_NR11);
+                    auto ch2LenDuty = mem.readIOReg(IO_NR21);
+                    auto ch3Len = mem.readIOReg(IO_NR31);
+                    auto ch4Len = mem.readIOReg(IO_NR41);
 
                     if(ch1FreqHi & NRx4_Counter)
                     {
@@ -96,10 +99,10 @@ void DMGAPU::update(int cycles)
                         ch4Len = ((64 - newLen) & 0x3F);
                     }
 
-                    cpu.writeIORegRaw(IO_NR11, ch1LenDuty);
-                    cpu.writeIORegRaw(IO_NR21, ch2LenDuty);
-                    cpu.writeIORegRaw(IO_NR31, ch3Len);
-                    cpu.writeIORegRaw(IO_NR41, ch4Len);
+                    mem.writeIOReg(IO_NR11, ch1LenDuty);
+                    mem.writeIOReg(IO_NR21, ch2LenDuty);
+                    mem.writeIOReg(IO_NR31, ch3Len);
+                    mem.writeIOReg(IO_NR41, ch4Len);
                 } 
 
                 if(frameSeqClock == 7)
@@ -112,7 +115,7 @@ void DMGAPU::update(int cycles)
 
         // channel 1
         ch1FreqTimer += cycles;
-        auto freq = cpu.readIORegRaw(IO_NR13) | ((ch1FreqHi & 0x7) << 8);
+        auto freq = mem.readIOReg(IO_NR13) | ((ch1FreqHi & 0x7) << 8);
         auto timerPeriod = (2048 - freq) * 4;
 
         while(ch1FreqTimer > timerPeriod)
@@ -124,7 +127,7 @@ void DMGAPU::update(int cycles)
 
         // channel 2
         ch2FreqTimer += cycles;
-        freq = cpu.readIORegRaw(IO_NR23) | ((ch2FreqHi & 0x7) << 8);
+        freq = mem.readIOReg(IO_NR23) | ((ch2FreqHi & 0x7) << 8);
         timerPeriod = (2048 - freq) * 4;
 
         while(ch2FreqTimer > timerPeriod)
@@ -151,7 +154,7 @@ void DMGAPU::update(int cycles)
         // wait for the audio thread/interrupt to catch up
         while(writeOff == readOff - 1) {}
 
-        auto outputSelect = cpu.readIORegRaw(IO_NR51);
+        auto outputSelect = mem.readIOReg(IO_NR51);
 
         auto vol = ch1EnvVol >> 4;
         auto ch1Val = (channelEnabled & 1) && (ch1DutyPattern & (1 << ch1DutyStep)) ? vol : -vol;
@@ -252,6 +255,8 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
     if(addr < 0xFF00)
         return;
 
+    auto &mem = cpu.getMem();
+
     switch(addr & 0xFF)
     {
         case IO_NR11: // length/duty
@@ -267,7 +272,7 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
         case IO_NR14: // freq hi/trigger/counter
             if(data & NRx4_Trigger)
             {
-                if(cpu.readIORegRaw(IO_NR12) & 0xF8)
+                if(mem.readIOReg(IO_NR12) & 0xF8)
                     channelEnabled |= (1 << 0);
             }
             break;
@@ -285,7 +290,7 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
         case IO_NR24: // freq hi/trigger/counter
             if(data & NRx4_Trigger)
             {
-                if(cpu.readIORegRaw(IO_NR22) & 0xF8)
+                if(mem.readIOReg(IO_NR22) & 0xF8)
                     channelEnabled |= (1 << 1);
             }
             break;
@@ -299,7 +304,7 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
         case IO_NR34: // freq hi/trigger/counter
             if(data & NRx4_Trigger)
             {
-                if(cpu.readIORegRaw(IO_NR30) & 0x80)
+                if(mem.readIOReg(IO_NR30) & 0x80)
                     channelEnabled |= (1 << 2);
             }
             break;
@@ -313,12 +318,12 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
         case IO_NR44: // freq hi/trigger/counter
             if(data & NRx4_Trigger)
             {
-                if(cpu.readIORegRaw(IO_NR42) & 0xF8)
+                if(mem.readIOReg(IO_NR42) & 0xF8)
                     channelEnabled |= (1 << 3);
             }
             break;
     }
 
     // make sure enabled flags are up to date
-    cpu.writeIORegRaw(IO_NR52, (cpu.readIORegRaw(IO_NR52) & 0xF0) | channelEnabled);
+    mem.writeIOReg(IO_NR52, (mem.readIOReg(IO_NR52) & 0xF0) | channelEnabled);
 }

@@ -9,11 +9,6 @@
 DMGCPU::DMGCPU(DMGMemory &mem) : mem(mem)
 {}
 
-void DMGCPU::loadCartridge(const uint8_t *rom, uint32_t romLen)
-{
-    mem.loadCartridge(rom, romLen);
-}
-
 void DMGCPU::reset()
 {
     stopped = halted = false;
@@ -169,9 +164,9 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
     return mem.read(addr);
 }
 
-uint8_t DMGCPU::readIORegRaw(uint8_t addr) const
+uint16_t DMGCPU::readMem16(uint16_t addr) const
 {
-    return mem.readIOReg(addr);
+    return readMem(addr) | (readMem(addr + 1) << 8);
 }
 
 void DMGCPU::writeMem(uint16_t addr, uint8_t data)
@@ -199,16 +194,6 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
     }
 
     mem.write(addr, data);
-}
-
-void DMGCPU::writeIORegRaw(uint8_t addr, uint8_t val)
-{
-    mem.writeIOReg(addr, val);
-}
-
-uint16_t DMGCPU::readMem16(uint16_t addr) const
-{
-    return readMem(addr) | (readMem(addr + 1) << 8);
 }
 
 void DMGCPU::writeMem16(uint16_t addr, uint16_t data)
