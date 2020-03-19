@@ -133,39 +133,23 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
         writeMBC(addr, data); // cart rom
         return;
     }
-    else if(addr < 0xA000)
-    {
-        vram[addr - 0x8000] = data;
-        return;
-    }
-    else if(addr < 0xC000)
-    {
-        cartRam[addr - 0xA000] = data;
-        return;
-    }
-    else if(addr < 0xE000)
-    {
-        wram[addr - 0xC000] = data;
-        return;
-    }
-    else if(addr < 0xFE00)
-    {} // echo
-    else if(addr < 0xFEA0)
-    {
-        oam[addr - 0xFE00] = data;
-        return;
-    }
-    else if(addr < 0xFF00)
-    {
-        //unusable
-        return;
-    }
-    else
+    else if(addr >= 0xFF00)
     {
         if(writeCallback)
             writeCallback(addr, data);
         iohram[addr & 0xFF] = data;
         return;
+    }
+    else if(addr >= 0xFEA0 && addr < 0xFF00)
+        return; // unusable
+    else
+    {
+        auto ptr = mapAddress(addr);
+        if(ptr)
+        {
+            ptr[addr] = data;
+            return;
+        }
     }
 
     printf("write %x = %x\n", addr, data);
@@ -174,6 +158,46 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
 void DMGMemory::writeIOReg(uint8_t addr, uint8_t val)
 {
     iohram[addr] = val;
+}
+
+uint8_t *DMGMemory::mapAddress(uint16_t &addr)
+{
+    if(addr < 0x8000)
+    {
+        // since cartROM is const, can't return it here
+        return nullptr; 
+    }
+    else if(addr < 0xA000)
+    {
+        addr -= 0x8000;
+        return vram;
+    }
+    else if(addr < 0xC000)
+    {
+        addr = (addr - 0xA000) + mbcRAMBank * 0x2000;
+        return cartRam;
+    }
+    else if(addr < 0xE000)
+    {
+        addr -= 0xC000;
+        return wram;
+    }
+    else if(addr < 0xFE00)
+    {} // echo
+    else if(addr < 0xFEA0)
+    {
+        addr -= 0xFE00;
+        return oam;
+    }
+    else if(addr < 0xFF00)
+    {} //unusable
+    else
+    {
+        addr = addr & 0xFF;
+        return iohram;
+    }
+
+    return nullptr;
 }
 
 void DMGMemory::writeMBC(uint16_t addr, uint8_t data)

@@ -19,6 +19,8 @@ public:
     void write(uint16_t addr, uint8_t data);
     void writeIOReg(uint8_t addr, uint8_t val);
 
+    uint8_t *mapAddress(uint16_t &addr);
+
 private:
     void writeMBC(uint16_t addr, uint8_t data);
 
