@@ -44,7 +44,7 @@ void DMGCPU::run(int ms)
         cycles -= exec;
 
         if(cycleCallback)
-            cycleCallback(exec, mem.getIORegs());
+            cycleCallback(exec);
 
         const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
         const auto tac = mem.readIOReg(IO_TAC);

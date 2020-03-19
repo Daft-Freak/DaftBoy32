@@ -19,7 +19,7 @@ DMGAPU apu(cpu);
 bool turbo = false;
 bool awfulScale = false;
 
-void onCyclesExeceuted(int cycles, uint8_t *ioRegs)
+void onCyclesExeceuted(int cycles)
 {
     apu.update(cycles);
     display.update(cycles);

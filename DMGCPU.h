@@ -17,7 +17,7 @@ class DMGCPU final
 public:
     DMGCPU(DMGMemory &mem);
 
-    using CycleCallback = void(*)(int, uint8_t *);
+    using CycleCallback = void(*)(int);
 
     void reset();
 
