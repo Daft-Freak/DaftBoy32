@@ -18,6 +18,8 @@ private:
     DMGMemory &mem;
 
     static const int scanlineCycles = 456;
+    static const int screenWidth = 160, screenHeight = 144;
+
     int remainingScanlineCycles = scanlineCycles;
-    uint8_t screenData[160 * 144]; // greyscale
+    uint8_t screenData[screenWidth * screenHeight]; // greyscale
 };

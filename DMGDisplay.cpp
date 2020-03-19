@@ -40,12 +40,12 @@ void DMGDisplay::update(int cycles)
     remainingScanlineCycles += scanlineCycles;
     int y = ioRegs[IO_LY];
 
-    if(y == 144)
+    if(y == screenHeight)
         cpu.flagInterrupt(Int_VBlank);
     else if(ioRegs[IO_LY] > 153)
         y = ioRegs[IO_LY] = 0; // end vblank
     
-    if(y < 144)
+    if(y < screenHeight)
     {
         const uint8_t colMap[]{0xFF, 0xCC, 0x77, 0};
 
@@ -66,7 +66,7 @@ void DMGDisplay::update(int cycles)
         {
             // bg
             // TODO: window
-            for(int x = 0; x < 160; x++)
+            for(int x = 0; x < screenWidth; x++)
             {
                 int tileId = (x / 8) + tileY * screenSizeTiles;
 
@@ -87,7 +87,7 @@ void DMGDisplay::update(int cycles)
 
                 int col = (bgPal >> (2 * palIndex)) & 0x3;
 
-                screenData[x + y * 160] = colMap[col];
+                screenData[x + y * screenWidth] = colMap[col];
             }
         }
 
@@ -128,7 +128,7 @@ void DMGDisplay::update(int cycles)
                     int palIndex = ((d1 >> xShift) & 1) | (((d2 >> xShift) & 1) << 1);
 
                     int col = (spritePal >> (2 * palIndex)) & 0x3;
-                    screenData[(x + spriteX) + y * 160] = colMap[col];
+                    screenData[(x + spriteX) + y * screenWidth] = colMap[col];
                 }
             }
         }
