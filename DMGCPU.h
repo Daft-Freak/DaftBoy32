@@ -74,8 +74,6 @@ private:
     int executeInstruction();
     int executeExInstruction();
 
-    void writeMBC(uint16_t addr, uint8_t data);
-
     static const uint32_t clockSpeed = 4194304;
 
     // internal state
