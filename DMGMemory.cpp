@@ -89,8 +89,8 @@ uint8_t DMGMemory::read(uint16_t addr) const
 {
     if(addr < 0x8000)
     {
-        int mappedAddr = addr;
-        if(addr > 0x4000) // handle banking
+        unsigned int mappedAddr = addr;
+        if(addr >= 0x4000) // handle banking
             mappedAddr += (mbcROMBank - 1) * 0x4000;
 
         if(mappedAddr < cartROMLen)
