@@ -4,8 +4,15 @@
 class DMGMemory
 {
 public:
+    using ReadCallback = uint8_t(*)(uint16_t, uint8_t val);
+    using WriteCallback = void(*)(uint16_t, uint8_t val);
+
     void loadCartridge(const uint8_t *rom, uint32_t romLen);
     void reset();
+
+    // only covers io registers
+    void setReadCallback(ReadCallback readCallback);
+    void setWriteCallback(WriteCallback writeCallback);
 
     uint8_t read(uint16_t addr) const;
     uint8_t readIOReg(uint8_t addr) const;
@@ -36,4 +43,7 @@ private:
     int mbcROMBank = 1, mbcRAMBank = 0;
     bool mbcRAMBankMode = false;
     uint8_t cartRam[0x2000];
+
+    ReadCallback readCallback;
+    WriteCallback writeCallback;
 };

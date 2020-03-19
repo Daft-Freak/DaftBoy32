@@ -75,6 +75,16 @@ void DMGMemory::reset()
     iohram[IO_IE] = 0x00; // IE
 }
 
+void DMGMemory::setReadCallback(ReadCallback readCallback)
+{
+    this->readCallback = readCallback;
+}
+
+void DMGMemory::setWriteCallback(WriteCallback writeCallback)
+{
+    this->writeCallback = writeCallback;
+}
+
 uint8_t DMGMemory::read(uint16_t addr) const
 {
     if(addr < 0x8000)
@@ -98,7 +108,14 @@ uint8_t DMGMemory::read(uint16_t addr) const
     else if(addr < 0xFF00)
     {} //unusable
     else
-        return iohram[addr & 0xFF];
+    {
+        auto val = iohram[addr & 0xFF];
+
+        if(readCallback)
+            val = readCallback(addr, val);
+
+        return val;
+    }
 
     printf("read %x\n", addr);
     return 0;
@@ -145,6 +162,8 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
     }
     else
     {
+        if(writeCallback)
+            writeCallback(addr, data);
         iohram[addr & 0xFF] = data;
         return;
     }

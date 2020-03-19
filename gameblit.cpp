@@ -190,8 +190,8 @@ void init()
 
     mem.loadCartridge(test_rom, test_rom_length);
     cpu.setCycleCallback(onCyclesExeceuted);
-    cpu.setReadCallback(onRead);
-    cpu.setWriteCallback(onWrite);
+    mem.setReadCallback(onRead);
+    mem.setWriteCallback(onWrite);
     cpu.reset();
 }
 

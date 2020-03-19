@@ -18,17 +18,12 @@ public:
     DMGCPU(DMGMemory &mem);
 
     using CycleCallback = void(*)(int, uint8_t *);
-    using ReadCallback = uint8_t(*)(uint16_t, uint8_t val);
-    using WriteCallback = void(*)(uint16_t, uint8_t val);
 
     void reset();
 
     void run(int ms);
 
     void setCycleCallback(CycleCallback cycleCallback);
-    // only covers io registers
-    void setReadCallback(ReadCallback readCallback);
-    void setWriteCallback(WriteCallback writeCallback);
 
     void flagInterrupt(int interrupt);
 
@@ -100,8 +95,6 @@ private:
 
     // callbacks
     CycleCallback cycleCallback;
-    ReadCallback readCallback;
-    WriteCallback writeCallback;
 
     // raw input data
     uint8_t rawInputs = 0;

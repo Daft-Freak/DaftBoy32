@@ -111,16 +111,6 @@ void DMGCPU::setCycleCallback(CycleCallback cycleCallback)
     this->cycleCallback = cycleCallback;
 }
 
-void DMGCPU::setReadCallback(ReadCallback readCallback)
-{
-    this->readCallback = readCallback;
-}
-
-void DMGCPU::setWriteCallback(WriteCallback writeCallback)
-{
-    this->writeCallback = writeCallback;
-}
-
 void DMGCPU::flagInterrupt(int interrupt)
 {
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
@@ -141,8 +131,7 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
         if((addr & 0xFF) == IO_STAT)
             printf("r STAT @~%x\n", pc);
 
-        uint8_t val = mem.readIOReg(addr);
-
+        uint8_t val = mem.read(addr);
 
         // input
         if((addr & 0xFF) == IO_JOYP)
@@ -154,9 +143,6 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
                 ret |= ((~rawInputs) >> 4) & 0xF;
             return ret;
         }
-
-        if(readCallback)
-            val = readCallback(addr, val);
 
         return val;
     }
@@ -181,15 +167,12 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
                 writeMem(0xFE00 + i, readMem((data << 8) + i));
         }
 
-        if(writeCallback)
-            writeCallback(addr, data);
-
         if((addr & 0xFF) == IO_LY)
-            mem.writeIOReg(addr & 0xFF, 0); // clear on write
+            mem.writeIOReg(addr, 0); // clear on write
         else if((addr & 0xFF) == IO_DIV)
             divCounter = 0;
         else
-            mem.writeIOReg(addr & 0xFF, data);
+            mem.write(addr, data);
         return;
     }
 
