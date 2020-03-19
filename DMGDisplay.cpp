@@ -36,7 +36,12 @@ void DMGDisplay::update(int cycles)
 
     // next scanline
     remainingScanlineCycles += scanlineCycles;
-    int y = mem.readIOReg(IO_LY) + 1;
+    int y = mem.readIOReg(IO_LY);
+
+    if(y < screenHeight)
+        drawScanLine(y);
+
+    y++;
 
     if(y == screenHeight)
         cpu.flagInterrupt(Int_VBlank);
@@ -44,9 +49,6 @@ void DMGDisplay::update(int cycles)
         y = 0; // end vblank
 
     mem.writeIOReg(IO_LY, y);
-    
-    if(y < screenHeight)
-        drawScanLine(y);
 }
 
 void DMGDisplay::drawScanLine(int y)
