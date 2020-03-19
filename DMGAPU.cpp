@@ -42,75 +42,72 @@ void DMGAPU::update(int cycles)
         auto oldDiv = cpu.getInternalTimer();
 
         // update frame sequencer clock
-        for(int c = cycles; c > 0; c -= 4)
+        auto wasSet = oldDiv & (1 << 12);
+        oldDiv += cycles;
+
+        if(wasSet && !(oldDiv & (1 << 12)))
         {
-            auto wasSet = oldDiv & (1 << 12);
-            oldDiv += 4;
+            frameSeqClock = (frameSeqClock + 1) % 8;
 
-            if(wasSet && !(oldDiv & (1 << 12)))
+            if((frameSeqClock & 1) == 0)
             {
-                frameSeqClock = (frameSeqClock + 1) % 8;
+                // length
+                auto ch1LenDuty = mem.readIOReg(IO_NR11);
+                auto ch2LenDuty = mem.readIOReg(IO_NR21);
+                auto ch3Len = mem.readIOReg(IO_NR31);
+                auto ch4Len = mem.readIOReg(IO_NR41);
 
-                if((frameSeqClock & 1) == 0)
+                if(ch1FreqHi & NRx4_Counter)
                 {
-                    // length
-                    auto ch1LenDuty = mem.readIOReg(IO_NR11);
-                    auto ch2LenDuty = mem.readIOReg(IO_NR21);
-                    auto ch3Len = mem.readIOReg(IO_NR31);
-                    auto ch4Len = mem.readIOReg(IO_NR41);
+                    int newLen = (64 - (ch1LenDuty & 0x3F)) - 1;
+                    if(newLen == 0)
+                        channelEnabled &= ~(1 << 0); // done, disable
 
-                    if(ch1FreqHi & NRx4_Counter)
-                    {
-                        int newLen = (64 - (ch1LenDuty & 0x3F)) - 1;
-                        if(newLen == 0)
-                            channelEnabled &= ~(1 << 0); // done, disable
+                    // write back
+                    ch1LenDuty = (ch1LenDuty & 0xC0) | ((64 - newLen) & 0x3F);
+                }
 
-                        // write back
-                        ch1LenDuty = (ch1LenDuty & 0xC0) | ((64 - newLen) & 0x3F);
-                    }
+                if(ch2FreqHi & NRx4_Counter)
+                {
+                    int newLen = (64 - (ch2LenDuty & 0x3F)) - 1;
+                    if(newLen == 0)
+                        channelEnabled &= ~(1 << 1); // done, disable
 
-                    if(ch2FreqHi & NRx4_Counter)
-                    {
-                        int newLen = (64 - (ch2LenDuty & 0x3F)) - 1;
-                        if(newLen == 0)
-                            channelEnabled &= ~(1 << 1); // done, disable
+                    // write back
+                    ch2LenDuty = (ch2LenDuty & 0xC0) | ((64 - newLen) & 0x3F);
+                }
 
-                        // write back
-                        ch2LenDuty = (ch2LenDuty & 0xC0) | ((64 - newLen) & 0x3F);
-                    }
+                if(ch3FreqHi & NRx4_Counter)
+                {
+                    int newLen = (256 - ch3Len) - 1;
+                    if(newLen == 0)
+                        channelEnabled &= ~(1 << 2); // done, disable
 
-                    if(ch3FreqHi & NRx4_Counter)
-                    {
-                        int newLen = (256 - ch3Len) - 1;
-                        if(newLen == 0)
-                            channelEnabled &= ~(1 << 2); // done, disable
+                    // write back
+                    ch3Len = 256 - newLen;
+                }
 
-                        // write back
-                        ch3Len = 256 - newLen;
-                    }
+                if(ch4FreqHi & NRx4_Counter)
+                {
+                    int newLen = (64 - (ch4Len & 0x3F)) - 1;
+                    if(newLen == 0)
+                        channelEnabled &= ~(1 << 3); // done, disable
 
-                    if(ch4FreqHi & NRx4_Counter)
-                    {
-                        int newLen = (64 - (ch4Len & 0x3F)) - 1;
-                        if(newLen == 0)
-                            channelEnabled &= ~(1 << 3); // done, disable
+                    // write back
+                    ch4Len = ((64 - newLen) & 0x3F);
+                }
 
-                        // write back
-                        ch4Len = ((64 - newLen) & 0x3F);
-                    }
+                mem.writeIOReg(IO_NR11, ch1LenDuty);
+                mem.writeIOReg(IO_NR21, ch2LenDuty);
+                mem.writeIOReg(IO_NR31, ch3Len);
+                mem.writeIOReg(IO_NR41, ch4Len);
+            } 
 
-                    mem.writeIOReg(IO_NR11, ch1LenDuty);
-                    mem.writeIOReg(IO_NR21, ch2LenDuty);
-                    mem.writeIOReg(IO_NR31, ch3Len);
-                    mem.writeIOReg(IO_NR41, ch4Len);
-                } 
+            if(frameSeqClock == 7)
+            {} // env
 
-                if(frameSeqClock == 7)
-                {} // env
-
-                if((frameSeqClock & 0x3) == 2)
-                {} // sweep
-            }
+            if((frameSeqClock & 0x3) == 2)
+            {} // sweep
         }
 
         // channel 1
