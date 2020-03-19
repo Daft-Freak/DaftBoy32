@@ -89,11 +89,12 @@ uint8_t DMGMemory::read(uint16_t addr) const
 {
     if(addr < 0x8000)
     {
+        int mappedAddr = addr;
         if(addr > 0x4000) // handle banking
-            addr += (mbcROMBank - 1) * 0x4000;
+            mappedAddr += (mbcROMBank - 1) * 0x4000;
 
-        if(addr < cartROMLen)
-            return cartROM[addr];
+        if(mappedAddr < cartROMLen)
+            return cartROM[mappedAddr];
     }
     else if(addr < 0xA000)
         return vram[addr - 0x8000];
