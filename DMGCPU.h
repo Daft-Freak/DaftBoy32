@@ -27,8 +27,6 @@ public:
 
     void flagInterrupt(int interrupt);
 
-    void setInputs(uint8_t inputs);
-
     DMGMemory &getMem() {return mem;}
 
     uint16_t getInternalTimer() const {return divCounter;}
@@ -95,7 +93,4 @@ private:
 
     // callbacks
     CycleCallback cycleCallback;
-
-    // raw input data
-    uint8_t rawInputs = 0;
 };

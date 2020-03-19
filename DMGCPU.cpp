@@ -116,35 +116,12 @@ void DMGCPU::flagInterrupt(int interrupt)
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
 }
 
-void DMGCPU::setInputs(uint8_t inputs)
-{
-    if(rawInputs == 0 && inputs != 0)
-        flagInterrupt(Int_Joypad);
-
-    rawInputs = inputs;
-}
-
 uint8_t DMGCPU::readMem(uint16_t addr) const
 {
     if(addr >= 0xFF00)
     {
         if((addr & 0xFF) == IO_STAT)
             printf("r STAT @~%x\n", pc);
-
-        uint8_t val = mem.read(addr);
-
-        // input
-        if((addr & 0xFF) == IO_JOYP)
-        {
-            int ret = val & 0xF0;
-            if(!(val & JOYP_SelectDir))
-                ret |= (~rawInputs) & 0xF;
-            if(!(val & JOYP_SelectButtons))
-                ret |= ((~rawInputs) >> 4) & 0xF;
-            return ret;
-        }
-
-        return val;
     }
 
     return mem.read(addr);

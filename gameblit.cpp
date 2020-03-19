@@ -16,6 +16,8 @@ DMGCPU cpu(mem);
 DMGDisplay display(cpu);
 DMGAPU apu(cpu);
 
+uint8_t inputs = 0;
+
 bool turbo = false;
 bool awfulScale = false;
 
@@ -27,6 +29,16 @@ void onCyclesExeceuted(int cycles)
 
 uint8_t onRead(uint16_t addr, uint8_t val)
 {
+    if((addr & 0xFF) == IO_JOYP)
+    {
+        int ret = val & 0xF0;
+        if(!(val & JOYP_SelectDir))
+            ret |= (~inputs) & 0xF;
+        if(!(val & JOYP_SelectButtons))
+            ret |= ((~inputs) >> 4) & 0xF;
+        return ret;
+    }
+
     return apu.readReg(addr, val);
 }
 
@@ -124,11 +136,15 @@ void update(uint32_t time_ms)
     auto start = blit::now();
 
     // translate inputs
-    uint8_t inputs = (blit::buttons & 0x7C) | // UP/DOWN/A/B match, select -> X
-                     ((blit::buttons & blit::Button::DPAD_RIGHT) >> 1) |
-                     ((blit::buttons & blit::Button::DPAD_LEFT) << 1) |
-                     ((blit::buttons & blit::Button::HOME) >> 2); // start -> home
-    cpu.setInputs(inputs);
+    // TODO: move input handling?
+    auto oldInputs = inputs;
+    inputs = (blit::buttons & 0x7C) | // UP/DOWN/A/B match, select -> X
+             ((blit::buttons & blit::Button::DPAD_RIGHT) >> 1) |
+             ((blit::buttons & blit::Button::DPAD_LEFT) << 1) |
+             ((blit::buttons & blit::Button::HOME) >> 2); // start -> home
+
+    if(oldInputs == 0 && inputs != 0)
+        cpu.flagInterrupt(Int_Joypad);
 
     // toggle the awful 1.5x scale
     if((changedButtons & blit::Button::Y) && !(blit::buttons & blit::Button::Y))
