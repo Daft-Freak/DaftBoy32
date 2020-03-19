@@ -81,12 +81,12 @@ void DMGDisplay::drawScanLine(int y)
     // active scanline
     if(lcdc & LCDC_BGDisp)
     {
-        auto windowX = mem.readIOReg(IO_WX) - 7;
+        auto windowX = (lcdc & LCDC_WindowEnable) ? mem.readIOReg(IO_WX) - 7 : screenWidth;
         auto scrollX = mem.readIOReg(IO_SCX);
         auto scrollY = mem.readIOReg(IO_SCY);
 
         // bg/window
-        for(int x = 0; x < screenWidth; x++)
+        for(int x = 0; x < screenWidth;)
         {
             int tileId;
             uint8_t tx;
@@ -116,13 +116,18 @@ void DMGDisplay::drawScanLine(int y)
             uint8_t d2 = tileDataPtr[tileAddr + (ty & 7) * 2 + 1];
 
             int xShift = 7 - (tx & 7);
-            int palIndex = ((d1 >> xShift) & 1) | (((d2 >> xShift) & 1) << 1);
 
-            bgRaw[x] = palIndex;
+            // attempt to copy as much of the tile as possible
+            const int limit = x >= windowX ? screenWidth : windowX;
+            for(; xShift >= 0 && x < limit; x++, xShift--)
+            {
+                int palIndex = ((d1 >> xShift) & 1) | (((d2 >> xShift) & 1) << 1);
 
-            int col = (bgPal >> (2 * palIndex)) & 0x3;
+                bgRaw[x] = palIndex;
 
-            screenData[x + y * screenWidth] = colMap[col];
+                int col = (bgPal >> (2 * palIndex)) & 0x3;
+                screenData[x + y * screenWidth] = colMap[col];
+            }
         }
     }
 
