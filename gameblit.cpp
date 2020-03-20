@@ -233,5 +233,14 @@ void update(uint32_t time_ms)
         cpu.run(1);
     }
 
+    // dump cart ram
+    if((changedButtons & blit::Button::JOYSTICK) && !(blit::buttons & blit::Button::JOYSTICK))
+    {
+        blit::File f(loadedFilename + ".ram", blit::OpenMode::write);
+
+        uint16_t addr = 0xA000;
+        f.write(0, 0x8000, (const char *)mem.mapAddress(addr));
+    }
+
     lastButtonState = blit::buttons;
 }
