@@ -62,6 +62,7 @@ void DMGMemory::reset()
     romBankCallback(0, cartROMBank0);
     romBankCallback(1, cartROMCurBank);
 
+    cachedROMBanks.clear();
     for(int i = 0; i < romBankCacheSize; i++)
         cachedROMBanks.emplace_back(ROMCacheEntry{cartROMBankCache + i * 0x4000, 0});
 
