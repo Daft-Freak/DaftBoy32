@@ -26,12 +26,14 @@ private:
     uint8_t channelEnabled = 0;
 
     // channel 1
+    int ch1EnvVolume, ch1EnvTimer;
     int ch1FreqTimer = 0;
     int ch1FreqTimerPeriod = 1;
     int ch1DutyStep = 0;
     uint8_t ch1DutyPattern = 0;
 
     // channel 2
+    int ch2EnvVolume, ch2EnvTimer;
     int ch2FreqTimer = 0;
     int ch2FreqTimerPeriod = 1;
     int ch2DutyStep = 0;

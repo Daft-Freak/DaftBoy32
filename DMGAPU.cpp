@@ -95,7 +95,35 @@ void DMGAPU::update(int cycles)
             } 
 
             if(frameSeqClock == 7)
-            {} // env
+            {
+                // envelope
+                const auto ch1EnvVol = mem.readIOReg(IO_NR12);
+                const auto ch2EnvVol = mem.readIOReg(IO_NR22);
+
+                ch1EnvTimer--;
+
+                if(ch1EnvTimer == 0)
+                {
+                    if(ch1EnvVol & (1 << 3) && ch1EnvVolume < 15)
+                        ch1EnvVolume++;
+                    else if(ch1EnvVolume > 0)
+                        ch1EnvVolume--;
+
+                    ch1EnvTimer = ch1EnvVol & 0x7;
+                }
+
+                ch2EnvTimer--;
+
+                if(ch2EnvTimer == 0)
+                {
+                    if(ch2EnvVol & (1 << 3) && ch2EnvVolume < 15)
+                        ch2EnvVolume++;
+                    else if(ch2EnvVolume > 0)
+                        ch2EnvVolume--;
+
+                    ch2EnvTimer = ch2EnvVol & 0x7;
+                }
+            }
 
             if((frameSeqClock & 0x3) == 2)
             {} // sweep
@@ -134,10 +162,6 @@ void DMGAPU::update(int cycles)
 
     if(sampleClock >= clocksPerSample)
     {
-        const auto ch1EnvVol = mem.readIOReg(IO_NR12);
-        const auto ch2EnvVol = mem.readIOReg(IO_NR22);
-        const auto ch4EnvVol = mem.readIOReg(IO_NR42);
-
         sampleClock -= clocksPerSample;
 
         // wait for the audio thread/interrupt to catch up
@@ -145,10 +169,10 @@ void DMGAPU::update(int cycles)
 
         auto outputSelect = mem.readIOReg(IO_NR51);
 
-        auto vol = ch1EnvVol >> 4;
+        auto vol = ch1EnvVolume;
         auto ch1Val = (channelEnabled & 1) && (ch1DutyPattern & (1 << ch1DutyStep)) ? vol : -vol;
 
-        vol = ch2EnvVol >> 4;
+        vol = ch2EnvVolume;
         auto ch2Val = (channelEnabled & 2) && (ch2DutyPattern & (1 << ch2DutyStep)) ? vol : -vol;
 
         int32_t sample = 0;
@@ -272,6 +296,10 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
             if(data & NRx4_Trigger)
             {
+                // reload envelope
+                ch1EnvVolume = mem.readIOReg(IO_NR12) >> 4;
+                ch1EnvTimer = mem.readIOReg(IO_NR12) & 0x7;
+
                 if(mem.readIOReg(IO_NR12) & 0xF8)
                     channelEnabled |= (1 << 0);
             }
@@ -302,6 +330,10 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
             if(data & NRx4_Trigger)
             {
+                // reload envelope
+                ch2EnvVolume = mem.readIOReg(IO_NR22) >> 4;
+                ch2EnvTimer = mem.readIOReg(IO_NR22) & 0x7;
+
                 if(mem.readIOReg(IO_NR22) & 0xF8)
                     channelEnabled |= (1 << 1);
             }
