@@ -10,10 +10,12 @@ include(${32BLIT_PATH}/32blit.cmake)
 #add_definitions("-DPROFILER")
 
 blit_executable(gameblit
+    control-icons.cpp
     DMGAPU.cpp
     DMGCPU.cpp
     DMGDisplay.cpp
     DMGMemory.cpp
+    file-browser.cpp
     gameblit.cpp
 )
 blit_assets_yaml(gameblit assets.yml)

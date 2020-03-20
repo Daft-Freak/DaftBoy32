@@ -1,2 +1,4 @@
 assets.cpp:
+  assets/buttons.png: asset_buttons
+
   roms/Tetris.gb: test_rom
