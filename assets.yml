@@ -1,4 +1,9 @@
 assets.cpp:
   assets/buttons.png: asset_buttons
+  assets/12x8font.png:
+    name: tall_font
+    type: font/image
+    vertical_spacing: 0
+    space_width: 4
 
   roms/Tetris.gb: test_rom
