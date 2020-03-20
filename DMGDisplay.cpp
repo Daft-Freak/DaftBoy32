@@ -158,7 +158,8 @@ void DMGDisplay::drawScanLine(int y)
 
             int ty = y - spriteY;
 
-            //TODO: y flip
+            if(attrs & Sprite_YFlip)
+                ty = 7 - ty;
 
             auto tileAddr = tileId * tileDataSize;
 
