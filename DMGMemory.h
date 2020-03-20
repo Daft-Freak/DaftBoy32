@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <list>
 
 class DMGMemory
 {
@@ -7,7 +8,9 @@ public:
     using ReadCallback = uint8_t(*)(uint16_t, uint8_t val);
     using WriteCallback = void(*)(uint16_t, uint8_t val);
 
-    void loadCartridge(const uint8_t *rom, uint32_t romLen);
+    using ROMBankCallback = void(*)(uint8_t, uint8_t *);
+
+    void setROMBankCallback(ROMBankCallback callback);
     void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
     void reset();
 
@@ -27,6 +30,7 @@ public:
 
 private:
     void writeMBC(uint16_t addr, uint8_t data);
+    void updateCurrentROMBank();
 
     enum class MBCType
     {
@@ -35,20 +39,34 @@ private:
         MBC3
     };
 
+    struct ROMCacheEntry
+    {
+        uint8_t *ptr;
+        uint8_t bank;
+    };
+
     uint8_t vram[0x2000]; // 8k @ 0x8000
     uint8_t wram[0x2000]; // 8k @ 0xC000
     uint8_t oam[0xA0]; // @ 0xFE00
     uint8_t iohram[0x100]; // io @ 0xFF00, hram @ 0xFF80, ie & 0xFFFF
 
     // cartridge
-    const uint8_t *cartROM = nullptr;
-    uint32_t cartROMLen = 0;
     MBCType mbcType = MBCType::None;
     bool mbcRAMEnabled = false;
     int mbcROMBank = 1, mbcRAMBank = 0;
     bool mbcRAMBankMode = false;
     uint8_t cartRam[0x8000];
 
+    uint8_t cartROMBank0[0x4000];
+    uint8_t *cartROMCurBank;
+
+    // cache as much as possible in RAM
+    static const int romBankCacheSize = 8;
+    uint8_t cartROMBankCache[0x4000 * romBankCacheSize];
+    std::list<ROMCacheEntry> cachedROMBanks;
+
     ReadCallback readCallback;
     WriteCallback writeCallback;
+
+    ROMBankCallback romBankCallback;
 };

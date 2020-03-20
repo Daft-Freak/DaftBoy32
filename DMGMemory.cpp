@@ -4,38 +4,9 @@
 #include "DMGMemory.h"
 #include "DMGRegs.h"
 
-void DMGMemory::loadCartridge(const uint8_t *rom, uint32_t romLen)
+void DMGMemory::setROMBankCallback(ROMBankCallback callback)
 {
-    cartROM = rom;
-    cartROMLen = romLen;
-
-    switch(cartROM[0x147])
-    {
-        case 0:
-            mbcType = MBCType::None;
-            break;
-        case 1:
-        case 2: // + RAM
-        case 3: // + RAM + Battery
-            mbcType = MBCType::MBC1;
-            break;
-
-        case 0x0F: // + Timer + Battery
-        case 0x11: // + Timer + RAM + Battery
-        case 0x12: // + RAM
-        case 0x13: // + RAM + Battery
-            mbcType = MBCType::MBC3;
-            break;
-
-        default:
-            printf("unhandled cartridge type %x\n", cartROM[0x147]);
-            mbcType = MBCType::None;
-    }
-
-    mbcRAMEnabled = false;
-    mbcROMBank = 1;
-    mbcRAMBank = 0;
-    mbcRAMBankMode = false;
+    this->romBankCallback = callback;
 }
 
 void DMGMemory::loadCartridgeRAM(const uint8_t *ram, uint32_t len)
@@ -85,6 +56,42 @@ void DMGMemory::reset()
     iohram[IO_WY] = 0x00; // WY
     iohram[IO_WX] = 0x00; // WX
     iohram[IO_IE] = 0x00; // IE
+
+    // load some ROM
+    cartROMCurBank = cartROMBankCache;
+    romBankCallback(0, cartROMBank0);
+    romBankCallback(1, cartROMCurBank);
+
+    for(int i = 0; i < romBankCacheSize; i++)
+        cachedROMBanks.emplace_back(ROMCacheEntry{cartROMBankCache + i * 0x4000, 0});
+
+    switch(cartROMBank0[0x147])
+    {
+        case 0:
+            mbcType = MBCType::None;
+            break;
+        case 1:
+        case 2: // + RAM
+        case 3: // + RAM + Battery
+            mbcType = MBCType::MBC1;
+            break;
+
+        case 0x0F: // + Timer + Battery
+        case 0x11: // + Timer + RAM + Battery
+        case 0x12: // + RAM
+        case 0x13: // + RAM + Battery
+            mbcType = MBCType::MBC3;
+            break;
+
+        default:
+            printf("unhandled cartridge type %x\n", cartROMBank0[0x147]);
+            mbcType = MBCType::None;
+    }
+
+    mbcRAMEnabled = false;
+    mbcROMBank = 1;
+    mbcRAMBank = 0;
+    mbcRAMBankMode = false;
 }
 
 void DMGMemory::setReadCallback(ReadCallback readCallback)
@@ -99,15 +106,10 @@ void DMGMemory::setWriteCallback(WriteCallback writeCallback)
 
 uint8_t DMGMemory::read(uint16_t addr) const
 {
-    if(addr < 0x8000)
-    {
-        unsigned int mappedAddr = addr;
-        if(addr >= 0x4000) // handle banking
-            mappedAddr += (mbcROMBank - 1) * 0x4000;
-
-        if(mappedAddr < cartROMLen)
-            return cartROM[mappedAddr];
-    }
+    if(addr < 0x4000)
+        return cartROMBank0[addr];
+    else if(addr < 0x8000)
+        return cartROMCurBank[addr - 0x4000];
     else if(addr < 0xA000)
         return vram[addr - 0x8000];
     else if(addr < 0xC000)
@@ -227,6 +229,8 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
             if(mbcROMBank == 0)
                 mbcROMBank = 1; // bank 0 is handled as bank 1
         }
+
+        updateCurrentROMBank();
     }
     else if(addr < 0x6000)
     {
@@ -234,7 +238,10 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
         if(mbcRAMBankMode || mbcType == MBCType::MBC3)
             mbcRAMBank = data & 0x3;
         else
+        {
             mbcROMBank = (mbcROMBank & 0x1F) | (data & 0xE0);
+            updateCurrentROMBank();
+        }
 
         // TODO: MBC3 bank >= 8 maps RTC regs
     }
@@ -250,4 +257,33 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
                 mbcRAMBank = 0;
         }
     }
+}
+
+void DMGMemory::updateCurrentROMBank()
+{
+    if(mbcROMBank == 0)
+    {
+        cartROMCurBank = cartROMBank0;
+        return;
+    }
+
+    int empty = romBankCacheSize - 1; // fallback
+
+    for(auto it = cachedROMBanks.begin(); it != cachedROMBanks.end(); ++it)
+    {
+        if(it->bank == mbcROMBank)
+        {
+            cartROMCurBank = it->ptr;
+            cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
+            return;
+        }
+    }
+
+    // reuse the last (least recently used) bank
+    auto it = std::prev(cachedROMBanks.end());
+
+    cartROMCurBank = it->ptr;
+    romBankCallback(mbcROMBank, cartROMCurBank);
+    it->bank = mbcROMBank;
+    cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
 }

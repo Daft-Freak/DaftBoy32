@@ -20,10 +20,9 @@ DMGAPU apu(cpu);
 
 uint8_t inputs = 0;
 
-uint8_t *romData = nullptr;
-
 bool loaded = false;
 std::string loadedFilename;
+blit::File romFile;
 
 bool turbo = false;
 bool awfulScale = false;
@@ -54,6 +53,13 @@ void onWrite(uint16_t addr, uint8_t val)
     apu.writeReg(addr, val);
 }
 
+
+void getROMBank(uint8_t bank, uint8_t *ptr)
+{
+    printf("loading bank %i\n", bank);
+    romFile.read(bank * 0x4000, 0x4000, (char *)ptr);
+}
+
 void updateAudio(void *arg)
 {
     if(apu.getNumSamples() < 64)
@@ -69,22 +75,11 @@ void updateAudio(void *arg)
 
 void openROM(std::string filename)
 {
-    blit::File file(filename);
-    auto romLen = file.get_length();
-
-    if(file.get_ptr()) // shortcut for embedded files
-        mem.loadCartridge(file.get_ptr(), romLen);
-    else
-    {
-        delete[] romData;
-        romData = new uint8_t[romLen];
-        file.read(0, romLen, (char *)romData);
-        mem.loadCartridge(romData, romLen);
-    }
+    romFile.open(filename);
 
     if(blit::file_exists(filename + ".ram"))
     {
-        file.open(filename + ".ram");
+        blit::File file(filename + ".ram");
         auto ramLen = file.get_length();
 
         if(file.get_ptr())
@@ -130,6 +125,7 @@ void init()
     fileBrowser.init();
 
     cpu.setCycleCallback(onCyclesExeceuted);
+    mem.setROMBankCallback(getROMBank);
     mem.setReadCallback(onRead);
     mem.setWriteCallback(onWrite);
 
