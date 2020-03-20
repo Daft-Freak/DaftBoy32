@@ -1944,7 +1944,7 @@ void DMGCPU::updateTimer(int cycles)
     const int timerBit = timerBits[tac & TAC_Clock];
 
     // increment the internal timer
-    for(;cycles > 0; cycles -= 4)
+    for(;(timerEnabled || timerOldVal) && cycles > 0; cycles -= 4)
     {
         divCounter += 4;
 
@@ -1953,19 +1953,22 @@ void DMGCPU::updateTimer(int cycles)
         // timer (incremented on falling edge)
         if(timerOldVal && !val)
         {
-            const auto tima = mem.readIOReg(IO_TIMA);
+            auto &tima = mem.getIOReg(IO_TIMA);
             if(tima == 0xFF)
             {
                 //overflow
-                mem.writeIOReg(IO_TIMA,  mem.readIOReg(IO_TMA));
+                tima = mem.readIOReg(IO_TMA);
                 flagInterrupt(Int_Timer);
             }
             else
-                mem.writeIOReg(IO_TIMA, tima + 1);
+                tima++;
         }
 
-        timerOldVal = (divCounter & timerBit) && timerEnabled;
+        timerOldVal = val;
     }
+
+    if(cycles > 0)
+        divCounter += cycles; // if the timer was off, the loop above won't run
 
     // divider
     mem.writeIOReg(IO_DIV, divCounter >> 8);
