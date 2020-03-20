@@ -8,8 +8,10 @@
 #include "DMGCPU.h"
 #include "DMGMemory.h"
 #include "DMGRegs.h"
+#include "file-browser.hpp"
 
-//
+const blit::Font tallFont(tall_font);
+FileBrowser fileBrowser(tallFont);
 
 DMGMemory mem;
 DMGCPU cpu(mem);
@@ -17,6 +19,11 @@ DMGDisplay display(cpu);
 DMGAPU apu(cpu);
 
 uint8_t inputs = 0;
+
+uint8_t *romData = nullptr;
+
+bool loaded = false;
+std::string loadedFilename;
 
 bool turbo = false;
 bool awfulScale = false;
@@ -60,6 +67,42 @@ void updateAudio(void *arg)
         blit::channels[0].wave_buffer[i] = apu.getSample();
 }
 
+void openROM(std::string filename)
+{
+    blit::File file(filename);
+    auto romLen = file.get_length();
+
+    if(file.get_ptr()) // shortcut for embedded files
+        mem.loadCartridge(file.get_ptr(), romLen);
+    else
+    {
+        delete[] romData;
+        romData = new uint8_t[romLen];
+        file.read(0, romLen, (char *)romData);
+        mem.loadCartridge(romData, romLen);
+    }
+
+    if(blit::file_exists(filename + ".ram"))
+    {
+        file.open(filename + ".ram");
+        auto ramLen = file.get_length();
+
+        if(file.get_ptr())
+            mem.loadCartridgeRAM(file.get_ptr(), ramLen);
+        else
+        {
+            auto ramData = new uint8_t[ramLen];
+            file.read(0, ramLen, (char *)ramData);
+            mem.loadCartridgeRAM(ramData, ramLen);
+            delete[] ramData;
+        }
+    }
+
+    cpu.reset();
+    loaded = true;
+    loadedFilename = filename;
+}
+
 void init()
 {
     blit::set_screen_mode(blit::ScreenMode::hires);
@@ -74,17 +117,37 @@ void init()
         blit::channels[0].trigger_sustain();
     }
 
-    mem.loadCartridge(test_rom, test_rom_length);
+    fileBrowser.setExtensions({".gb"});
+    fileBrowser.setDisplayRect(blit::Rect(5, 5, blit::screen.bounds.w - 10, blit::screen.bounds.h - 10));
+    fileBrowser.setOnFileOpen(openROM);
+
+    // embed test ROM
+#if 0
+    blit::File::add_buffer_file("auto.gb", test_rom, test_rom_length);
+    blit::File::add_buffer_file("auto.gb.ram", test_ram, test_ram_length);
+#endif
+
+    fileBrowser.init();
+
     cpu.setCycleCallback(onCyclesExeceuted);
     mem.setReadCallback(onRead);
     mem.setWriteCallback(onWrite);
-    cpu.reset();
+
+    // autostart
+    if(blit::file_exists("auto.gb"))
+        openROM("auto.gb");
 }
 
 void render(uint32_t time_ms)
 {
     blit::screen.pen = blit::Pen(20, 30, 40);
     blit::screen.clear();
+
+    if(!loaded)
+    {
+        fileBrowser.render();
+        return;
+    }
 
     auto gbScreen = display.getData();
 
@@ -129,6 +192,12 @@ void render(uint32_t time_ms)
 
 void update(uint32_t time_ms)
 {
+    if(!loaded)
+    {
+        fileBrowser.update(time_ms);
+        return;
+    }
+
     static uint32_t lastButtonState = 0;
 
     auto changedButtons = blit::buttons ^ lastButtonState;

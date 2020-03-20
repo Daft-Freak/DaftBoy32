@@ -5,5 +5,3 @@ assets.cpp:
     type: font/image
     vertical_spacing: 0
     space_width: 4
-
-  roms/Tetris.gb: test_rom
