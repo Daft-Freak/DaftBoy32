@@ -43,5 +43,5 @@ private:
     int sampleClock = 0;
     static const int bufferSize = 1024;
     int16_t sampleData[bufferSize] = {0};
-    volatile int readOff = 0, writeOff = 128;
+    volatile int readOff = 0, writeOff = 64;
 };
