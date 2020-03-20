@@ -1973,27 +1973,28 @@ void DMGCPU::updateTimer(int cycles)
 
 void DMGCPU::serviceInterrupts()
 {
-    auto flag = mem.readIOReg(IO_IF);
+    const auto flag = mem.readIOReg(IO_IF);
     const auto enabled = mem.readIOReg(IO_IE);
     const uint16_t vectors[]{0x40, 0x48, 0x50, 0x58, 0x60};
 
-    for(int i = 0; i < 5; i++)
+    int servicable = enabled & flag;
+
+    for(int i = 0; servicable; i++, servicable >>= 1)
     {
-        int intBit = 1 << i;
-        if((enabled & intBit) && (flag & intBit))
+        if(servicable & 1)
         {
             halted = false; // un-halt even if interrupts are disabled
 
             if(masterInterruptEnable)
             {
                 masterInterruptEnable = false;
-                flag &= ~intBit;
-                mem.writeIOReg(IO_IF, flag);
+                mem.writeIOReg(IO_IF, flag & ~(1 << i));
 
                 // call vector
                 sp -= 2;
                 writeMem16(sp, pc);
                 pc = vectors[i];
+                break;
             }
         }
     }
