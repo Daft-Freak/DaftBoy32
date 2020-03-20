@@ -4,6 +4,9 @@
 #include "DMGMemory.h"
 #include "DMGRegs.h"
 
+static const int extraROMBankCacheSize = 4;
+static uint8_t extraROMBankCache[0x4000 * extraROMBankCacheSize]{1}; // sneakily steal some of DTCMRAM
+
 void DMGMemory::setROMBankCallback(ROMBankCallback callback)
 {
     this->romBankCallback = callback;
@@ -65,6 +68,9 @@ void DMGMemory::reset()
     cachedROMBanks.clear();
     for(int i = 0; i < romBankCacheSize; i++)
         cachedROMBanks.emplace_back(ROMCacheEntry{cartROMBankCache + i * 0x4000, 0});
+
+    for(int i = 0; i < extraROMBankCacheSize; i++)
+        cachedROMBanks.emplace_back(ROMCacheEntry{extraROMBankCache + i * 0x4000, 0});
 
     switch(cartROMBank0[0x147])
     {
