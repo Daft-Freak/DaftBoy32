@@ -69,6 +69,19 @@ enum JOYPBits
     JOYP_SelectButtons = 1 << 5
 };
 
+enum TACBits
+{
+    TAC_Start = 1 << 2,
+    TAC_Clock = 0x3,
+};
+
+enum NR10Bits
+{
+    NR10_Shift = 0x7,
+    NR10_Negate = 1 << 3,
+    NR10_Period = 0x70
+};
+
 // common bits for all channels
 enum NRx4Bits
 {
@@ -84,12 +97,6 @@ enum NR52Bits
     NR52_Ch4On  = 1 << 3,
 
     NR52_Enable = 1 << 7
-};
-
-enum TACBits
-{
-    TAC_Start = 1 << 2,
-    TAC_Clock = 0x3,
 };
 
 enum LCDCBits

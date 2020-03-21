@@ -101,7 +101,52 @@ void DMGAPU::update(int cycles)
             }
 
             if((frameSeqClock & 0x3) == 2)
-            {} // sweep
+            {
+                // sweep
+                const auto ch1Sweep = mem.readIOReg(IO_NR10);
+                auto sweepPeriod = (ch1Sweep & NR10_Period) >> 4;
+                ch1SweepTimer--;
+
+                if(ch1SweepEnable && ch1SweepTimer <= 0)
+                {
+                    if(sweepPeriod)
+                    {
+                        auto shift = ch1Sweep & NR10_Shift;
+                        int newFreq = ch1SweepFreq >> shift;
+
+                        if(ch1Sweep & NR10_Negate) // negate
+                            newFreq = ch1SweepFreq - newFreq;
+                        else
+                            newFreq = ch1SweepFreq + newFreq;
+
+                        if(shift && newFreq < 2048)
+                        {
+                            ch1SweepFreq = newFreq;
+                            mem.writeIOReg(IO_NR13, newFreq & 0xFF);
+                            mem.writeIOReg(IO_NR14, (mem.readIOReg(IO_NR14) & 0xF1) | (newFreq >> 8));
+                            ch1FreqTimerPeriod = (2048 - newFreq) * 4;
+                        }
+
+                        ch1SweepTimer = (ch1Sweep >> 4) & 3;
+
+                        // calculate again for overflow check
+                        newFreq = ch1SweepFreq >> shift;
+
+                        if(ch1Sweep & NR10_Negate) // negate
+                        {
+                            newFreq = ch1SweepFreq - newFreq;
+                            ch1SweepCalcWithNeg = true;
+                        }
+                        else
+                            newFreq = ch1SweepFreq + newFreq;
+
+                        if(newFreq >= 2048)
+                            channelEnabled &= ~(1 << 0);
+                    }
+                    else // period is 0, reset to 8
+                        ch1SweepTimer = 8;
+                }
+            }
         }
 
         // channel 1
@@ -247,6 +292,13 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
     switch(addr & 0xFF)
     {
+        case IO_NR10: // sweep
+
+            // switching negate off after an update with it on kills the channel
+            if(!(data & NR10_Negate) && (mem.readIOReg(IO_NR10) & NR10_Negate) && ch1SweepCalcWithNeg)
+                channelEnabled &= ~1;
+            break;
+
         case IO_NR11: // length/duty
             ch1DutyPattern = dutyPatterns[data >> 6];
             ch1Len = 64 - (data & 0x3F);
@@ -279,6 +331,16 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
             if(data & NRx4_Trigger)
             {
+                // init sweep
+                auto sweepReg = mem.readIOReg(IO_NR10);
+                auto sweepShift = sweepReg & NR10_Shift;
+                ch1SweepTimer = (sweepReg & NR10_Period) >> 4;
+                ch1SweepFreq = freq;
+                ch1SweepEnable = ch1SweepTimer || sweepShift;
+
+                if(ch1SweepTimer == 0)
+                    ch1SweepTimer = 8;
+
                 // reload envelope
                 ch1EnvVolume = mem.readIOReg(IO_NR12) >> 4;
                 ch1EnvTimer = mem.readIOReg(IO_NR12) & 0x7;
@@ -295,6 +357,25 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
                 if(mem.readIOReg(IO_NR12) & 0xF8)
                     channelEnabled |= (1 << 0);
+
+                ch1SweepCalcWithNeg = false;
+
+                // update sweep now if shift is set
+                if(sweepShift)
+                {
+                    int newFreq = ch1SweepFreq >> sweepShift;
+
+                    if(sweepReg & NR10_Negate) // negate
+                    {
+                        newFreq = ch1SweepFreq - newFreq;
+                        ch1SweepCalcWithNeg = true;
+                    }
+                    else
+                        newFreq = ch1SweepFreq + newFreq;
+
+                    if(newFreq >= 2048)
+                        channelEnabled &= ~(1 << 0);
+                }
             }
             break;
         }

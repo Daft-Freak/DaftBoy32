@@ -26,6 +26,10 @@ private:
     uint8_t channelEnabled = 0;
 
     // channel 1
+    bool ch1SweepEnable = false;
+    bool ch1SweepCalcWithNeg = false; // for some wierdness
+    int ch1SweepTimer = 0;
+    int ch1SweepFreq = 0;
     int ch1Len = 0;
     int ch1EnvVolume, ch1EnvTimer;
     int ch1FreqTimer = 0;
