@@ -152,8 +152,8 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
     }
     else if(addr >= 0xFF00)
     {
-        if(writeCallback)
-            writeCallback(addr, data);
+        if(writeCallback && writeCallback(addr, data))
+            return;
         iohram[addr & 0xFF] = data;
         return;
     }

@@ -6,7 +6,7 @@ class DMGMemory
 {
 public:
     using ReadCallback = uint8_t(*)(uint16_t, uint8_t val);
-    using WriteCallback = void(*)(uint16_t, uint8_t val);
+    using WriteCallback = bool(*)(uint16_t, uint8_t val);
 
     using ROMBankCallback = void(*)(uint8_t, uint8_t *);
 
