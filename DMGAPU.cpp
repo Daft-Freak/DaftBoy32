@@ -281,14 +281,18 @@ uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
     return val;
 }
 
-void DMGAPU::writeReg(uint16_t addr, uint8_t data)
+bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 {
     const uint8_t dutyPatterns[]{0b00000001, 0b10000001, 0b10000111, 0b01111110};
 
     if(addr < 0xFF00)
-        return;
+        return false;
 
     auto &mem = cpu.getMem();
+
+    // ignore the write
+    if(!enabled && (addr & 0xFF) >= IO_NR10 && (addr & 0xFF) < IO_NR52)
+        return true;
 
     switch(addr & 0xFF)
     {
@@ -507,6 +511,5 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
             break;
     }
 
-    // make sure enabled flags are up to date
-    mem.writeIOReg(IO_NR52, (mem.readIOReg(IO_NR52) & 0xF0) | channelEnabled);
+    return false;
 }

@@ -50,7 +50,8 @@ uint8_t onRead(uint16_t addr, uint8_t val)
 
 bool onWrite(uint16_t addr, uint8_t val)
 {
-    apu.writeReg(addr, val);
+    if(apu.writeReg(addr, val))
+        return true;
 
     return false;
 }
