@@ -43,55 +43,30 @@ void DMGAPU::update(int cycles)
             if((frameSeqClock & 1) == 0)
             {
                 // length
-                auto ch1LenDuty = mem.readIOReg(IO_NR11);
-                auto ch2LenDuty = mem.readIOReg(IO_NR21);
-                auto ch3Len = mem.readIOReg(IO_NR31);
-                auto ch4Len = mem.readIOReg(IO_NR41);
 
-                if(ch1FreqHi & NRx4_Counter)
+                if((ch1FreqHi & NRx4_Counter) && ch1Len)
                 {
-                    int newLen = (64 - (ch1LenDuty & 0x3F)) - 1;
-                    if(newLen == 0)
+                    if(--ch1Len == 0)
                         channelEnabled &= ~(1 << 0); // done, disable
-
-                    // write back
-                    ch1LenDuty = (ch1LenDuty & 0xC0) | ((64 - newLen) & 0x3F);
                 }
 
-                if(ch2FreqHi & NRx4_Counter)
+                if((ch2FreqHi & NRx4_Counter) && ch2Len)
                 {
-                    int newLen = (64 - (ch2LenDuty & 0x3F)) - 1;
-                    if(newLen == 0)
+                    if(--ch2Len == 0)
                         channelEnabled &= ~(1 << 1); // done, disable
-
-                    // write back
-                    ch2LenDuty = (ch2LenDuty & 0xC0) | ((64 - newLen) & 0x3F);
                 }
 
-                if(ch3FreqHi & NRx4_Counter)
+                if((ch3FreqHi & NRx4_Counter) && ch3Len)
                 {
-                    int newLen = (256 - ch3Len) - 1;
-                    if(newLen == 0)
+                    if(--ch3Len == 0)
                         channelEnabled &= ~(1 << 2); // done, disable
-
-                    // write back
-                    ch3Len = 256 - newLen;
                 }
 
-                if(ch4FreqHi & NRx4_Counter)
+                if((ch4FreqHi & NRx4_Counter) && ch4Len)
                 {
-                    int newLen = (64 - (ch4Len & 0x3F)) - 1;
-                    if(newLen == 0)
+                    if(--ch4Len == 0)
                         channelEnabled &= ~(1 << 3); // done, disable
-
-                    // write back
-                    ch4Len = ((64 - newLen) & 0x3F);
                 }
-
-                mem.writeIOReg(IO_NR11, ch1LenDuty);
-                mem.writeIOReg(IO_NR21, ch2LenDuty);
-                mem.writeIOReg(IO_NR31, ch3Len);
-                mem.writeIOReg(IO_NR41, ch4Len);
             } 
 
             if(frameSeqClock == 7)
@@ -274,6 +249,7 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
     {
         case IO_NR11: // length/duty
             ch1DutyPattern = dutyPatterns[data >> 6];
+            ch1Len = 64 - (data & 0x3F);
             break;
 
         case IO_NR12: // envelope/volume
@@ -294,11 +270,28 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
             auto freq = mem.readIOReg(IO_NR13) | ((data & 0x7) << 8);
             ch1FreqTimerPeriod = (2048 - freq) * 4;
 
+            // enabling counter can cause an extra clock
+            if((data & NRx4_Counter) && !(mem.readIOReg(IO_NR14) & NRx4_Counter) && !(frameSeqClock & 1))
+            {
+                if(ch1Len && --ch1Len == 0)
+                    channelEnabled &= ~(1 << 0); // done, disable
+            }
+
             if(data & NRx4_Trigger)
             {
                 // reload envelope
                 ch1EnvVolume = mem.readIOReg(IO_NR12) >> 4;
                 ch1EnvTimer = mem.readIOReg(IO_NR12) & 0x7;
+
+                if(ch1Len == 0)
+                {
+                    // triggering resets length to max
+                    // but also clocks if the counter is enabled
+                    if((data & NRx4_Counter) && !(frameSeqClock & 1))
+                        ch1Len = 63;
+                    else
+                        ch1Len = 64;
+                }
 
                 if(mem.readIOReg(IO_NR12) & 0xF8)
                     channelEnabled |= (1 << 0);
@@ -308,6 +301,7 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
         case IO_NR21: // length/duty
             ch2DutyPattern = dutyPatterns[data >> 6];
+            ch2Len = 64 - (data & 0x3F);
             break;
 
         case IO_NR22: // envelope/volume
@@ -328,11 +322,28 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
             auto freq = mem.readIOReg(IO_NR23) | ((data & 0x7) << 8);
             ch2FreqTimerPeriod = (2048 - freq) * 4;
 
+            // enabling counter can cause an extra clock
+            if((data & NRx4_Counter) && !(mem.readIOReg(IO_NR24) & NRx4_Counter) && !(frameSeqClock & 1))
+            {
+                if(ch2Len && --ch2Len == 0)
+                    channelEnabled &= ~(1 << 1); // done, disable
+            }
+
             if(data & NRx4_Trigger)
             {
                 // reload envelope
                 ch2EnvVolume = mem.readIOReg(IO_NR22) >> 4;
                 ch2EnvTimer = mem.readIOReg(IO_NR22) & 0x7;
+
+                if(ch2Len == 0)
+                {
+                    // triggering resets length to max
+                    // but also clocks if the counter is enabled
+                    if((data & NRx4_Counter) && !(frameSeqClock & 1))
+                        ch2Len = 63;
+                    else
+                        ch2Len = 64;
+                }
 
                 if(mem.readIOReg(IO_NR22) & 0xF8)
                     channelEnabled |= (1 << 1);
@@ -346,12 +357,37 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 channelEnabled &= ~(1 << 2);
             break;
 
+        case IO_NR31: // length
+            ch3Len = 256 - data;
+            break;
+
         case IO_NR34: // freq hi/trigger/counter
+            // enabling counter can cause an extra clock
+            if((data & NRx4_Counter) && !(mem.readIOReg(IO_NR34) & NRx4_Counter) && !(frameSeqClock & 1))
+            {
+                if(ch3Len && --ch3Len == 0)
+                    channelEnabled &= ~(1 << 2); // done, disable
+            }
+
             if(data & NRx4_Trigger)
             {
+                if(ch3Len == 0)
+                {
+                    // triggering resets length to max
+                    // but also clocks if the counter is enabled
+                    if((data & NRx4_Counter) && !(frameSeqClock & 1))
+                        ch3Len = 255;
+                    else
+                        ch3Len = 256;
+                }
+
                 if(mem.readIOReg(IO_NR30) & 0x80)
                     channelEnabled |= (1 << 2);
             }
+            break;
+
+        case IO_NR41: // length
+            ch4Len = 64 - (data & 0x3F);
             break;
 
         case IO_NR42: // envelope/volume
@@ -361,8 +397,25 @@ void DMGAPU::writeReg(uint16_t addr, uint8_t data)
             break;
 
         case IO_NR44: // freq hi/trigger/counter
+            // enabling counter can cause an extra clock
+            if((data & NRx4_Counter) && !(mem.readIOReg(IO_NR44) & NRx4_Counter) && !(frameSeqClock & 1))
+            {
+                if(ch4Len && --ch4Len == 0)
+                    channelEnabled &= ~(1 << 3); // done, disable
+            }
+
             if(data & NRx4_Trigger)
             {
+                if(ch4Len == 0)
+                {
+                    // triggering resets length to max
+                    // but also clocks if the counter is enabled
+                    if((data & NRx4_Counter) && !(frameSeqClock & 1))
+                        ch4Len = 63;
+                    else
+                        ch4Len = 64;
+                }
+
                 if(mem.readIOReg(IO_NR42) & 0xF8)
                     channelEnabled |= (1 << 3);
             }

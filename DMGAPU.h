@@ -26,6 +26,7 @@ private:
     uint8_t channelEnabled = 0;
 
     // channel 1
+    int ch1Len = 0;
     int ch1EnvVolume, ch1EnvTimer;
     int ch1FreqTimer = 0;
     int ch1FreqTimerPeriod = 1;
@@ -33,11 +34,18 @@ private:
     uint8_t ch1DutyPattern = 0;
 
     // channel 2
+    int ch2Len = 0;
     int ch2EnvVolume, ch2EnvTimer;
     int ch2FreqTimer = 0;
     int ch2FreqTimerPeriod = 1;
     int ch2DutyStep = 0;
     uint8_t ch2DutyPattern = 0;
+
+    // channel 3
+    int ch3Len = 0;
+
+    // channel 4
+    int ch4Len = 0;
 
     // output
     int sampleClock = 0;
