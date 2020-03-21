@@ -139,7 +139,11 @@ void DMGDisplay::drawScanLine(int y)
         addr = 0xFE00;
         auto oam = mem.mapAddress(addr);
 
-        for(int i = 0; i < numSprites; i++)
+        // 10 sprites per line limit
+        uint8_t lineSprites[10];
+        int numLineSprites = 0;
+
+        for(int i = 0; i < numSprites && numLineSprites < 10; i++)
         {
             const int spriteY = oam[i * 4] - 16;
 
@@ -147,9 +151,16 @@ void DMGDisplay::drawScanLine(int y)
             if(y < spriteY || y >= spriteY + 8)
                 continue;
 
-            const int spriteX = oam[i * 4 + 1] - 8;
-            const int tileId = oam[i * 4 + 2];
-            const int attrs = oam[i * 4 + 3];
+            lineSprites[numLineSprites++] = i;
+        }
+
+        for(int i = 0; i < numLineSprites; i++)
+        {
+            const int spriteId = lineSprites[i];
+            const int spriteY = oam[spriteId * 4] - 16;
+            const int spriteX = oam[spriteId * 4 + 1] - 8;
+            const int tileId = oam[spriteId * 4 + 2];
+            const int attrs = oam[spriteId * 4 + 3];
 
             const int spritePal = mem.readIOReg((attrs & Sprite_Palette) ? IO_OBP1 : IO_OBP0);
 
