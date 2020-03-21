@@ -15,6 +15,9 @@ void DMGCPU::reset()
     masterInterruptEnable = false; //?
     divCounter = 0xABCC;
 
+    timerEnabled = timerOldVal = false;
+    timerBit = 1 << 9;
+
     // values after boot rom
     pc = 0x100;
     reg(WReg::AF) = 0x01B0;
@@ -59,6 +62,9 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
     {
         if((addr & 0xFF) == IO_STAT)
             printf("r STAT @~%x\n", pc);
+
+        if((addr & 0xFF) == IO_DIV)
+            return divCounter >> 8;
     }
 
     return mem.read(addr);
@@ -85,6 +91,12 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
             mem.writeIOReg(addr, 0); // clear on write
         else if((addr & 0xFF) == IO_DIV)
             divCounter = 0;
+        else if((addr & 0xFF) == IO_TAC)
+        {
+            const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
+            timerEnabled = data & TAC_Start;
+            timerBit = timerBits[data & TAC_Clock];
+        }
         else
             mem.write(addr, data);
         return;
@@ -1938,13 +1950,14 @@ int DMGCPU::executeExInstruction()
 
 void DMGCPU::updateTimer(int cycles)
 {
-    const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
-    const auto tac = mem.readIOReg(IO_TAC);
-    bool timerEnabled = tac & TAC_Start;
-    const int timerBit = timerBits[tac & TAC_Clock];
+    if(!timerEnabled && !timerOldVal)
+    {
+        divCounter += cycles;
+        return;
+    }
 
     // increment the internal timer
-    for(;(timerEnabled || timerOldVal) && cycles > 0; cycles -= 4)
+    for(;cycles > 0; cycles -= 4)
     {
         divCounter += 4;
 
@@ -1966,12 +1979,6 @@ void DMGCPU::updateTimer(int cycles)
 
         timerOldVal = val;
     }
-
-    if(cycles > 0)
-        divCounter += cycles; // if the timer was off, the loop above won't run
-
-    // divider
-    mem.writeIOReg(IO_DIV, divCounter >> 8);
 }
 
 void DMGCPU::serviceInterrupts()

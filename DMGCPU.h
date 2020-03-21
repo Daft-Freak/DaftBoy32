@@ -83,6 +83,8 @@ private:
     bool stopped, halted;
     bool masterInterruptEnable;
     uint16_t divCounter = 0;
+    bool timerEnabled = false;
+    int timerBit = 1 << 9;
     bool timerOldVal = false;
 
     // registers
