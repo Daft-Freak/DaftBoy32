@@ -279,13 +279,19 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
     if(addr < 0xFF00)
         return false;
 
+    addr = addr & 0xFF;
+
     auto &mem = cpu.getMem();
 
     // ignore the write
-    if(!enabled && (addr & 0xFF) >= IO_NR10 && (addr & 0xFF) < IO_NR52)
-        return true;
+    if(!enabled && addr >= IO_NR10 && addr < IO_NR52)
+    {
+        // DMG allows length writes
+        if(addr != IO_NR11 && addr != IO_NR21 && addr != IO_NR31 && addr != IO_NR41)
+            return true;
+    }
 
-    switch(addr & 0xFF)
+    switch(addr)
     {
         case IO_NR10: // sweep
 
@@ -297,6 +303,8 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
         case IO_NR11: // length/duty
             ch1DutyPattern = dutyPatterns[data >> 6];
             ch1Len = 64 - (data & 0x3F);
+            if(!enabled)
+                return true; // don't store it if disabled
             break;
 
         case IO_NR12: // envelope/volume
@@ -378,6 +386,8 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
         case IO_NR21: // length/duty
             ch2DutyPattern = dutyPatterns[data >> 6];
             ch2Len = 64 - (data & 0x3F);
+            if(!enabled)
+                return true;
             break;
 
         case IO_NR22: // envelope/volume
