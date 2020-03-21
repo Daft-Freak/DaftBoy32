@@ -13,16 +13,7 @@ void DMGAPU::update(int cycles)
 {
     auto &mem = cpu.getMem();
 
-    if(!enabled)
-    {
-        // disabled
-        for(int i = IO_NR10; i < IO_NR52; i++)
-            mem.writeIOReg(i, 0);
-
-        channelEnabled = 0;
-        frameSeqClock = 0;
-    }
-    else
+    if(enabled)
     {
         // this gets called before the timer is incremented
         auto oldDiv = cpu.getInternalTimer();
@@ -507,6 +498,17 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
             break;
 
         case IO_NR52:
+            // disabling
+            if(enabled && !(data & NR52_Enable))
+            {
+                // disabled
+                for(int i = IO_NR10; i < IO_NR52; i++)
+                    mem.writeIOReg(i, 0);
+
+                channelEnabled = 0;
+                frameSeqClock = 0;
+            }
+
             enabled = data & NR52_Enable;
             break;
     }
