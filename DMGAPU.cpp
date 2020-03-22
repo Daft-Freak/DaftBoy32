@@ -65,6 +65,7 @@ void DMGAPU::update(int cycles)
                 // envelope
                 const auto ch1EnvVol = mem.readIOReg(IO_NR12);
                 const auto ch2EnvVol = mem.readIOReg(IO_NR22);
+                const auto ch4EnvVol = mem.readIOReg(IO_NR42);
 
                 ch1EnvTimer--;
 
@@ -88,6 +89,18 @@ void DMGAPU::update(int cycles)
                         ch2EnvVolume--;
 
                     ch2EnvTimer = ch2EnvVol & 0x7;
+                }
+
+                ch4EnvTimer--;
+
+                if(ch4EnvTimer == 0)
+                {
+                    if(ch4EnvVol & (1 << 3) && ch4EnvVolume < 15)
+                        ch4EnvVolume++;
+                    else if(ch4EnvVolume > 0)
+                        ch4EnvVolume--;
+
+                    ch4EnvTimer = ch4EnvVol & 0x7;
                 }
             }
 
@@ -177,7 +190,21 @@ void DMGAPU::update(int cycles)
         }
 
         // channel 4
+        ch4FreqTimer -= cycles;
+    
+        while(ch4FreqTimer <= 0)
+        {
+            ch4FreqTimer += ch4FreqTimerPeriod;
+            // make noise
+            bool bit = ((ch4LFSRBits >> 1) ^ ch4LFSRBits) & 1;
+            ch4LFSRBits >>= 1;
+            ch4LFSRBits |= bit << 14; // bit 15
 
+            if(ch4Narrow)
+                ch4LFSRBits |= (bit << 6); // also set bit 7
+
+            ch4Val = ch4LFSRBits & 1;
+        }
     }
 
     // output clock - attempt to get close to 22050Hz
@@ -203,6 +230,9 @@ void DMGAPU::update(int cycles)
         auto ch3Val = (channelEnabled & 4) && vol ? (ch3Sample * 2) - 0xF : 0;
         ch3Val /= (1 << (vol - 1));
 
+        vol = ch4EnvVolume;
+        auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : -vol;
+
         int32_t sample = 0;
         
         if(outputSelect & 1)
@@ -213,6 +243,9 @@ void DMGAPU::update(int cycles)
 
         if(outputSelect & 4)
             sample += ch3Val;
+
+        if(outputSelect & 8)
+            sample += ch4Val;
 
         // TODO SO2?
 
@@ -545,6 +578,16 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 channelEnabled &= ~(1 << 3);
             break;
 
+        case IO_NR43: // clock/width
+        {
+            const int divisors[]{8, 16, 32, 48, 64, 80, 96, 112};
+            auto shift = data >> 4;
+            auto divCode = data & 0x7;
+            ch4FreqTimerPeriod = divisors[divCode] << shift;
+            ch4Narrow = data & (1 << 3);
+            break;
+        }
+
         case IO_NR44: // freq hi/trigger/counter
             // enabling counter can cause an extra clock
             if((data & NRx4_Counter) && !(mem.readIOReg(IO_NR44) & NRx4_Counter) && !(frameSeqClock & 1))
@@ -555,6 +598,14 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
             if(data & NRx4_Trigger)
             {
+                // reload envelope
+                ch4EnvVolume = mem.readIOReg(IO_NR42) >> 4;
+                ch4EnvTimer = mem.readIOReg(IO_NR42) & 0x7;
+
+                ch4FreqTimer = ch4FreqTimerPeriod;
+
+                ch4LFSRBits = 0x7FFF;
+
                 if(ch4Len == 0)
                 {
                     // triggering resets length to max
