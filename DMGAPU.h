@@ -47,6 +47,10 @@ private:
 
     // channel 3
     int ch3Len = 0;
+    int ch3FreqTimer = 0;
+    int ch3FreqTimerPeriod = 1;
+    uint8_t ch3Sample = 0;
+    int ch3SampleIndex = 0;
 
     // channel 4
     int ch4Len = 0;

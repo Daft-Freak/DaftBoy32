@@ -162,6 +162,20 @@ void DMGAPU::update(int cycles)
         }
 
         // channel 3
+        ch3FreqTimer -= cycles;
+
+        while(ch3FreqTimer <= 0)
+        {
+            ch3FreqTimer += ch3FreqTimerPeriod;
+            ch3SampleIndex = (ch3SampleIndex + 1) % 32;
+
+            auto sampleByte = mem.readIOReg(0x30 + (ch3SampleIndex / 2));
+
+            if(ch3SampleIndex & 1)
+                ch3Sample = sampleByte & 0xF;
+            else
+                ch3Sample = sampleByte >> 4;
+        }
 
         // channel 4
 
@@ -186,6 +200,10 @@ void DMGAPU::update(int cycles)
         vol = ch2EnvVolume;
         auto ch2Val = (channelEnabled & 2) && (ch2DutyPattern & (1 << ch2DutyStep)) ? vol : -vol;
 
+        vol = (mem.readIOReg(IO_NR32) >> 5) & 0x3;
+        auto ch3Val = (channelEnabled & 4) && vol ? (ch3Sample * 2) - 0xF : 0;
+        ch3Val /= (1 << (vol - 1));
+
         int32_t sample = 0;
         
         if(outputSelect & 1)
@@ -194,9 +212,12 @@ void DMGAPU::update(int cycles)
         if(outputSelect & 2)
             sample += ch2Val;
 
+        if(outputSelect & 4)
+            sample += ch3Val;
+
         // TODO SO2?
 
-        sampleData[writeOff] = sample * 0x444;
+        sampleData[writeOff] = sample * 0x222;
         writeOff = (writeOff + 1) % bufferSize;
     }
 }
@@ -266,6 +287,30 @@ uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
 
         case IO_NR52:
             return (val & 0xF0) | 0x70 | channelEnabled; // enabled channels is read only
+
+        // wave RAM - reads the current byte when the channel is enabled
+        case 0x30:
+        case 0x31:
+        case 0x32:
+        case 0x33:
+        case 0x34:
+        case 0x35:
+        case 0x36:
+        case 0x37:
+        case 0x38:
+        case 0x39:
+        case 0x3A:
+        case 0x3B:
+        case 0x3C:
+        case 0x3D:
+        case 0x3E:
+        case 0x3F:
+            if(channelEnabled & (1 << 2))
+            {
+                return cpu.getMem().readIOReg(0x30 + ch3SampleIndex / 2);
+            }
+
+            break;
     }
 
 
@@ -447,7 +492,18 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
             ch3Len = 256 - data;
             break;
 
+        case IO_NR33: // freq lo
+        {
+            auto freq = data | ((mem.readIOReg(IO_NR34) & 0x7) << 8);
+            ch3FreqTimerPeriod = (2048 - freq) * 2;
+            break;
+        }
+
         case IO_NR34: // freq hi/trigger/counter
+        {
+            auto freq = mem.readIOReg(IO_NR33) | ((data & 0x7) << 8);
+            ch3FreqTimerPeriod = (2048 - freq) * 2;
+
             // enabling counter can cause an extra clock
             if((data & NRx4_Counter) && !(mem.readIOReg(IO_NR34) & NRx4_Counter) && !(frameSeqClock & 1))
             {
@@ -457,6 +513,9 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
             if(data & NRx4_Trigger)
             {
+                ch3SampleIndex = 0;
+                ch3FreqTimer = ch3FreqTimerPeriod;
+
                 if(ch3Len == 0)
                 {
                     // triggering resets length to max
@@ -471,6 +530,7 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                     channelEnabled |= (1 << 2);
             }
             break;
+        }
 
         case IO_NR41: // length
             ch4Len = 64 - (data & 0x3F);
