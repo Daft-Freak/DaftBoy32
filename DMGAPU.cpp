@@ -141,22 +141,21 @@ void DMGAPU::update(int cycles)
         }
 
         // channel 1
-        ch1FreqTimer += cycles;
+        ch1FreqTimer -= cycles;
 
-        while(ch1FreqTimer > ch1FreqTimerPeriod)
+        while(ch1FreqTimer <= 0)
         {
-            ch1FreqTimer -= ch1FreqTimerPeriod;
+            ch1FreqTimer += ch1FreqTimerPeriod;
             ch1DutyStep++;
             ch1DutyStep &= 7;
         }
 
         // channel 2
-        ch2FreqTimer += cycles;
+        ch2FreqTimer -= cycles;
     
-        while(ch2FreqTimer > ch2FreqTimerPeriod)
+        while(ch2FreqTimer <= 0)
         {
-            ch2DutyStep += ch2FreqTimer / ch2FreqTimerPeriod;
-            ch2FreqTimer -= ch2FreqTimerPeriod;
+            ch2FreqTimer += ch2FreqTimerPeriod;
             ch2DutyStep++;
             ch2DutyStep &= 7;
         }
@@ -393,6 +392,8 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 ch1EnvVolume = mem.readIOReg(IO_NR12) >> 4;
                 ch1EnvTimer = mem.readIOReg(IO_NR12) & 0x7;
 
+                ch1FreqTimer = ch1FreqTimerPeriod;
+
                 if(ch1Len == 0)
                 {
                     // triggering resets length to max
@@ -465,6 +466,8 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 // reload envelope
                 ch2EnvVolume = mem.readIOReg(IO_NR22) >> 4;
                 ch2EnvTimer = mem.readIOReg(IO_NR22) & 0x7;
+
+                ch2FreqTimer = ch2FreqTimerPeriod;
 
                 if(ch2Len == 0)
                 {
