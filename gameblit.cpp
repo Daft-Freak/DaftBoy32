@@ -156,22 +156,31 @@ void render(uint32_t time_ms)
 
         auto copyLine = [gbScreen](int y, int y1, int oy)
         {
-            auto ptr = blit::screen.ptr(40, oy++ + 12);
-            for(int x = 0; x < 160; x += 2)
+            auto ptr = blit::screen.ptr(27, oy++);
+            for(int x = 0; x < 158; x += 3)
             {
                 auto v1 = (gbScreen[x + y * 160] + gbScreen[x + y1 * 160]) / 2;
                 auto v2 = (gbScreen[(x + 1) + y * 160] + gbScreen[(x + 1) + y1 * 160]) / 2;
+                auto v3 = (gbScreen[(x + 2) + y * 160] + gbScreen[(x + 2) + y1 * 160]) / 2;
 
                 *ptr++ = v1; *ptr++ = v1; *ptr++ = v1;
                 *ptr++ = (v1 + v2) / 2; *ptr++ = (v1 + v2) / 2; *ptr++ = (v1 + v2) / 2;
                 *ptr++ = v2; *ptr++ = v2; *ptr++ = v2;
+                *ptr++ = (v2 + v3) / 2; *ptr++ = (v2 + v3) / 2; *ptr++ = (v2 + v3) / 2;
+                *ptr++ = v3; *ptr++ = v3; *ptr++ = v3;
             }
+
+            // one pixel left
+            auto v = (gbScreen[159 + y * 160] + gbScreen[159 + y1 * 160]) / 2;
+            *ptr++ = v; *ptr++ = v; *ptr++ = v;
         };
-        for(int y = 0; y < 144; y += 2)
+        for(int y = 0; y < 144; y += 3)
         {
             copyLine(y, y, oy++);
             copyLine(y, y + 1, oy++);
             copyLine(y + 1, y + 1, oy++);
+            copyLine(y + 1, y + 2, oy++);
+            copyLine(y + 2, y + 2, oy++);
         }
     }
     else
