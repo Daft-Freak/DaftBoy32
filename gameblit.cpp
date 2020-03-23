@@ -45,12 +45,18 @@ uint8_t onRead(uint16_t addr, uint8_t val)
         return ret;
     }
 
-    return apu.readReg(addr, val);
+    if((addr & 0xFF) < IO_LCDC)
+        return apu.readReg(addr, val);
+    else
+        return display.readReg(addr, val);
 }
 
 bool onWrite(uint16_t addr, uint8_t val)
 {
     if(apu.writeReg(addr, val))
+        return true;
+
+    if(display.writeReg(addr, val))
         return true;
 
     return false;

@@ -87,9 +87,7 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
                 writeMem(0xFE00 + i, readMem((data << 8) + i));
         }
 
-        if((addr & 0xFF) == IO_LY)
-            mem.writeIOReg(addr, 0); // clear on write
-        else if((addr & 0xFF) == IO_DIV)
+        if((addr & 0xFF) == IO_DIV)
             divCounter = 0;
         else if((addr & 0xFF) == IO_TAC)
         {
