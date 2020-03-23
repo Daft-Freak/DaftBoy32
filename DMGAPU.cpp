@@ -154,56 +154,68 @@ void DMGAPU::update(int cycles)
         }
 
         // channel 1
-        ch1FreqTimer -= cycles;
-
-        while(ch1FreqTimer <= 0)
+        if(channelEnabled & (1 << 0))
         {
-            ch1FreqTimer += ch1FreqTimerPeriod;
-            ch1DutyStep++;
-            ch1DutyStep &= 7;
+            ch1FreqTimer -= cycles;
+
+            while(ch1FreqTimer <= 0)
+            {
+                ch1FreqTimer += ch1FreqTimerPeriod;
+                ch1DutyStep++;
+                ch1DutyStep &= 7;
+            }
         }
 
         // channel 2
-        ch2FreqTimer -= cycles;
-    
-        while(ch2FreqTimer <= 0)
+        if(channelEnabled & (1 << 1))
         {
-            ch2FreqTimer += ch2FreqTimerPeriod;
-            ch2DutyStep++;
-            ch2DutyStep &= 7;
+            ch2FreqTimer -= cycles;
+
+            while(ch2FreqTimer <= 0)
+            {
+                ch2FreqTimer += ch2FreqTimerPeriod;
+                ch2DutyStep++;
+                ch2DutyStep &= 7;
+            }
         }
 
         // channel 3
-        ch3FreqTimer -= cycles;
-
-        while(ch3FreqTimer <= 0)
+        if(channelEnabled & (1 << 2))
         {
-            ch3FreqTimer += ch3FreqTimerPeriod;
-            ch3SampleIndex = (ch3SampleIndex + 1) % 32;
+            ch3FreqTimer -= cycles;
 
-            auto sampleByte = mem.readIOReg(0x30 + (ch3SampleIndex / 2));
+            while(ch3FreqTimer <= 0)
+            {
+                ch3FreqTimer += ch3FreqTimerPeriod;
+                ch3SampleIndex = (ch3SampleIndex + 1) % 32;
 
-            if(ch3SampleIndex & 1)
-                ch3Sample = sampleByte & 0xF;
-            else
-                ch3Sample = sampleByte >> 4;
+                auto sampleByte = mem.readIOReg(0x30 + (ch3SampleIndex / 2));
+
+                if(ch3SampleIndex & 1)
+                    ch3Sample = sampleByte & 0xF;
+                else
+                    ch3Sample = sampleByte >> 4;
+            }
         }
 
         // channel 4
-        ch4FreqTimer -= cycles;
-    
-        while(ch4FreqTimer <= 0)
+        if(channelEnabled & (1 << 3))
         {
-            ch4FreqTimer += ch4FreqTimerPeriod;
-            // make noise
-            bool bit = ((ch4LFSRBits >> 1) ^ ch4LFSRBits) & 1;
-            ch4LFSRBits >>= 1;
-            ch4LFSRBits |= bit << 14; // bit 15
+            ch4FreqTimer -= cycles;
 
-            if(ch4Narrow)
-                ch4LFSRBits |= (bit << 6); // also set bit 7
+            while(ch4FreqTimer <= 0)
+            {
+                ch4FreqTimer += ch4FreqTimerPeriod;
+                // make noise
+                bool bit = ((ch4LFSRBits >> 1) ^ ch4LFSRBits) & 1;
+                ch4LFSRBits >>= 1;
+                ch4LFSRBits |= bit << 14; // bit 15
 
-            ch4Val = ch4LFSRBits & 1;
+                if(ch4Narrow)
+                    ch4LFSRBits |= (bit << 6); // also set bit 7
+
+                ch4Val = ch4LFSRBits & 1;
+            }
         }
     }
 
