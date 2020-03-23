@@ -17,6 +17,8 @@ public:
     bool writeReg(uint16_t addr, uint8_t data);
 
 private:
+    void updateFreq();
+
     DMGCPU &cpu;
 
     bool enabled = true;

@@ -19,21 +19,22 @@ void DMGAPU::update(int cycles)
         auto oldDiv = cpu.getInternalTimer();
 
         // update frame sequencer clock
-        auto wasSet = oldDiv & (1 << 12);
-        oldDiv += cycles;
+        //auto wasSet = oldDiv & (1 << 12);
+        //oldDiv += cycles;
 
-        if(wasSet && !(oldDiv & (1 << 12)))
+        //if(wasSet && !(oldDiv & (1 << 12)))
+        if((oldDiv & 0x1FFF) + cycles >= 8192)
         {
-            frameSeqClock = (frameSeqClock + 1) % 8;
-
-            const auto ch1FreqHi = mem.readIOReg(IO_NR14);
-            const auto ch2FreqHi = mem.readIOReg(IO_NR24);
-            const auto ch3FreqHi = mem.readIOReg(IO_NR34);
-            const auto ch4FreqHi = mem.readIOReg(IO_NR44);
+            frameSeqClock = (frameSeqClock + 1) & 7;
 
             if((frameSeqClock & 1) == 0)
             {
                 // length
+
+                const auto ch1FreqHi = mem.readIOReg(IO_NR14);
+                const auto ch2FreqHi = mem.readIOReg(IO_NR24);
+                const auto ch3FreqHi = mem.readIOReg(IO_NR34);
+                const auto ch4FreqHi = mem.readIOReg(IO_NR44);
 
                 if((ch1FreqHi & NRx4_Counter) && ch1Len)
                 {
@@ -107,12 +108,12 @@ void DMGAPU::update(int cycles)
             if((frameSeqClock & 0x3) == 2)
             {
                 // sweep
-                const auto ch1Sweep = mem.readIOReg(IO_NR10);
-                auto sweepPeriod = (ch1Sweep & NR10_Period) >> 4;
                 ch1SweepTimer--;
 
                 if(ch1SweepEnable && ch1SweepTimer == 0)
                 {
+                    const auto ch1Sweep = mem.readIOReg(IO_NR10);
+                    auto sweepPeriod = (ch1Sweep & NR10_Period) >> 4;
                     if(sweepPeriod)
                     {
                         auto shift = ch1Sweep & NR10_Shift;
@@ -153,70 +154,11 @@ void DMGAPU::update(int cycles)
             }
         }
 
-        // channel 1
-        if(channelEnabled & (1 << 0))
-        {
-            ch1FreqTimer -= cycles;
-
-            while(ch1FreqTimer <= 0)
-            {
-                ch1FreqTimer += ch1FreqTimerPeriod;
-                ch1DutyStep++;
-                ch1DutyStep &= 7;
-            }
-        }
-
-        // channel 2
-        if(channelEnabled & (1 << 1))
-        {
-            ch2FreqTimer -= cycles;
-
-            while(ch2FreqTimer <= 0)
-            {
-                ch2FreqTimer += ch2FreqTimerPeriod;
-                ch2DutyStep++;
-                ch2DutyStep &= 7;
-            }
-        }
-
-        // channel 3
-        if(channelEnabled & (1 << 2))
-        {
-            ch3FreqTimer -= cycles;
-
-            while(ch3FreqTimer <= 0)
-            {
-                ch3FreqTimer += ch3FreqTimerPeriod;
-                ch3SampleIndex = (ch3SampleIndex + 1) % 32;
-
-                auto sampleByte = mem.readIOReg(0x30 + (ch3SampleIndex / 2));
-
-                if(ch3SampleIndex & 1)
-                    ch3Sample = sampleByte & 0xF;
-                else
-                    ch3Sample = sampleByte >> 4;
-            }
-        }
-
-        // channel 4
-        if(channelEnabled & (1 << 3))
-        {
-            ch4FreqTimer -= cycles;
-
-            while(ch4FreqTimer <= 0)
-            {
-                ch4FreqTimer += ch4FreqTimerPeriod;
-                // make noise
-                bool bit = ((ch4LFSRBits >> 1) ^ ch4LFSRBits) & 1;
-                ch4LFSRBits >>= 1;
-                ch4LFSRBits |= bit << 14; // bit 15
-
-                if(ch4Narrow)
-                    ch4LFSRBits |= (bit << 6); // also set bit 7
-
-                ch4Val = ch4LFSRBits & 1;
-            }
-        }
+        // freq timers
+        ch1FreqTimer -= cycles;
+        ch2FreqTimer -= cycles;
+        ch3FreqTimer -= cycles;
+        ch4FreqTimer -= cycles;
     }
 
     // output clock - attempt to get close to 22050Hz
@@ -225,6 +167,7 @@ void DMGAPU::update(int cycles)
 
     if(sampleClock >= clocksPerSample)
     {
+        updateFreq();
         sampleClock -= clocksPerSample;
 
         // wait for the audio thread/interrupt to catch up
@@ -286,8 +229,10 @@ int DMGAPU::getNumSamples() const
 
 uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
 {
-    if(addr < 0xFF00)
+    if(addr < (0xFF00 | IO_NR10) || addr > 0xFF3F/* end of wave ram*/)
         return val;
+
+    updateFreq();
 
     // unsued bits/lengths/freqs read as 1
     switch(addr & 0xFF)
@@ -365,8 +310,10 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 {
     const uint8_t dutyPatterns[]{0b00000001, 0b10000001, 0b10000111, 0b01111110};
 
-    if(addr < 0xFF00)
+    if(addr < (0xFF00 | IO_NR10) || addr > 0xFF3F/* end of wave ram*/)
         return false;
+
+    updateFreq();
 
     addr = addr & 0xFF;
 
@@ -652,4 +599,64 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
     }
 
     return false;
+}
+
+void DMGAPU::updateFreq()
+{
+    // channel 1
+    if(channelEnabled & (1 << 0))
+    {
+        while(ch1FreqTimer <= 0)
+        {
+            ch1FreqTimer += ch1FreqTimerPeriod;
+            ch1DutyStep++;
+            ch1DutyStep &= 7;
+        }
+    }
+
+    // channel 2
+    if(channelEnabled & (1 << 1))
+    {
+        while(ch2FreqTimer <= 0)
+        {
+            ch2FreqTimer += ch2FreqTimerPeriod;
+            ch2DutyStep++;
+            ch2DutyStep &= 7;
+        }
+    }
+
+    // channel 3
+    if(channelEnabled & (1 << 2))
+    {
+        while(ch3FreqTimer <= 0)
+        {
+            ch3FreqTimer += ch3FreqTimerPeriod;
+            ch3SampleIndex = (ch3SampleIndex + 1) % 32;
+
+            auto sampleByte = cpu.getMem().readIOReg(0x30 + (ch3SampleIndex / 2));
+
+            if(ch3SampleIndex & 1)
+                ch3Sample = sampleByte & 0xF;
+            else
+                ch3Sample = sampleByte >> 4;
+        }
+    }
+
+    // channel 4
+    if(channelEnabled & (1 << 3))
+    {
+        while(ch4FreqTimer <= 0)
+        {
+            ch4FreqTimer += ch4FreqTimerPeriod;
+            // make noise
+            bool bit = ((ch4LFSRBits >> 1) ^ ch4LFSRBits) & 1;
+            ch4LFSRBits >>= 1;
+            ch4LFSRBits |= bit << 14; // bit 15
+
+            if(ch4Narrow)
+                ch4LFSRBits |= (bit << 6); // also set bit 7
+
+            ch4Val = ch4LFSRBits & 1;
+        }
+    }
 }
