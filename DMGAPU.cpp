@@ -70,7 +70,7 @@ void DMGAPU::update(int cycles)
 
                 ch1EnvTimer--;
 
-                if(ch1EnvTimer == 0)
+                if(ch1EnvTimer == 0 && (ch1EnvVol & 0x7))
                 {
                     if(ch1EnvVol & (1 << 3) && ch1EnvVolume < 15)
                         ch1EnvVolume++;
@@ -82,7 +82,7 @@ void DMGAPU::update(int cycles)
 
                 ch2EnvTimer--;
 
-                if(ch2EnvTimer == 0)
+                if(ch2EnvTimer == 0 && (ch2EnvVol & 0x7))
                 {
                     if(ch2EnvVol & (1 << 3) && ch2EnvVolume < 15)
                         ch2EnvVolume++;
@@ -94,7 +94,7 @@ void DMGAPU::update(int cycles)
 
                 ch4EnvTimer--;
 
-                if(ch4EnvTimer == 0)
+                if(ch4EnvTimer == 0 && (ch4EnvVol & 0x7))
                 {
                     if(ch4EnvVol & (1 << 3) && ch4EnvVolume < 15)
                         ch4EnvVolume++;
