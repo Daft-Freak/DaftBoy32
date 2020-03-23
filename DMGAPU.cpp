@@ -111,7 +111,7 @@ void DMGAPU::update(int cycles)
                 auto sweepPeriod = (ch1Sweep & NR10_Period) >> 4;
                 ch1SweepTimer--;
 
-                if(ch1SweepEnable && ch1SweepTimer <= 0)
+                if(ch1SweepEnable && ch1SweepTimer == 0)
                 {
                     if(sweepPeriod)
                     {
