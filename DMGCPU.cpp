@@ -35,7 +35,7 @@ void DMGCPU::run(int ms)
 
     while(!stopped && cycles > 0)
     {
-        int exec = halted ? 1 : executeInstruction();
+        int exec = halted ? 4 : executeInstruction();
         cycles -= exec;
 
         if(cycleCallback)
