@@ -60,9 +60,6 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
 {
     if(addr >= 0xFF00)
     {
-        if((addr & 0xFF) == IO_STAT)
-            printf("r STAT @~%x\n", pc);
-
         if((addr & 0xFF) == IO_DIV)
             return divCounter >> 8;
     }

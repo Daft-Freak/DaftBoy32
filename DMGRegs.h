@@ -110,3 +110,13 @@ enum LCDCBits
     LCDC_WindowTileMap9C00 = 1 << 6,
     LCDC_DisplayEnable     = 1 << 7
 };
+
+enum STATBits
+{
+    STAT_Mode           = 0x3,
+    STAT_Coincidence    = 1 << 2,
+    STAT_HBlankInt      = 1 << 3,
+    STAT_VBlankInt      = 1 << 4,
+    STAT_OAMInt         = 1 << 5,
+    STAT_CoincidenceInt = 1 << 6
+};

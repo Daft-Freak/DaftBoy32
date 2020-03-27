@@ -28,9 +28,35 @@ void DMGDisplay::update(int cycles)
         return;
     }
 
-    // TODO: set mode/stat interrupt
-
     remainingScanlineCycles -= cycles;
+
+    int newMode;
+    const int readTime = (168 + 291) / 2;
+
+    if(y >= screenHeight)
+        newMode = 1; // vblank
+    else
+    {
+        // 80 cycles - mode 2 / oam search
+        if(remainingScanlineCycles >= scanlineCycles - 80)
+            newMode = 2;
+        // 168-291 cycles - mode 3 / reading oam/vram
+        else if(remainingScanlineCycles >= scanlineCycles - 80 - readTime)
+            newMode = 3;
+        else // hblank
+            newMode = 0;
+    }
+
+    if(newMode != statMode)
+    {
+        auto stat = mem.readIOReg(IO_STAT);
+        if(newMode == 2 && (stat & STAT_OAMInt))
+            cpu.flagInterrupt(Int_LCDStat);
+        else if(newMode == 0 && (stat & STAT_HBlankInt))
+            cpu.flagInterrupt(Int_LCDStat);
+    }
+
+    statMode = newMode;
 
     if(remainingScanlineCycles > 0)
         return;
@@ -43,10 +69,33 @@ void DMGDisplay::update(int cycles)
 
     y++;
 
+    // coincidince interrupt
+    auto stat = mem.readIOReg(IO_STAT);
+
+    if(stat & STAT_CoincidenceInt)
+    {
+        if((stat & STAT_Coincidence) && y == mem.readIOReg(IO_LYC))
+            cpu.flagInterrupt(Int_LCDStat);
+        else if(!(stat & STAT_Coincidence) && y - 1 == mem.readIOReg(IO_LYC)) // not-equal, trigger on change from equal
+            cpu.flagInterrupt(Int_LCDStat);
+    }
+
     if(y == screenHeight)
+    {
         cpu.flagInterrupt(Int_VBlank);
+        statMode = 1;
+        if(mem.readIOReg(IO_STAT) & STAT_VBlankInt)
+            cpu.flagInterrupt(Int_LCDStat);
+    }
     else if(y > 153)
+    {
         y = 0; // end vblank
+        statMode = 2; // oam search
+
+        // TODO: slightly duplicated
+        if(mem.readIOReg(IO_STAT) & STAT_OAMInt)
+            cpu.flagInterrupt(Int_LCDStat);
+    }
 }
 
 uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
@@ -56,6 +105,8 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
 
     switch(addr & 0xFF)
     {
+        case IO_STAT:
+            return (val & 0xFC) | statMode;
         case IO_LY:
             return y;
     }
