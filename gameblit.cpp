@@ -252,8 +252,7 @@ void update(uint32_t time_ms)
     {
         blit::File f(loadedFilename + ".ram", blit::OpenMode::write);
 
-        uint16_t addr = 0xA000;
-        f.write(0, 0x8000, (const char *)mem.mapAddress(addr));
+        f.write(0, 0x8000, (const char *)mem.getCartridgeRAM());
     }
 
     lastButtonState = blit::buttons;
