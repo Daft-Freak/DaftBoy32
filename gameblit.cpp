@@ -69,6 +69,13 @@ void getROMBank(uint8_t bank, uint8_t *ptr)
     romFile.read(bank * 0x4000, 0x4000, (char *)ptr);
 }
 
+void updateCartRAM(uint8_t *cartRam)
+{
+    blit::File f(loadedFilename + ".ram", blit::OpenMode::write);
+
+    f.write(0, 0x8000, (const char *)cartRam);
+}
+
 void updateAudio(void *arg)
 {
     if(apu.getNumSamples() < 64)
@@ -137,6 +144,7 @@ void init()
     mem.setROMBankCallback(getROMBank);
     mem.setReadCallback(onRead);
     mem.setWriteCallback(onWrite);
+    mem.setCartRamUpdateCallback(updateCartRAM);
 
     // autostart
     if(blit::file_exists("auto.gb"))
@@ -249,11 +257,7 @@ void update(uint32_t time_ms)
 
     // dump cart ram
     if((changedButtons & blit::Button::JOYSTICK) && !(blit::buttons & blit::Button::JOYSTICK))
-    {
-        blit::File f(loadedFilename + ".ram", blit::OpenMode::write);
-
-        f.write(0, 0x8000, (const char *)mem.getCartridgeRAM());
-    }
+        updateCartRAM(mem.getCartridgeRAM());
 
     lastButtonState = blit::buttons;
 }
