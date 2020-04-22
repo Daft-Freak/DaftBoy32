@@ -164,12 +164,20 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
         auto ptr = mapAddress(addr);
         if(ptr)
         {
+            if(ptr == cartRam)
+                cartRamWritten = true;
+
             ptr[addr] = data;
             return;
         }
     }
 
     printf("write %x = %x\n", addr, data);
+}
+
+void DMGMemory::setCartRamUpdateCallback(CartRamUpdateCallback callback)
+{
+    cartRamUpdateCallback = callback;
 }
 
 uint8_t *DMGMemory::mapAddress(uint16_t &addr)
@@ -217,10 +225,21 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
     if(mbcType == MBCType::None)
         return;
 
-    // MBC1
+    // MBC1/3
 
     if(addr < 0x2000)
+    {
         mbcRAMEnabled = (data & 0xF) == 0xA;
+
+        // on disable sync the ram if changed
+        if(!mbcRAMEnabled)
+        {
+            if(cartRamWritten && cartRamUpdateCallback)
+                cartRamUpdateCallback(cartRam);
+
+            cartRamWritten = false;
+        }
+    }
     else if(addr < 0x4000)
     {
         if(mbcType == MBCType::MBC1) // low 5 bits of rom bank

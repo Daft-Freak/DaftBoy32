@@ -10,6 +10,8 @@ public:
 
     using ROMBankCallback = void(*)(uint8_t, uint8_t *);
 
+    using CartRamUpdateCallback = void(*)(uint8_t *);
+
     void setROMBankCallback(ROMBankCallback callback);
     void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
     void reset();
@@ -27,6 +29,7 @@ public:
     void writeIOReg(uint8_t addr, uint8_t val) {iohram[addr] = val;}
 
     uint8_t *getCartridgeRAM() {return cartRam;}
+    void setCartRamUpdateCallback(CartRamUpdateCallback callback);
 
     uint8_t *mapAddress(uint16_t &addr);
 
@@ -58,6 +61,7 @@ private:
     int mbcROMBank = 1, mbcRAMBank = 0;
     bool mbcRAMBankMode = false;
     uint8_t cartRam[0x8000];
+    bool cartRamWritten = false;
 
     uint8_t cartROMBank0[0x4000];
     uint8_t *cartROMCurBank;
@@ -71,4 +75,6 @@ private:
     WriteCallback writeCallback;
 
     ROMBankCallback romBankCallback;
+
+    CartRamUpdateCallback cartRamUpdateCallback;
 };
