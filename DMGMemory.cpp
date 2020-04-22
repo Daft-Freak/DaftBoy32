@@ -187,7 +187,7 @@ uint8_t *DMGMemory::mapAddress(uint16_t &addr)
     else if(addr < 0xC000)
     {
         addr = (addr - 0xA000) + mbcRAMBank * 0x2000;
-        return cartRam;
+        return mbcRAMEnabled ? cartRam : nullptr;
     }
     else if(addr < 0xE000)
     {
