@@ -71,9 +71,16 @@ void getROMBank(uint8_t bank, uint8_t *ptr)
 
 void updateCartRAM(uint8_t *cartRam)
 {
-    blit::File f(loadedFilename + ".ram", blit::OpenMode::write);
+    blit::File f(loadedFilename + ".ram.tmp", blit::OpenMode::write);
 
-    f.write(0, 0x8000, (const char *)cartRam);
+    if(f.write(0, 0x8000, (const char *)cartRam) != 0x8000)
+        return;
+
+    f.close();
+
+    blit::remove_file(loadedFilename + ".ram.old"); // remove old
+    blit::rename_file(loadedFilename + ".ram", loadedFilename + ".ram.old"); // move current -> old
+    blit::rename_file(loadedFilename + ".ram.tmp", loadedFilename + ".ram"); // move new -> current
 }
 
 void updateAudio(void *arg)
