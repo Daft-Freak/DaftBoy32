@@ -227,10 +227,6 @@ void update(uint32_t time_ms)
         return;
     }
 
-    static uint32_t lastButtonState = 0;
-
-    auto changedButtons = blit::buttons ^ lastButtonState;
-
     auto start = blit::now();
 
     // translate inputs
@@ -245,7 +241,7 @@ void update(uint32_t time_ms)
         cpu.flagInterrupt(Int_Joypad);
 
     // toggle the awful 1.5x scale
-    if((changedButtons & blit::Button::Y) && !(blit::buttons & blit::Button::Y))
+    if(blit::buttons.released & blit::Button::Y)
         awfulScale = !awfulScale;
 
     if(apu.getNumSamples() < 1024 - 225) // single update generates ~220 samples
@@ -263,8 +259,6 @@ void update(uint32_t time_ms)
     }
 
     // dump cart ram
-    if((changedButtons & blit::Button::JOYSTICK) && !(blit::buttons & blit::Button::JOYSTICK))
+    if(blit::buttons.released & blit::Button::JOYSTICK)
         updateCartRAM(mem.getCartridgeRAM());
-
-    lastButtonState = blit::buttons;
 }
