@@ -153,17 +153,25 @@ void DMGDisplay::drawScanLine(int y)
 
     uint8_t bgRaw[screenWidth]{0};
 
-    auto windowY = mem.readIOReg(IO_WY);
-    bool yIsWin = (lcdc & LCDC_WindowEnable) && y >= windowY;
-
     // active scanline
     if(lcdc & LCDC_BGDisp)
     {
-        auto windowX = (lcdc & LCDC_WindowEnable) ? mem.readIOReg(IO_WX) - 7 : screenWidth;
+        uint8_t windowX = screenWidth, windowY = 0;
+        bool yIsWin = false;
+
+        if(lcdc & LCDC_WindowEnable)
+        {
+            windowX = mem.readIOReg(IO_WX) - 7;
+            windowY = mem.readIOReg(IO_WY);
+            yIsWin = y >= windowY;
+        }
+
         auto scrollX = mem.readIOReg(IO_SCX);
         auto scrollY = mem.readIOReg(IO_SCY);
 
         // bg/window
+        auto out = screenData + y * screenWidth;
+        auto rawOut = bgRaw;
         for(int x = 0; x < screenWidth;)
         {
             int tileId;
@@ -193,18 +201,21 @@ void DMGDisplay::drawScanLine(int y)
             uint8_t d1 = tileDataPtr[tileAddr + (ty & 7) * 2];
             uint8_t d2 = tileDataPtr[tileAddr + (ty & 7) * 2 + 1];
 
-            int xShift = 7 - (tx & 7);
+            // skip bits
+            d1 <<= (tx & 7);
+            d2 <<= (tx & 7);
 
             // attempt to copy as much of the tile as possible
-            const int limit = x >= windowX ? screenWidth : windowX;
-            for(; xShift >= 0 && x < limit; x++, xShift--)
-            {
-                int palIndex = ((d1 >> xShift) & 1) | (((d2 >> xShift) & 1) << 1);
+            const int limit = std::min(x + 8 - (tx & 7), x >= windowX ? screenWidth : windowX);
 
-                bgRaw[x] = palIndex;
+            for(; x < limit; x++, d1 <<= 1, d2 <<= 1)
+            {
+                int palIndex = ((d1 & 0x80) >> 7) | ((d2 & 0x80) >> 6);
+
+                *(rawOut++) = palIndex;
 
                 int col = (bgPal >> (2 * palIndex)) & 0x3;
-                screenData[x + y * screenWidth] = colMap[col];
+                *(out++) = colMap[col];
             }
         }
     }
@@ -254,11 +265,15 @@ void DMGDisplay::drawScanLine(int y)
             uint8_t d1 = spriteDataPtr[tileAddr + ty * 2];
             uint8_t d2 = spriteDataPtr[tileAddr + ty * 2 + 1];
 
+            int x = std::max(0, -spriteX);
             int end = std::min(8, screenWidth - spriteX);
-            for(int x = std::max(0, -spriteX); x < end; x++)
+
+            auto out = screenData + (x + spriteX) + y * screenWidth;
+            auto bgIn = bgRaw + x + spriteX;
+            for(; x < end; x++, out++, bgIn++)
             {
                 // background has priority
-                if((attrs & Sprite_BGPriority) && bgRaw[x + spriteX])
+                if((attrs & Sprite_BGPriority) && *bgIn)
                     continue;
 
                 int xShift = x;
@@ -271,7 +286,7 @@ void DMGDisplay::drawScanLine(int y)
                     continue;
 
                 int col = (spritePal >> (2 * palIndex)) & 0x3;
-                screenData[(x + spriteX) + y * screenWidth] = colMap[col];
+                *out = colMap[col];
             }
         }
     }
