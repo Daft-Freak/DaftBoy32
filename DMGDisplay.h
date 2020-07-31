@@ -11,7 +11,7 @@ public:
 
     void update(int cycles);
 
-    const uint8_t *getData() {return screenData;}
+    const uint16_t *getData() {return screenData;}
 
     uint8_t readReg(uint16_t addr, uint8_t val);
     bool writeReg(uint16_t addr, uint8_t data);
@@ -29,5 +29,5 @@ private:
     static const int screenWidth = 160, screenHeight = 144;
 
     int remainingScanlineCycles = scanlineCycles;
-    uint8_t screenData[screenWidth * screenHeight]; // greyscale
+    uint16_t screenData[screenWidth * screenHeight]; // rgb555
 };

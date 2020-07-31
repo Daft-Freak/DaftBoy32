@@ -175,24 +175,48 @@ void render(uint32_t time_ms)
 
     auto gbScreen = display.getData();
 
+    auto expandCol = [](uint16_t rgb555, uint8_t &r, uint8_t &g, uint8_t &b)
+    {
+        r = (rgb555 & 0x1F) << 3;
+        g = (rgb555 & 0x3E0) >> 2;
+        b = (rgb555 & 0x7C00) >> 7;
+    };
+
     if(awfulScale)
     {
         int oy = 0;
 
-        auto copyLine = [gbScreen](int y, int y1, int oy)
+        auto copyLine = [gbScreen, &expandCol](int y, int y1, int oy)
         {
             auto ptr = blit::screen.ptr(27, oy++);
             for(int x = 0; x < 158; x += 3)
             {
-                auto v1 = (gbScreen[x + y * 160] + gbScreen[x + y1 * 160]) / 2;
-                auto v2 = (gbScreen[(x + 1) + y * 160] + gbScreen[(x + 1) + y1 * 160]) / 2;
-                auto v3 = (gbScreen[(x + 2) + y * 160] + gbScreen[(x + 2) + y1 * 160]) / 2;
+                uint8_t tmpR, tmpG, tmpB;
 
-                *ptr++ = v1; *ptr++ = v1; *ptr++ = v1;
-                *ptr++ = (v1 + v2) / 2; *ptr++ = (v1 + v2) / 2; *ptr++ = (v1 + v2) / 2;
-                *ptr++ = v2; *ptr++ = v2; *ptr++ = v2;
-                *ptr++ = (v2 + v3) / 2; *ptr++ = (v2 + v3) / 2; *ptr++ = (v2 + v3) / 2;
-                *ptr++ = v3; *ptr++ = v3; *ptr++ = v3;
+                uint8_t r1, r2, r3, g1, g2, g3, b1, b2, b3;
+                expandCol(gbScreen[x + y * 160], r1, g1, b1);
+                expandCol(gbScreen[x + y1 * 160], tmpR, tmpG, tmpB);
+                r1 = (r1 + tmpR) / 2;
+                g1 = (g1 + tmpG) / 2;
+                b1 = (b1 + tmpB) / 2;
+
+                expandCol(gbScreen[(x + 1) + y * 160], r2, g2, b2);
+                expandCol(gbScreen[(x + 1) + y1 * 160], tmpR, tmpG, tmpB);
+                r2 = (r2 + tmpR) / 2;
+                g2 = (g2 + tmpG) / 2;
+                b2 = (b2 + tmpB) / 2;
+
+                expandCol(gbScreen[(x + 2) + y * 160], r3, g3, b3);
+                expandCol(gbScreen[(x + 2) + y1 * 160], tmpR, tmpG, tmpB);
+                r3 = (r3 + tmpR) / 2;
+                g3 = (g3 + tmpG) / 2;
+                b3 = (b3 + tmpB) / 2;
+
+                *ptr++ = r1; *ptr++ = g1; *ptr++ = b1;
+                *ptr++ = (r1 + r2) / 2; *ptr++ = (g1 + g2) / 2; *ptr++ = (b1 + b2) / 2;
+                *ptr++ = r2; *ptr++ = g2; *ptr++ = b2;
+                *ptr++ = (r2 + r3) / 2; *ptr++ = (g2 + g3) / 2; *ptr++ = (b2 + b3) / 2;
+                *ptr++ = r3; *ptr++ = g3; *ptr++ = b3;
             }
 
             // one pixel left
@@ -215,9 +239,8 @@ void render(uint32_t time_ms)
             auto ptr = blit::screen.ptr(80, y + 48);
             for(int x = 0; x < 160; x++)
             {
-                *ptr++ = gbScreen[x + y * 160];
-                *ptr++ = gbScreen[x + y * 160];
-                *ptr++ = gbScreen[x + y * 160];
+                expandCol(gbScreen[x + y * 160], *ptr, *(ptr + 1), *(ptr + 2));
+                ptr += 3;
             }
         }
     }

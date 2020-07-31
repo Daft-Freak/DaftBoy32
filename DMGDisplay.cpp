@@ -133,7 +133,7 @@ void DMGDisplay::drawScanLine(int y)
 {
     auto lcdc = mem.readIOReg(IO_LCDC);
 
-    const uint8_t colMap[]{0xFF, 0xCC, 0x77, 0};
+    const uint16_t colMap[]{0xFFFF, 0x6739, 0x39CE, 0};
 
     uint16_t addr = (lcdc & LCDC_TileData8000) ? 0x8000 : 0x8800;
     auto tileDataPtr = mem.mapAddress(addr) + addr;

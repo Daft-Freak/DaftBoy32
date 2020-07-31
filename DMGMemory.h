@@ -67,7 +67,7 @@ private:
     uint8_t *cartROMCurBank;
 
     // cache as much as possible in RAM
-    static const int romBankCacheSize = 8;
+    static const int romBankCacheSize = 7;
     uint8_t cartROMBankCache[0x4000 * romBankCacheSize];
     std::list<ROMCacheEntry> cachedROMBanks;
 
