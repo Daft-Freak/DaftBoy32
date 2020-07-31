@@ -135,15 +135,12 @@ void DMGDisplay::drawScanLine(int y)
 
     const uint16_t colMap[]{0xFFFF, 0x6739, 0x39CE, 0};
 
-    uint16_t addr = (lcdc & LCDC_TileData8000) ? 0x8000 : 0x8800;
-    auto tileDataPtr = mem.mapAddress(addr) + addr;
-    addr = (lcdc & LCDC_BGTileMap9C00) ? 0x9C00 : 0x9800;
-    auto bgMapPtr = mem.mapAddress(addr) + addr;
-    addr = (lcdc & LCDC_WindowTileMap9C00) ? 0x9C00 : 0x9800;
-    auto winMapPtr = mem.mapAddress(addr) + addr;
+    auto vram = mem.getVRAM();
 
-    addr = 0x8000;
-    auto spriteDataPtr = mem.mapAddress(addr) + addr;
+    auto tileDataPtr = (lcdc & LCDC_TileData8000) ? vram : vram + 0x800;
+    auto bgMapPtr = (lcdc & LCDC_BGTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
+    auto winMapPtr = (lcdc & LCDC_WindowTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
+    auto spriteDataPtr = vram;
 
     const int tileDataSize = 16;
     const int screenSizeTiles = 32; // 32x32 tiles
@@ -223,7 +220,7 @@ void DMGDisplay::drawScanLine(int y)
     if(lcdc & LCDC_OBJDisp)
     {
         // sprites
-        addr = 0xFE00;
+        uint16_t addr = 0xFE00;
         auto oam = mem.mapAddress(addr);
 
         // 10 sprites per line limit

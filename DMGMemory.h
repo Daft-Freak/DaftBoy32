@@ -28,6 +28,8 @@ public:
     uint8_t &getIOReg(uint8_t addr) {return iohram[addr];}
     void writeIOReg(uint8_t addr, uint8_t val) {iohram[addr] = val;}
 
+    uint8_t *getVRAM() {return vram;}
+
     uint8_t *getCartridgeRAM() {return cartRam;}
     void setCartRamUpdateCallback(CartRamUpdateCallback callback);
 
