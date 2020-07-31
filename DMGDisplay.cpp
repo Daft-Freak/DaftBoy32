@@ -9,10 +9,21 @@
 
 enum SpriteFlags
 {
-    Sprite_Palette    = (1 << 4),
+    // 0-2 is colour palette
+    Sprite_Bank       = (1 << 3),
+    Sprite_Palette    = (1 << 4), // non-colour
     Sprite_XFlip      = (1 << 5),
     Sprite_YFlip      = (1 << 6),
     Sprite_BGPriority = (1 << 7),
+};
+
+enum TileFlags
+{
+    // 0-2 is palette
+    Tile_Bank       = (1 << 3),
+    Tile_XFlip      = (1 << 5),
+    Tile_YFlip      = (1 << 6),
+    Tile_BGPriority = (1 << 7)
 };
 
 DMGDisplay::DMGDisplay(DMGCPU &cpu) : cpu(cpu), mem(cpu.getMem())
