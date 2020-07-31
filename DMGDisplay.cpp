@@ -205,71 +205,72 @@ void DMGDisplay::drawScanLine(int y)
         uint8_t windowX = screenWidth, windowY = 0;
         bool yIsWin = false;
 
-        if(lcdc & LCDC_WindowEnable)
-        {
-            windowX = mem.readIOReg(IO_WX) - 7;
-            windowY = mem.readIOReg(IO_WY);
-            yIsWin = y >= windowY;
-        }
-
-        auto scrollX = mem.readIOReg(IO_SCX);
-        auto scrollY = mem.readIOReg(IO_SCY);
-
-        // bg/window
+        int x = 0;
         auto out = screenData + y * screenWidth;
         auto rawOut = bgRaw;
-        for(int x = 0; x < screenWidth;)
-        {
-            int tileId;
-            uint8_t mapAttrs; // GBC
-            uint8_t tx;
-            uint8_t ty;
 
-            if(yIsWin && x >= windowX)
+        auto copyTiles = [this, &x, y, lcdc, isColour, tileDataPtr, &out, &rawOut](uint8_t *mapPtr, int xLimit, int offsetX, int offsetY)
+        {
+            while(x < xLimit)
             {
-                tx = x - windowX;
-                ty = y - windowY;
-                tileId = (tx / 8) + (ty / 8) * screenSizeTiles;
-                mapAttrs = winMapPtr[tileId + 0x2000]; // bank 1
-                tileId = (lcdc & LCDC_TileData8000) ? winMapPtr[tileId] : (int8_t)winMapPtr[tileId] + 128;
-            }
-            else
-            {
-                tx = x + scrollX;
-                ty = y + scrollY;
-                tileId = (tx / 8) + (ty / 8) * screenSizeTiles;
-                mapAttrs = bgMapPtr[tileId + 0x2000]; // bank 1
+                uint8_t tx = x + offsetX;
+                uint8_t ty = y + offsetY;
+                int tileId = (tx / 8) + (ty / 8) * screenSizeTiles;
+                auto mapAttrs = mapPtr[tileId + 0x2000]; // GBC, bank 1
 
                 // tile id is signed if addr == 0x8800
-                tileId = (lcdc & LCDC_TileData8000) ? bgMapPtr[tileId] : (int8_t)bgMapPtr[tileId] + 128;
+                tileId = (lcdc & LCDC_TileData8000) ? mapPtr[tileId] : (int8_t)mapPtr[tileId] + 128;
+
+                // TODO: GBC bank, h/v flip, bg priority
+
+                auto tileAddr = tileId * tileDataSize;
+
+                // get the two tile data bytes for this line
+                uint8_t d1 = tileDataPtr[tileAddr + (ty & 7) * 2];
+                uint8_t d2 = tileDataPtr[tileAddr + (ty & 7) * 2 + 1];
+
+                // skip bits
+                d1 <<= (tx & 7);
+                d2 <<= (tx & 7);
+
+                // palette
+                const auto bgPal = bgPalette + (isColour ? (mapAttrs & 0x7) * 4 : 0);
+
+                // attempt to copy as much of the tile as possible
+                const int limit = std::min(x + 8 - (tx & 7), xLimit);
+
+                for(; x < limit; x++, d1 <<= 1, d2 <<= 1)
+                {
+                    int palIndex = ((d1 & 0x80) >> 7) | ((d2 & 0x80) >> 6);
+
+                    *(rawOut++) = palIndex;
+                    *(out++) = bgPal[palIndex];
+                }
             }
+        };
 
-            // TODO: GBC bank, h/v flip, bg priority
-
-            auto tileAddr = tileId * tileDataSize;
-
-            // get the two tile data bytes for this line
-            uint8_t d1 = tileDataPtr[tileAddr + (ty & 7) * 2];
-            uint8_t d2 = tileDataPtr[tileAddr + (ty & 7) * 2 + 1];
-
-            // skip bits
-            d1 <<= (tx & 7);
-            d2 <<= (tx & 7);
-
-            // palette
-            const auto bgPal = bgPalette + (isColour ? (mapAttrs & 0x7) * 4 : 0);
-
-            // attempt to copy as much of the tile as possible
-            const int limit = std::min(x + 8 - (tx & 7), x >= windowX ? screenWidth : windowX);
-
-            for(; x < limit; x++, d1 <<= 1, d2 <<= 1)
+        if(lcdc & LCDC_WindowEnable)
+        {
+            windowY = mem.readIOReg(IO_WY);
+            if(y >= windowY)
             {
-                int palIndex = ((d1 & 0x80) >> 7) | ((d2 & 0x80) >> 6);
-
-                *(rawOut++) = palIndex;
-                *(out++) = bgPal[palIndex];
+                yIsWin = true;
+                windowX = mem.readIOReg(IO_WX) - 7;
             }
         }
+
+        // background
+        if(windowX > 0)
+        {
+            auto scrollX = mem.readIOReg(IO_SCX);
+            auto scrollY = mem.readIOReg(IO_SCY);
+
+            copyTiles(bgMapPtr, windowX, scrollX, scrollY);
+        }
+
+        // window
+        if(yIsWin)
+            copyTiles(winMapPtr, screenWidth, -windowX, -windowY);
     }
 
     if(lcdc & LCDC_OBJDisp)
