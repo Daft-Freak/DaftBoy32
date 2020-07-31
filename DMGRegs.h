@@ -52,6 +52,24 @@ enum IOReg
     // GBC
     IO_KEY1 = 0x4D,
 
+    IO_VBK = 0x4F,
+
+    IO_RP = 0x56,
+
+    IO_HDMA1 = 0x51, // src high
+    IO_HDMA2, // src low
+    IO_HDMA3, // dest hi
+    IO_HDMA4, // dest low
+    IO_HDMA5, // len/mode/start
+
+    IO_BCPS = 0x68,
+    IO_BCPD,
+    IO_OCPS,
+    IO_OCPD,
+    IO_OPRI,
+
+    IO_SVBK = 0x70,
+
     IO_IF = 0x0F, // interrupt flag
     IO_IE = 0xFF // interrupt enable
 };
