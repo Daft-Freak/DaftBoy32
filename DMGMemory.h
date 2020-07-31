@@ -52,10 +52,12 @@ private:
         uint8_t bank;
     };
 
-    uint8_t vram[0x2000]; // 8k @ 0x8000
+    uint8_t vram[0x2000 * 2]; // 8k @ 0x8000, two banks on GBC
     uint8_t wram[0x2000]; // 8k @ 0xC000
     uint8_t oam[0xA0]; // @ 0xFE00
     uint8_t iohram[0x100]; // io @ 0xFF00, hram @ 0xFF80, ie & 0xFFFF
+
+    uint8_t vramBank = 0;
 
     // cartridge
     MBCType mbcType = MBCType::None;
