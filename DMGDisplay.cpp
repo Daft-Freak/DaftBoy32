@@ -122,12 +122,35 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
     if(addr < 0xFF00)
         return false;
 
+    const uint16_t colMap[]{0xFFFF, 0x6739, 0x39CE, 0};
+
     switch(addr & 0xFF)
     {
         case IO_LY:
             y = 0;
             return true;
 
+        // grey palettes
+        case IO_BGP:
+        {
+            for(int i = 0; i < 4; i++)
+                reinterpret_cast<uint16_t *>(bgPalette)[i] = colMap[(data >> (2 * i)) & 0x3];
+            break;
+        }
+        case IO_OBP0:
+        {
+            for(int i = 0; i < 4; i++)
+                reinterpret_cast<uint16_t *>(objPalette)[i] = colMap[(data >> (2 * i)) & 0x3];
+            break;
+        }
+        case IO_OBP1:
+        {
+            for(int i = 0; i < 4; i++)
+                reinterpret_cast<uint16_t *>(objPalette)[i + 4] = colMap[(data >> (2 * i)) & 0x3];
+            break;
+        }
+
+        // colour palettes
         case IO_BCPD:
         {
             auto bcps = mem.readIOReg(IO_BCPS);
@@ -162,8 +185,6 @@ void DMGDisplay::drawScanLine(int y)
 
     const bool isColour = cpu.getColourMode();
 
-    const uint16_t colMap[]{0xFFFF, 0x6739, 0x39CE, 0};
-
     auto vram = mem.getVRAM();
 
     auto tileDataPtr = (lcdc & LCDC_TileData8000) ? vram : vram + 0x800;
@@ -193,17 +214,6 @@ void DMGDisplay::drawScanLine(int y)
 
         auto scrollX = mem.readIOReg(IO_SCX);
         auto scrollY = mem.readIOReg(IO_SCY);
-
-        // non-colour palette
-        uint16_t gPal[4];
-
-        if(!isColour)
-        {
-            auto pal = mem.readIOReg(IO_BGP);
-
-            for(int i = 0; i < 4; i++)
-                gPal[i] = colMap[(pal >> (2 * i)) & 0x3];
-        }
 
         // bg/window
         auto out = screenData + y * screenWidth;
@@ -247,7 +257,7 @@ void DMGDisplay::drawScanLine(int y)
             d2 <<= (tx & 7);
 
             // palette
-            const auto bgPal = isColour ? reinterpret_cast<uint16_t *>(bgPalette) + (mapAttrs & 0x7) * 4 : gPal;
+            const auto bgPal = reinterpret_cast<uint16_t *>(bgPalette) + (isColour ? (mapAttrs & 0x7) * 4 : 0);
 
             // attempt to copy as much of the tile as possible
             const int limit = std::min(x + 8 - (tx & 7), x >= windowX ? screenWidth : windowX);
@@ -272,21 +282,6 @@ void DMGDisplay::drawScanLine(int y)
         uint8_t lineSprites[10];
         int numLineSprites = 0;
 
-        // non-colour palettes
-        uint16_t gPal0[4], gPal1[4];
-
-        if(!isColour)
-        {
-            auto pal0 = mem.readIOReg(IO_OBP0);
-            auto pal1 = mem.readIOReg(IO_OBP1);
-
-            for(int i = 0; i < 4; i++)
-            {
-                gPal0[i] = colMap[(pal0 >> (2 * i)) & 0x3];
-                gPal1[i] = colMap[(pal1 >> (2 * i)) & 0x3];
-            }
-        }
-
         for(int i = 0; i < numSprites && numLineSprites < 10; i++)
         {
             const int spriteY = oam[i * 4] - 16;
@@ -309,8 +304,8 @@ void DMGDisplay::drawScanLine(int y)
             const uint16_t *spritePal;
             if(isColour)
                 spritePal = reinterpret_cast<uint16_t *>(objPalette) + (attrs & 0x7) * 4;
-            else
-                spritePal = (attrs & Sprite_Palette) ? gPal1 : gPal0;
+            else // OBP0 or 1
+                spritePal = reinterpret_cast<uint16_t *>(objPalette) + ((attrs & Sprite_Palette) ? 4 : 0);
 
             // TODO: 8x16
             // TODO: priority
