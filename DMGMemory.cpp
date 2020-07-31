@@ -84,10 +84,20 @@ void DMGMemory::reset()
             break;
 
         case 0x0F: // + Timer + Battery
-        case 0x11: // + Timer + RAM + Battery
+        case 0x10: // + Timer + RAM + Battery
+        case 0x11:
         case 0x12: // + RAM
         case 0x13: // + RAM + Battery
             mbcType = MBCType::MBC3;
+            break;
+
+        case 0x19:
+        case 0x1A: // + RAM
+        case 0x1B: // + RAM + Battery
+        case 0x1C: // + Rumble
+        case 0x1D: // + Rumble + RAM
+        case 0x1E: // + Rumble + RAM + Battery 
+            mbcType = MBCType::MBC5;
             break;
 
         default:
@@ -230,7 +240,7 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
     if(mbcType == MBCType::None)
         return;
 
-    // MBC1/3
+    // MBC1/3/5
 
     if(addr < 0x2000)
     {
@@ -260,13 +270,22 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
             if(mbcROMBank == 0)
                 mbcROMBank = 1; // bank 0 is handled as bank 1
         }
+        else if(mbcType == MBCType::MBC5)
+        {
+            if(addr < 0x3000) // low 8
+                mbcROMBank = (mbcROMBank & 0x100) | data;
+            else // high 1
+                mbcROMBank = (mbcROMBank & 0xFF) | ((data & 1) << 8);
+        }
 
         updateCurrentROMBank();
     }
     else if(addr < 0x6000)
     {
+        if(mbcType == MBCType::MBC5)
+            mbcRAMBank = data & 0xF;
         // high 2 bits of rom bank / ram bank
-        if(mbcRAMBankMode || mbcType == MBCType::MBC3)
+        else if(mbcRAMBankMode || mbcType != MBCType::MBC3)
             mbcRAMBank = data & 0x3;
         else
         {

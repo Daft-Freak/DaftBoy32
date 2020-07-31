@@ -43,7 +43,8 @@ private:
     {
         None = 0,
         MBC1,
-        MBC3
+        MBC3,
+        MBC5
     };
 
     struct ROMCacheEntry
