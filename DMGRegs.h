@@ -49,6 +49,9 @@ enum IOReg
     IO_WY,
     IO_WX,
 
+    // GBC
+    IO_KEY1 = 0x4D,
+
     IO_IF = 0x0F, // interrupt flag
     IO_IE = 0xFF // interrupt enable
 };

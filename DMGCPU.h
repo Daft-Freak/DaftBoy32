@@ -31,6 +31,8 @@ public:
 
     uint16_t getInternalTimer() const {return divCounter;}
 
+    bool getDoubleSpeedMode() const {return doubleSpeed;}
+
 private:
     enum class Reg
     {
@@ -86,6 +88,8 @@ private:
     bool timerEnabled = false;
     int timerBit = 1 << 9;
     bool timerOldVal = false;
+
+    bool doubleSpeed = false, speedSwitch = false;
 
     // registers
     uint16_t regs[4];

@@ -29,6 +29,10 @@ bool awfulScale = false;
 
 void onCyclesExeceuted(int cycles)
 {
+    // these still work at normal speed
+    if(cpu.getDoubleSpeedMode())
+        cycles /= 2;
+
     apu.update(cycles);
     display.update(cycles);
 }

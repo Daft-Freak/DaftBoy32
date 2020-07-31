@@ -18,6 +18,8 @@ void DMGCPU::reset()
     timerEnabled = timerOldVal = false;
     timerBit = 1 << 9;
 
+    doubleSpeed = speedSwitch = false;
+
     // values after boot rom
     pc = 0x100;
     reg(WReg::AF) = 0x01B0;
@@ -32,6 +34,9 @@ void DMGCPU::reset()
 void DMGCPU::run(int ms)
 {
     int cycles = (clockSpeed * ms) / 1000;
+
+    if(doubleSpeed)
+        cycles *= 2;
 
     while(!stopped && cycles > 0)
     {
@@ -62,6 +67,8 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
     {
         if((addr & 0xFF) == IO_DIV)
             return divCounter >> 8;
+        else if((addr & 0xFF) == IO_KEY1)
+            return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
     }
 
     return mem.read(addr);
@@ -92,6 +99,8 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
             timerEnabled = data & TAC_Start;
             timerBit = timerBits[data & TAC_Clock];
         }
+        else if((addr & 0xFF) == IO_KEY1)
+            speedSwitch = data & 1;
         else
             mem.write(addr, data);
         return;
@@ -441,7 +450,13 @@ int DMGCPU::executeInstruction()
         }
 
         case 0x10: // STOP
-            stopped = true;
+            if(speedSwitch)
+            {
+                speedSwitch = false;
+                doubleSpeed = !doubleSpeed;
+            }
+            else
+                stopped = true;
             break;
 
         case 0x11: // LD DE,nn
