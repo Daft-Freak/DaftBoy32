@@ -31,6 +31,7 @@ public:
 
     uint16_t getInternalTimer() const {return divCounter;}
 
+    bool getColourMode() const {return isGBC;}
     bool getDoubleSpeedMode() const {return doubleSpeed;}
 
 private:
@@ -89,6 +90,7 @@ private:
     int timerBit = 1 << 9;
     bool timerOldVal = false;
 
+    bool isGBC = false;
     bool doubleSpeed = false, speedSwitch = false;
 
     // registers
