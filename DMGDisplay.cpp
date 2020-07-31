@@ -134,19 +134,19 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
         case IO_BGP:
         {
             for(int i = 0; i < 4; i++)
-                reinterpret_cast<uint16_t *>(bgPalette)[i] = colMap[(data >> (2 * i)) & 0x3];
+                bgPalette[i] = colMap[(data >> (2 * i)) & 0x3];
             break;
         }
         case IO_OBP0:
         {
             for(int i = 0; i < 4; i++)
-                reinterpret_cast<uint16_t *>(objPalette)[i] = colMap[(data >> (2 * i)) & 0x3];
+                objPalette[i] = colMap[(data >> (2 * i)) & 0x3];
             break;
         }
         case IO_OBP1:
         {
             for(int i = 0; i < 4; i++)
-                reinterpret_cast<uint16_t *>(objPalette)[i + 4] = colMap[(data >> (2 * i)) & 0x3];
+                objPalette[i + 4] = colMap[(data >> (2 * i)) & 0x3];
             break;
         }
 
@@ -154,7 +154,7 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
         case IO_BCPD:
         {
             auto bcps = mem.readIOReg(IO_BCPS);
-            bgPalette[bcps & 0x3F] = data;
+            reinterpret_cast<uint8_t *>(bgPalette)[bcps & 0x3F] = data;
 
             // auto inc
             if(bcps & 0x80)
@@ -166,7 +166,7 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
         case IO_OCPD:
         {
             auto ocps = mem.readIOReg(IO_OCPS);
-            objPalette[ocps & 0x3F] = data;
+            reinterpret_cast<uint8_t *>(objPalette)[ocps & 0x3F] = data;
 
             // auto inc
             if(ocps & 0x80)
@@ -257,7 +257,7 @@ void DMGDisplay::drawScanLine(int y)
             d2 <<= (tx & 7);
 
             // palette
-            const auto bgPal = reinterpret_cast<uint16_t *>(bgPalette) + (isColour ? (mapAttrs & 0x7) * 4 : 0);
+            const auto bgPal = bgPalette + (isColour ? (mapAttrs & 0x7) * 4 : 0);
 
             // attempt to copy as much of the tile as possible
             const int limit = std::min(x + 8 - (tx & 7), x >= windowX ? screenWidth : windowX);
@@ -303,9 +303,9 @@ void DMGDisplay::drawScanLine(int y)
 
             const uint16_t *spritePal;
             if(isColour)
-                spritePal = reinterpret_cast<uint16_t *>(objPalette) + (attrs & 0x7) * 4;
+                spritePal = objPalette + (attrs & 0x7) * 4;
             else // OBP0 or 1
-                spritePal = reinterpret_cast<uint16_t *>(objPalette) + ((attrs & Sprite_Palette) ? 4 : 0);
+                spritePal = objPalette + ((attrs & Sprite_Palette) ? 4 : 0);
 
             // TODO: 8x16
             // TODO: priority

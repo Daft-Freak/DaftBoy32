@@ -32,5 +32,5 @@ private:
     uint16_t screenData[screenWidth * screenHeight]; // rgb555
 
     // GBC
-    uint8_t bgPalette[8 * 8], objPalette[8 * 8];
+    uint16_t bgPalette[8 * 4], objPalette[8 * 4];
 };
