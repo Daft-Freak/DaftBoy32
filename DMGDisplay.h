@@ -30,4 +30,7 @@ private:
 
     int remainingScanlineCycles = scanlineCycles;
     uint16_t screenData[screenWidth * screenHeight]; // rgb555
+
+    // GBC
+    uint8_t bgPalette[8 * 8], objPalette[8 * 8];
 };

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 
 #include "DMGDisplay.h"
 
@@ -16,6 +17,8 @@ enum SpriteFlags
 
 DMGDisplay::DMGDisplay(DMGCPU &cpu) : cpu(cpu), mem(cpu.getMem())
 {
+    memset(bgPalette, 0xFF, sizeof(bgPalette));
+    memset(objPalette, 0xFF, sizeof(objPalette));
 }
 
 void DMGDisplay::update(int cycles)
@@ -124,6 +127,30 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
         case IO_LY:
             y = 0;
             return true;
+
+        case IO_BCPD:
+        {
+            auto bcps = mem.readIOReg(IO_BCPS);
+            bgPalette[bcps & 0x3F] = data;
+
+            // auto inc
+            if(bcps & 0x80)
+                mem.writeIOReg(IO_BCPS, ((bcps & 0x3F) + 1) | 0x80);
+
+            return true;
+        }
+
+        case IO_OCPD:
+        {
+            auto ocps = mem.readIOReg(IO_OCPS);
+            objPalette[ocps & 0x3F] = data;
+
+            // auto inc
+            if(ocps & 0x80)
+                mem.writeIOReg(IO_OCPS, ((ocps & 0x3F) + 1) | 0x80);
+
+            return true;
+        }
     }
     
     return false;
@@ -132,6 +159,8 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 void DMGDisplay::drawScanLine(int y)
 {
     auto lcdc = mem.readIOReg(IO_LCDC);
+
+    const bool isColour = cpu.getColourMode();
 
     const uint16_t colMap[]{0xFFFF, 0x6739, 0x39CE, 0};
 
@@ -144,7 +173,6 @@ void DMGDisplay::drawScanLine(int y)
 
     const int tileDataSize = 16;
     const int screenSizeTiles = 32; // 32x32 tiles
-    const int bgPal = mem.readIOReg(IO_BGP);
 
     const int numSprites = 40;
 
@@ -166,12 +194,24 @@ void DMGDisplay::drawScanLine(int y)
         auto scrollX = mem.readIOReg(IO_SCX);
         auto scrollY = mem.readIOReg(IO_SCY);
 
+        // non-colour palette
+        uint16_t gPal[4];
+
+        if(!isColour)
+        {
+            auto pal = mem.readIOReg(IO_BGP);
+
+            for(int i = 0; i < 4; i++)
+                gPal[i] = colMap[(pal >> (2 * i)) & 0x3];
+        }
+
         // bg/window
         auto out = screenData + y * screenWidth;
         auto rawOut = bgRaw;
         for(int x = 0; x < screenWidth;)
         {
             int tileId;
+            uint8_t mapAttrs; // GBC
             uint8_t tx;
             uint8_t ty;
 
@@ -180,6 +220,7 @@ void DMGDisplay::drawScanLine(int y)
                 tx = x - windowX;
                 ty = y - windowY;
                 tileId = (tx / 8) + (ty / 8) * screenSizeTiles;
+                mapAttrs = winMapPtr[tileId + 0x2000]; // bank 1
                 tileId = (lcdc & LCDC_TileData8000) ? winMapPtr[tileId] : (int8_t)winMapPtr[tileId] + 128;
             }
             else
@@ -187,10 +228,13 @@ void DMGDisplay::drawScanLine(int y)
                 tx = x + scrollX;
                 ty = y + scrollY;
                 tileId = (tx / 8) + (ty / 8) * screenSizeTiles;
+                mapAttrs = bgMapPtr[tileId + 0x2000]; // bank 1
 
                 // tile id is signed if addr == 0x8800
                 tileId = (lcdc & LCDC_TileData8000) ? bgMapPtr[tileId] : (int8_t)bgMapPtr[tileId] + 128;
             }
+
+            // TODO: GBC bank, h/v flip, bg priority
 
             auto tileAddr = tileId * tileDataSize;
 
@@ -202,6 +246,9 @@ void DMGDisplay::drawScanLine(int y)
             d1 <<= (tx & 7);
             d2 <<= (tx & 7);
 
+            // palette
+            const auto bgPal = isColour ? reinterpret_cast<uint16_t *>(bgPalette) + (mapAttrs & 0x7) * 4 : gPal;
+
             // attempt to copy as much of the tile as possible
             const int limit = std::min(x + 8 - (tx & 7), x >= windowX ? screenWidth : windowX);
 
@@ -210,9 +257,7 @@ void DMGDisplay::drawScanLine(int y)
                 int palIndex = ((d1 & 0x80) >> 7) | ((d2 & 0x80) >> 6);
 
                 *(rawOut++) = palIndex;
-
-                int col = (bgPal >> (2 * palIndex)) & 0x3;
-                *(out++) = colMap[col];
+                *(out++) = bgPal[palIndex];
             }
         }
     }
@@ -226,6 +271,21 @@ void DMGDisplay::drawScanLine(int y)
         // 10 sprites per line limit
         uint8_t lineSprites[10];
         int numLineSprites = 0;
+
+        // non-colour palettes
+        uint16_t gPal0[4], gPal1[4];
+
+        if(!isColour)
+        {
+            auto pal0 = mem.readIOReg(IO_OBP0);
+            auto pal1 = mem.readIOReg(IO_OBP1);
+
+            for(int i = 0; i < 4; i++)
+            {
+                gPal0[i] = colMap[(pal0 >> (2 * i)) & 0x3];
+                gPal1[i] = colMap[(pal1 >> (2 * i)) & 0x3];
+            }
+        }
 
         for(int i = 0; i < numSprites && numLineSprites < 10; i++)
         {
@@ -246,10 +306,15 @@ void DMGDisplay::drawScanLine(int y)
             const int tileId = oam[spriteId * 4 + 2];
             const int attrs = oam[spriteId * 4 + 3];
 
-            const int spritePal = mem.readIOReg((attrs & Sprite_Palette) ? IO_OBP1 : IO_OBP0);
+            const uint16_t *spritePal;
+            if(isColour)
+                spritePal = reinterpret_cast<uint16_t *>(objPalette) + (attrs & 0x7) * 4;
+            else
+                spritePal = (attrs & Sprite_Palette) ? gPal1 : gPal0;
 
             // TODO: 8x16
             // TODO: priority
+            // TODO: GBC bank
 
             int ty = y - spriteY;
 
@@ -282,8 +347,7 @@ void DMGDisplay::drawScanLine(int y)
                 if(!palIndex)
                     continue;
 
-                int col = (spritePal >> (2 * palIndex)) & 0x3;
-                *out = colMap[col];
+                *out = spritePal[palIndex];
             }
         }
     }
