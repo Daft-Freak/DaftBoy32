@@ -73,11 +73,11 @@ void getROMBank(uint8_t bank, uint8_t *ptr)
     romFile.read(bank * 0x4000, 0x4000, (char *)ptr);
 }
 
-void updateCartRAM(uint8_t *cartRam)
+void updateCartRAM(uint8_t *cartRam, unsigned int size)
 {
     blit::File f(loadedFilename + ".ram.tmp", blit::OpenMode::write);
 
-    if(f.write(0, 0x8000, (const char *)cartRam) != 0x8000)
+    if(f.write(0, size, (const char *)cartRam) != size)
         return;
 
     f.close();
@@ -287,5 +287,5 @@ void update(uint32_t time_ms)
 
     // dump cart ram
     if(blit::buttons.released & blit::Button::JOYSTICK)
-        updateCartRAM(mem.getCartridgeRAM());
+        updateCartRAM(mem.getCartridgeRAM(), mem.getCartridgeRAMSize());
 }

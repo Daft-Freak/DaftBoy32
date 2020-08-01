@@ -10,7 +10,7 @@ public:
 
     using ROMBankCallback = void(*)(uint8_t, uint8_t *);
 
-    using CartRamUpdateCallback = void(*)(uint8_t *);
+    using CartRamUpdateCallback = void(*)(uint8_t *, unsigned int);
 
     void setROMBankCallback(ROMBankCallback callback);
     void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
@@ -31,6 +31,7 @@ public:
     uint8_t *getVRAM() {return vram;}
 
     uint8_t *getCartridgeRAM() {return cartRam;}
+    int getCartridgeRAMSize() {return cartRamSize;}
     void setCartRamUpdateCallback(CartRamUpdateCallback callback);
 
     uint8_t *mapAddress(uint16_t &addr);
@@ -68,6 +69,7 @@ private:
     bool mbcRAMBankMode = false;
     uint8_t cartRam[0x8000];
     bool cartRamWritten = false;
+    unsigned int cartRamSize = 0;
 
     uint8_t cartROMBank0[0x4000];
     uint8_t *cartROMCurBank;

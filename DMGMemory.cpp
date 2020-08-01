@@ -72,6 +72,16 @@ void DMGMemory::reset()
     for(int i = 0; i < extraROMBankCacheSize; i++)
         cachedROMBanks.emplace_back(ROMCacheEntry{extraROMBankCache + i * 0x4000, 0});
 
+    // check cart ram size
+    static const unsigned int ramSizes[]{
+        0, 2048, 8 * 1024, 32 * 1024, 128 * 1024, 64 * 1024
+    };
+
+    cartRamSize = ramSizes[cartROMBank0[0x149]];
+
+    if(cartRamSize > sizeof(cartRam))
+        printf("Too much cart RAM! (%i > %i)\n", cartRamSize, sizeof(cartRam));
+
     switch(cartROMBank0[0x147])
     {
         case 0:
@@ -259,7 +269,7 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
         if(!mbcRAMEnabled)
         {
             if(cartRamWritten && cartRamUpdateCallback)
-                cartRamUpdateCallback(cartRam);
+                cartRamUpdateCallback(cartRam, cartRamSize);
 
             cartRamWritten = false;
         }
