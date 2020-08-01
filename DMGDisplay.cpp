@@ -26,6 +26,15 @@ enum TileFlags
     Tile_BGPriority = (1 << 7)
 };
 
+// reverses the bits in each byte, but not the bytes
+static uint16_t reverseBitsPerByte(uint16_t v)
+{
+    v = (((v & 0xAAAA) >> 1) | ((v & 0x5555) << 1));
+    v = (((v & 0xCCCC) >> 2) | ((v & 0x3333) << 2));
+    v = (((v & 0xF0F0) >> 4) | ((v & 0x0F0F) << 4));
+    return v;
+}
+
 DMGDisplay::DMGDisplay(DMGCPU &cpu) : cpu(cpu), mem(cpu.getMem())
 {
     memset(bgPalette, 0xFF, sizeof(bgPalette));
@@ -251,13 +260,13 @@ void DMGDisplay::drawScanLine(int y)
                 // get the two tile data bytes for this line
                 //uint8_t d1 = tileDataPtr[tileAddr + ty * 2];
                 //uint8_t d2 = tileDataPtr[tileAddr + ty * 2 + 1];
-                uint32_t d = reinterpret_cast<uint16_t *>(tileDataPtr + tileAddr)[ty];
+                uint16_t d = reinterpret_cast<uint16_t *>(tileDataPtr + tileAddr)[ty];
+
+                if(mapAttrs & Tile_XFlip)
+                    d = reverseBitsPerByte(d);
 
                 // skip bits
-                if(mapAttrs & Tile_XFlip)
-                    d <<= (7 - tx);
-                else
-                    d <<= tx;
+                d <<= tx;
 
                 // palette
                 const auto bgPal = bgPalette + (mapAttrs & 0x7) * 4;
@@ -265,17 +274,12 @@ void DMGDisplay::drawScanLine(int y)
                 // attempt to copy as much of the tile as possible
                 const int limit = std::min(x + 8 - tx, xLimit);
 
-                for(; x < limit; x++)
+                for(; x < limit; x++, d <<= 1)
                 {
                     int palIndex = ((d & 0x80) >> 7) | ((d & 0x8000) >> 14);
 
                     *(rawOut++) = palIndex;
                     *(out++) = bgPal[palIndex];
-
-                    if(mapAttrs & Tile_XFlip)
-                        d >>= 1;
-                    else
-                        d <<= 1;
                 }
             }
         };
@@ -358,6 +362,9 @@ void DMGDisplay::drawScanLine(int y)
             // get the two tile data bytes for this line
             uint16_t d = reinterpret_cast<uint16_t *>(spriteDataPtr + tileAddr)[ty];
 
+            if(attrs & Sprite_XFlip)
+                d = reverseBitsPerByte(d);
+
             int x = std::max(0, -spriteX);
             int end = std::min(8, screenWidth - spriteX);
 
@@ -369,10 +376,7 @@ void DMGDisplay::drawScanLine(int y)
                 if((attrs & Sprite_BGPriority) && *bgIn)
                     continue;
 
-                int xShift = x;
-                if(!(attrs & Sprite_XFlip))
-                    xShift = 7 - xShift;
-
+                int xShift = 7 - x;
                 int palIndex = ((d >> xShift) & 1) | (((d >> (xShift + 8)) & 1) << 1);
 
                 if(!palIndex)
