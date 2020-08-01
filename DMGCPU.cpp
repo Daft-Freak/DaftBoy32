@@ -2013,7 +2013,7 @@ void DMGCPU::serviceInterrupts()
 {
     const auto flag = mem.readIOReg(IO_IF);
     const auto enabled = mem.readIOReg(IO_IE);
-    const uint16_t vectors[]{0x40, 0x48, 0x50, 0x58, 0x60};
+    static const uint16_t vectors[]{0x40, 0x48, 0x50, 0x58, 0x60};
 
     int servicable = enabled & flag;
 
