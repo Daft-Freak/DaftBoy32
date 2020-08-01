@@ -17,7 +17,10 @@ public:
     bool writeReg(uint16_t addr, uint8_t data);
 
 private:
+    void updateFrameSequencer();
     void updateFreq();
+
+    void sampleOutput();
 
     DMGCPU &cpu;
 

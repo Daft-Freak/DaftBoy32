@@ -11,8 +11,6 @@ DMGAPU::DMGAPU(DMGCPU &cpu) : cpu(cpu)
 
 void DMGAPU::update(int cycles)
 {
-    auto &mem = cpu.getMem();
-
     if(enabled)
     {
         // this gets called before the timer is incremented
@@ -28,133 +26,7 @@ void DMGAPU::update(int cycles)
         //if(wasSet && !(oldDiv & (1 << 12)))
         if((oldDiv & 0x1FFF) + cycles >= 8192)
         {
-            frameSeqClock = (frameSeqClock + 1) & 7;
-
-            if((frameSeqClock & 1) == 0)
-            {
-                // length
-
-                const auto ch1FreqHi = mem.readIOReg(IO_NR14);
-                const auto ch2FreqHi = mem.readIOReg(IO_NR24);
-                const auto ch3FreqHi = mem.readIOReg(IO_NR34);
-                const auto ch4FreqHi = mem.readIOReg(IO_NR44);
-
-                if((ch1FreqHi & NRx4_Counter) && ch1Len)
-                {
-                    if(--ch1Len == 0)
-                        channelEnabled &= ~(1 << 0); // done, disable
-                }
-
-                if((ch2FreqHi & NRx4_Counter) && ch2Len)
-                {
-                    if(--ch2Len == 0)
-                        channelEnabled &= ~(1 << 1); // done, disable
-                }
-
-                if((ch3FreqHi & NRx4_Counter) && ch3Len)
-                {
-                    if(--ch3Len == 0)
-                        channelEnabled &= ~(1 << 2); // done, disable
-                }
-
-                if((ch4FreqHi & NRx4_Counter) && ch4Len)
-                {
-                    if(--ch4Len == 0)
-                        channelEnabled &= ~(1 << 3); // done, disable
-                }
-            } 
-
-            if(frameSeqClock == 7)
-            {
-                // envelope
-                const auto ch1EnvVol = mem.readIOReg(IO_NR12);
-                const auto ch2EnvVol = mem.readIOReg(IO_NR22);
-                const auto ch4EnvVol = mem.readIOReg(IO_NR42);
-
-                ch1EnvTimer--;
-
-                if(ch1EnvTimer == 0 && (ch1EnvVol & 0x7))
-                {
-                    if(ch1EnvVol & (1 << 3) && ch1EnvVolume < 15)
-                        ch1EnvVolume++;
-                    else if(ch1EnvVolume > 0)
-                        ch1EnvVolume--;
-
-                    ch1EnvTimer = ch1EnvVol & 0x7;
-                }
-
-                ch2EnvTimer--;
-
-                if(ch2EnvTimer == 0 && (ch2EnvVol & 0x7))
-                {
-                    if(ch2EnvVol & (1 << 3) && ch2EnvVolume < 15)
-                        ch2EnvVolume++;
-                    else if(ch2EnvVolume > 0)
-                        ch2EnvVolume--;
-
-                    ch2EnvTimer = ch2EnvVol & 0x7;
-                }
-
-                ch4EnvTimer--;
-
-                if(ch4EnvTimer == 0 && (ch4EnvVol & 0x7))
-                {
-                    if(ch4EnvVol & (1 << 3) && ch4EnvVolume < 15)
-                        ch4EnvVolume++;
-                    else if(ch4EnvVolume > 0)
-                        ch4EnvVolume--;
-
-                    ch4EnvTimer = ch4EnvVol & 0x7;
-                }
-            }
-
-            if((frameSeqClock & 0x3) == 2)
-            {
-                // sweep
-                ch1SweepTimer--;
-
-                if(ch1SweepEnable && ch1SweepTimer == 0)
-                {
-                    const auto ch1Sweep = mem.readIOReg(IO_NR10);
-                    auto sweepPeriod = (ch1Sweep & NR10_Period) >> 4;
-                    if(sweepPeriod)
-                    {
-                        auto shift = ch1Sweep & NR10_Shift;
-                        int newFreq = ch1SweepFreq >> shift;
-
-                        if(ch1Sweep & NR10_Negate) // negate
-                            newFreq = ch1SweepFreq - newFreq;
-                        else
-                            newFreq = ch1SweepFreq + newFreq;
-
-                        if(shift && newFreq < 2048)
-                        {
-                            ch1SweepFreq = newFreq;
-                            mem.writeIOReg(IO_NR13, newFreq & 0xFF);
-                            mem.writeIOReg(IO_NR14, (mem.readIOReg(IO_NR14) & 0xF1) | (newFreq >> 8));
-                            ch1FreqTimerPeriod = (2048 - newFreq) * 4;
-                        }
-
-                        ch1SweepTimer = (ch1Sweep >> 4) & 3;
-
-                        // calculate again for overflow check
-                        newFreq = ch1SweepFreq >> shift;
-
-                        if(ch1Sweep & NR10_Negate) // negate
-                        {
-                            newFreq = ch1SweepFreq - newFreq;
-                            ch1SweepCalcWithNeg = true;
-                        }
-                        else
-                            newFreq = ch1SweepFreq + newFreq;
-
-                        if(newFreq >= 2048)
-                            channelEnabled &= ~(1 << 0);
-                    }
-                    else // period is 0, reset to 8
-                        ch1SweepTimer = 8;
-                }
-            }
+            updateFrameSequencer();
         }
 
         // freq timers
@@ -170,45 +42,8 @@ void DMGAPU::update(int cycles)
 
     if(sampleClock >= clocksPerSample)
     {
-        updateFreq();
         sampleClock -= clocksPerSample;
-
-        // wait for the audio thread/interrupt to catch up
-        while(writeOff == readOff - 1) {}
-
-        auto outputSelect = mem.readIOReg(IO_NR51);
-
-        auto vol = ch1EnvVolume;
-        auto ch1Val = (channelEnabled & 1) && (ch1DutyPattern & (1 << ch1DutyStep)) ? vol : -vol;
-
-        vol = ch2EnvVolume;
-        auto ch2Val = (channelEnabled & 2) && (ch2DutyPattern & (1 << ch2DutyStep)) ? vol : -vol;
-
-        vol = (mem.readIOReg(IO_NR32) >> 5) & 0x3;
-        auto ch3Val = (channelEnabled & 4) && vol ? (ch3Sample * 2) - 0xF : 0;
-        ch3Val /= (1 << (vol - 1));
-
-        vol = ch4EnvVolume;
-        auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : -vol;
-
-        int32_t sample = 0;
-        
-        if(outputSelect & 1)
-            sample += ch1Val;
-
-        if(outputSelect & 2)
-            sample += ch2Val;
-
-        if(outputSelect & 4)
-            sample += ch3Val;
-
-        if(outputSelect & 8)
-            sample += ch4Val;
-
-        // TODO SO2?
-
-        sampleData[writeOff] = sample * 0x222;
-        writeOff = (writeOff + 1) % bufferSize;
+        sampleOutput();
     }
 }
 
@@ -604,6 +439,139 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
     return false;
 }
 
+void DMGAPU::updateFrameSequencer()
+{
+    auto &mem = cpu.getMem();
+
+    frameSeqClock = (frameSeqClock + 1) & 7;
+
+    if((frameSeqClock & 1) == 0)
+    {
+        // length
+
+        const auto ch1FreqHi = mem.readIOReg(IO_NR14);
+        const auto ch2FreqHi = mem.readIOReg(IO_NR24);
+        const auto ch3FreqHi = mem.readIOReg(IO_NR34);
+        const auto ch4FreqHi = mem.readIOReg(IO_NR44);
+
+        if((ch1FreqHi & NRx4_Counter) && ch1Len)
+        {
+            if(--ch1Len == 0)
+                channelEnabled &= ~(1 << 0); // done, disable
+        }
+
+        if((ch2FreqHi & NRx4_Counter) && ch2Len)
+        {
+            if(--ch2Len == 0)
+                channelEnabled &= ~(1 << 1); // done, disable
+        }
+
+        if((ch3FreqHi & NRx4_Counter) && ch3Len)
+        {
+            if(--ch3Len == 0)
+                channelEnabled &= ~(1 << 2); // done, disable
+        }
+
+        if((ch4FreqHi & NRx4_Counter) && ch4Len)
+        {
+            if(--ch4Len == 0)
+                channelEnabled &= ~(1 << 3); // done, disable
+        }
+    } 
+
+    if(frameSeqClock == 7)
+    {
+        // envelope
+        const auto ch1EnvVol = mem.readIOReg(IO_NR12);
+        const auto ch2EnvVol = mem.readIOReg(IO_NR22);
+        const auto ch4EnvVol = mem.readIOReg(IO_NR42);
+
+        ch1EnvTimer--;
+
+        if(ch1EnvTimer == 0 && (ch1EnvVol & 0x7))
+        {
+            if(ch1EnvVol & (1 << 3) && ch1EnvVolume < 15)
+                ch1EnvVolume++;
+            else if(ch1EnvVolume > 0)
+                ch1EnvVolume--;
+
+            ch1EnvTimer = ch1EnvVol & 0x7;
+        }
+
+        ch2EnvTimer--;
+
+        if(ch2EnvTimer == 0 && (ch2EnvVol & 0x7))
+        {
+            if(ch2EnvVol & (1 << 3) && ch2EnvVolume < 15)
+                ch2EnvVolume++;
+            else if(ch2EnvVolume > 0)
+                ch2EnvVolume--;
+
+            ch2EnvTimer = ch2EnvVol & 0x7;
+        }
+
+        ch4EnvTimer--;
+
+        if(ch4EnvTimer == 0 && (ch4EnvVol & 0x7))
+        {
+            if(ch4EnvVol & (1 << 3) && ch4EnvVolume < 15)
+                ch4EnvVolume++;
+            else if(ch4EnvVolume > 0)
+                ch4EnvVolume--;
+
+            ch4EnvTimer = ch4EnvVol & 0x7;
+        }
+    }
+
+    if((frameSeqClock & 0x3) == 2)
+    {
+        // sweep
+        ch1SweepTimer--;
+
+        if(ch1SweepEnable && ch1SweepTimer == 0)
+        {
+            const auto ch1Sweep = mem.readIOReg(IO_NR10);
+            auto sweepPeriod = (ch1Sweep & NR10_Period) >> 4;
+            if(sweepPeriod)
+            {
+                auto shift = ch1Sweep & NR10_Shift;
+                int newFreq = ch1SweepFreq >> shift;
+
+                if(ch1Sweep & NR10_Negate) // negate
+                    newFreq = ch1SweepFreq - newFreq;
+                else
+                    newFreq = ch1SweepFreq + newFreq;
+
+                if(shift && newFreq < 2048)
+                {
+                    ch1SweepFreq = newFreq;
+                    mem.writeIOReg(IO_NR13, newFreq & 0xFF);
+                    mem.writeIOReg(IO_NR14, (mem.readIOReg(IO_NR14) & 0xF1) | (newFreq >> 8));
+                    ch1FreqTimerPeriod = (2048 - newFreq) * 4;
+                }
+
+                ch1SweepTimer = (ch1Sweep >> 4) & 3;
+
+                // calculate again for overflow check
+                newFreq = ch1SweepFreq >> shift;
+
+                if(ch1Sweep & NR10_Negate) // negate
+                {
+                    newFreq = ch1SweepFreq - newFreq;
+                    ch1SweepCalcWithNeg = true;
+                }
+                else
+                    newFreq = ch1SweepFreq + newFreq;
+
+                if(newFreq >= 2048)
+                    channelEnabled &= ~(1 << 0);
+            }
+            else // period is 0, reset to 8
+                ch1SweepTimer = 8;
+        }
+    }
+}
+
 void DMGAPU::updateFreq()
 {
     // channel 1
@@ -662,4 +630,49 @@ void DMGAPU::updateFreq()
             ch4Val = ch4LFSRBits & 1;
         }
     }
+
+    cyclesPassed = 0;
+}
+
+void DMGAPU::sampleOutput()
+{
+    auto &mem = cpu.getMem();
+    updateFreq();
+
+    // wait for the audio thread/interrupt to catch up
+    while(writeOff == readOff - 1) {}
+
+    auto outputSelect = mem.readIOReg(IO_NR51);
+
+    auto vol = ch1EnvVolume;
+    auto ch1Val = (channelEnabled & 1) && (ch1DutyPattern & (1 << ch1DutyStep)) ? vol : -vol;
+
+    vol = ch2EnvVolume;
+    auto ch2Val = (channelEnabled & 2) && (ch2DutyPattern & (1 << ch2DutyStep)) ? vol : -vol;
+
+    vol = (mem.readIOReg(IO_NR32) >> 5) & 0x3;
+    auto ch3Val = (channelEnabled & 4) && vol ? (ch3Sample * 2) - 0xF : 0;
+    ch3Val /= (1 << (vol - 1));
+
+    vol = ch4EnvVolume;
+    auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : -vol;
+
+    int32_t sample = 0;
+
+    if(outputSelect & 1)
+        sample += ch1Val;
+
+    if(outputSelect & 2)
+        sample += ch2Val;
+
+    if(outputSelect & 4)
+        sample += ch3Val;
+
+    if(outputSelect & 8)
+        sample += ch4Val;
+
+    // TODO SO2?
+
+    sampleData[writeOff] = sample * 0x222;
+    writeOff = (writeOff + 1) % bufferSize;
 }
