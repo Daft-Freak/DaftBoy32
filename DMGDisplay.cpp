@@ -232,9 +232,12 @@ void DMGDisplay::drawScanLine(int y)
                 // tile id is signed if addr == 0x8800
                 tileId = (lcdc & LCDC_TileData8000) ? mapPtr[tileId] : (int8_t)mapPtr[tileId] + 128;
 
-                // TODO: GBC bank, h/v flip, bg priority
+                // TODO: GBC h/v flip, bg priority
 
                 auto tileAddr = tileId * tileDataSize;
+
+                if(mapAttrs & Tile_Bank)
+                    tileAddr += 0x2000;
 
                 // get the two tile data bytes for this line
                 uint8_t d1 = tileDataPtr[tileAddr + (ty & 7) * 2];
@@ -321,7 +324,6 @@ void DMGDisplay::drawScanLine(int y)
 
             // TODO: 8x16
             // TODO: priority
-            // TODO: GBC bank
 
             int ty = y - spriteY;
 
@@ -329,6 +331,9 @@ void DMGDisplay::drawScanLine(int y)
                 ty = 7 - ty;
 
             auto tileAddr = tileId * tileDataSize;
+
+            if(attrs & Sprite_Bank)
+                tileAddr += 0x2000;
 
             // get the two tile data bytes for this line
             uint8_t d1 = spriteDataPtr[tileAddr + ty * 2];
