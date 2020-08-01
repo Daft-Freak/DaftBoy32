@@ -257,7 +257,7 @@ void DMGDisplay::drawScanLine(int y)
                 d2 <<= tx;
 
                 // palette
-                const auto bgPal = bgPalette + (isColour ? (mapAttrs & 0x7) * 4 : 0);
+                const auto bgPal = bgPalette + (mapAttrs & 0x7) * 4;
 
                 // attempt to copy as much of the tile as possible
                 const int limit = std::min(x + 8 - tx, xLimit);
