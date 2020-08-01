@@ -54,11 +54,12 @@ private:
     };
 
     uint8_t vram[0x2000 * 2]; // 8k @ 0x8000, two banks on GBC
-    uint8_t wram[0x2000]; // 8k @ 0xC000
+    uint8_t wram[0x1000 * 8]; // 8k @ 0xC000, second half switchable on GBC
     uint8_t oam[0xA0]; // @ 0xFE00
     uint8_t iohram[0x100]; // io @ 0xFF00, hram @ 0xFF80, ie & 0xFFFF
 
     uint8_t vramBank = 0;
+    uint8_t wramBank = 1;
 
     // cartridge
     MBCType mbcType = MBCType::None;
@@ -72,7 +73,7 @@ private:
     uint8_t *cartROMCurBank;
 
     // cache as much as possible in RAM
-    static const int romBankCacheSize = 7;
+    static const int romBankCacheSize = 6;
     uint8_t cartROMBankCache[0x4000 * romBankCacheSize];
     std::list<ROMCacheEntry> cachedROMBanks;
 

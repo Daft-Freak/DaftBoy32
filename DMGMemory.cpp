@@ -131,8 +131,10 @@ uint8_t DMGMemory::read(uint16_t addr) const
         return vram[(addr - 0x8000) + vramBank * 0x2000];
     else if(addr < 0xC000)
         return cartRam[(addr - 0xA000) + mbcRAMBank * 0x2000];
-    else if(addr < 0xE000)
+    else if(addr < 0xD000)
         return wram[addr - 0xC000];
+    else if(addr < 0xE000)
+        return wram[(addr - 0xD000) + wramBank * 0x1000];
     else if(addr < 0xFE00)
     {} // echo
     else if(addr < 0xFEA0)
@@ -167,6 +169,8 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
     {
         if((addr & 0xFF) == IO_VBK)
             vramBank = data & 1;
+        else if((addr & 0xFF) == IO_SVBK)
+            wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
         else if(writeCallback && writeCallback(addr, data))
             return;
         iohram[addr & 0xFF] = data;
@@ -212,9 +216,14 @@ uint8_t *DMGMemory::mapAddress(uint16_t &addr)
         addr = (addr - 0xA000) + mbcRAMBank * 0x2000;
         return mbcRAMEnabled ? cartRam : nullptr;
     }
-    else if(addr < 0xE000)
+    else if(addr < 0xD000)
     {
         addr -= 0xC000;
+        return wram;
+    }
+    else if(addr < 0xE000)
+    {
+        addr = (addr - 0xD000) + wramBank * 0x1000;
         return wram;
     }
     else if(addr < 0xFE00)
