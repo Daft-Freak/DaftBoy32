@@ -220,6 +220,8 @@ void DMGDisplay::drawScanLine(int y)
 
     uint8_t bgRaw[screenWidth]{0};
 
+    auto scanLine = screenData + y * screenWidth;
+
     // active scanline
     if(lcdc & LCDC_BGDisp)
     {
@@ -227,7 +229,7 @@ void DMGDisplay::drawScanLine(int y)
         bool yIsWin = false;
 
         int x = 0;
-        auto out = screenData + y * screenWidth;
+        auto out = scanLine;
         auto rawOut = bgRaw;
 
         auto copyTiles = [this, &x, y, lcdc, isColour, tileDataPtr, &out, &rawOut](uint8_t *mapPtr, int xLimit, int offsetX, int offsetY)
@@ -368,16 +370,17 @@ void DMGDisplay::drawScanLine(int y)
             int x = std::max(0, -spriteX);
             int end = std::min(8, screenWidth - spriteX);
 
-            auto out = screenData + (x + spriteX) + y * screenWidth;
+            d <<= x;
+
+            auto out = scanLine + (x + spriteX);
             auto bgIn = bgRaw + x + spriteX;
-            for(; x < end; x++, out++, bgIn++)
+            for(; x < end; x++, out++, bgIn++, d <<= 1)
             {
                 // background has priority
                 if((attrs & Sprite_BGPriority) && *bgIn)
                     continue;
 
-                int xShift = 7 - x;
-                int palIndex = ((d >> xShift) & 1) | (((d >> (xShift + 8)) & 1) << 1);
+                int palIndex = ((d & 0x80) >> 7) | ((d & 0x8000) >> 14);
 
                 if(!palIndex)
                     continue;
