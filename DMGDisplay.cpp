@@ -235,7 +235,7 @@ void DMGDisplay::drawScanLine(int y)
                 // tile id is signed if addr == 0x8800
                 tileId = (lcdc & LCDC_TileData8000) ? mapPtr[tileId] : (int8_t)mapPtr[tileId] + 128;
 
-                // TODO: GBC h flip, bg priority
+                // TODO: GBC bg priority
 
                 auto tileAddr = tileId * tileDataSize;
 
@@ -249,12 +249,20 @@ void DMGDisplay::drawScanLine(int y)
                     ty = 7 - ty;
 
                 // get the two tile data bytes for this line
-                uint8_t d1 = tileDataPtr[tileAddr + ty * 2];
-                uint8_t d2 = tileDataPtr[tileAddr + ty * 2 + 1];
+                uint16_t d1 = tileDataPtr[tileAddr + ty * 2];
+                uint16_t d2 = tileDataPtr[tileAddr + ty * 2 + 1];
 
-                // skip bits
-                d1 <<= tx;
-                d2 <<= tx;
+                if(mapAttrs & Tile_XFlip)
+                {
+                    d1 <<= (7 - tx);
+                    d2 <<= (7 - tx);
+                }
+                else
+                {
+                    // skip bits
+                    d1 <<= tx;
+                    d2 <<= tx;
+                }
 
                 // palette
                 const auto bgPal = bgPalette + (mapAttrs & 0x7) * 4;
@@ -262,12 +270,23 @@ void DMGDisplay::drawScanLine(int y)
                 // attempt to copy as much of the tile as possible
                 const int limit = std::min(x + 8 - tx, xLimit);
 
-                for(; x < limit; x++, d1 <<= 1, d2 <<= 1)
+                for(; x < limit; x++)
                 {
                     int palIndex = ((d1 & 0x80) >> 7) | ((d2 & 0x80) >> 6);
 
                     *(rawOut++) = palIndex;
                     *(out++) = bgPal[palIndex];
+
+                    if(mapAttrs & Tile_XFlip)
+                    {
+                        d1 >>= 1;
+                        d2 >>= 1;
+                    }
+                    else
+                    {
+                        d1 <<= 1;
+                        d2 <<= 1;
+                    }
                 }
             }
         };
