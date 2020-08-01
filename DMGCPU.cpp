@@ -90,8 +90,26 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
             for(int i = 0; i < 0xA0; i++)
                 writeMem(0xFE00 + i, readMem((data << 8) + i));
         }
+        else if((addr & 0xFF) == IO_HDMA5)
+        {
+            uint16_t src = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
+            uint16_t dst = 0x8000 | ((mem.readIOReg(IO_HDMA3) & 0x1F) << 8) | (mem.readIOReg(IO_HDMA4) & 0xF0);
+            uint16_t count = ((data & 0x7F) + 1) << 4;
 
-        if((addr & 0xFF) == IO_DIV)
+            if(data & 0x80) // HDMA
+                printf("HDMA %03X %04X -> %04X\n", count, src, dst);
+            else
+            {
+                // GDMA
+                // TODO: also move, timing
+                for(; count; count--, src++, dst++)
+                    writeMem(dst, readMem(src));
+
+                data = 0xFF;
+            }
+        }
+
+        else if((addr & 0xFF) == IO_DIV)
             divCounter = 0;
         else if((addr & 0xFF) == IO_TAC)
         {
