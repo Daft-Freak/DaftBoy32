@@ -249,20 +249,15 @@ void DMGDisplay::drawScanLine(int y)
                     ty = 7 - ty;
 
                 // get the two tile data bytes for this line
-                uint16_t d1 = tileDataPtr[tileAddr + ty * 2];
-                uint16_t d2 = tileDataPtr[tileAddr + ty * 2 + 1];
+                //uint8_t d1 = tileDataPtr[tileAddr + ty * 2];
+                //uint8_t d2 = tileDataPtr[tileAddr + ty * 2 + 1];
+                uint32_t d = reinterpret_cast<uint16_t *>(tileDataPtr + tileAddr)[ty];
 
+                // skip bits
                 if(mapAttrs & Tile_XFlip)
-                {
-                    d1 <<= (7 - tx);
-                    d2 <<= (7 - tx);
-                }
+                    d <<= (7 - tx);
                 else
-                {
-                    // skip bits
-                    d1 <<= tx;
-                    d2 <<= tx;
-                }
+                    d <<= tx;
 
                 // palette
                 const auto bgPal = bgPalette + (mapAttrs & 0x7) * 4;
@@ -272,21 +267,15 @@ void DMGDisplay::drawScanLine(int y)
 
                 for(; x < limit; x++)
                 {
-                    int palIndex = ((d1 & 0x80) >> 7) | ((d2 & 0x80) >> 6);
+                    int palIndex = ((d & 0x80) >> 7) | ((d & 0x8000) >> 14);
 
                     *(rawOut++) = palIndex;
                     *(out++) = bgPal[palIndex];
 
                     if(mapAttrs & Tile_XFlip)
-                    {
-                        d1 >>= 1;
-                        d2 >>= 1;
-                    }
+                        d >>= 1;
                     else
-                    {
-                        d1 <<= 1;
-                        d2 <<= 1;
-                    }
+                        d <<= 1;
                 }
             }
         };
@@ -367,8 +356,7 @@ void DMGDisplay::drawScanLine(int y)
                 tileAddr += 0x2000;
 
             // get the two tile data bytes for this line
-            uint8_t d1 = spriteDataPtr[tileAddr + ty * 2];
-            uint8_t d2 = spriteDataPtr[tileAddr + ty * 2 + 1];
+            uint16_t d = reinterpret_cast<uint16_t *>(spriteDataPtr + tileAddr)[ty];
 
             int x = std::max(0, -spriteX);
             int end = std::min(8, screenWidth - spriteX);
@@ -385,7 +373,7 @@ void DMGDisplay::drawScanLine(int y)
                 if(!(attrs & Sprite_XFlip))
                     xShift = 7 - xShift;
 
-                int palIndex = ((d1 >> xShift) & 1) | (((d2 >> xShift) & 1) << 1);
+                int palIndex = ((d >> xShift) & 1) | (((d >> (xShift + 8)) & 1) << 1);
 
                 if(!palIndex)
                     continue;
