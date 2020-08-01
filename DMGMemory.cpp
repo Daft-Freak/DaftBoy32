@@ -126,19 +126,19 @@ uint8_t DMGMemory::read(uint16_t addr) const
     if(addr < 0x4000)
         return cartROMBank0[addr];
     else if(addr < 0x8000)
-        return cartROMCurBank[addr - 0x4000];
+        return cartROMCurBank[addr & 0x3FFF];
     else if(addr < 0xA000)
-        return vram[(addr - 0x8000) + vramBank * 0x2000];
+        return vram[(addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/];
     else if(addr < 0xC000)
-        return cartRam[(addr - 0xA000) + mbcRAMBank * 0x2000];
+        return cartRam[(addr & 0x1FFF) + (mbcRAMBank << 13)];
     else if(addr < 0xD000)
-        return wram[addr - 0xC000];
+        return wram[addr & 0xFFF];
     else if(addr < 0xE000)
-        return wram[(addr - 0xD000) + wramBank * 0x1000];
+        return wram[(addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/];
     else if(addr < 0xFE00)
     {} // echo
     else if(addr < 0xFEA0)
-        return oam[addr - 0xFE00];
+        return oam[addr & 0xFF];
     else if(addr < 0xFF00)
     {} //unusable
     else
@@ -208,29 +208,29 @@ uint8_t *DMGMemory::mapAddress(uint16_t &addr)
     }
     else if(addr < 0xA000)
     {
-        addr -= 0x8000;
-        return vram + vramBank * 0x2000;
+        addr = (addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/;
+        return vram;
     }
     else if(addr < 0xC000)
     {
-        addr = (addr - 0xA000) + mbcRAMBank * 0x2000;
+        addr = (addr & 0x1FFF) + (mbcRAMBank << 13);
         return mbcRAMEnabled ? cartRam : nullptr;
     }
     else if(addr < 0xD000)
     {
-        addr -= 0xC000;
+        addr &= 0xFFF;
         return wram;
     }
     else if(addr < 0xE000)
     {
-        addr = (addr - 0xD000) + wramBank * 0x1000;
+        addr = (addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/;
         return wram;
     }
     else if(addr < 0xFE00)
     {} // echo
     else if(addr < 0xFEA0)
     {
-        addr -= 0xFE00;
+        addr &= 0xFF;
         return oam;
     }
     else if(addr < 0xFF00)
