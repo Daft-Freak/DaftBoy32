@@ -10,6 +10,27 @@
 #include "DMGRegs.h"
 #include "file-browser.hpp"
 
+// catch running out of memory
+#ifdef TARGET_32BLIT_HW
+extern "C" void *_sbrk(ptrdiff_t incr)
+{
+    extern char end, __ltdc_start;
+    static char *heap_end;
+
+    if(!heap_end)
+        heap_end = &end;
+
+    // ltdc is at the end of the heap
+    if(heap_end + incr > &__ltdc_start)
+        return (void *)-1;
+
+    char *ret = heap_end;
+    heap_end += incr;
+
+    return (void *)ret;
+}
+#endif
+
 const blit::Font tallFont(tall_font);
 FileBrowser fileBrowser(tallFont);
 
