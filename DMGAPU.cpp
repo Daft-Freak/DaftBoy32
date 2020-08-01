@@ -18,6 +18,9 @@ void DMGAPU::update(int cycles)
         // this gets called before the timer is incremented
         auto oldDiv = cpu.getInternalTimer();
 
+        if(cpu.getDoubleSpeedMode())
+            oldDiv /= 2;
+
         // update frame sequencer clock
         //auto wasSet = oldDiv & (1 << 12);
         //oldDiv += cycles;
