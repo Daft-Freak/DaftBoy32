@@ -26,6 +26,9 @@ private:
 
     bool enabled = true;
 
+    // deferred updates
+    int cyclesPassed = 0;
+
     uint8_t frameSeqClock = 0;
 
     uint8_t channelEnabled = 0;

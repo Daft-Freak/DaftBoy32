@@ -16,24 +16,20 @@ void DMGAPU::update(int cycles)
         // this gets called before the timer is incremented
         auto oldDiv = cpu.getInternalTimer();
 
-        if(cpu.getDoubleSpeedMode())
-            oldDiv /= 2;
-
-        // update frame sequencer clock
-        //auto wasSet = oldDiv & (1 << 12);
-        //oldDiv += cycles;
-
-        //if(wasSet && !(oldDiv & (1 << 12)))
-        if((oldDiv & 0x1FFF) + cycles >= 8192)
+        // check bit below (or two bits for double speed)
+        // as the most cycles this will be called with is small, don't bother checking if we're nowhere near
+        if(oldDiv & 0x1000)
         {
-            updateFrameSequencer();
+            if(cpu.getDoubleSpeedMode())
+                oldDiv >>= 1;
+
+            // update frame sequencer clock
+            if((oldDiv & 0x1FFF) + cycles >= 8192)
+                updateFrameSequencer();
         }
 
         // freq timers
-        ch1FreqTimer -= cycles;
-        ch2FreqTimer -= cycles;
-        ch3FreqTimer -= cycles;
-        ch4FreqTimer -= cycles;
+        cyclesPassed += cycles;
     }
 
     // output clock - attempt to get close to 22050Hz
@@ -575,6 +571,7 @@ void DMGAPU::updateFrameSequencer()
 void DMGAPU::updateFreq()
 {
     // channel 1
+    ch1FreqTimer -= cyclesPassed;
     if(channelEnabled & (1 << 0))
     {
         while(ch1FreqTimer <= 0)
@@ -586,6 +583,7 @@ void DMGAPU::updateFreq()
     }
 
     // channel 2
+    ch2FreqTimer -= cyclesPassed;
     if(channelEnabled & (1 << 1))
     {
         while(ch2FreqTimer <= 0)
@@ -597,6 +595,7 @@ void DMGAPU::updateFreq()
     }
 
     // channel 3
+    ch3FreqTimer -= cyclesPassed;
     if(channelEnabled & (1 << 2))
     {
         while(ch3FreqTimer <= 0)
@@ -614,6 +613,7 @@ void DMGAPU::updateFreq()
     }
 
     // channel 4
+    ch4FreqTimer -= cyclesPassed;
     if(channelEnabled & (1 << 3))
     {
         while(ch4FreqTimer <= 0)
