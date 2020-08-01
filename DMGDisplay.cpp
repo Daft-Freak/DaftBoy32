@@ -207,6 +207,7 @@ void DMGDisplay::drawScanLine(int y)
     const int screenSizeTiles = 32; // 32x32 tiles
 
     const int numSprites = 40;
+    const int spriteHeight = (lcdc & LCDC_Sprite8x16) ? 16 : 8;
 
     uint8_t bgRaw[screenWidth]{0};
 
@@ -302,7 +303,7 @@ void DMGDisplay::drawScanLine(int y)
             const int spriteY = oam[i * 4] - 16;
 
             // not on this line
-            if(y < spriteY || y >= spriteY + 8)
+            if(y < spriteY || y >= spriteY + spriteHeight)
                 continue;
 
             lineSprites[numLineSprites++] = i;
@@ -313,8 +314,12 @@ void DMGDisplay::drawScanLine(int y)
             const int spriteId = lineSprites[i];
             const int spriteY = oam[spriteId * 4] - 16;
             const int spriteX = oam[spriteId * 4 + 1] - 8;
-            const int tileId = oam[spriteId * 4 + 2];
+            int tileId = oam[spriteId * 4 + 2];
             const int attrs = oam[spriteId * 4 + 3];
+
+            // tall sprites
+            if(spriteHeight != 8)
+                tileId &= 0xFE;
 
             const uint16_t *spritePal;
             if(isColour)
@@ -322,13 +327,12 @@ void DMGDisplay::drawScanLine(int y)
             else // OBP0 or 1
                 spritePal = objPalette + ((attrs & Sprite_Palette) ? 4 : 0);
 
-            // TODO: 8x16
             // TODO: priority
 
             int ty = y - spriteY;
 
             if(attrs & Sprite_YFlip)
-                ty = 7 - ty;
+                ty = (spriteHeight - 1) - ty;
 
             auto tileAddr = tileId * tileDataSize;
 
