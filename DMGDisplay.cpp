@@ -223,36 +223,44 @@ void DMGDisplay::drawScanLine(int y)
 
         auto copyTiles = [this, &x, y, lcdc, isColour, tileDataPtr, &out, &rawOut](uint8_t *mapPtr, int xLimit, int offsetX, int offsetY)
         {
+            const uint8_t oy = y + offsetY;
+
             while(x < xLimit)
             {
-                uint8_t tx = x + offsetX;
-                uint8_t ty = y + offsetY;
-                int tileId = (tx / 8) + (ty / 8) * screenSizeTiles;
+                uint8_t ox = x + offsetX;
+
+                int tileId = (ox / 8) + (oy / 8) * screenSizeTiles;
                 auto mapAttrs = mapPtr[tileId + 0x2000]; // GBC, bank 1
 
                 // tile id is signed if addr == 0x8800
                 tileId = (lcdc & LCDC_TileData8000) ? mapPtr[tileId] : (int8_t)mapPtr[tileId] + 128;
 
-                // TODO: GBC h/v flip, bg priority
+                // TODO: GBC h flip, bg priority
 
                 auto tileAddr = tileId * tileDataSize;
 
                 if(mapAttrs & Tile_Bank)
                     tileAddr += 0x2000;
 
+                int ty = (oy & 7);
+                int tx = (ox & 7);
+
+                if(mapAttrs & Tile_YFlip)
+                    ty = 7 - ty;
+
                 // get the two tile data bytes for this line
-                uint8_t d1 = tileDataPtr[tileAddr + (ty & 7) * 2];
-                uint8_t d2 = tileDataPtr[tileAddr + (ty & 7) * 2 + 1];
+                uint8_t d1 = tileDataPtr[tileAddr + ty * 2];
+                uint8_t d2 = tileDataPtr[tileAddr + ty * 2 + 1];
 
                 // skip bits
-                d1 <<= (tx & 7);
-                d2 <<= (tx & 7);
+                d1 <<= tx;
+                d2 <<= tx;
 
                 // palette
                 const auto bgPal = bgPalette + (isColour ? (mapAttrs & 0x7) * 4 : 0);
 
                 // attempt to copy as much of the tile as possible
-                const int limit = std::min(x + 8 - (tx & 7), xLimit);
+                const int limit = std::min(x + 8 - tx, xLimit);
 
                 for(; x < limit; x++, d1 <<= 1, d2 <<= 1)
                 {
