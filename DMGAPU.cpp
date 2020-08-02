@@ -9,6 +9,20 @@
 DMGAPU::DMGAPU(DMGCPU &cpu) : cpu(cpu)
 {}
 
+void DMGAPU::reset()
+{
+    enabled = true;
+
+    cyclesPassed = 0;
+    frameSeqClock = 0;
+    channelEnabled = 0;
+
+    //... incomplete
+
+    sampleClock = 0;
+    readOff = 0, writeOff = 64;
+}
+
 void DMGAPU::update(int cycles)
 {
     if(enabled)

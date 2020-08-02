@@ -141,6 +141,7 @@ void openROM(std::string filename)
         }
     }
 
+    apu.reset();
     cpu.reset();
     loaded = true;
     loadedFilename = filename;

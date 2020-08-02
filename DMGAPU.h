@@ -8,6 +8,8 @@ class DMGAPU
 public:
     DMGAPU(DMGCPU &cpu);
 
+    void reset();
+
     void update(int cycles);
 
     int16_t getSample();
