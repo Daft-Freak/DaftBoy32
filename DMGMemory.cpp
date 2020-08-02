@@ -19,6 +19,9 @@ void DMGMemory::loadCartridgeRAM(const uint8_t *ram, uint32_t len)
 
 void DMGMemory::reset()
 {
+    vramBank = 0;
+    wramBank = 1;
+
     // io regs
     memset(iohram, 0xFF, 0x80);
 
@@ -59,6 +62,9 @@ void DMGMemory::reset()
     iohram[IO_WY] = 0x00; // WY
     iohram[IO_WX] = 0x00; // WX
     iohram[IO_IE] = 0x00; // IE
+
+    // clear vram
+    memset(vram, 0, sizeof(vram));
 
     // load some ROM
     cartROMCurBank = cartROMBankCache;
