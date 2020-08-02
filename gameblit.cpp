@@ -9,6 +9,7 @@
 #include "DMGMemory.h"
 #include "DMGRegs.h"
 #include "file-browser.hpp"
+#include "menu.hpp"
 
 // catch running out of memory
 #ifdef TARGET_32BLIT_HW
@@ -48,6 +49,47 @@ blit::File romFile;
 bool turbo = false;
 bool awfulScale = false;
 
+void updateCartRAM(uint8_t *cartRam, unsigned int size);
+
+// menu
+enum class MenuItem
+{
+    SaveRAM,
+    Reset,
+    SwitchGame,
+};
+
+Menu menu("Menu",
+{
+    {"Save Cart RAM", static_cast<int>(MenuItem::SaveRAM)},
+    {"Reset", static_cast<int>(MenuItem::Reset)},
+    {"Switch Game", static_cast<int>(MenuItem::SwitchGame)}
+}, tallFont);
+
+bool menuOpen = false;
+
+void onMenuItemPressed(Menu::Item &item, int index)
+{
+    switch(static_cast<MenuItem>(item.id))
+    {
+        case MenuItem::SaveRAM:
+            updateCartRAM(mem.getCartridgeRAM(), mem.getCartridgeRAMSize());
+            break;
+
+        case MenuItem::Reset:
+            apu.reset();
+            cpu.reset();
+            break;
+
+        case MenuItem::SwitchGame:
+            loaded = false;
+            break;
+    }
+
+    menuOpen = false;
+}
+
+// CPU callbacks
 void onCyclesExeceuted(int cycles)
 {
     // these still work at normal speed
@@ -173,6 +215,9 @@ void init()
 
     fileBrowser.init();
 
+    menu.setDisplayRect(blit::Rect(5, 5, 100, blit::screen.bounds.h - 10));
+    menu.setOnItemPressed(onMenuItemPressed);
+
     cpu.setCycleCallback(onCyclesExeceuted);
     mem.setROMBankCallback(getROMBank);
     mem.setReadCallback(onRead);
@@ -266,6 +311,9 @@ void render(uint32_t time_ms)
             }
         }
     }
+
+    if(menuOpen)
+        menu.render();
 }
 
 void update(uint32_t time_ms)
@@ -273,6 +321,16 @@ void update(uint32_t time_ms)
     if(!loaded)
     {
         fileBrowser.update(time_ms);
+        return;
+    }
+
+    // menu
+    if(blit::buttons.released & blit::Button::JOYSTICK)
+        menuOpen = !menuOpen;
+
+    if(menuOpen)
+    {
+        menu.update(time_ms);
         return;
     }
 
@@ -307,7 +365,4 @@ void update(uint32_t time_ms)
         cpu.run(1);
     }
 
-    // dump cart ram
-    if(blit::buttons.released & blit::Button::JOYSTICK)
-        updateCartRAM(mem.getCartridgeRAM(), mem.getCartridgeRAMSize());
 }
