@@ -334,6 +334,11 @@ void update(uint32_t time_ms)
         return;
     }
 
+#ifdef TARGET_32BLIT_HW
+    if(blit::now() - time_ms >= 20)
+        return;
+#endif
+
     auto start = blit::now();
 
     // translate inputs
