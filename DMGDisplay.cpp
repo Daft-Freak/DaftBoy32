@@ -331,7 +331,8 @@ void DMGDisplay::drawScanLine(int y)
             lineSprites[numLineSprites++] = i;
         }
 
-        for(int i = 0; i < numLineSprites; i++)
+        // priority for lower address (GBC behaviour, TODO? sort by x for DMG)
+        for(int i = numLineSprites - 1; i >= 0; i--)
         {
             const int spriteId = lineSprites[i];
             const int spriteY = oam[spriteId * 4] - 16;
