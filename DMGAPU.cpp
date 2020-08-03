@@ -171,7 +171,7 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
     if(!enabled && addr >= IO_NR10 && addr < IO_NR52)
     {
         // DMG allows length writes
-        if(addr != IO_NR11 && addr != IO_NR21 && addr != IO_NR31 && addr != IO_NR41)
+        if(cpu.getColourMode() || (addr != IO_NR11 && addr != IO_NR21 && addr != IO_NR31 && addr != IO_NR41))
             return true;
     }
 
@@ -434,7 +434,10 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
             {
                 // disabled
                 for(int i = IO_NR10; i < IO_NR52; i++)
+                {
+                    writeReg(0xFF00 | i, 0);
                     mem.writeIOReg(i, 0);
+                }
 
                 channelEnabled = 0;
                 frameSeqClock = 0;
