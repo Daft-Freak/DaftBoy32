@@ -213,12 +213,14 @@ void DMGDisplay::drawScanLine(int y)
     const int numSprites = 40;
     const int spriteHeight = (lcdc & LCDC_Sprite8x16) ? 16 : 8;
 
+    // contains palette index + a tile priority flag
     uint8_t bgRaw[screenWidth]{0};
 
     auto scanLine = screenData + y * screenWidth;
 
     // active scanline
-    if(lcdc & LCDC_BGDisp)
+    // this is reduced to a priority flag on GBC
+    if(lcdc & LCDC_BGDisp || isColour)
     {
         uint8_t windowX = screenWidth, windowY = 0;
         bool yIsWin = false;
@@ -241,8 +243,6 @@ void DMGDisplay::drawScanLine(int y)
                 // tile id is signed if addr == 0x8800
                 tileId = (lcdc & LCDC_TileData8000) ? mapPtr[tileId] : (int8_t)mapPtr[tileId] + 128;
 
-                // TODO: GBC bg priority
-
                 auto tileAddr = tileId * tileDataSize;
 
                 if(mapAttrs & Tile_Bank)
@@ -253,6 +253,8 @@ void DMGDisplay::drawScanLine(int y)
 
                 if(mapAttrs & Tile_YFlip)
                     ty = 7 - ty;
+
+                uint8_t tilePriority = (mapAttrs & Tile_BGPriority) ? 0x80 : 0;
 
                 // get the two tile data bytes for this line
                 //uint8_t d1 = tileDataPtr[tileAddr + ty * 2];
@@ -275,7 +277,7 @@ void DMGDisplay::drawScanLine(int y)
                 {
                     int palIndex = ((d & 0x80) >> 7) | ((d & 0x8000) >> 14);
 
-                    *(rawOut++) = palIndex;
+                    *(rawOut++) = (lcdc & LCDC_BGDisp) ? palIndex | tilePriority : 0;
                     *(out++) = bgPal[palIndex];
                 }
             }
@@ -373,7 +375,7 @@ void DMGDisplay::drawScanLine(int y)
             for(; x < end; x++, out++, bgIn++, d <<= 1)
             {
                 // background has priority
-                if((attrs & Sprite_BGPriority) && *bgIn)
+                if(((attrs & Sprite_BGPriority) || (*bgIn & 0x80)/*tile has priority flag*/) && (*bgIn & 0x7F))
                     continue;
 
                 int palIndex = ((d & 0x80) >> 7) | ((d & 0x8000) >> 14);
