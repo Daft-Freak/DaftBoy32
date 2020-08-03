@@ -124,7 +124,7 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
     switch(addr & 0xFF)
     {
         case IO_STAT:
-            return (val & 0xF7) | (y == mem.readIOReg(IO_LYC) ? STAT_Coincidence : 0) | statMode;
+            return (val & 0xF8) | (y == mem.readIOReg(IO_LYC) ? STAT_Coincidence : 0) | statMode;
         case IO_LY:
             return y;
     }
