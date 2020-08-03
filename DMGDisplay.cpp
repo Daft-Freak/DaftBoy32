@@ -95,13 +95,8 @@ void DMGDisplay::update(int cycles)
     // coincidince interrupt
     auto stat = mem.readIOReg(IO_STAT);
 
-    if(stat & STAT_CoincidenceInt)
-    {
-        if((stat & STAT_Coincidence) && y == mem.readIOReg(IO_LYC))
-            cpu.flagInterrupt(Int_LCDStat);
-        else if(!(stat & STAT_Coincidence) && y - 1 == mem.readIOReg(IO_LYC)) // not-equal, trigger on change from equal
-            cpu.flagInterrupt(Int_LCDStat);
-    }
+    if((stat & STAT_CoincidenceInt) && y == mem.readIOReg(IO_LYC))
+        cpu.flagInterrupt(Int_LCDStat);
 
     if(y == screenHeight)
     {
@@ -129,7 +124,7 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
     switch(addr & 0xFF)
     {
         case IO_STAT:
-            return (val & 0xFC) | statMode;
+            return (val & 0xF7) | (y == mem.readIOReg(IO_LYC) ? STAT_Coincidence : 0) | statMode;
         case IO_LY:
             return y;
     }
