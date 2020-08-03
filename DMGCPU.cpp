@@ -41,13 +41,16 @@ void DMGCPU::run(int ms)
     while(!stopped && cycles > 0)
     {
         int exec = halted ? 4 : executeInstruction();
+
+        if(serviceInterrupts())
+            exec += 5 * 4;
+
         cycles -= exec;
 
         if(cycleCallback)
             cycleCallback(exec);
 
         updateTimer(exec);
-        serviceInterrupts();
     }
 }
 
@@ -2009,7 +2012,7 @@ void DMGCPU::updateTimer(int cycles)
     }
 }
 
-void DMGCPU::serviceInterrupts()
+bool DMGCPU::serviceInterrupts()
 {
     const auto flag = mem.readIOReg(IO_IF);
     const auto enabled = mem.readIOReg(IO_IE);
@@ -2032,8 +2035,10 @@ void DMGCPU::serviceInterrupts()
                 sp -= 2;
                 writeMem16(sp, pc);
                 pc = vectors[i];
-                break;
+                return true;
             }
         }
     }
+
+    return false;
 }
