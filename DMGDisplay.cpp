@@ -297,7 +297,7 @@ void DMGDisplay::drawScanLine(int y)
             auto scrollX = mem.readIOReg(IO_SCX);
             auto scrollY = mem.readIOReg(IO_SCY);
 
-            copyTiles(bgMapPtr, windowX, scrollX, scrollY);
+            copyTiles(bgMapPtr, std::min(windowX, static_cast<uint8_t>(screenWidth)), scrollX, scrollY);
         }
 
         // window
