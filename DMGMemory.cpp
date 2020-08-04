@@ -348,8 +348,6 @@ void DMGMemory::updateCurrentROMBank()
         return;
     }
 
-    int empty = romBankCacheSize - 1; // fallback
-
     for(auto it = cachedROMBanks.begin(); it != cachedROMBanks.end(); ++it)
     {
         if(it->bank == mbcROMBank)
