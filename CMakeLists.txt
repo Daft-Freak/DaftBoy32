@@ -17,5 +17,6 @@ blit_executable(gameblit
     DMGMemory.cpp
     file-browser.cpp
     gameblit.cpp
+    menu.cpp
 )
 blit_assets_yaml(gameblit assets.yml)
