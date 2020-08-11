@@ -12,17 +12,17 @@ void AGBMemory::reset()
 {
 }
 
-void AGBMemory::setReadCallback(ReadCallback readCallback)
+void AGBMemory::setIOReadCallback(ReadCallback readCallback)
 {
     this->readCallback = readCallback;
 }
 
-void AGBMemory::setWriteCallback(WriteCallback writeCallback)
+void AGBMemory::setIOWriteCallback(WriteCallback writeCallback)
 {
     this->writeCallback = writeCallback;
 }
 
-uint8_t AGBMemory::read(uint32_t addr) const
+uint8_t AGBMemory::read8(uint32_t addr) const
 {
     bool isIO = (addr >> 24) == 0x4;
     auto ptr = mapAddress(addr);
@@ -37,7 +37,7 @@ uint8_t AGBMemory::read(uint32_t addr) const
     return ret;
 }
 
-void AGBMemory::write(uint32_t addr, uint8_t data)
+void AGBMemory::write8(uint32_t addr, uint8_t data)
 {
     // io
     if((addr >> 24) == 0x4 && writeCallback && writeCallback(addr, data))

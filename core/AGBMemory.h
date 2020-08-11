@@ -14,11 +14,11 @@ public:
     void reset();
 
     // only covers io registers
-    void setReadCallback(ReadCallback readCallback);
-    void setWriteCallback(WriteCallback writeCallback);
+    void setIOReadCallback(ReadCallback readCallback);
+    void setIOWriteCallback(WriteCallback writeCallback);
 
-    uint8_t read(uint32_t addr) const;
-    void write(uint32_t addr, uint8_t data);
+    uint8_t read8(uint32_t addr) const;
+    void write8(uint32_t addr, uint8_t data);
   
     /*uint8_t *getCartridgeRAM() {return cartRam;}
     int getCartridgeRAMSize() {return cartRamSize;}

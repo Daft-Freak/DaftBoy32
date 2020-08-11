@@ -41,7 +41,7 @@ void AGBCPU::setCycleCallback(CycleCallback cycleCallback)
 
 uint8_t AGBCPU::readMem8(uint32_t addr) const
 {
-    return mem.read(addr);
+    return mem.read8(addr);
 }
 
 uint32_t AGBCPU::readMem16(uint32_t addr) const
@@ -82,7 +82,7 @@ uint32_t AGBCPU::readMem32Aligned(uint32_t addr) const
 
 void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
 {
-    mem.write(addr, data);
+    mem.write8(addr, data);
 }
 
 void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
