@@ -21,6 +21,11 @@ public:
     uint16_t read16(uint32_t addr) const;
 
     void write8(uint32_t addr, uint8_t data);
+
+    // fast access to IO regs
+    uint16_t readIOReg(uint16_t addr) const {return *reinterpret_cast<const uint16_t *>(ioRegs + addr);}
+    uint16_t &getIOReg(uint16_t addr) {return *reinterpret_cast<uint16_t *>(ioRegs + addr);}
+    void writeIOReg(uint16_t addr, uint16_t val) {*reinterpret_cast<uint16_t *>(ioRegs + addr) = val;}
   
     /*uint8_t *getCartridgeRAM() {return cartRam;}
     int getCartridgeRAMSize() {return cartRamSize;}
