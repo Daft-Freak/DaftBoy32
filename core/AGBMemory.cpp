@@ -86,6 +86,8 @@ const uint8_t *AGBMemory::mapAddress(uint32_t &addr) const
             addr &= 0x7FFF;
             return iwram;
         case 0x4:
+            if(addr >= 0x4000400)
+                return nullptr; // IO regs don't mirror
             addr &= 0x3FF;
             return ioRegs;
         case 0x5:
@@ -127,6 +129,8 @@ uint8_t *AGBMemory::mapAddress(uint32_t &addr)
             addr &= 0x7FFF;
             return iwram;
         case 0x4:
+            if(addr >= 0x4000400)
+                return nullptr; // IO regs don't mirror
             addr &= 0x3FF;
             return ioRegs;
         case 0x5:
