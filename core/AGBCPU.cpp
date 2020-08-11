@@ -48,7 +48,7 @@ uint32_t AGBCPU::readMem16(uint32_t addr) const
 {
     // this returns the 32-bit result of an unaligned 16-bit read
     auto aligned = addr & ~1;
-    uint16_t val = readMem8(aligned) | (readMem8(aligned + 1) << 8);
+    uint16_t val = mem.read16(aligned);
 
     if(!(addr & 1))
         return val;
@@ -59,13 +59,13 @@ uint32_t AGBCPU::readMem16(uint32_t addr) const
 uint16_t AGBCPU::readMem16Aligned(uint32_t addr) const
 {
     assert((addr & 1) == 0);
-    return readMem8(addr) | (readMem8(addr + 1) << 8);
+    return mem.read16(addr);
 }
 
 uint32_t AGBCPU::readMem32(uint32_t addr) const
 {
     auto aligned = addr & ~3;
-    uint32_t val = readMem8(aligned) | (readMem8(aligned + 1) << 8) | (readMem8(aligned + 2) << 16) | (readMem8(aligned + 3) << 24);
+    uint32_t val = readMem16(aligned) | (readMem16(aligned + 2) << 16);
 
     if(!(addr & 3))
         return val;
@@ -77,7 +77,7 @@ uint32_t AGBCPU::readMem32(uint32_t addr) const
 uint32_t AGBCPU::readMem32Aligned(uint32_t addr) const
 {
     assert((addr & 3) == 0);
-    return readMem8(addr) | (readMem8(addr + 1) << 8) | (readMem8(addr + 2) << 16) | (readMem8(addr + 3) << 24);
+    return readMem16(addr) | (readMem16(addr + 2) << 16);
 }
 
 void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
