@@ -6,6 +6,24 @@ class AGBMemory;
 class AGBCPU final
 {
 public:
+    enum Interrupts
+    {
+        Int_LCDVBlank = 1 << 0,
+        Int_LCDHBlank = 1 << 1,
+        Int_LCDVCount = 1 << 2,
+        Int_Timer0    = 1 << 3,
+        Int_Timer1    = 1 << 4,
+        Int_Timer2    = 1 << 5,
+        Int_Timer3    = 1 << 6,
+        Int_Serial    = 1 << 7,
+        Int_DMA0      = 1 << 8,
+        Int_DMA1      = 1 << 9,
+        Int_DMA2      = 1 << 10,
+        Int_DMA3      = 1 << 11,
+        Int_Keypad    = 1 << 12,
+        Int_External  = 1 << 13
+    };
+
     AGBCPU(AGBMemory &mem);
 
     using CycleCallback = void(*)(int);
@@ -16,7 +34,7 @@ public:
 
     void setCycleCallback(CycleCallback cycleCallback);
 
-    //void flagInterrupt(int interrupt);
+    void flagInterrupt(int interrupt);
 
     AGBMemory &getMem() {return mem;}
 
@@ -147,14 +165,13 @@ private:
 
     int doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCondCode, bool carry);
 
-    //bool serviceInterrupts();
+    bool serviceInterrupts();
 
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
 
     // internal state
     //bool stopped, halted;
-    //bool masterInterruptEnable;
 
     // registers
     uint32_t regs[31]{};

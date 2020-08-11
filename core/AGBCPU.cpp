@@ -5,7 +5,7 @@
 
 #include "AGBCPU.h"
 #include "AGBMemory.h"
-//#include "AGBRegs.h"
+#include "AGBRegs.h"
 
 AGBCPU::AGBCPU(AGBMemory &mem) : mem(mem)
 {}
@@ -26,6 +26,8 @@ void AGBCPU::run(int ms)
     {
         int exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
 
+        serviceInterrupts(); // cycles?
+
         cycles -= exec;
 
         if(cycleCallback)
@@ -38,6 +40,10 @@ void AGBCPU::setCycleCallback(CycleCallback cycleCallback)
     this->cycleCallback = cycleCallback;
 }
 
+void AGBCPU::flagInterrupt(int interrupt)
+{
+    mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
+}
 
 uint8_t AGBCPU::readMem8(uint32_t addr) const
 {
@@ -82,6 +88,13 @@ uint32_t AGBCPU::readMem32Aligned(uint32_t addr) const
 
 void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
 {
+    if((addr >> 24) == 0x4)
+    {
+        // writing IF bits clears them internally
+        if(addr == 0x4000202/*IF*/ || addr == 0x4000203)
+            data = (mem.getIOReg(IO_IF) >> (addr & 1 ? 8 : 0)) & ~data; // ... this read is a mess
+    }
+
     mem.write8(addr, data);
 }
 
@@ -1460,4 +1473,33 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCon
     }
 
     return 1;
+}
+
+bool AGBCPU::serviceInterrupts()
+{
+    if((cpsr & Flag_I) || !(mem.readIOReg(IO_IME) & 1))
+        return false;
+
+    const auto flag = mem.readIOReg(IO_IF);
+    const auto enabled = mem.readIOReg(IO_IE);
+
+    int servicable = enabled & flag;
+
+    for(int i = 0; servicable; i++, servicable >>= 1)
+    {
+        if(servicable & 1)
+        {
+            //halted = false;
+
+            auto ret = loReg(Reg::PC) + 4;
+            spsr[3/*irq*/] = cpsr;
+
+            loReg(Reg::PC) = 0x18;
+            cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x12; // irq mode
+            reg(Reg::LR) = ret;
+            return true;
+        }
+    }
+
+    return false;
 }
