@@ -4,7 +4,7 @@
 class AGBMemory
 {
 public:
-    using ReadCallback = uint8_t(*)(uint32_t, uint8_t val);
+    using ReadCallback = uint16_t(*)(uint32_t, uint16_t val);
     using WriteCallback = bool(*)(uint32_t, uint8_t val);
 
     //using CartRamUpdateCallback = void(*)(uint8_t *, unsigned int);

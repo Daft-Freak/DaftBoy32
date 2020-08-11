@@ -24,30 +24,35 @@ void AGBMemory::setIOWriteCallback(WriteCallback writeCallback)
 
 uint8_t AGBMemory::read8(uint32_t addr) const
 {
-    bool isIO = (addr >> 24) == 0x4;
+    // handle IO reads as 16-bit
+    if((addr >> 24) == 0x4)
+    {
+        auto tmp = read16(addr & ~1);
+        return (addr & 1) ? tmp >> 8 : tmp;
+    }
+
     auto ptr = mapAddress(addr);
-    uint8_t ret = 0;
+
     if(ptr)
-        ret = ptr[addr];
+        return ptr[addr];
+
+    return 0;
+}
+
+uint16_t AGBMemory::read16(uint32_t addr) const
+{
+    bool isIO = (addr >> 24) == 0x4;
+
+    auto ptr = mapAddress(addr);
+    uint16_t ret = 0;
+    if(ptr)
+        ret = *reinterpret_cast<const uint16_t *>(ptr + addr);
 
     // io
     if(isIO && readCallback)
         ret = readCallback(addr, ret);
 
     return ret;
-}
-
-uint16_t AGBMemory::read16(uint32_t addr) const
-{
-    if((addr >> 24) == 0x4) // temp, should switch IO reg handling to 16-bit
-        return read8(addr) | (read8(addr + 1) << 8);
-
-    auto ptr = mapAddress(addr);
-    uint8_t ret = 0;
-    if(ptr)
-        return *reinterpret_cast<const uint16_t *>(ptr + addr);
-
-    return 0;
 }
 
 void AGBMemory::write8(uint32_t addr, uint8_t data)
