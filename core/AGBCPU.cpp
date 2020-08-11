@@ -697,7 +697,7 @@ int AGBCPU::executeARMInstruction()
             spsr[1/*svc*/] = cpsr;
 
             pc = 8;
-            cpsr = (cpsr & ~0x1F) | 0x13; //supervisor mode
+            cpsr = (cpsr & ~0x1F) | Flag_I | 0x13; //supervisor mode
             reg(Reg::LR) = ret;
             break;
         }
@@ -1274,7 +1274,7 @@ int AGBCPU::executeTHUMBInstruction()
                 spsr[1/*svc*/] = cpsr;
 
                 pc = 8;
-                cpsr = (cpsr & ~(0x1F | Flag_T)) | 0x13; //supervisor mode
+                cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x13; //supervisor mode
                 reg(Reg::LR) = ret;
             }
             else // format 16, conditional branch
