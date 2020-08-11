@@ -107,16 +107,6 @@ uint8_t *AGBMemory::mapAddress(uint32_t &addr)
             addr &= 0x3FF;
             return oam;
 
-        case 0x8: // wait state 0
-        case 0x9:
-        case 0xA: // wait state 1
-        case 0xB:
-        case 0xC: // wait state 2
-        case 0xD:
-            addr &= 0x1FFFFFF;
-            if(addr >= sizeof(cartROM))
-                return nullptr;
-            return cartROM;
     }
 
     return nullptr;
