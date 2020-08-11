@@ -5,7 +5,7 @@
 
 #include "AGBCPU.h"
 #include "AGBMemory.h"
-#include "AGBRegs.h"
+//#include "AGBRegs.h"
 
 AGBCPU::AGBCPU(AGBMemory &mem) : mem(mem)
 {}
