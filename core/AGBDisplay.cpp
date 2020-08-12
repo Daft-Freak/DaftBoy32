@@ -7,11 +7,91 @@
 #include "AGBMemory.h"
 #include "AGBRegs.h"
 
-static void drawBG2(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+// bg layer helpers
+// hopefully this gets mostly inlined
+static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t xOffset, uint16_t yOffset)
+{
+    const int screenBlockTiles = 32; // 32x32
+
+    int screenSize = (control & BGCNT_ScreenSize) >> 14;
+
+    int ty = (y + yOffset) & 7;
+    int by = (y + yOffset) >> 3;
+
+    int blockIndex = 0;
+
+    // inc index for second row
+    if((screenSize & 2) && (by & screenBlockTiles)) // 1x2, 2x2
+        blockIndex += screenSize == 2 ? 1 : 2;
+
+    // wrap
+    by &= (screenBlockTiles - 1);
+
+    auto blockBase = (control & BGCNT_ScreenBase) << 3; // >> 8 * 0x800
+    uint16_t *screenPtr = reinterpret_cast<uint16_t *>(vram + blockBase + blockIndex * 0x800);
+
+    auto charBase = ((control & BGCNT_CharBase) >> 2) * 0x4000;
+    auto charPtr = vram + charBase;
+
+    if(control & BGCNT_SinglePal)
+        return; // TODO
+
+    for(int x = 0; x < 240;)
+    {
+        int tx = (x + xOffset) & 7;
+        int bx = (x + xOffset) >> 3;
+
+        auto tilePtr = screenPtr + by * screenBlockTiles;
+
+        // second column
+        if(screenSize & 1 && (bx & screenBlockTiles)) // 2x1, 2x2
+            tilePtr += screenBlockTiles * screenBlockTiles;
+
+        // wrap
+        bx &= (screenBlockTiles - 1);
+
+        uint16_t tileMeta = tilePtr[bx];
+
+        // TODO: x/y flip
+
+        // 4bit tiles
+        uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (tileMeta & 0x3FF) * 32)[ty];
+
+        tileRow >>= (tx * 4);
+
+        for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4)
+        {
+            auto palIndex = ((tileMeta & 0xF000) >> 8) | (tileRow & 0xF);
+            *scanLine++ = palRam[palIndex];
+        }
+    }
+}
+
+// these two are always "text" mode
+static void drawBG0(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+{
+    if((dispControl & DISPCNT_Mode) > 1)
+        return;
+
+    drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG0HOFS), mem.readIOReg(IO_BG0VOFS));
+}
+
+static void drawBG1(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+{
+    if((dispControl & DISPCNT_Mode) > 1)
+        return;
+
+    drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG1HOFS), mem.readIOReg(IO_BG1VOFS));
+}
+
+static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
 {
     switch(dispControl & DISPCNT_Mode)
     {
-        // 0-2...
+        case 0: // "text" mode
+            drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG2HOFS), mem.readIOReg(IO_BG2VOFS));
+            break;
+        // 1-2...
         case 3: // 16-bit fullscreen bitmap
         {
             // TODO: rot/scale
@@ -58,6 +138,13 @@ static void drawBG2(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, 
         default:
             memset(scanLine, 0, 240 * 2);
     }
+}
+
+static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+{
+    if((dispControl & DISPCNT_Mode) == 0)
+        drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG3HOFS), mem.readIOReg(IO_BG3VOFS));
+    // else 2
 }
 
 AGBDisplay::AGBDisplay(AGBCPU &cpu) : cpu(cpu), mem(cpu.getMem())
@@ -129,7 +216,10 @@ bool AGBDisplay::writeReg(uint32_t addr, uint8_t data)
 void AGBDisplay::drawScanLine(int y)
 {
     auto dispControl = mem.readIOReg(IO_DISPCNT);
+    auto bg0Control = mem.readIOReg(IO_BG0CNT);
+    auto bg1Control = mem.readIOReg(IO_BG1CNT);
     auto bg2Control = mem.readIOReg(IO_BG2CNT);
+    auto bg3Control = mem.readIOReg(IO_BG3CNT);
 
     auto palRAM = reinterpret_cast<uint16_t *>(mem.getPalRAM());
     auto vram = mem.getVRAM();
@@ -138,7 +228,13 @@ void AGBDisplay::drawScanLine(int y)
 
     for(int priority = 3; priority >= 0; priority--)
     {
+        if((dispControl & DISPCNT_BG3On) && (bg3Control & BGCNT_Priority) == priority)
+            drawBG3(mem, y, scanLine, palRAM, vram, dispControl, bg3Control);
         if((dispControl & DISPCNT_BG2On) && (bg2Control & BGCNT_Priority) == priority)
-            drawBG2(y, scanLine, palRAM, vram, dispControl, bg2Control);
+            drawBG2(mem, y, scanLine, palRAM, vram, dispControl, bg2Control);
+        if((dispControl & DISPCNT_BG1On) && (bg1Control & BGCNT_Priority) == priority)
+            drawBG1(mem, y, scanLine, palRAM, vram, dispControl, bg1Control);
+        if((dispControl & DISPCNT_BG0On) && (bg0Control & BGCNT_Priority) == priority)
+            drawBG0(mem, y, scanLine, palRAM, vram, dispControl, bg0Control);
     }
 }

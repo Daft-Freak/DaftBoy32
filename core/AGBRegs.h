@@ -10,6 +10,14 @@ enum AGBIOReg
     IO_BG1CNT = 0xA,
     IO_BG2CNT = 0xC,
     IO_BG3CNT = 0xE,
+    IO_BG0HOFS = 0x10,
+    IO_BG0VOFS = 0x12,
+    IO_BG1HOFS = 0x14,
+    IO_BG1VOFS = 0x16,
+    IO_BG2HOFS = 0x18,
+    IO_BG2VOFS = 0x1A,
+    IO_BG3HOFS = 0x1C,
+    IO_BG3VOFS = 0x1E,
 
     // input
     IO_KEYINPUT = 0x130,
@@ -52,6 +60,11 @@ enum DISPSTATBits
 
 enum BGCNTBits
 {
-    BGCNT_Priority = 0x3,
-    //...
+    BGCNT_Priority   = 0x3,
+    BGCNT_CharBase   = 0x3 << 2,
+    BGCNT_Mosaic     = 1 << 6,
+    BGCNT_SinglePal  = 1 << 7,
+    BGCNT_ScreenBase = 0x1F << 8,
+    BGCNT_Wrap       = 1 << 13,
+    BGCNT_ScreenSize = 0x3 << 14
 };
