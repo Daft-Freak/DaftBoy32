@@ -24,6 +24,9 @@ static void drawBG2(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, 
         case 4: // paletted fullscreen bitmap
         {
             auto inPtr = vram + y * 240;
+            if(dispControl & DISPCNT_Frame)
+                inPtr += 0xA000;
+
             auto outPtr = scanLine;
             for(int x = 0; x < 240; x++)
                 *outPtr++ = palRam[*inPtr++];
@@ -36,6 +39,8 @@ static void drawBG2(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, 
             if(y < 128)
             {
                 auto inPtr = reinterpret_cast<uint16_t *>(vram + y * 160 * 2);
+                if(dispControl & DISPCNT_Frame)
+                    inPtr += (0xA000 / 2);
 
                 int x;
                 for(x = 0; x < 160; x++)
