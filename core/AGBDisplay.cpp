@@ -33,9 +33,6 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
     auto charBase = ((control & BGCNT_CharBase) >> 2) * 0x4000;
     auto charPtr = vram + charBase;
 
-    if(control & BGCNT_SinglePal)
-        return; // TODO
-
     for(int x = 0; x < 240;)
     {
         int tx = (x + xOffset) & 7;
@@ -54,15 +51,26 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
 
         // TODO: x/y flip
 
-        // 4bit tiles
-        uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (tileMeta & 0x3FF) * 32)[ty];
-
-        tileRow >>= (tx * 4);
-
-        for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4)
+        if(control & BGCNT_SinglePal)
         {
-            auto palIndex = ((tileMeta & 0xF000) >> 8) | (tileRow & 0xF);
-            *scanLine++ = palRam[palIndex];
+            // 8bit tiles
+            auto tilePtr = charPtr + (tileMeta & 0x3FF) * 64 + ty * 8 + tx;
+
+            for(; tx < 8 && x < 240; tx++, x++)
+                *scanLine++ = palRam[*tilePtr++];
+        }
+        else
+        {
+            // 4bit tiles
+            uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (tileMeta & 0x3FF) * 32)[ty];
+
+            tileRow >>= (tx * 4);
+
+            for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4)
+            {
+                auto palIndex = ((tileMeta & 0xF000) >> 8) | (tileRow & 0xF);
+                *scanLine++ = palRam[palIndex];
+            }
         }
     }
 }
