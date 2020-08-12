@@ -58,7 +58,7 @@ uint16_t AGBMemory::read16(uint32_t addr) const
 void AGBMemory::write8(uint32_t addr, uint8_t data)
 {
     // io
-    if((addr >> 24) == 0x4 && writeCallback && writeCallback(addr, data))
+    if((addr >> 24) == 0x4 && writeCallback && writeCallback(addr & 0xFFFFFF, data))
         return;
 
     auto ptr = mapAddress(addr);
