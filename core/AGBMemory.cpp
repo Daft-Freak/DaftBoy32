@@ -34,23 +34,21 @@ uint8_t AGBMemory::read8(uint32_t addr) const
     auto ptr = mapAddress(addr);
 
     if(ptr)
-        return ptr[addr];
+        return *ptr;
 
     return 0;
 }
 
 uint16_t AGBMemory::read16(uint32_t addr) const
 {
-    bool isIO = (addr >> 24) == 0x4;
-
     auto ptr = mapAddress(addr);
     uint16_t ret = 0;
     if(ptr)
-        ret = *reinterpret_cast<const uint16_t *>(ptr + addr);
+        ret = *reinterpret_cast<const uint16_t *>(ptr);
 
     // io
-    if(isIO && readCallback)
-        ret = readCallback(addr, ret);
+    if((addr >> 24) == 0x4 && readCallback)
+        ret = readCallback(addr & 0xFFFFFF, ret);
 
     return ret;
 }
@@ -64,41 +62,34 @@ void AGBMemory::write8(uint32_t addr, uint8_t data)
     auto ptr = mapAddress(addr);
     if(ptr)
     {
-        ptr[addr] = data;
+        *ptr = data;
         return;
     }
 
     //printf("write %x = %x\n", addr, data);
 }
 
-const uint8_t *AGBMemory::mapAddress(uint32_t &addr) const
+const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
 {
     switch(addr >> 24)
     {
         case 0x0:
-            addr &= 0x3FFF;
-            return biosROM;
+            return biosROM + (addr & 0x3FFF);
 
         case 0x2:
-            addr &= 0x3FFFF;
-            return ewram;
+            return ewram + (addr & 0x3FFFF);
         case 0x3:
-            addr &= 0x7FFF;
-            return iwram;
+            return iwram + (addr & 0x7FFF);
         case 0x4:
             if(addr >= 0x4000400)
                 return nullptr; // IO regs don't mirror
-            addr &= 0x3FF;
-            return ioRegs;
+            return ioRegs + (addr & 0x3FF);
         case 0x5:
-            addr &= 0x3FF;
-            return palRAM;
+            return palRAM + (addr & 0x3FF);
         case 0x6:
-            addr &= 0x1FFFF; //? too much
-            return vram;
+            return vram + (addr & 0x1FFFF); //? too much
         case 0x7:
-            addr &= 0x3FF;
-            return oam;
+            return oam + (addr & 0x3FF);
         case 0x8: // wait state 0
         case 0x9:
         case 0xA: // wait state 1
@@ -108,41 +99,33 @@ const uint8_t *AGBMemory::mapAddress(uint32_t &addr) const
             addr &= 0x1FFFFFF;
             if(addr >= sizeof(cartROM))
                 return nullptr;
-            return cartROM;
+            return cartROM + addr;
     }
 
     return nullptr;
 }
 
-uint8_t *AGBMemory::mapAddress(uint32_t &addr)
+uint8_t *AGBMemory::mapAddress(uint32_t addr)
 {
     switch(addr >> 24)
     {
         case 0x0:
-            addr &= 0x3FFF;
             return nullptr; // bios rom
 
         case 0x2:
-            addr &= 0x3FFFF;
-            return ewram;
+            return ewram + (addr & 0x3FFFF);
         case 0x3:
-            addr &= 0x7FFF;
-            return iwram;
+            return iwram + (addr & 0x7FFF);
         case 0x4:
             if(addr >= 0x4000400)
                 return nullptr; // IO regs don't mirror
-            addr &= 0x3FF;
-            return ioRegs;
+            return ioRegs + (addr & 0x3FF);
         case 0x5:
-            addr &= 0x3FF;
-            return palRAM;
+            return palRAM + (addr & 0x3FF);
         case 0x6:
-            addr &= 0x1FFFF; //? too much
-            return vram;
+            return vram + (addr & 0x1FFFF); //? too much
         case 0x7:
-            addr &= 0x3FF;
-            return oam;
-
+            return oam + (addr & 0x3FF);
     }
 
     return nullptr;
