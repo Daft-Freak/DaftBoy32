@@ -56,8 +56,12 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
             // 8bit tiles
             auto tilePtr = charPtr + (tileMeta & 0x3FF) * 64 + ty * 8 + tx;
 
-            for(; tx < 8 && x < 240; tx++, x++)
-                *scanLine++ = palRam[*tilePtr++];
+            for(; tx < 8 && x < 240; tx++, x++, scanLine++)
+            {
+                auto palIndex = *tilePtr++;
+                if(palIndex)
+                    *scanLine = palRam[palIndex];
+            }
         }
         else
         {
@@ -66,10 +70,11 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
 
             tileRow >>= (tx * 4);
 
-            for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4)
+            for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
             {
                 auto palIndex = ((tileMeta & 0xF000) >> 8) | (tileRow & 0xF);
-                *scanLine++ = palRam[palIndex];
+                if(palIndex)
+                    *scanLine = palRam[palIndex];
             }
         }
     }
@@ -133,14 +138,8 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
                 int x;
                 for(x = 0; x < 160; x++)
                     *outPtr++ = *inPtr++;
-
-                // fill rest with pal 0? (works for tonc demo)
-                for(;x < 240; x++)
-                    *outPtr++ = palRam[0];
             }
-            else
-                for(int x = 0; x < 240; x++)
-                    *outPtr++ = palRam[0];
+
             break;
         }
         default:
@@ -233,6 +232,10 @@ void AGBDisplay::drawScanLine(int y)
     auto vram = mem.getVRAM();
 
     auto scanLine = screenData + y * screenWidth;
+
+    // fill with "transparent" (seems to work?)
+    for(int i = 0; i < screenWidth; i++)
+        scanLine[i] = palRAM[0];
 
     for(int priority = 3; priority >= 0; priority--)
     {
