@@ -87,7 +87,10 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
         case 0x5:
             return palRAM + (addr & 0x3FF);
         case 0x6:
-            return vram + (addr & 0x1FFFF); //? too much
+            addr &= 0x1FFFF;
+            if(addr >= 0x18000)
+                addr &= ~0x8000; // last 32K is the previous 32K
+            return vram + addr;
         case 0x7:
             return oam + (addr & 0x3FF);
         case 0x8: // wait state 0
@@ -123,7 +126,10 @@ uint8_t *AGBMemory::mapAddress(uint32_t addr)
         case 0x5:
             return palRAM + (addr & 0x3FF);
         case 0x6:
-            return vram + (addr & 0x1FFFF); //? too much
+            addr &= 0x1FFFF;
+            if(addr >= 0x18000)
+                addr &= ~0x8000; // last 32K is the previous 32K
+            return vram + addr;
         case 0x7:
             return oam + (addr & 0x3FF);
     }
