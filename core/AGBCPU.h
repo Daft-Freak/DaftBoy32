@@ -167,6 +167,8 @@ private:
 
     bool serviceInterrupts();
 
+    int dmaTransfer(int channel);
+
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
 

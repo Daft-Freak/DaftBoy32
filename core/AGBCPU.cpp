@@ -24,9 +24,24 @@ void AGBCPU::run(int ms)
 
     while(cycles > 0)
     {
-        int exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
+        int exec;
 
-        serviceInterrupts(); // cycles?
+        // DMA
+        if((mem.readIOReg(IO_DMA0CNT_H) & (DMACNTH_Start | DMACNTH_Enable)) == DMACNTH_Enable) // enabled, start now
+            exec = dmaTransfer(0);
+        else if((mem.readIOReg(IO_DMA1CNT_H) & (DMACNTH_Start | DMACNTH_Enable)) == DMACNTH_Enable)
+            exec = dmaTransfer(1);
+        else if((mem.readIOReg(IO_DMA2CNT_H) & (DMACNTH_Start | DMACNTH_Enable)) == DMACNTH_Enable)
+            exec = dmaTransfer(2);
+        else if((mem.readIOReg(IO_DMA3CNT_H) & (DMACNTH_Start | DMACNTH_Enable)) == DMACNTH_Enable)
+            exec = dmaTransfer(3);
+        else
+        {
+            // CPU
+            exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
+
+            serviceInterrupts(); // cycles?
+        }
 
         cycles -= exec;
 
@@ -1502,4 +1517,45 @@ bool AGBCPU::serviceInterrupts()
     }
 
     return false;
+}
+
+int AGBCPU::dmaTransfer(int channel)
+{
+    int regOffset = channel * 12;
+
+    auto &dmaControl = mem.getIOReg(IO_DMA0CNT_H + regOffset);
+    auto srcAddr = (mem.readIOReg(IO_DMA0SAD + regOffset) | (mem.readIOReg(IO_DMA0SAD + regOffset + 2) << 16)) & (channel ? 0xFFFFFFF : 0x7FFFFFF); // 1 bit less for DMA0
+    auto dstAddr = (mem.readIOReg(IO_DMA0DAD + regOffset) | (mem.readIOReg(IO_DMA0DAD + regOffset + 2) << 16)) & (channel == 3 ? 0xFFFFFFF : 0x7FFFFFF); // 1 bit less for !DMA3
+    auto count = mem.readIOReg(IO_DMA0CNT_L  + regOffset);
+
+    bool is32Bit = dmaControl & DMACNTH_32Bit;
+    int dstMode = (dmaControl & DMACNTH_DestMode) >> 5;
+    int srcMode = (dmaControl & DMACNTH_SrcMode) >> 7;
+
+    //printf("DMA%i %xx%i %x -> %x\n", channel, count, is32Bit ? 4 : 2, srcAddr, dstAddr);
+
+    int cycles = count * 2 + 2; // FIXME: 1N + (n-1)S read + 1N + (n-1)S write + 2I (or 4I if both addrs in gamepak)
+
+    while(count--)
+    {
+        if(is32Bit)
+            writeMem32(dstAddr, readMem32(srcAddr & ~3));
+        else
+            writeMem16(dstAddr, readMem16(srcAddr & ~1));
+
+        if(dstMode == 0 || dstMode == 3)
+            dstAddr += is32Bit ? 4 : 2;
+        else if(dstMode == 1)
+            dstAddr -= is32Bit ? 4 : 2;
+
+        if(srcMode == 0)
+            srcAddr += is32Bit ? 4 : 2;
+        else if(srcMode == 1)
+            srcAddr -= is32Bit ? 4 : 2;
+    }
+
+    if(!(dmaControl & DAMCNTH_Repeat))
+        dmaControl &= ~DMACNTH_Enable;
+
+    return cycles;
 }
