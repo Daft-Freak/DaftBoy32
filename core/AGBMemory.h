@@ -29,6 +29,7 @@ public:
 
     uint8_t *getPalRAM() {return palRAM;}
     uint8_t *getVRAM() {return vram;}
+    uint8_t *getOAM() {return oam;}
   
     /*uint8_t *getCartridgeRAM() {return cartRam;}
     int getCartridgeRAMSize() {return cartRamSize;}
