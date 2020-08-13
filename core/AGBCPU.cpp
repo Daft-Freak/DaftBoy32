@@ -367,7 +367,7 @@ int AGBCPU::executeARMInstruction()
 
                     if(isLoad)
                     {
-                        if(halfWords)
+                        if(halfWords && (!sign || !(addr & 1))) // check alignment for signed load...
                         {
                             auto val = readMem16(addr); // LDRH/LDRSH
 
@@ -376,7 +376,7 @@ int AGBCPU::executeARMInstruction()
                             else
                                 reg(srcDestReg) = val;
                         }
-                        else // LDRSB
+                        else // LDRSB ... or misaligned LDRSH
                         {
                             auto val = readMem8(addr);
                             if(val & (1 << 7))
@@ -1081,7 +1081,7 @@ int AGBCPU::executeTHUMBInstruction()
 
                 if(signEx)
                 {
-                    if(hFlag) // LDRSH
+                    if(hFlag && !(addr & 1)) // LDRSH, (misaligned gets treated as a byte!)
                     {
                         auto val = readMem16(addr);
                         if(val & 0x8000)
