@@ -7,6 +7,32 @@
 #include "AGBMemory.h"
 #include "AGBRegs.h"
 
+enum OAMAttr0Bits
+{
+    Attr0_Y         = 0xFF,
+    Attr0_Mode      = 0x3 << 8, // normal, affine, disabled, affine double
+    Attr0_Effect    = 0x3 << 10, // normal, blend, window, INVALID
+    Attr0_Mosaic    = 1 << 12,
+    Attr0_SinglePal = 1 << 13,
+    Attr0_Shape     = 0x3 << 14 // square, wide tall
+};
+
+enum OAMAttr1Bits
+{
+    Attr1_X           = 0x1FF,
+    Attr1_AffineIndex = 0x1F << 9, // this...
+    Attr1_HFlip       = 1 << 12, // ... or these
+    Attr1_VFlip       = 1 << 13, //
+    Attr1_Size        = 0x3 << 14
+};
+
+enum OAMAttr2Bits
+{
+    Attr2_Index    = 0x3FF,
+    Attr2_Priority = 0x3 << 10,
+    Attr2_Pal      = 0xF << 12
+};
+
 // bg layer helpers
 // hopefully this gets mostly inlined
 static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t xOffset, uint16_t yOffset)
@@ -154,6 +180,105 @@ static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
     // else 2
 }
 
+static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, int priority)
+{
+    auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
+    const int entrySize = 4; // * 16 bit
+
+    // width, flip the shape bits for heights
+    static const int sizes[]
+    {
+         8, 16, 32, 64, // square
+        16, 32, 32, 64, // wide
+         8,  8, 16, 32  // tall
+    };
+
+    auto charPtr = vram + 0x10000;
+
+    for(int i = 127; i >= 0; i--)
+    {
+        const uint16_t attr0 = oam[i * entrySize + 0];
+        const uint16_t attr1 = oam[i * entrySize + 1];
+        const uint16_t attr2 = oam[i * entrySize + 2];
+
+        // not this priority
+        if((attr2 & Attr2_Priority) >> 10 != priority)
+            continue;
+
+        if((attr0 & Attr0_Mode) >> 8 == 2/*disable*/)
+            continue;
+
+        // check y
+        int spriteY = attr0 & Attr0_Y;
+
+        auto shape = (attr0 & Attr0_Shape) >> 12;
+        int sizeShape = (shape ? shape ^ 0xC : 0) | ((attr1 & Attr1_Size) >> 14);
+        int spriteH = sizes[sizeShape];
+
+        // wrap
+        if(((spriteY + spriteH) & 0xFF) < spriteY)
+            spriteY -= 256;
+
+        if(spriteY > y)
+            continue;
+
+        if(spriteY + spriteH <= y)
+            continue;
+
+        // get X/W
+        int spriteX = attr1 & Attr1_X;
+        sizeShape = shape | ((attr1 & Attr1_Size) >> 14);
+        const int spriteW = sizes[sizeShape];
+
+        // wrap
+        if(((spriteX + spriteW) & 0x1FF) < spriteX)
+            spriteX -= 512;
+
+        // calc offsets
+        auto startTile = attr2 & Attr2_Index;
+        int sx = std::max(0, -spriteX);
+        int sy = y - spriteY;
+
+        if(dispControl & DISPCNT_OBJChar1D)
+            startTile += (sy >> 3) * (spriteW >> 3);
+        else
+            startTile += (sy >> 3) * 32;
+
+        // TODO: x/y flip, transforms
+
+        int xOff = sx & 7;
+        auto out = scanLine + (spriteX + sx);
+        auto outEnd = scanLine + 240;
+
+        if(attr0 & Attr0_SinglePal)
+        {
+            // 8bit tiles
+            *out = 0xF000;
+        }
+        else
+        {
+            // 4bit tiles
+            for(int stx = sx >> 3; stx < spriteW >> 3 && out != outEnd; stx++)
+            {
+                uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + ((startTile + stx) & 0x3FF) * 32)[sy & 7];
+
+                // first tile
+                if(xOff)
+                    tileRow >>= (xOff * 4);
+
+                for(int x = xOff; x < 8 && out != outEnd; x++, tileRow >>= 4, out++)
+                {
+                    auto palIndex = ((attr2 & Attr2_Pal) >> 8) | (tileRow & 0xF);
+                    if(palIndex & 0xF)
+                        *out = palRam[palIndex + 256];
+                }
+
+                xOff = 0;
+            }
+        }
+    }
+}
+
 AGBDisplay::AGBDisplay(AGBCPU &cpu) : cpu(cpu), mem(cpu.getMem())
 {
 }
@@ -247,5 +372,8 @@ void AGBDisplay::drawScanLine(int y)
             drawBG1(mem, y, scanLine, palRAM, vram, dispControl, bg1Control);
         if((dispControl & DISPCNT_BG0On) && (bg0Control & BGCNT_Priority) == priority)
             drawBG0(mem, y, scanLine, palRAM, vram, dispControl, bg0Control);
+
+        if((dispControl & DISPCNT_OBJOn))
+            drawOBJs(mem, y, scanLine, palRAM, vram, dispControl, priority);
     }
 }
