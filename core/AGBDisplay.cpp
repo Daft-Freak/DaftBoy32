@@ -73,7 +73,7 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
             for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
             {
                 auto palIndex = ((tileMeta & 0xF000) >> 8) | (tileRow & 0xF);
-                if(palIndex)
+                if(palIndex & 0xF)
                     *scanLine = palRam[palIndex];
             }
         }
