@@ -549,6 +549,8 @@ int AGBCPU::executeARMInstruction()
             // get the immediate value
             uint32_t op2 = opcode & 0xFF;
             int shift = ((opcode >> 8) & 0xF) * 2;
+
+            bool carry = shift ? op2 & (1 << (shift - 1)) : cpsr & Flag_C;
             op2 = (op2 >> shift) | (op2 << (32 - shift));
 
             // TODO: a bit duplicated with above
@@ -576,7 +578,7 @@ int AGBCPU::executeARMInstruction()
                     cpsr = (cpsr & ~mask) | (val & mask);
             }
 
-            return doALUOp(instOp, destReg, op1, op2, setCondCode, cpsr & Flag_C);
+            return doALUOp(instOp, destReg, op1, op2, setCondCode, carry);
         }
         case 0x4: // Single Data Transfer (I = 0, P = 0)
         case 0x5: // Single Data Transfer (I = 0, P = 1)
