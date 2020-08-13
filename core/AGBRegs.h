@@ -19,6 +19,24 @@ enum AGBIOReg
     IO_BG3HOFS = 0x1C,
     IO_BG3VOFS = 0x1E,
 
+    // DMA (mostly 32-bit)
+    IO_DMA0SAD = 0xB0,
+    IO_DMA0DAD = 0xB4,
+    IO_DMA0CNT_L = 0xB8,
+    IO_DMA0CNT_H = 0xBA,
+    IO_DMA1SAD = 0xBC,
+    IO_DMA1DAD = 0xC0,
+    IO_DMA1CNT_L = 0xC4,
+    IO_DMA1CNT_H = 0xC6,
+    IO_DMA2SAD = 0xC8,
+    IO_DMA2DAD = 0xCC,
+    IO_DMA2CNT_L = 0xD0,
+    IO_DMA2CNT_H = 0xD2,
+    IO_DMA3SAD = 0xD4,
+    IO_DMA3DAD = 0xD8,
+    IO_DMA3CNT_L = 0xDC,
+    IO_DMA3CNT_H = 0xDE,
+
     // input
     IO_KEYINPUT = 0x130,
 
@@ -67,4 +85,16 @@ enum BGCNTBits
     BGCNT_ScreenBase = 0x1F << 8,
     BGCNT_Wrap       = 1 << 13,
     BGCNT_ScreenSize = 0x3 << 14
+};
+
+enum DMACNTHBits
+{
+    DMACNTH_DestMode  = 0x3 << 5,
+    DMACNTH_SrcMode   = 0x3 << 7,
+    DAMCNTH_Repeat    = 1 << 9,
+    DMACNTH_32Bit     = 1 << 10,
+    DMACNTH_GamePak   = 1 << 11, // 3 only
+    DMACNTH_Start     = 0x3 << 12,
+    DMACNTH_IRQEnable = 1 << 14,
+    DMACNTH_Enable    = 1 << 15
 };
