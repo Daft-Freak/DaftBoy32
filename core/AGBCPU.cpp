@@ -118,9 +118,13 @@ void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
 {
     if((addr >> 24) == 0x4)
     {
-        // writing IF bits clears them internally
+        // need to modify these internally, promote to 16-bit
         if(addr == 0x4000202/*IF*/ || addr == 0x4000203)
-            data = (mem.getIOReg(IO_IF) >> (addr & 1 ? 8 : 0)) & ~data; // ... this read is a mess
+        {
+            auto tmp = readMem8(addr ^ 1);
+            writeMem16(addr & ~1, addr & 1 ? tmp | (data << 8) : (tmp << 8) | data);
+            return;
+        }
     }
 
     mem.write8(addr, data);
@@ -130,18 +134,22 @@ void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
 {
     addr &= ~1;
 
-    writeMem8(addr, data);
-    writeMem8(addr + 1, data >> 8);
+    if((addr >> 24) == 0x4)
+    {
+        // writing IF bits clears them internally
+        if((addr & 0xFFFFFF) == IO_IF)
+            data = mem.getIOReg(IO_IF) & ~data;
+    }
+
+    mem.write16(addr, data);
 }
 
 void AGBCPU::writeMem32(uint32_t addr, uint32_t data)
 {
     addr &= ~3;
 
-    writeMem8(addr, data);
-    writeMem8(addr + 1, data >> 8);
-    writeMem8(addr + 2, data >> 16);
-    writeMem8(addr + 3, data >> 24);
+    writeMem16(addr, data);
+    writeMem16(addr + 2, data >> 16);
 }
 
 // returns cycle count

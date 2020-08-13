@@ -55,6 +55,26 @@ uint16_t AGBMemory::read16(uint32_t addr) const
 
 void AGBMemory::write8(uint32_t addr, uint8_t data)
 {
+    // handle IO writes as 16-bit
+    if((addr >> 24) == 0x4)
+    {
+        auto tmp = read8(addr ^ 1);
+        addr & 1 ? write16(addr, tmp | (data << 8)) : write16(addr, (tmp << 8) | data);
+        return;
+    }
+
+    auto ptr = mapAddress(addr);
+    if(ptr)
+    {
+        *ptr = data;
+        return;
+    }
+
+    //printf("write %x = %x\n", addr, data);
+}
+
+void AGBMemory::write16(uint32_t addr, uint16_t data)
+{
     // io
     if((addr >> 24) == 0x4 && writeCallback && writeCallback(addr & 0xFFFFFF, data))
         return;
@@ -62,7 +82,7 @@ void AGBMemory::write8(uint32_t addr, uint8_t data)
     auto ptr = mapAddress(addr);
     if(ptr)
     {
-        *ptr = data;
+        *reinterpret_cast<uint16_t *>(ptr) = data;
         return;
     }
 

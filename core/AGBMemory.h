@@ -5,7 +5,7 @@ class AGBMemory
 {
 public:
     using ReadCallback = uint16_t(*)(uint32_t, uint16_t val);
-    using WriteCallback = bool(*)(uint32_t, uint8_t val);
+    using WriteCallback = bool(*)(uint32_t, uint16_t val);
 
     //using CartRamUpdateCallback = void(*)(uint8_t *, unsigned int);
 
@@ -21,6 +21,7 @@ public:
     uint16_t read16(uint32_t addr) const;
 
     void write8(uint32_t addr, uint8_t data);
+    void write16(uint32_t addr, uint16_t data);
 
     // fast access to IO regs
     uint16_t readIOReg(uint16_t addr) const {return *reinterpret_cast<const uint16_t *>(ioRegs + addr);}
