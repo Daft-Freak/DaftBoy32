@@ -24,18 +24,26 @@ void AGBCPU::run(int ms)
 
     while(cycles > 0)
     {
-        int exec;
+        int exec = 0;
 
         // DMA
-        if((mem.readIOReg(IO_DMA0CNT_H) & (DMACNTH_Start | DMACNTH_Enable)) == DMACNTH_Enable) // enabled, start now
-            exec = dmaTransfer(0);
-        else if((mem.readIOReg(IO_DMA1CNT_H) & (DMACNTH_Start | DMACNTH_Enable)) == DMACNTH_Enable)
-            exec = dmaTransfer(1);
-        else if((mem.readIOReg(IO_DMA2CNT_H) & (DMACNTH_Start | DMACNTH_Enable)) == DMACNTH_Enable)
-            exec = dmaTransfer(2);
-        else if((mem.readIOReg(IO_DMA3CNT_H) & (DMACNTH_Start | DMACNTH_Enable)) == DMACNTH_Enable)
-            exec = dmaTransfer(3);
-        else
+        for(int chan = 0; chan < 4; chan++)
+        {
+            auto control = mem.readIOReg(IO_DMA0CNT_H + chan * 12);
+            if(!(control & DMACNTH_Enable))
+                continue;
+
+            if((control & DMACNTH_Start) == 0 || // immediate
+               ((control & DMACNTH_Start) == 1 << 12 && (dmaTriggers & Trig_VBlank)) ||
+               ((control & DMACNTH_Start) == 2 << 12 && (dmaTriggers & Trig_HBlank)))
+            {
+                exec += dmaTransfer(chan);
+            }
+        }
+
+        dmaTriggers = 0;
+
+        if(!exec)
         {
             // CPU
             exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
@@ -58,6 +66,11 @@ void AGBCPU::setCycleCallback(CycleCallback cycleCallback)
 void AGBCPU::flagInterrupt(int interrupt)
 {
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
+}
+
+void AGBCPU::triggerDMA(int trigger)
+{
+    dmaTriggers |= trigger;
 }
 
 uint8_t AGBCPU::readMem8(uint32_t addr) const

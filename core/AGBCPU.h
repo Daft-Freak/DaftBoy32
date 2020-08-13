@@ -24,6 +24,13 @@ public:
         Int_External  = 1 << 13
     };
 
+    enum DMATrigger
+    {
+        Trig_VBlank = 1 << 0,
+        Trig_HBlank = 1 << 1
+        // sound...
+    };
+
     AGBCPU(AGBMemory &mem);
 
     using CycleCallback = void(*)(int);
@@ -35,6 +42,7 @@ public:
     void setCycleCallback(CycleCallback cycleCallback);
 
     void flagInterrupt(int interrupt);
+    void triggerDMA(int trigger);
 
     AGBMemory &getMem() {return mem;}
 
@@ -174,6 +182,7 @@ private:
 
     // internal state
     //bool stopped, halted;
+    int dmaTriggers = 0;
 
     // registers
     uint32_t regs[31]{};

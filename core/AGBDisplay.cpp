@@ -297,6 +297,7 @@ void AGBDisplay::update(int cycles)
             // TODO? could miss this if incrementing by > 1...
             if(stat & DISPSTAT_HBlankInt)
                 cpu.flagInterrupt(AGBCPU::Int_LCDHBlank);
+            cpu.triggerDMA(AGBCPU::Trig_HBlank);
         }
     }
 
@@ -317,7 +318,11 @@ void AGBDisplay::update(int cycles)
         cpu.flagInterrupt(AGBCPU::Int_LCDVCount);
 
     if(y == screenHeight)
-        cpu.flagInterrupt(AGBCPU::Int_LCDVBlank);
+    {
+        //if(stat & DISPSTAT_VBlankInt) // hangs?
+            cpu.flagInterrupt(AGBCPU::Int_LCDVBlank);
+        cpu.triggerDMA(AGBCPU::Trig_VBlank);
+    }
     else if(y >= 228)
         y = 0; // end vblank
 }
