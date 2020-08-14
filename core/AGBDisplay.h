@@ -14,7 +14,7 @@ public:
     const uint16_t *getData() {return screenData;}
 
     uint16_t readReg(uint32_t addr, uint16_t val);
-    bool writeReg(uint32_t addr, uint8_t data);
+    bool writeReg(uint32_t addr, uint16_t data);
 
 private:
     void drawScanLine(int y);

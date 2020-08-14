@@ -364,7 +364,7 @@ uint16_t AGBDisplay::readReg(uint32_t addr, uint16_t val)
     return val;
 }
 
-bool AGBDisplay::writeReg(uint32_t addr, uint8_t data)
+bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
 {
     switch(addr)
     {
