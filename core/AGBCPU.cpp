@@ -1068,7 +1068,29 @@ int AGBCPU::executeTHUMBInstruction()
                         else
                             res = op1;
                         break;
-                    // ASR
+                    case 0x4: // ASR
+                    {
+                        auto sign = op1 & signBit;
+                        if(op2 >= 32)
+                        {
+                            carry = sign;
+                            reg(dstReg) = res = sign ? 0xFFFFFFFF : 0;
+                        }
+                        else if(op2)
+                        {
+                            carry = op1 & (1 << (op2 - 1));
+                            res = op1 >> op2;
+
+                            if(sign)
+                                res |= ~(0xFFFFFFFF >> op2);
+
+                            reg(dstReg) = res;
+                        }
+                        else
+                            res = op1;
+
+                        break;
+                    }
                     case 0x5: // ADC
                     {
                         int c = carry ? 1 : 0;
@@ -1131,8 +1153,7 @@ int AGBCPU::executeTHUMBInstruction()
                         break;
 
                     default:
-                        printf("THUMB op 4 %x %i %i (%x) @%x\n", instOp, srcReg, dstReg, opcode, pc - 2);
-                        exit(0);
+                        assert(!"Invalid format 4 op!");
                 }
 
                 // cond code
