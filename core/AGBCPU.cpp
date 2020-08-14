@@ -400,8 +400,6 @@ int AGBCPU::executeARMInstruction()
             {
                 if((opcode >> 5) & 3) // halfword transfer 
                 {
-                    assert((opcode & 0xF00) == 0);
-
                     bool isPre = opcode & (1 << 24);
                     bool isUp = opcode & (1 << 23);
                     bool isImm = opcode & (1 << 22);
@@ -418,7 +416,10 @@ int AGBCPU::executeARMInstruction()
                     if(isImm)
                         offset = ((opcode >> 4) & 0xF0) | (opcode & 0xF);
                     else
+                    {
                         offset = reg(offReg);
+                        assert((opcode & 0xF00) == 0);
+                    }
 
                     if(!isUp)
                         offset = -offset;
