@@ -68,7 +68,7 @@ void AGBMemory::write8(uint32_t addr, uint8_t data)
 
     if((addr >> 24) == 0x5 || ((addr >> 24) == 0x6 && (addr &  0x1FFFF) < 0x10000)) // pal / BG VRAM
     {
-        write16(addr, data | (data << 8));
+        write16(addr & ~1, data | (data << 8));
         return;
     }
 
