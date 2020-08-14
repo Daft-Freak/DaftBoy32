@@ -63,6 +63,15 @@ void AGBMemory::write8(uint32_t addr, uint8_t data)
         return;
     }
 
+    if((addr >> 24) == 0x7 || ((addr >> 24) == 0x6 && (addr &  0x1FFFF) >= 0x10000)) // OAM / OBJ VRAM ignores byte writes
+        return;
+
+    if((addr >> 24) == 0x5 || ((addr >> 24) == 0x6 && (addr &  0x1FFFF) < 0x10000)) // pal / BG VRAM
+    {
+        write16(addr, data | (data << 8));
+        return;
+    }
+
     auto ptr = mapAddress(addr);
     if(ptr)
     {
