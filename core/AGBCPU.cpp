@@ -15,6 +15,12 @@ void AGBCPU::reset()
     cpsr = Flag_I | Flag_F | 0x13 /*supervisor mode*/;
     loReg(Reg::PC) = 0;
 
+    timer = 0;
+    for(auto &c : timerCounters)
+        c = 0;
+    for(auto &p : timerPrescalers)
+        p = 0;
+
     mem.reset();
 }
 
@@ -50,6 +56,8 @@ void AGBCPU::run(int ms)
 
             serviceInterrupts(); // cycles?
         }
+
+        updateTimers(exec);
 
         cycles -= exec;
 
@@ -93,6 +101,22 @@ uint32_t AGBCPU::readMem16(uint32_t addr) const
 uint16_t AGBCPU::readMem16Aligned(uint32_t addr) const
 {
     assert((addr & 1) == 0);
+
+    if((addr >> 24) == 0x4)
+    {
+        switch(addr & 0xFFFFFF)
+        {
+            case IO_TM0CNT_L:
+                return timerCounters[0];
+            case IO_TM1CNT_L:
+                return timerCounters[1];
+            case IO_TM2CNT_L:
+                return timerCounters[2];
+            case IO_TM3CNT_L:
+                return timerCounters[3];
+        }
+    }
+
     return mem.read16(addr);
 }
 
@@ -119,7 +143,7 @@ void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
     if((addr >> 24) == 0x4)
     {
         // need to modify these internally, promote to 16-bit
-        if(addr == 0x4000202/*IF*/ || addr == 0x4000203)
+        if(addr == 0x4000202/*IF*/ || addr == 0x4000203 || (addr >= 0x4000100 && addr <= 0x400010E) /*timers*/)
         {
             auto tmp = readMem8(addr ^ 1);
             writeMem16(addr & ~1, addr & 1 ? tmp | (data << 8) : (tmp << 8) | data);
@@ -136,9 +160,36 @@ void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
 
     if((addr >> 24) == 0x4)
     {
-        // writing IF bits clears them internally
-        if((addr & 0xFFFFFF) == IO_IF)
-            data = mem.getIOReg(IO_IF) & ~data;
+        switch(addr & 0xFFFFFF)
+        {
+            case IO_TM0CNT_H:
+            case IO_TM1CNT_H:
+            case IO_TM2CNT_H:
+            case IO_TM3CNT_H:
+            {
+                int index = ((addr & 0xFFFFFF) - IO_TM0CNT_H) >> 2;
+                static const int prescalers[]{1, 64, 256, 1024};
+
+                if(data & TMCNTH_Enable)
+                {
+                    if(!(mem.readIOReg(IO_TM0CNT_H + index * 4) & TMCNTH_Enable))
+                        timerCounters[index] = mem.readIOReg(IO_TM0CNT_L + index * 4); // reload counter
+
+                    if(data & TMCNTH_CountUp)
+                        timerPrescalers[index] = -1; // magic value for count-up mode
+                    else
+                        timerPrescalers[index] = prescalers[data & TMCNTH_Prescaler];
+                }
+                else
+                    timerPrescalers[index] = 0;
+
+                break;
+            }
+
+            case IO_IF: // writing IF bits clears them internally
+                data = mem.getIOReg(IO_IF) & ~data;
+                break;
+        }
     }
 
     mem.write16(addr, data);
@@ -1581,4 +1632,49 @@ int AGBCPU::dmaTransfer(int channel)
         dmaControl &= ~DMACNTH_Enable;
 
     return cycles;
+}
+
+void AGBCPU::updateTimers(int cycles)
+{
+    bool overflow = false;
+    for(int i = 0; i < 4; i++)
+    {
+        if(!timerPrescalers[i])
+        {
+            overflow = false;
+            continue;
+        }
+
+        // count-up
+        if(timerPrescalers[i] == -1)
+        {
+            if(overflow)
+                timerCounters[i]++;
+            else
+            {
+                overflow = false;
+                continue;
+            }
+        }
+        else
+        {
+            int count = (timer & (timerPrescalers[i] - 1)) + cycles;
+            if(count >= timerPrescalers[i])
+                timerCounters[i]++;
+            else
+            {
+                overflow = false;
+                continue;
+            }
+        }
+
+        overflow = timerCounters[i] == 0;
+
+        if(overflow)
+        {
+            timerCounters[i] = mem.readIOReg(IO_TM0CNT_L + i * 4);
+            flagInterrupt(Int_Timer0 << i);
+        }
+    }
+    timer += cycles;
 }

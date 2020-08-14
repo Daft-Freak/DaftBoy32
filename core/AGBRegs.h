@@ -37,6 +37,16 @@ enum AGBIOReg
     IO_DMA3CNT_L = 0xDC,
     IO_DMA3CNT_H = 0xDE,
 
+    // timers
+    IO_TM0CNT_L = 0x100, // counter
+    IO_TM0CNT_H = 0x102, // control
+    IO_TM1CNT_L = 0x104,
+    IO_TM1CNT_H = 0x106,
+    IO_TM2CNT_L = 0x108,
+    IO_TM2CNT_H = 0x10A,
+    IO_TM3CNT_L = 0x10C,
+    IO_TM3CNT_H = 0x10E,
+
     // input
     IO_KEYINPUT = 0x130,
 
@@ -97,4 +107,12 @@ enum DMACNTHBits
     DMACNTH_Start     = 0x3 << 12,
     DMACNTH_IRQEnable = 1 << 14,
     DMACNTH_Enable    = 1 << 15
+};
+
+enum TMCNTHBits
+{
+    TMCNTH_Prescaler = 0x3,
+    TMCNTH_CountUp   = 1 << 2,
+    TMCNTH_IRQEnable = 1 << 6,
+    TMCNTH_Enable    = 1 << 7
 };

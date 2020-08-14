@@ -177,12 +177,20 @@ private:
 
     int dmaTransfer(int channel);
 
+    void updateTimers(int cycles);
+
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
 
     // internal state
     //bool stopped, halted;
     int dmaTriggers = 0;
+
+    // timers
+    uint32_t timer = 0; // just counts cycles
+
+    uint16_t timerCounters[4]{};
+    int timerPrescalers[4]{};
 
     // registers
     uint32_t regs[31]{};
