@@ -817,7 +817,7 @@ int AGBCPU::executeARMInstruction()
 int AGBCPU::executeTHUMBInstruction()
 {
     auto &pc = loReg(Reg::PC); // not a low reg, but not banked
-    auto opcode = readMem16Aligned(pc);
+    auto opcode = readMem16Aligned(pc & ~1);
 
     pc += 2;
 
