@@ -1280,7 +1280,7 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
             bool carry = !(src > dst);
 
             cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V))
-                    | ((res & signBit) ? Flag_V : 0)
+                    | ((res & signBit) ? Flag_N : 0)
                     | (res == 0 ? Flag_Z : 0)
                     | (carry ? Flag_C : 0)
                     | (((dst ^ src) & signBit) && ((dst ^ res) & signBit) ? Flag_V : 0);
