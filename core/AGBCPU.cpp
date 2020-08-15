@@ -1671,30 +1671,22 @@ void AGBCPU::updateTimers(int cycles)
             continue;
         }
 
+        auto oldCount = timerCounters[i];
+
         // count-up
         if(timerPrescalers[i] == -1)
         {
             if(overflow)
                 timerCounters[i]++;
-            else
-            {
-                overflow = false;
-                continue;
-            }
         }
         else
         {
             int count = (timer & (timerPrescalers[i] - 1)) + cycles;
             if(count >= timerPrescalers[i])
-                timerCounters[i]++;
-            else
-            {
-                overflow = false;
-                continue;
-            }
+                timerCounters[i] += count / timerPrescalers[i];
         }
 
-        overflow = timerCounters[i] == 0;
+        overflow = timerCounters[i] < oldCount;
 
         if(overflow)
         {
