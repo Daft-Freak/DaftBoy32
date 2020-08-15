@@ -165,3 +165,35 @@ uint8_t *AGBMemory::mapAddress(uint32_t addr)
 
     return nullptr;
 }
+
+int AGBMemory::getAccessCycles(uint32_t addr, int width, bool sequential) const
+{
+    switch(addr >> 24)
+    {
+        case 0x0: // BIOS
+        case 0x3: // IWRAM
+        case 0x4: // IO
+        case 0x7: // OAM
+            return 1;
+
+        case 0x2: // EWRAM
+            return width == 4 ? 6 : 3;
+
+        case 0x5: // pal
+        case 0x6: // VRAM
+            return width == 4 ? 2 : 1;
+
+        // defaults TODO: WAITCNT
+        case 0x8: // wait state 0
+        case 0x9:
+            return (sequential ? 3 : 5) * (width == 4 ? 2 : 1);
+        case 0xA: // wait state 1
+        case 0xB:
+            return (sequential ? 5 : 5) * (width == 4 ? 2 : 1);
+        case 0xC: // wait state 2
+        case 0xD:
+            return (sequential ? 9 : 5) * (width == 4 ? 2 : 1);
+    }
+
+    return 1;
+}

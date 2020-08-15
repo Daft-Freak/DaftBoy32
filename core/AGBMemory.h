@@ -39,6 +39,8 @@ public:
     const uint8_t *mapAddress(uint32_t addr) const;
     uint8_t *mapAddress(uint32_t addr);
 
+    int getAccessCycles(uint32_t addr, int width, bool sequential) const;
+
 private:
     uint8_t biosROM[0x4000];
     uint8_t ewram[0x40000]; // external wram, two wait states, 16bit bus

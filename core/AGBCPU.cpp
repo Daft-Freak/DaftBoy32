@@ -208,6 +208,7 @@ int AGBCPU::executeARMInstruction()
 {
     auto &pc = loReg(Reg::PC); // not a low reg, but not banked
     auto opcode = readMem32Aligned(pc);
+    auto timing = mem.getAccessCycles(pc, 4, true);
 
     pc += 4;
 
@@ -318,59 +319,59 @@ int AGBCPU::executeARMInstruction()
     {
         case 0x0: // equal
             if(!(cpsr & Flag_Z))
-                return 1; // fetch timing?
+                return timing;
             break;
         case 0x1: // not equal
             if(cpsr & Flag_Z)
-                return 1; 
+                return timing;
             break;
         case 0x2: // carry set
             if(!(cpsr & Flag_C))
-                return 1; 
+                return timing;
             break;
         case 0x3: // carry clear
             if(cpsr & Flag_C)
-                return 1; 
+                return timing;
             break;
         case 0x4: // negative
             if(!(cpsr & Flag_N))
-                return 1; 
+                return timing;
             break;
         case 0x5: // positive or zero
             if((cpsr & Flag_N))
-                return 1; 
+                return timing;
             break;
         case 0x6: // overflow
             if(!(cpsr & Flag_V))
-                return 1; 
+                return timing;
             break;
         case 0x7: // no overflow
             if((cpsr & Flag_V))
-                return 1; 
+                return timing;
             break;
         case 0x8: // unsigned higher
             if(!(cpsr & Flag_C) || (cpsr & Flag_Z))
-                return 1; 
+                return timing;
             break;
         case 0x9: // unsigned lower or same
             if((cpsr & Flag_C) && !(cpsr & Flag_Z))
-                return 1; 
+                return timing;
             break;
         case 0xA: // greater or equal
             if(!!(cpsr & Flag_N) != !!(cpsr & Flag_V))
-                return 1;
+                return timing;
             break;
         case 0xB: // less than
             if(!!(cpsr & Flag_N) == !!(cpsr & Flag_V))
-                return 1;
+                return timing;
             break;
         case 0xC: // greater than
             if((cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V))
-                return 1;
+                return timing;
             break;
         case 0xD: // less than or equal
             if(!(cpsr & Flag_Z) && !!(cpsr & Flag_N) == !!(cpsr & Flag_V))
-                return 1;
+                return timing;
             break;
         case 0xE: // always
             break;
@@ -393,7 +394,7 @@ int AGBCPU::executeARMInstruction()
                     cpsr |= Flag_T;
 
                 pc = newPC & 0xFFFFFFFE;
-                return 1; // TODO: timing
+                return timing; // TODO: timing
             }
 
             if(((opcode >> 4) & 9) == 9)
@@ -548,7 +549,7 @@ int AGBCPU::executeARMInstruction()
                     }
                 }
 
-                return 1; // TODO: timing
+                return timing; // TODO: timing
             }
 
             auto instOp = (opcode >> 21) & 0xF;
@@ -602,7 +603,8 @@ int AGBCPU::executeARMInstruction()
                 if(op1Reg == Reg::PC)
                     op1 += (op2Shift & 1) ? 8 : 4;
 
-                return doALUOp(instOp, destReg, op1, op2, setCondCode, carry);
+                doALUOp(instOp, destReg, op1, op2, setCondCode, carry);
+                return timing + (op2Shift & 1); // +1I if shift by reg
             }
             
             break;
@@ -651,7 +653,8 @@ int AGBCPU::executeARMInstruction()
                     cpsr = (cpsr & ~mask) | (val & mask);
             }
 
-            return doALUOp(instOp, destReg, op1, op2, setCondCode, carry);
+            doALUOp(instOp, destReg, op1, op2, setCondCode, carry);
+            return timing;
         }
         case 0x4: // Single Data Transfer (I = 0, P = 0)
         case 0x5: // Single Data Transfer (I = 0, P = 1)
@@ -700,6 +703,9 @@ int AGBCPU::executeARMInstruction()
                     reg(srcDestReg) = readMem8(addr);
                 else
                     reg(srcDestReg) = readMem32(addr);
+
+                return timing + mem.getAccessCycles(addr, isByte ? 1 : 4, false) + 1; // 1S + 1N + 1I
+                // TODO: +1S+1N if dst == PC
             }
             else
             {
@@ -709,6 +715,8 @@ int AGBCPU::executeARMInstruction()
                     writeMem8(addr, reg(srcDestReg));
                 else
                     writeMem32(addr, reg(srcDestReg));
+
+                return mem.getAccessCycles(pc, 4, false) + mem.getAccessCycles(addr, isByte ? 1 : 4, false); // 2N
             }
 
             break;
@@ -811,7 +819,7 @@ int AGBCPU::executeARMInstruction()
             break;
     }
 
-    return 1; // TODO: timings
+    return timing; // TODO: timings
 }
 
 int AGBCPU::executeTHUMBInstruction()
@@ -1489,7 +1497,8 @@ int AGBCPU::executeTHUMBInstruction()
             break;
         }
     }
-    return 1;
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
 int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCondCode, bool carry)
