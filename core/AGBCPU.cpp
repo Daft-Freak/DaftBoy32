@@ -833,61 +833,36 @@ int AGBCPU::executeTHUMBInstruction()
     {
         case 0x0: // format 1
         case 0x1: // formats 1-2
-            doTHUMB0102(opcode);
-            break;
+            return doTHUMB0102(opcode, pc);
         case 0x2: // format 3, mov/cmp immediate
         case 0x3: // format 3, add/sub immediate
-            doTHUMB03(opcode);
-            break;
+            return doTHUMB03(opcode, pc);
         case 0x4: // formats 4-6
-        {
-            if(opcode & (1 << 11)) // format 6, PC-relative load
-                doTHUMB06PCRelLoad(opcode, pc);
-            else if(opcode & (1 << 10)) // format 5, Hi reg/branch exchange
-                doTHUMB05HiReg(opcode, pc);
-            else // format 4, alu
-                doTHUMB04ALU(opcode);
-            break;
-        }
+            return doTHUMB040506(opcode, pc);
         case 0x5: // formats 7-8
-            doTHUMB0708(opcode);
-            break;
+            return doTHUMB0708(opcode, pc);
         case 0x6: // format 9, load/store with imm offset
         case 0x7:
-            doTHUMB09LoadStore(opcode);
-            break;
+            return doTHUMB09LoadStore(opcode, pc);
         case 0x8: // format 10, load/store halfword
-            doTHUMB10LoadStoreHalf(opcode);
-            break;
+            return doTHUMB10LoadStoreHalf(opcode, pc);
         case 0x9: // format 11, SP-relative load/store
-            doTHUMB11SPRelLoadStore(opcode);
-            break;
+            return doTHUMB11SPRelLoadStore(opcode, pc);
         case 0xA: // format 12, load address
-            doTHUMB12LoadAddr(opcode, pc);
-            break;
+            return doTHUMB12LoadAddr(opcode, pc);
         case 0xB: // formats 13-14
-        {
-            if(opcode & (1 << 10)) // format 14, push/pop
-                doTHUMB14PushPop(opcode, pc);
-            else // format 13, add offset to SP
-                doTHUMB13SPOffset(opcode);
-            break;
-        }
+            return doTHUMB1314(opcode, pc);
         case 0xC: // format 15, multiple load/store
-            doTHUMB15MultiLoadStore(opcode);
-            break;
+            return doTHUMB15MultiLoadStore(opcode, pc);
         case 0xD: // formats 16-17
-            doTHUMB1617(opcode, pc);
-            break;
+            return doTHUMB1617(opcode, pc);
         case 0xE: // format 18, unconditional branch
-            doTHUMB18UncondBranch(opcode, pc);
-            break;
+            return doTHUMB18UncondBranch(opcode, pc);
         case 0xF: // format 19, long branch with link
-            doTHUMB19LongBranchLink(opcode, pc);
-            break;
+            return doTHUMB19LongBranchLink(opcode, pc);
     }
 
-    return mem.getAccessCycles(pc, 2, true);
+    __builtin_unreachable();
 }
 
 int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCondCode, bool carry)
@@ -984,7 +959,7 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCon
     return 1;
 }
 
-void AGBCPU::doTHUMB0102(uint16_t opcode)
+int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
 {
     auto instOp = opcode >> 11;
     auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
@@ -1076,9 +1051,10 @@ void AGBCPU::doTHUMB0102(uint16_t opcode)
                 | (carry ? Flag_C : 0);
     }
 
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB03(uint16_t opcode)
+int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
 {
     auto instOp = (opcode >> 11) & 0x3;
     auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
@@ -1117,9 +1093,21 @@ void AGBCPU::doTHUMB03(uint16_t opcode)
                 | (carry ? Flag_C : 0)
                 | (((dst ^ offset) & signBit) && ((dst ^ res) & signBit) ? Flag_V : 0);
     }
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB04ALU(uint16_t opcode)
+int AGBCPU::doTHUMB040506(uint16_t opcode, uint32_t &pc)
+{
+    if(opcode & (1 << 11)) // format 6, PC-relative load
+        return doTHUMB06PCRelLoad(opcode, pc);
+    else if(opcode & (1 << 10)) // format 5, Hi reg/branch exchange
+        return doTHUMB05HiReg(opcode, pc);
+    else // format 4, alu
+        return doTHUMB04ALU(opcode, pc);
+}
+
+int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
 {
     auto instOp = (opcode >> 6) & 0xF;
     auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
@@ -1257,9 +1245,11 @@ void AGBCPU::doTHUMB04ALU(uint16_t opcode)
 
     // cond code
     cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
 {
     auto op = (opcode >> 8) & 3;
     bool h1 = opcode & (1 << 7);
@@ -1307,9 +1297,11 @@ void AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
         default:
             assert(!"Invalid format 5 op!");
     }
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t pc)
+int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
 {
     auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
     uint8_t word = opcode & 0xFF;
@@ -1317,9 +1309,11 @@ void AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t pc)
     // pc + 4, bit 1 forced to 0
     auto base = (pc + 2) & ~2;
     loReg(dstReg) = readMem32(base + (word << 2));
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB0708(uint16_t opcode)
+int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
 {
     auto offReg = static_cast<Reg>((opcode >> 6) & 7);
     auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
@@ -1379,9 +1373,11 @@ void AGBCPU::doTHUMB0708(uint16_t opcode)
                 writeMem32(addr, loReg(dstReg));
         }
     }
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB09LoadStore(uint16_t opcode)
+int AGBCPU::doTHUMB09LoadStore(uint16_t opcode, uint32_t &pc)
 {
     bool isByte = opcode & (1 << 12);
     bool isLoad = opcode & (1 << 11);
@@ -1405,9 +1401,11 @@ void AGBCPU::doTHUMB09LoadStore(uint16_t opcode)
         else // STR
             writeMem32(base + (offset << 2), loReg(dstReg));
     }
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode)
+int AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t &pc)
 {
     bool isLoad = opcode & (1 << 11);
     auto offset = ((opcode >> 6) & 0x1F) << 1;
@@ -1418,9 +1416,11 @@ void AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode)
         loReg(dstReg) = readMem16(loReg(baseReg) + offset);
     else // STRH
         writeMem16(loReg(baseReg) + offset, loReg(dstReg));
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode)
+int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
 {
     bool isLoad = opcode & (1 << 11);
     auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
@@ -1430,9 +1430,11 @@ void AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode)
         loReg(dstReg) = readMem32(reg(Reg::SP) + word);
     else
         writeMem32(reg(Reg::SP) + word, loReg(dstReg));
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t pc)
+int AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t &pc)
 {
     bool isSP = opcode & (1 << 11);
     auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
@@ -1442,9 +1444,19 @@ void AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t pc)
         loReg(dstReg) = reg(Reg::SP) + word;
     else
         loReg(dstReg) = ((pc + 2) & ~2) + word; // + 4, bit 1 forced to 0
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB13SPOffset(uint16_t opcode)
+int AGBCPU::doTHUMB1314(uint16_t opcode, uint32_t &pc)
+{
+    if(opcode & (1 << 10)) // format 14, push/pop
+        return doTHUMB14PushPop(opcode, pc);
+    else // format 13, add offset to SP
+        return doTHUMB13SPOffset(opcode, pc);
+}
+
+int AGBCPU::doTHUMB13SPOffset(uint16_t opcode, uint32_t &pc)
 {
     bool isNeg = opcode & (1 << 7);
     int off = (opcode & 0x7F) << 2;
@@ -1453,9 +1465,11 @@ void AGBCPU::doTHUMB13SPOffset(uint16_t opcode)
         reg(Reg::SP) -= off;
     else
         reg(Reg::SP) += off;
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
 {
     bool isLoad = opcode & (1 << 11);
     bool pclr = opcode & (1 << 8); // store LR/load PC
@@ -1509,9 +1523,11 @@ void AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
         if(pclr)
             writeMem32(addr, reg(Reg::LR));
     }
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode)
+int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
 {
     bool isLoad = opcode & (1 << 11);
     auto baseReg = static_cast<Reg>((opcode >> 8) & 7);
@@ -1537,9 +1553,11 @@ void AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode)
 
     if(!isLoad || !baseInList)
         reg(baseReg) = addr;
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
 {
     auto cond = (opcode >> 8) & 0xF;
     if(cond == 0xF) // format 17, SWI
@@ -1605,18 +1623,22 @@ void AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
         if(condVal)
             pc += offset * 2 + 2 /*prefetch*/;
     }
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
 {
     uint32_t offset = (opcode & 0x7FF) << 1;
     if(offset & 0x800)
         offset |= 0xFFFFF000;
 
     pc += offset + 2 /*prefetch*/;
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
-void AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
 {
     bool high = opcode & (1 << 11);
     uint32_t offset = opcode & 0x7FF;
@@ -1634,6 +1656,8 @@ void AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
         pc = reg(Reg::LR) + (offset << 1);
         reg(Reg::LR) = temp | 1; // magic switch to thumb bit...
     }
+
+    return mem.getAccessCycles(pc, 2, true);
 }
 
 bool AGBCPU::serviceInterrupts()
