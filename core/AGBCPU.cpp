@@ -1594,22 +1594,17 @@ bool AGBCPU::serviceInterrupts()
     const auto flag = mem.readIOReg(IO_IF);
     const auto enabled = mem.readIOReg(IO_IE);
 
-    int servicable = enabled & flag;
-
-    for(int i = 0; servicable; i++, servicable >>= 1)
+    if(enabled & flag)
     {
-        if(servicable & 1)
-        {
-            //halted = false;
+        //halted = false;
 
-            auto ret = loReg(Reg::PC) + 4;
-            spsr[3/*irq*/] = cpsr;
+        auto ret = loReg(Reg::PC) + 4;
+        spsr[3/*irq*/] = cpsr;
 
-            loReg(Reg::PC) = 0x18;
-            cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x12; // irq mode
-            reg(Reg::LR) = ret;
-            return true;
-        }
+        loReg(Reg::PC) = 0x18;
+        cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x12; // irq mode
+        reg(Reg::LR) = ret;
+        return true;
     }
 
     return false;
