@@ -1402,7 +1402,7 @@ int AGBCPU::executeTHUMBInstruction()
             auto cond = (opcode >> 8) & 0xF;
             if(cond == 0xF) // format 17, SWI
             {
-                auto ret = pc;
+                auto ret = pc & ~1;
                 spsr[1/*svc*/] = cpsr;
 
                 pc = 8;
