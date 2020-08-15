@@ -833,669 +833,58 @@ int AGBCPU::executeTHUMBInstruction()
     {
         case 0x0: // format 1
         case 0x1: // formats 1-2
-        {
-            auto instOp = opcode >> 11;
-            auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
-            auto dstReg = static_cast<Reg>(opcode & 7);
-
-            if(instOp == 3) // format 2, add/sub
-            {
-                bool isImm = opcode & (1 << 10);
-                bool isSub = opcode & (1 << 9);
-                uint32_t op1 = loReg(srcReg), op2;
-
-                uint32_t res;
-
-                if(isImm)
-                    op2 = (opcode >> 6) & 7;
-                else
-                    op2 = loReg(static_cast<Reg>((opcode >> 6) & 7));
-
-                bool carry, overflow;
-
-                if(isSub)
-                {
-                    res = op1 - op2;
-                    carry = !(op2 > op1);
-                    overflow = ((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
-                }
-                else
-                {
-                    res = op1 + op2;
-                    carry = res < op1;
-                    overflow = !((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
-                }
-
-                loReg(dstReg) = res;
-
-                cpsr = (cpsr & 0x0FFFFFFF)
-                     | (res & signBit ? Flag_N : 0)
-                     | (res == 0 ? Flag_Z : 0)
-                     | (carry ? Flag_C : 0)
-                     | (overflow ? Flag_V : 0);
-            }
-            else // format 1, move shifted register
-            {
-                auto offset = (opcode >> 6) & 0x1F;
-                auto res = loReg(srcReg);
-
-                if(!offset && instOp) offset = 32; // shift by 0 is really 32 (except for LSL)
-
-                bool carry = cpsr & Flag_C;
-                switch(instOp)
-                {
-                    case 0: // LSL
-                        if(offset != 0)
-                        {
-                            carry = res & (1 << (32 - offset));
-                            res <<= offset;
-                        }
-                        break;
-                    case 1: // LSR
-                        carry = res & (1 << (offset - 1));
-                        if(offset == 32)
-                            res = 0;
-                        else
-                            res >>= offset;
-                        break;
-                    case 2: // ASR
-                    {
-                        auto sign = res & signBit;
-                        carry = res & (1 << (offset - 1));
-                        if(offset == 32)
-                            res = sign ? 0xFFFFFFFF : 0;
-                        else
-                        {
-                            res >>= offset;
-                            if(sign)
-                                res |= ~(0xFFFFFFFF >> offset);
-                        }
-                        break;
-                    }
-                    default:
-                        assert(!"Invalid format 1 shift type");
-                }
-
-                loReg(dstReg) = res;
-
-                cpsr = (cpsr & 0x1FFFFFFF)
-                        | (res & signBit ? Flag_N : 0)
-                        | (res == 0 ? Flag_Z : 0)
-                        | (carry ? Flag_C : 0);
-            }
-
+            doTHUMB0102(opcode);
             break;
-        }
         case 0x2: // format 3, mov/cmp immediate
         case 0x3: // format 3, add/sub immediate
-        {
-            auto instOp = (opcode >> 11) & 0x3;
-            auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
-            uint8_t offset = opcode & 0xFF;
-
-            auto dst = loReg(dstReg);
-
-            uint32_t res = 0;
-            bool carry = false;
-
-            switch(instOp)
-            {
-                case 0: // MOV
-                    loReg(dstReg) = offset;
-                    cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (offset == 0 ? Flag_Z : 0); // N not possible
-                    break;
-                case 1: // CMP
-                    res = dst - offset;
-                    carry = !(offset > dst);
-                    break;
-                case 2: // ADD
-                    loReg(dstReg) = res = dst + offset;
-                    carry = res < dst;
-                    break;
-                case 3: // SUB
-                    loReg(dstReg) = res = dst - offset;
-                    carry = !(offset > dst);
-                    break;
-            }
-
-            if(instOp) // not MOV
-            {
-                cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V))
-                     | ((res & signBit) ? Flag_V : 0)
-                     | (res == 0 ? Flag_Z : 0)
-                     | (carry ? Flag_C : 0)
-                     | (((dst ^ offset) & signBit) && ((dst ^ res) & signBit) ? Flag_V : 0);
-            }
+            doTHUMB03(opcode);
             break;
-        }
         case 0x4: // formats 4-6
         {
             if(opcode & (1 << 11)) // format 6, PC-relative load
-            {
-                auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
-                uint8_t word = opcode & 0xFF;
-
-                // pc + 4, bit 1 forced to 0
-                auto base = (pc + 2) & ~2;
-                loReg(dstReg) = readMem32(base + (word << 2));
-            }
+                doTHUMB06PCRelLoad(opcode, pc);
             else if(opcode & (1 << 10)) // format 5, Hi reg/branch exchange
-            {
-                auto op = (opcode >> 8) & 3;
-                bool h1 = opcode & (1 << 7);
-                bool h2 = opcode & (1 << 6);
-
-                auto srcReg = static_cast<Reg>(((opcode >> 3) & 7) + (h2 ? 8 : 0));
-                auto dstReg = static_cast<Reg>((opcode & 7) + (h1 ? 8 : 0));
-
-                auto src = reg(srcReg);
-
-                if(srcReg == Reg::PC)
-                    src += 2;
-
-                switch(op)
-                {
-                    case 0: // ADD
-                        reg(dstReg) += reg(srcReg);
-                        break;
-                    case 1: // CMP
-                    {
-                        auto dst = reg(dstReg);
-                        auto res = dst - src;
-                        bool carry = !(src > dst);
-
-                        cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V))
-                             | ((res & signBit) ? Flag_V : 0)
-                             | (res == 0 ? Flag_Z : 0)
-                             | (carry ? Flag_C : 0)
-                             | (((dst ^ src) & signBit) && ((dst ^ res) & signBit) ? Flag_V : 0);
-                        break;
-                    }
-                    case 2: // MOV
-                        reg(dstReg) = src;
-                        break;
-                    case 3: // BX
-                    {
-                        auto newPC = src;
-                        if(!(newPC & 1))
-                            cpsr &= ~Flag_T;
-
-                        pc = newPC & 0xFFFFFFFE;
-                        break;
-                    }
-
-                    default:
-                        assert(!"Invalid format 5 op!");
-                }
-            }
+                doTHUMB05HiReg(opcode, pc);
             else // format 4, alu
-            {
-                auto instOp = (opcode >> 6) & 0xF;
-                auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
-                auto dstReg = static_cast<Reg>(opcode & 7);
-
-                auto op1 = loReg(dstReg);
-                auto op2 = loReg(srcReg);
-
-                uint32_t res;
-                bool carry = cpsr & Flag_C, overflow = cpsr & Flag_V; // preserved if logical op
-
-                switch(instOp)
-                {
-                    case 0x0: // AND
-                        reg(dstReg) = res = op1 & op2;
-                        break;
-                    case 0x1: // EOR
-                        reg(dstReg) = res = op1 ^ op2;
-                        break;
-                    case 0x2: // LSL
-                        if(op2 >= 32)
-                        {
-                            carry = op2 == 32 ? (op1 & 1) : 0;
-                            reg(dstReg) = res = 0;
-                        }
-                        else if(op2)
-                        {
-                            carry = op1 & (1 << (32 - op2));
-                            reg(dstReg) = res = op1 << op2;
-                        }
-                        else
-                            res = op1;
-                        break;
-                    case 0x3: // LSR
-                        if(op2 >= 32)
-                        {
-                            carry = op2 == 32 ? (op1 & (1 << 31)) : 0;
-                            reg(dstReg) = res = 0;
-                        }
-                        else if(op2)
-                        {
-                            carry = op1 & (1 << (op2 - 1));
-                            reg(dstReg) = res = op1 >> op2;
-                        }
-                        else
-                            res = op1;
-                        break;
-                    case 0x4: // ASR
-                    {
-                        auto sign = op1 & signBit;
-                        if(op2 >= 32)
-                        {
-                            carry = sign;
-                            reg(dstReg) = res = sign ? 0xFFFFFFFF : 0;
-                        }
-                        else if(op2)
-                        {
-                            carry = op1 & (1 << (op2 - 1));
-                            res = op1 >> op2;
-
-                            if(sign)
-                                res |= ~(0xFFFFFFFF >> op2);
-
-                            reg(dstReg) = res;
-                        }
-                        else
-                            res = op1;
-
-                        break;
-                    }
-                    case 0x5: // ADC
-                    {
-                        int c = carry ? 1 : 0;
-                        reg(dstReg) = res = op1 + op2 + c;
-                        carry = res < op1 || (res == op1 && c);
-                        overflow = !((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
-
-                        break;
-                    }
-                    case 0x6: // SBC
-                    {
-                        int c = carry ? 1 : 0;
-                        res = op1 - op2 + c - 1;
-                        carry = !(op2 > op1 || (op2 == op1 && !c));
-                        overflow = ((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
-                        break;
-                    }
-                    case 0x7: // ROR
-                    {
-                        int shift = op2 & 0x1F;
-                                            
-                        if(op2)
-                            carry = op1 & (1 << (shift - 1));
-
-                        reg(dstReg) = res = (op1 >> shift) | (op1 << (32 - shift));
-                        break;
-                    }
-                    case 0x8: // TST
-                        res = op1 & op2;
-                        break;
-                    case 0x9: // NEG
-                    {
-                        reg(dstReg) = res = 0 - op2;
-                        carry = !(op2 > 0); //?
-                        overflow = (op2 & signBit) && (res & signBit);
-                        break;
-                    }
-                    case 0xA: // CMP
-                        res = op1 - op2;
-                        carry = !(op2 > op1);
-                        overflow = ((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit); // different signs and sign changed
-                        break;
-                    case 0xB: // CMN
-                        res = op1 + op2;
-                        carry = res < op1;
-                        overflow = !((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit); // same signs and sign changed
-                        break;
-                    case 0xC: // ORR
-                        reg(dstReg) = res = op1 | op2;
-                        break;
-                    case 0xD: // MUL
-                        // carry is meaningless, v is unaffected
-                        reg(dstReg) = res = op1 * op2;
-                        break;
-                    case 0xE: // BIC
-                        reg(dstReg) = res = op1 & ~op2;
-                        break;
-                    case 0xF: // MVN
-                        reg(dstReg) = res = ~op2;
-                        break;
-
-                    default:
-                        assert(!"Invalid format 4 op!");
-                }
-
-                // cond code
-                cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
-            }
-            
+                doTHUMB04ALU(opcode);
             break;
         }
         case 0x5: // formats 7-8
-        {
-            auto offReg = static_cast<Reg>((opcode >> 6) & 7);
-            auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
-            auto dstReg = static_cast<Reg>(opcode & 7);
-
-            auto addr = loReg(baseReg) + loReg(offReg);
-
-            if(opcode & (1 << 9)) // format 8, load/store sign-extended byte/halfword
-            {
-                bool hFlag = opcode & (1 << 11);
-                bool signEx = opcode & (1 << 10);
-
-                if(signEx)
-                {
-                    if(hFlag && !(addr & 1)) // LDRSH, (misaligned gets treated as a byte!)
-                    {
-                        auto val = readMem16(addr);
-                        if(val & 0x8000)
-                            loReg(dstReg) = val | 0xFFFF0000;
-                        else
-                            loReg(dstReg) = val;
-                    }
-                    else // LDRSB
-                    {
-                        auto val = readMem8(addr);
-                        if(val & 0x80)
-                            loReg(dstReg) = val | 0xFFFFFF00;
-                        else
-                            loReg(dstReg) = val;
-                    }
-                }
-                else
-                {
-                    if(hFlag) // LDRH
-                        loReg(dstReg) = readMem16(addr);
-                    else // STRH
-                        writeMem16(addr, loReg(dstReg));
-                }
-            }
-            else // format 7, load/store with reg offset
-            {
-                bool isLoad = opcode & (1 << 11);
-                bool isByte = opcode & (1 << 10);
-                
-                if(isLoad)
-                {
-                    if(isByte) // LDRB
-                        loReg(dstReg) = readMem8(addr);
-                    else // LDR
-                        loReg(dstReg) = readMem32(addr);
-                }
-                else
-                {
-                    if(isByte) // STRB
-                        writeMem8(addr, loReg(dstReg));
-                    else // STR
-                        writeMem32(addr, loReg(dstReg));
-                }
-            }
-            
+            doTHUMB0708(opcode);
             break;
-        }
         case 0x6: // format 9, load/store with imm offset
         case 0x7:
-        {
-            bool isByte = opcode & (1 << 12);
-            bool isLoad = opcode & (1 << 11);
-            auto offset = ((opcode >> 6) & 0x1F);
-            auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
-            auto dstReg = static_cast<Reg>(opcode & 7);
-
-            auto base = loReg(baseReg);
-
-            if(isLoad)
-            {
-                if(isByte) // LDRB
-                    loReg(dstReg) = readMem8(base + offset);
-                else // LDR
-                    loReg(dstReg) = readMem32(base + (offset << 2));
-            }
-            else
-            {
-                if(isByte) // STRB
-                    writeMem8(base + offset, loReg(dstReg));
-                else // STR
-                    writeMem32(base + (offset << 2), loReg(dstReg));
-            }
+            doTHUMB09LoadStore(opcode);
             break;
-        }
         case 0x8: // format 10, load/store halfword
-        {
-            bool isLoad = opcode & (1 << 11);
-            auto offset = ((opcode >> 6) & 0x1F) << 1;
-            auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
-            auto dstReg = static_cast<Reg>(opcode & 7);
-
-            if(isLoad) // LDRH
-                loReg(dstReg) = readMem16(loReg(baseReg) + offset);
-            else // STRH
-                writeMem16(loReg(baseReg) + offset, loReg(dstReg));
-
+            doTHUMB10LoadStoreHalf(opcode);
             break;
-        }
         case 0x9: // format 11, SP-relative load/store
-        {
-            bool isLoad = opcode & (1 << 11);
-            auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
-            auto word = (opcode & 0xFF) << 2;
-
-            if(isLoad)
-                loReg(dstReg) = readMem32(reg(Reg::SP) + word);
-            else
-                writeMem32(reg(Reg::SP) + word, loReg(dstReg));
-
+            doTHUMB11SPRelLoadStore(opcode);
             break;
-        }
         case 0xA: // format 12, load address
-        {
-            bool isSP = opcode & (1 << 11);
-            auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
-            auto word = (opcode & 0xFF) << 2;
-
-            if(isSP)
-                loReg(dstReg) = reg(Reg::SP) + word;
-            else
-                loReg(dstReg) = ((pc + 2) & ~2) + word; // + 4, bit 1 forced to 0
-
+            doTHUMB12LoadAddr(opcode, pc);
             break;
-        }
         case 0xB: // formats 13-14
         {
             if(opcode & (1 << 10)) // format 14, push/pop
-            {
-                bool isLoad = opcode & (1 << 11);
-                bool pclr = opcode & (1 << 8); // store LR/load PC
-                uint8_t regList = opcode & 0xFF;
-
-                // count regs
-                int numRegs = pclr ? 1 : 0;
-
-                for(uint8_t t = regList; t; t >>= 1)
-                {
-                    if(t & 1)
-                        numRegs++;
-                }
-
-                if(isLoad) // POP
-                {
-                    auto addr = reg(Reg::SP);
-
-                    int i = 0;
-                    for(; regList; regList >>= 1, i++)
-                    {
-                        if(regList & 1)
-                        {
-                            regs[i] = readMem32(addr);
-                            addr += 4;
-                        }
-                    }
-                    if(pclr)
-                    {
-                        pc = readMem32(addr) & ~1; /*ignore thumb bit*/
-                        addr += 4;
-                    }
-
-                    reg(Reg::SP) = addr;
-                }
-                else // PUSH
-                {
-                    auto addr = reg(Reg::SP) - numRegs * 4;
-                    reg(Reg::SP) = addr;
-
-                    int i = 0;
-                    for(; regList; regList >>= 1, i++)
-                    {
-                        if(regList & 1)
-                        {
-                            writeMem32(addr, regs[i]);
-                            addr += 4;
-                        }
-                    }
-                    
-                    if(pclr)
-                        writeMem32(addr, reg(Reg::LR));
-                }
-            }
+                doTHUMB14PushPop(opcode, pc);
             else // format 13, add offset to SP
-            {
-                bool isNeg = opcode & (1 << 7);
-                int off = (opcode & 0x7F) << 2;
-
-                if(isNeg)
-                    reg(Reg::SP) -= off;
-                else
-                    reg(Reg::SP) += off;
-            }
+                doTHUMB13SPOffset(opcode);
             break;
         }
         case 0xC: // format 15, multiple load/store
-        {
-            bool isLoad = opcode & (1 << 11);
-            auto baseReg = static_cast<Reg>((opcode >> 8) & 7);
-            uint8_t regList = opcode & 0xFF;
-
-            auto addr = loReg(baseReg) & ~3;
-
-            bool baseInList = regList & (1 << static_cast<int>(baseReg));
-
-            int i = 0;
-            for(; regList; regList >>= 1, i++)
-            {
-                if(!(regList & 1))
-                    continue;
-
-                if(isLoad)
-                    regs[i] = readMem32(addr);
-                else
-                    writeMem32(addr, regs[i]);
-
-                addr += 4;
-            }
-
-            if(!isLoad || !baseInList)
-                reg(baseReg) = addr;
+            doTHUMB15MultiLoadStore(opcode);
             break;
-        }
         case 0xD: // formats 16-17
-        {
-            auto cond = (opcode >> 8) & 0xF;
-            if(cond == 0xF) // format 17, SWI
-            {
-                auto ret = pc & ~1;
-                spsr[1/*svc*/] = cpsr;
-
-                pc = 8;
-                cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x13; //supervisor mode
-                reg(Reg::LR) = ret;
-            }
-            else // format 16, conditional branch
-            {
-                int offset = static_cast<int8_t>(opcode & 0xFF);
-                bool condVal = false;
-                switch(cond)
-                {
-                    case 0x0: // BEQ
-                        condVal = cpsr & Flag_Z;
-                        break;
-                    case 0x1: // BNE
-                        condVal = !(cpsr & Flag_Z);
-                        break;
-                    case 0x2: // BCS
-                        condVal = cpsr & Flag_C;
-                        break;
-                    case 0x3: // BCC
-                        condVal = !(cpsr & Flag_C);
-                        break;
-                    case 0x4: // BMI
-                        condVal = cpsr & Flag_N;
-                        break;
-                    case 0x5: // BPL
-                        condVal = !(cpsr & Flag_N);
-                        break;
-                    // BVS BVC
-                    case 0x8: // BHI
-                        condVal = (cpsr & Flag_C) && !(cpsr & Flag_Z);
-                        break;
-                    case 0x9: // BLS
-                        condVal = !(cpsr & Flag_C) || (cpsr & Flag_Z);
-                        break;
-                    case 0xA: // BGE
-                        condVal = !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
-                        break;
-                    case 0xB: // BLT
-                        condVal = !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
-                        break;
-                    case 0xC: // BGT
-                        condVal = !(cpsr & Flag_Z) && !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
-                        break;
-                    case 0xD: // BLE
-                        condVal = (cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
-                        break;
-                    // E undefined
-                    // F is SWI
-
-                    default:
-                        printf("THUMB cond %x @%x\n", cond, pc - 2);
-                        exit(0);
-                }
-
-                if(condVal)
-                    pc += offset * 2 + 2 /*prefetch*/;
-            }
+            doTHUMB1617(opcode, pc);
             break;
-        }
         case 0xE: // format 18, unconditional branch
-        {
-            uint32_t offset = (opcode & 0x7FF) << 1;
-            if(offset & 0x800)
-                offset |= 0xFFFFF000;
-
-            pc += offset + 2 /*prefetch*/;
-
+            doTHUMB18UncondBranch(opcode, pc);
             break;
-        }
         case 0xF: // format 19, long branch with link
-        {
-            bool high = opcode & (1 << 11);
-            uint32_t offset = opcode & 0x7FF;
-
-            if(!high) // first half
-            {
-                offset <<= 12;
-                if(offset & (1 << 22))
-                    offset |= 0xFF800000; //sign extend
-                reg(Reg::LR) = pc + 2 + offset;
-            }
-            else // second half
-            {
-                auto temp = pc;
-                pc = reg(Reg::LR) + (offset << 1);
-                reg(Reg::LR) = temp | 1; // magic switch to thumb bit...
-            }
-
+            doTHUMB19LongBranchLink(opcode, pc);
             break;
-        }
     }
 
     return mem.getAccessCycles(pc, 2, true);
@@ -1593,6 +982,658 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCon
     }
 
     return 1;
+}
+
+void AGBCPU::doTHUMB0102(uint16_t opcode)
+{
+    auto instOp = opcode >> 11;
+    auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    if(instOp == 3) // format 2, add/sub
+    {
+        bool isImm = opcode & (1 << 10);
+        bool isSub = opcode & (1 << 9);
+        uint32_t op1 = loReg(srcReg), op2;
+
+        uint32_t res;
+
+        if(isImm)
+            op2 = (opcode >> 6) & 7;
+        else
+            op2 = loReg(static_cast<Reg>((opcode >> 6) & 7));
+
+        bool carry, overflow;
+
+        if(isSub)
+        {
+            res = op1 - op2;
+            carry = !(op2 > op1);
+            overflow = ((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
+        }
+        else
+        {
+            res = op1 + op2;
+            carry = res < op1;
+            overflow = !((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
+        }
+
+        loReg(dstReg) = res;
+
+        cpsr = (cpsr & 0x0FFFFFFF)
+                | (res & signBit ? Flag_N : 0)
+                | (res == 0 ? Flag_Z : 0)
+                | (carry ? Flag_C : 0)
+                | (overflow ? Flag_V : 0);
+    }
+    else // format 1, move shifted register
+    {
+        auto offset = (opcode >> 6) & 0x1F;
+        auto res = loReg(srcReg);
+
+        if(!offset && instOp) offset = 32; // shift by 0 is really 32 (except for LSL)
+
+        bool carry = cpsr & Flag_C;
+        switch(instOp)
+        {
+            case 0: // LSL
+                if(offset != 0)
+                {
+                    carry = res & (1 << (32 - offset));
+                    res <<= offset;
+                }
+                break;
+            case 1: // LSR
+                carry = res & (1 << (offset - 1));
+                if(offset == 32)
+                    res = 0;
+                else
+                    res >>= offset;
+                break;
+            case 2: // ASR
+            {
+                auto sign = res & signBit;
+                carry = res & (1 << (offset - 1));
+                if(offset == 32)
+                    res = sign ? 0xFFFFFFFF : 0;
+                else
+                {
+                    res >>= offset;
+                    if(sign)
+                        res |= ~(0xFFFFFFFF >> offset);
+                }
+                break;
+            }
+            default:
+                assert(!"Invalid format 1 shift type");
+        }
+
+        loReg(dstReg) = res;
+
+        cpsr = (cpsr & 0x1FFFFFFF)
+                | (res & signBit ? Flag_N : 0)
+                | (res == 0 ? Flag_Z : 0)
+                | (carry ? Flag_C : 0);
+    }
+
+}
+
+void AGBCPU::doTHUMB03(uint16_t opcode)
+{
+    auto instOp = (opcode >> 11) & 0x3;
+    auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
+    uint8_t offset = opcode & 0xFF;
+
+    auto dst = loReg(dstReg);
+
+    uint32_t res = 0;
+    bool carry = false;
+
+    switch(instOp)
+    {
+        case 0: // MOV
+            loReg(dstReg) = offset;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (offset == 0 ? Flag_Z : 0); // N not possible
+            break;
+        case 1: // CMP
+            res = dst - offset;
+            carry = !(offset > dst);
+            break;
+        case 2: // ADD
+            loReg(dstReg) = res = dst + offset;
+            carry = res < dst;
+            break;
+        case 3: // SUB
+            loReg(dstReg) = res = dst - offset;
+            carry = !(offset > dst);
+            break;
+    }
+
+    if(instOp) // not MOV
+    {
+        cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V))
+                | ((res & signBit) ? Flag_V : 0)
+                | (res == 0 ? Flag_Z : 0)
+                | (carry ? Flag_C : 0)
+                | (((dst ^ offset) & signBit) && ((dst ^ res) & signBit) ? Flag_V : 0);
+    }
+}
+
+void AGBCPU::doTHUMB04ALU(uint16_t opcode)
+{
+    auto instOp = (opcode >> 6) & 0xF;
+    auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    auto op1 = loReg(dstReg);
+    auto op2 = loReg(srcReg);
+
+    uint32_t res;
+    bool carry = cpsr & Flag_C, overflow = cpsr & Flag_V; // preserved if logical op
+
+    switch(instOp)
+    {
+        case 0x0: // AND
+            reg(dstReg) = res = op1 & op2;
+            break;
+        case 0x1: // EOR
+            reg(dstReg) = res = op1 ^ op2;
+            break;
+        case 0x2: // LSL
+            if(op2 >= 32)
+            {
+                carry = op2 == 32 ? (op1 & 1) : 0;
+                reg(dstReg) = res = 0;
+            }
+            else if(op2)
+            {
+                carry = op1 & (1 << (32 - op2));
+                reg(dstReg) = res = op1 << op2;
+            }
+            else
+                res = op1;
+            break;
+        case 0x3: // LSR
+            if(op2 >= 32)
+            {
+                carry = op2 == 32 ? (op1 & (1 << 31)) : 0;
+                reg(dstReg) = res = 0;
+            }
+            else if(op2)
+            {
+                carry = op1 & (1 << (op2 - 1));
+                reg(dstReg) = res = op1 >> op2;
+            }
+            else
+                res = op1;
+            break;
+        case 0x4: // ASR
+        {
+            auto sign = op1 & signBit;
+            if(op2 >= 32)
+            {
+                carry = sign;
+                reg(dstReg) = res = sign ? 0xFFFFFFFF : 0;
+            }
+            else if(op2)
+            {
+                carry = op1 & (1 << (op2 - 1));
+                res = op1 >> op2;
+
+                if(sign)
+                    res |= ~(0xFFFFFFFF >> op2);
+
+                reg(dstReg) = res;
+            }
+            else
+                res = op1;
+
+            break;
+        }
+        case 0x5: // ADC
+        {
+            int c = carry ? 1 : 0;
+            reg(dstReg) = res = op1 + op2 + c;
+            carry = res < op1 || (res == op1 && c);
+            overflow = !((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
+
+            break;
+        }
+        case 0x6: // SBC
+        {
+            int c = carry ? 1 : 0;
+            res = op1 - op2 + c - 1;
+            carry = !(op2 > op1 || (op2 == op1 && !c));
+            overflow = ((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
+            break;
+        }
+        case 0x7: // ROR
+        {
+            int shift = op2 & 0x1F;
+
+            if(op2)
+                carry = op1 & (1 << (shift - 1));
+
+            reg(dstReg) = res = (op1 >> shift) | (op1 << (32 - shift));
+            break;
+        }
+        case 0x8: // TST
+            res = op1 & op2;
+            break;
+        case 0x9: // NEG
+        {
+            reg(dstReg) = res = 0 - op2;
+            carry = !(op2 > 0); //?
+            overflow = (op2 & signBit) && (res & signBit);
+            break;
+        }
+        case 0xA: // CMP
+            res = op1 - op2;
+            carry = !(op2 > op1);
+            overflow = ((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit); // different signs and sign changed
+            break;
+        case 0xB: // CMN
+            res = op1 + op2;
+            carry = res < op1;
+            overflow = !((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit); // same signs and sign changed
+            break;
+        case 0xC: // ORR
+            reg(dstReg) = res = op1 | op2;
+            break;
+        case 0xD: // MUL
+            // carry is meaningless, v is unaffected
+            reg(dstReg) = res = op1 * op2;
+            break;
+        case 0xE: // BIC
+            reg(dstReg) = res = op1 & ~op2;
+            break;
+        case 0xF: // MVN
+            reg(dstReg) = res = ~op2;
+            break;
+
+        default:
+            assert(!"Invalid format 4 op!");
+    }
+
+    // cond code
+    cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
+}
+
+void AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
+{
+    auto op = (opcode >> 8) & 3;
+    bool h1 = opcode & (1 << 7);
+    bool h2 = opcode & (1 << 6);
+
+    auto srcReg = static_cast<Reg>(((opcode >> 3) & 7) + (h2 ? 8 : 0));
+    auto dstReg = static_cast<Reg>((opcode & 7) + (h1 ? 8 : 0));
+
+    auto src = reg(srcReg);
+
+    if(srcReg == Reg::PC)
+        src += 2;
+
+    switch(op)
+    {
+        case 0: // ADD
+            reg(dstReg) += reg(srcReg);
+            break;
+        case 1: // CMP
+        {
+            auto dst = reg(dstReg);
+            auto res = dst - src;
+            bool carry = !(src > dst);
+
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V))
+                    | ((res & signBit) ? Flag_V : 0)
+                    | (res == 0 ? Flag_Z : 0)
+                    | (carry ? Flag_C : 0)
+                    | (((dst ^ src) & signBit) && ((dst ^ res) & signBit) ? Flag_V : 0);
+            break;
+        }
+        case 2: // MOV
+            reg(dstReg) = src;
+            break;
+        case 3: // BX
+        {
+            auto newPC = src;
+            if(!(newPC & 1))
+                cpsr &= ~Flag_T;
+
+            pc = newPC & 0xFFFFFFFE;
+            break;
+        }
+
+        default:
+            assert(!"Invalid format 5 op!");
+    }
+}
+
+void AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t pc)
+{
+    auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
+    uint8_t word = opcode & 0xFF;
+
+    // pc + 4, bit 1 forced to 0
+    auto base = (pc + 2) & ~2;
+    loReg(dstReg) = readMem32(base + (word << 2));
+}
+
+void AGBCPU::doTHUMB0708(uint16_t opcode)
+{
+    auto offReg = static_cast<Reg>((opcode >> 6) & 7);
+    auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    auto addr = loReg(baseReg) + loReg(offReg);
+
+    if(opcode & (1 << 9)) // format 8, load/store sign-extended byte/halfword
+    {
+        bool hFlag = opcode & (1 << 11);
+        bool signEx = opcode & (1 << 10);
+
+        if(signEx)
+        {
+            if(hFlag && !(addr & 1)) // LDRSH, (misaligned gets treated as a byte!)
+            {
+                auto val = readMem16(addr);
+                if(val & 0x8000)
+                    loReg(dstReg) = val | 0xFFFF0000;
+                else
+                    loReg(dstReg) = val;
+            }
+            else // LDRSB
+            {
+                auto val = readMem8(addr);
+                if(val & 0x80)
+                    loReg(dstReg) = val | 0xFFFFFF00;
+                else
+                    loReg(dstReg) = val;
+            }
+        }
+        else
+        {
+            if(hFlag) // LDRH
+                loReg(dstReg) = readMem16(addr);
+            else // STRH
+                writeMem16(addr, loReg(dstReg));
+        }
+    }
+    else // format 7, load/store with reg offset
+    {
+        bool isLoad = opcode & (1 << 11);
+        bool isByte = opcode & (1 << 10);
+
+        if(isLoad)
+        {
+            if(isByte) // LDRB
+                loReg(dstReg) = readMem8(addr);
+            else // LDR
+                loReg(dstReg) = readMem32(addr);
+        }
+        else
+        {
+            if(isByte) // STRB
+                writeMem8(addr, loReg(dstReg));
+            else // STR
+                writeMem32(addr, loReg(dstReg));
+        }
+    }
+}
+
+void AGBCPU::doTHUMB09LoadStore(uint16_t opcode)
+{
+    bool isByte = opcode & (1 << 12);
+    bool isLoad = opcode & (1 << 11);
+    auto offset = ((opcode >> 6) & 0x1F);
+    auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    auto base = loReg(baseReg);
+
+    if(isLoad)
+    {
+        if(isByte) // LDRB
+            loReg(dstReg) = readMem8(base + offset);
+        else // LDR
+            loReg(dstReg) = readMem32(base + (offset << 2));
+    }
+    else
+    {
+        if(isByte) // STRB
+            writeMem8(base + offset, loReg(dstReg));
+        else // STR
+            writeMem32(base + (offset << 2), loReg(dstReg));
+    }
+}
+
+void AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode)
+{
+    bool isLoad = opcode & (1 << 11);
+    auto offset = ((opcode >> 6) & 0x1F) << 1;
+    auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    if(isLoad) // LDRH
+        loReg(dstReg) = readMem16(loReg(baseReg) + offset);
+    else // STRH
+        writeMem16(loReg(baseReg) + offset, loReg(dstReg));
+}
+
+void AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode)
+{
+    bool isLoad = opcode & (1 << 11);
+    auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
+    auto word = (opcode & 0xFF) << 2;
+
+    if(isLoad)
+        loReg(dstReg) = readMem32(reg(Reg::SP) + word);
+    else
+        writeMem32(reg(Reg::SP) + word, loReg(dstReg));
+}
+
+void AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t pc)
+{
+    bool isSP = opcode & (1 << 11);
+    auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
+    auto word = (opcode & 0xFF) << 2;
+
+    if(isSP)
+        loReg(dstReg) = reg(Reg::SP) + word;
+    else
+        loReg(dstReg) = ((pc + 2) & ~2) + word; // + 4, bit 1 forced to 0
+}
+
+void AGBCPU::doTHUMB13SPOffset(uint16_t opcode)
+{
+    bool isNeg = opcode & (1 << 7);
+    int off = (opcode & 0x7F) << 2;
+
+    if(isNeg)
+        reg(Reg::SP) -= off;
+    else
+        reg(Reg::SP) += off;
+}
+
+void AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
+{
+    bool isLoad = opcode & (1 << 11);
+    bool pclr = opcode & (1 << 8); // store LR/load PC
+    uint8_t regList = opcode & 0xFF;
+
+    // count regs
+    int numRegs = pclr ? 1 : 0;
+
+    for(uint8_t t = regList; t; t >>= 1)
+    {
+        if(t & 1)
+            numRegs++;
+    }
+
+    if(isLoad) // POP
+    {
+        auto addr = reg(Reg::SP);
+
+        int i = 0;
+        for(; regList; regList >>= 1, i++)
+        {
+            if(regList & 1)
+            {
+                regs[i] = readMem32(addr);
+                addr += 4;
+            }
+        }
+        if(pclr)
+        {
+            pc = readMem32(addr) & ~1; /*ignore thumb bit*/
+            addr += 4;
+        }
+
+        reg(Reg::SP) = addr;
+    }
+    else // PUSH
+    {
+        auto addr = reg(Reg::SP) - numRegs * 4;
+        reg(Reg::SP) = addr;
+
+        int i = 0;
+        for(; regList; regList >>= 1, i++)
+        {
+            if(regList & 1)
+            {
+                writeMem32(addr, regs[i]);
+                addr += 4;
+            }
+        }
+
+        if(pclr)
+            writeMem32(addr, reg(Reg::LR));
+    }
+}
+
+void AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode)
+{
+    bool isLoad = opcode & (1 << 11);
+    auto baseReg = static_cast<Reg>((opcode >> 8) & 7);
+    uint8_t regList = opcode & 0xFF;
+
+    auto addr = loReg(baseReg) & ~3;
+
+    bool baseInList = regList & (1 << static_cast<int>(baseReg));
+
+    int i = 0;
+    for(; regList; regList >>= 1, i++)
+    {
+        if(!(regList & 1))
+            continue;
+
+        if(isLoad)
+            regs[i] = readMem32(addr);
+        else
+            writeMem32(addr, regs[i]);
+
+        addr += 4;
+    }
+
+    if(!isLoad || !baseInList)
+        reg(baseReg) = addr;
+}
+
+void AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
+{
+    auto cond = (opcode >> 8) & 0xF;
+    if(cond == 0xF) // format 17, SWI
+    {
+        auto ret = pc & ~1;
+        spsr[1/*svc*/] = cpsr;
+
+        pc = 8;
+        cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x13; //supervisor mode
+        reg(Reg::LR) = ret;
+    }
+    else // format 16, conditional branch
+    {
+        int offset = static_cast<int8_t>(opcode & 0xFF);
+        bool condVal = false;
+        switch(cond)
+        {
+            case 0x0: // BEQ
+                condVal = cpsr & Flag_Z;
+                break;
+            case 0x1: // BNE
+                condVal = !(cpsr & Flag_Z);
+                break;
+            case 0x2: // BCS
+                condVal = cpsr & Flag_C;
+                break;
+            case 0x3: // BCC
+                condVal = !(cpsr & Flag_C);
+                break;
+            case 0x4: // BMI
+                condVal = cpsr & Flag_N;
+                break;
+            case 0x5: // BPL
+                condVal = !(cpsr & Flag_N);
+                break;
+            // BVS BVC
+            case 0x8: // BHI
+                condVal = (cpsr & Flag_C) && !(cpsr & Flag_Z);
+                break;
+            case 0x9: // BLS
+                condVal = !(cpsr & Flag_C) || (cpsr & Flag_Z);
+                break;
+            case 0xA: // BGE
+                condVal = !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
+                break;
+            case 0xB: // BLT
+                condVal = !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
+                break;
+            case 0xC: // BGT
+                condVal = !(cpsr & Flag_Z) && !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
+                break;
+            case 0xD: // BLE
+                condVal = (cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
+                break;
+            // E undefined
+            // F is SWI
+
+            default:
+                printf("THUMB cond %x @%x\n", cond, pc - 2);
+                exit(0);
+        }
+
+        if(condVal)
+            pc += offset * 2 + 2 /*prefetch*/;
+    }
+}
+
+void AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
+{
+    uint32_t offset = (opcode & 0x7FF) << 1;
+    if(offset & 0x800)
+        offset |= 0xFFFFF000;
+
+    pc += offset + 2 /*prefetch*/;
+}
+
+void AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
+{
+    bool high = opcode & (1 << 11);
+    uint32_t offset = opcode & 0x7FF;
+
+    if(!high) // first half
+    {
+        offset <<= 12;
+        if(offset & (1 << 22))
+            offset |= 0xFF800000; //sign extend
+        reg(Reg::LR) = pc + 2 + offset;
+    }
+    else // second half
+    {
+        auto temp = pc;
+        pc = reg(Reg::LR) + (offset << 1);
+        reg(Reg::LR) = temp | 1; // magic switch to thumb bit...
+    }
 }
 
 bool AGBCPU::serviceInterrupts()

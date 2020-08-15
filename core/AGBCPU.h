@@ -173,6 +173,23 @@ private:
 
     int doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCondCode, bool carry);
 
+    void doTHUMB0102(uint16_t opcode);
+    void doTHUMB03(uint16_t opcode);
+    void doTHUMB04ALU(uint16_t opcode);
+    void doTHUMB05HiReg(uint16_t opcode, uint32_t &pc);
+    void doTHUMB06PCRelLoad(uint16_t opcode, uint32_t pc);
+    void doTHUMB0708(uint16_t opcode);
+    void doTHUMB09LoadStore(uint16_t opcode);
+    void doTHUMB10LoadStoreHalf(uint16_t opcode);
+    void doTHUMB11SPRelLoadStore(uint16_t opcode);
+    void doTHUMB12LoadAddr(uint16_t opcode, uint32_t pc);
+    void doTHUMB13SPOffset(uint16_t opcode);
+    void doTHUMB14PushPop(uint16_t opcode, uint32_t &pc);
+    void doTHUMB15MultiLoadStore(uint16_t opcode);
+    void doTHUMB1617(uint16_t opcode, uint32_t &pc);
+    void doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc);
+    void doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc);
+
     bool serviceInterrupts();
 
     int dmaTransfer(int channel);
