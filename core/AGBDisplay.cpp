@@ -258,6 +258,9 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         if(((spriteX + spriteW) & 0x1FF) < spriteX)
             spriteX -= 512;
 
+        if(spriteX >= 240)
+            continue;
+
         // calc offsets
         auto startTile = attr2 & Attr2_Index;
         int sx = std::max(0, -spriteX);
