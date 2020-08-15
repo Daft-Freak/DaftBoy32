@@ -1063,7 +1063,7 @@ int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
     auto dst = loReg(dstReg);
 
     uint32_t res = 0;
-    bool carry = false;
+    bool carry, overflow;
 
     switch(instOp)
     {
@@ -1074,24 +1074,29 @@ int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
         case 1: // CMP
             res = dst - offset;
             carry = !(offset > dst);
+            overflow = (dst & signBit) && ((dst ^ res) & signBit); // offset cannot be negative
             break;
         case 2: // ADD
             loReg(dstReg) = res = dst + offset;
             carry = res < dst;
+            overflow = !(dst & signBit) && ((dst ^ res) & signBit);
             break;
         case 3: // SUB
             loReg(dstReg) = res = dst - offset;
             carry = !(offset > dst);
+            overflow = (dst & signBit) && ((dst ^ res) & signBit);
             break;
+        default:
+            __builtin_unreachable();
     }
 
     if(instOp) // not MOV
     {
         cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V))
-                | ((res & signBit) ? Flag_V : 0)
+                | ((res & signBit) ? Flag_N : 0)
                 | (res == 0 ? Flag_Z : 0)
                 | (carry ? Flag_C : 0)
-                | (((dst ^ offset) & signBit) && ((dst ^ res) & signBit) ? Flag_V : 0);
+                | (overflow ? Flag_V : 0);
     }
 
     return mem.getAccessCycles(pc, 2, true);
