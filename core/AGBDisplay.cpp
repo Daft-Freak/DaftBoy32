@@ -280,14 +280,26 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         if(attr0 & Attr0_SinglePal)
         {
             // 8bit tiles
-            *out = 0xF000;
+            for(int stx = sx >> 3; stx < spriteW >> 3 && out != outEnd; stx++)
+            {
+                auto tilePtr = charPtr + startTile * 32 + stx * 64 + (sy & 7) * 8 + xOff;
+
+                for(int x = xOff; x < 8 && out != outEnd; x++, out++)
+                {
+                    auto palIndex = *tilePtr++;
+                    if(palIndex)
+                        *out = palRam[palIndex + 256];
+                }
+
+                xOff = 0;
+            }
         }
         else
         {
             // 4bit tiles
             for(int stx = sx >> 3; stx < spriteW >> 3 && out != outEnd; stx++)
             {
-                uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + ((startTile + stx) & 0x3FF) * 32)[sy & 7];
+                uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (startTile + stx) * 32)[sy & 7];
 
                 // first tile
                 if(xOff)
