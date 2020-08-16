@@ -49,11 +49,11 @@ uint16_t AGBMemory::read16(uint32_t addr) const
 void AGBMemory::write8(uint32_t addr, uint8_t data)
 {
     // handle IO writes as 16-bit
-    if((addr >> 24) == 0x4)
+    if((addr >> 24) == 0x4 && writeCallback)
     {
-        auto tmp = read8(addr ^ 1);
-        addr & 1 ? write16(addr, tmp | (data << 8)) : write16(addr, (tmp << 8) | data);
-        return;
+        auto tmp = ioRegs[(addr ^ 1) & 0x3FF];
+        if(addr & 1 ? writeCallback(addr, tmp | (data << 8)) : writeCallback(addr, (tmp << 8) | data))
+            return;
     }
 
     if((addr >> 24) == 0x7 || ((addr >> 24) == 0x6 && (addr &  0x1FFFF) >= 0x10000)) // OAM / OBJ VRAM ignores byte writes
