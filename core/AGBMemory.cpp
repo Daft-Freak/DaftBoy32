@@ -31,20 +31,13 @@ uint8_t AGBMemory::read8(uint32_t addr) const
         return (addr & 1) ? tmp >> 8 : tmp;
     }
 
-    auto ptr = mapAddress(addr);
-
-    if(ptr)
-        return *ptr;
-
-    return 0;
+    return *mapAddress(addr);
 }
 
 uint16_t AGBMemory::read16(uint32_t addr) const
 {
     auto ptr = mapAddress(addr);
-    uint16_t ret = 0;
-    if(ptr)
-        ret = *reinterpret_cast<const uint16_t *>(ptr);
+    uint16_t ret = *reinterpret_cast<const uint16_t *>(ptr);
 
     // io
     if((addr >> 24) == 0x4 && readCallback)
@@ -111,7 +104,7 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
             return iwram + (addr & 0x7FFF);
         case 0x4:
             if(addr >= 0x4000400)
-                return nullptr; // IO regs don't mirror
+                return reinterpret_cast<const uint8_t *>(&dummy); // IO regs don't mirror
             return ioRegs + (addr & 0x3FF);
         case 0x5:
             return palRAM + (addr & 0x3FF);
@@ -130,11 +123,11 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
         case 0xD:
             addr &= 0x1FFFFFF;
             if(addr >= sizeof(cartROM))
-                return nullptr;
+                return reinterpret_cast<const uint8_t *>(&dummy);
             return cartROM + addr;
     }
 
-    return nullptr;
+    return reinterpret_cast<const uint8_t *>(&dummy);
 }
 
 uint8_t *AGBMemory::mapAddress(uint32_t addr)

@@ -54,6 +54,8 @@ private:
 
     uint8_t cartROM[0x80000]{}; // 16bit bus, much bigger than this (32MB)...
 
+    uint32_t dummy = 0xBADADD55;
+
     ReadCallback readCallback;
     WriteCallback writeCallback;
 
