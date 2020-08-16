@@ -34,21 +34,11 @@ void AGBCPU::run(int ms)
         int exec = 0;
 
         // DMA
-        for(int chan = 0; chan < 4; chan++)
+        for(int chan = 0; dmaTriggered; chan++, dmaTriggered >>= 1)
         {
-            auto control = mem.readIOReg(IO_DMA0CNT_H + chan * 12);
-            if(!(control & DMACNTH_Enable))
-                continue;
-
-            if((control & DMACNTH_Start) == 0 || // immediate
-               ((control & DMACNTH_Start) == 1 << 12 && (dmaTriggers & Trig_VBlank)) ||
-               ((control & DMACNTH_Start) == 2 << 12 && (dmaTriggers & Trig_HBlank)))
-            {
+            if(dmaTriggered & 1)
                 exec += dmaTransfer(chan);
-            }
         }
-
-        dmaTriggers = 0;
 
         if(!exec && !halted)
         {
@@ -81,7 +71,18 @@ void AGBCPU::flagInterrupt(int interrupt)
 
 void AGBCPU::triggerDMA(int trigger)
 {
-    dmaTriggers |= trigger;
+    for(int chan = 0; chan < 4; chan++)
+    {
+        auto control = mem.readIOReg(IO_DMA0CNT_H + chan * 12);
+        if(!(control & DMACNTH_Enable))
+            continue;
+
+        if(((control & DMACNTH_Start) == 1 << 12 && (trigger == Trig_VBlank)) ||
+            ((control & DMACNTH_Start) == 2 << 12 && (trigger == Trig_HBlank)))
+        {
+            dmaTriggered |= 1 << chan;
+        }
+    }
 }
 
 uint8_t AGBCPU::readMem8(uint32_t addr) const
@@ -146,7 +147,7 @@ void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
     if((addr >> 24) == 0x4)
     {
         // need to modify these internally, promote to 16-bit
-        if(addr == 0x4000202/*IF*/ || addr == 0x4000203 || (addr >= 0x4000100 && addr <= 0x400010E) /*timers*/)
+        if(addr == 0x4000202/*IF*/ || addr == 0x4000203 || (addr >= 0x40000BA && addr <= 0x40000DE) /*DMA*/ || (addr >= 0x4000100 && addr <= 0x400010E) /*timers*/)
         {
             auto tmp = readMem8(addr ^ 1);
             writeMem16(addr & ~1, addr & 1 ? tmp | (data << 8) : (tmp << 8) | data);
@@ -172,6 +173,23 @@ void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
     {
         switch(addr & 0xFFFFFF)
         {
+            case IO_DMA0CNT_H:
+            case IO_DMA1CNT_H:
+            case IO_DMA2CNT_H:
+            case IO_DMA3CNT_H:
+            {
+                int index = ((addr & 0xFFFFFF) - IO_DMA0CNT_H) / 12;
+                if(data & DMACNTH_Enable)
+                {
+                    if((data & DMACNTH_Start) == 0)
+                        dmaTriggered |= (1 << index);
+                }
+                else
+                    dmaTriggered &= ~(1 << index);
+
+                break;
+            }
+
             case IO_TM0CNT_H:
             case IO_TM1CNT_H:
             case IO_TM2CNT_H:

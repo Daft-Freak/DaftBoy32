@@ -26,8 +26,8 @@ public:
 
     enum DMATrigger
     {
-        Trig_VBlank = 1 << 0,
-        Trig_HBlank = 1 << 1
+        Trig_VBlank = 1,
+        Trig_HBlank
         // sound...
     };
 
@@ -204,7 +204,9 @@ private:
     // internal state
     //bool stopped, halted;
     bool halted;
-    int dmaTriggers = 0;
+
+    // dma
+    uint8_t dmaTriggered = 0;
 
     // timers
     uint32_t timer = 0; // just counts cycles
