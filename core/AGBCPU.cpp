@@ -34,19 +34,21 @@ void AGBCPU::run(int ms)
         int exec = 0;
 
         // DMA
-        for(int chan = 0; dmaTriggered; chan++, dmaTriggered >>= 1)
+        if(dmaTriggered)
         {
-            if(dmaTriggered & 1)
-                exec += dmaTransfer(chan);
+            for(int chan = 0; dmaTriggered; chan++, dmaTriggered >>= 1)
+            {
+                if(dmaTriggered & 1)
+                    exec += dmaTransfer(chan);
+            }
         }
-
-        if(!exec && !halted)
+        else if(!halted)
         {
             // CPU
             exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
         }
-        else if(!exec)
-            exec = 1;
+        else
+            exec = 4; // higher = less overhead
 
         serviceInterrupts(); // cycles?
 
