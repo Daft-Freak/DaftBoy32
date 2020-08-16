@@ -203,6 +203,7 @@ private:
 
     // internal state
     //bool stopped, halted;
+    bool halted;
     int dmaTriggers = 0;
 
     // timers

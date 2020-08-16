@@ -14,6 +14,7 @@ void AGBCPU::reset()
 {
     cpsr = Flag_I | Flag_F | 0x13 /*supervisor mode*/;
     loReg(Reg::PC) = 0;
+    halted = false;
 
     timer = 0;
     for(auto &c : timerCounters)
@@ -49,13 +50,15 @@ void AGBCPU::run(int ms)
 
         dmaTriggers = 0;
 
-        if(!exec)
+        if(!exec && !halted)
         {
             // CPU
             exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
-
-            serviceInterrupts(); // cycles?
         }
+        else if(!exec)
+            exec = 1;
+
+        serviceInterrupts(); // cycles?
 
         updateTimers(exec);
 
@@ -148,6 +151,13 @@ void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
             auto tmp = readMem8(addr ^ 1);
             writeMem16(addr & ~1, addr & 1 ? tmp | (data << 8) : (tmp << 8) | data);
             return;
+        }
+        else if(addr == 0x4000301/*HALTCNT*/)
+        {
+            if(data & 0x80)
+                printf("STOP\n");
+            else
+                halted = true;
         }
     }
 
@@ -1675,7 +1685,7 @@ bool AGBCPU::serviceInterrupts()
 
     if(enabled & flag)
     {
-        //halted = false;
+        halted = false;
 
         auto ret = loReg(Reg::PC) + 4;
         spsr[3/*irq*/] = cpsr;
