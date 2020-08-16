@@ -9,7 +9,7 @@ public:
 
     //using CartRamUpdateCallback = void(*)(uint8_t *, unsigned int);
 
-    void loadBIOSROM(const uint8_t *rom);
+    void setBIOSROM(const uint8_t *rom);
     //void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
     void reset();
 
@@ -42,7 +42,7 @@ public:
     int getAccessCycles(uint32_t addr, int width, bool sequential) const;
 
 private:
-    uint8_t biosROM[0x4000];
+    const uint8_t *biosROM = nullptr;
     uint8_t ewram[0x40000]; // external wram, two wait states, 16bit bus
     uint8_t iwram[0x8000]; // internal wram
 

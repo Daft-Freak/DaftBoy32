@@ -3,9 +3,9 @@
 
 #include "AGBMemory.h"
 
-void AGBMemory::loadBIOSROM(const uint8_t *rom)
+void AGBMemory::setBIOSROM(const uint8_t *rom)
 {
-    memcpy(biosROM, rom, 0x4000);
+    biosROM = rom;
 }
 
 void AGBMemory::reset()
