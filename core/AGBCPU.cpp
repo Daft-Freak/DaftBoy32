@@ -209,9 +209,11 @@ void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
                         timerPrescalers[index] = -1; // magic value for count-up mode
                     else
                         timerPrescalers[index] = prescalers[data & TMCNTH_Prescaler];
+
+                    timerEnabled |= (1 << index);
                 }
                 else
-                    timerPrescalers[index] = 0;
+                    timerEnabled &= ~(1 << index);
 
                 break;
             }
@@ -1762,23 +1764,23 @@ int AGBCPU::dmaTransfer(int channel)
 
 void AGBCPU::updateTimers(int cycles)
 {
-    bool overflow = false;
-    for(int i = 0; i < 4; i++)
+    uint8_t overflow = 0;
+    auto enabled = timerEnabled;
+    for(int i = 0; enabled; i++, enabled >>= 1)
     {
-        if(!timerPrescalers[i])
-        {
-            overflow = false;
+        if(!(enabled & 1))
             continue;
-        }
 
         auto oldCount = timerCounters[i];
 
         // count-up
         if(timerPrescalers[i] == -1)
         {
-            if(overflow)
+            if(overflow & (1 << (i - 1)))
                 timerCounters[i]++;
         }
+        else if(timerPrescalers[i] == 1)
+            timerCounters[i] += cycles;
         else
         {
             int count = (timer & (timerPrescalers[i] - 1)) + cycles;
@@ -1786,10 +1788,9 @@ void AGBCPU::updateTimers(int cycles)
                 timerCounters[i] += count / timerPrescalers[i];
         }
 
-        overflow = timerCounters[i] < oldCount;
-
-        if(overflow)
+        if(timerCounters[i] < oldCount)
         {
+            overflow |= (1 << i);
             timerCounters[i] = mem.readIOReg(IO_TM0CNT_L + i * 4);
             flagInterrupt(Int_Timer0 << i);
         }
