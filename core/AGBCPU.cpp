@@ -50,7 +50,8 @@ void AGBCPU::run(int ms)
         else
             exec = 4; // higher = less overhead
 
-        serviceInterrupts(); // cycles?
+        if(currentInterrupts)
+            serviceInterrupts(); // cycles?
 
         updateTimers(exec);
 
@@ -69,6 +70,8 @@ void AGBCPU::setCycleCallback(CycleCallback cycleCallback)
 void AGBCPU::flagInterrupt(int interrupt)
 {
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
+
+    currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? mem.readIOReg(IO_IE) & mem.readIOReg(IO_IF) : 0;
 }
 
 void AGBCPU::triggerDMA(int trigger)
@@ -149,7 +152,7 @@ void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
     if((addr >> 24) == 0x4)
     {
         // need to modify these internally, promote to 16-bit
-        if(addr == 0x4000202/*IF*/ || addr == 0x4000203 || (addr >= 0x40000BA && addr <= 0x40000DE) /*DMA*/ || (addr >= 0x4000100 && addr <= 0x400010E) /*timers*/)
+        if((addr >= 0x4000200 && addr <= 0x4000203) /*IE/IF*/ || addr == 0x4000208 /*IME*/ || (addr >= 0x40000BA && addr <= 0x40000DE) /*DMA*/ || (addr >= 0x4000100 && addr <= 0x400010E) /*timers*/)
         {
             auto tmp = readMem8(addr ^ 1);
             writeMem16(addr & ~1, addr & 1 ? tmp | (data << 8) : (tmp << 8) | data);
@@ -218,8 +221,18 @@ void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
                 break;
             }
 
+            case IO_IE:
+                currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? data & mem.readIOReg(IO_IF) : 0;
+                break;
+
             case IO_IF: // writing IF bits clears them internally
                 data = mem.getIOReg(IO_IF) & ~data;
+
+                currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? mem.readIOReg(IO_IE) & data : 0;
+                break;
+
+            case IO_IME:
+                currentInterrupts = (data & 1) ? mem.readIOReg(IO_IE) & mem.readIOReg(IO_IF) : 0;
                 break;
         }
     }
@@ -1699,26 +1712,18 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
 
 bool AGBCPU::serviceInterrupts()
 {
-    if((cpsr & Flag_I) || !(mem.readIOReg(IO_IME) & 1))
+    if((cpsr & Flag_I))
         return false;
 
-    const auto flag = mem.readIOReg(IO_IF);
-    const auto enabled = mem.readIOReg(IO_IE);
+    halted = false;
 
-    if(enabled & flag)
-    {
-        halted = false;
+    auto ret = loReg(Reg::PC) + 4;
+    spsr[3/*irq*/] = cpsr;
 
-        auto ret = loReg(Reg::PC) + 4;
-        spsr[3/*irq*/] = cpsr;
-
-        loReg(Reg::PC) = 0x18;
-        cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x12; // irq mode
-        reg(Reg::LR) = ret;
-        return true;
-    }
-
-    return false;
+    loReg(Reg::PC) = 0x18;
+    cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x12; // irq mode
+    reg(Reg::LR) = ret;
+    return true;
 }
 
 int AGBCPU::dmaTransfer(int channel)

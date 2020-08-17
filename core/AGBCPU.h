@@ -205,6 +205,8 @@ private:
     //bool stopped, halted;
     bool halted;
 
+    uint16_t currentInterrupts = 0; // IME ? (IE | IF) : 0
+
     // dma
     uint8_t dmaTriggered = 0;
 
