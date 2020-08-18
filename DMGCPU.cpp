@@ -19,6 +19,7 @@ void DMGCPU::reset()
     timerEnabled = timerOldVal = false;
     timerBit = 1 << 9;
 
+    isGBC = false;
     doubleSpeed = speedSwitch = false;
 
     // values after boot rom
@@ -30,6 +31,13 @@ void DMGCPU::reset()
     sp = 0xFFFE;
 
     mem.reset();
+
+    // enable color mode
+    if(mem.read(0x143) & 0x80)
+    {
+        isGBC = true;
+        reg(Reg::A) = 0x11;
+    }
 }
 
 void DMGCPU::run(int ms)
