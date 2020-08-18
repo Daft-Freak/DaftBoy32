@@ -53,33 +53,28 @@ void DMGDisplay::update(int cycles)
 
     remainingScanlineCycles -= cycles;
 
-    int newMode;
     // avg-ish time
     static const int readTime = (168 + 291) / 2;
 
-    if(y < screenHeight)
+    if(statMode > 1) // update STAT if not hblank/vblank
     {
         // 80 cycles - mode 2 / oam search
         if(remainingScanlineCycles >= scanlineCycles - 80)
-            newMode = 2;
+        {} // transition handled below
         // 168-291 cycles - mode 3 / reading oam/vram
         else if(remainingScanlineCycles >= scanlineCycles - 80 - readTime)
-            newMode = 3;
+            statMode = 3;
         else // hblank
-            newMode = 0;
-
-        if(newMode != statMode)
         {
-            auto stat = mem.readIOReg(IO_STAT);
-            if(newMode == 2 && (stat & STAT_OAMInt))
-                cpu.flagInterrupt(Int_LCDStat);
-            else if(newMode == 0 && (stat & STAT_HBlankInt))
-                cpu.flagInterrupt(Int_LCDStat);
+            if(statMode)
+            {
+                auto stat = mem.readIOReg(IO_STAT);
+                if(stat & STAT_HBlankInt)
+                    cpu.flagInterrupt(Int_LCDStat);
+            }
+            statMode = 0;
         }
-
-        statMode = newMode;
     }
-    // else vblank, handled at the bottom
 
     if(remainingScanlineCycles > 0)
         return;
@@ -105,12 +100,14 @@ void DMGDisplay::update(int cycles)
         if(stat & STAT_VBlankInt)
             cpu.flagInterrupt(Int_LCDStat);
     }
-    else if(y > 153)
+    else
     {
-        y = 0; // end vblank
+        if(y > 153)
+            y = 0; // end vblank
+
+        // new scanline
         statMode = 2; // oam search
 
-        // TODO: slightly duplicated
         if(stat & STAT_OAMInt)
             cpu.flagInterrupt(Int_LCDStat);
     }
