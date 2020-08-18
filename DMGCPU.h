@@ -85,6 +85,8 @@ private:
     // internal state
     bool stopped, halted;
     bool masterInterruptEnable;
+    uint8_t serviceableInterrupts;
+
     uint16_t divCounter = 0;
     bool timerEnabled = false;
     int timerBit = 1 << 9;

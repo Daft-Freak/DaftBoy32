@@ -13,6 +13,7 @@ void DMGCPU::reset()
 {
     stopped = halted = false;
     masterInterruptEnable = false; //?
+    serviceableInterrupts = 0;
     divCounter = 0xABCC;
 
     timerEnabled = timerOldVal = false;
@@ -42,7 +43,7 @@ void DMGCPU::run(int ms)
     {
         int exec = halted ? 4 : executeInstruction();
 
-        if(serviceInterrupts())
+        if(serviceableInterrupts && serviceInterrupts())
             exec += 5 * 4;
 
         cycles -= exec;
@@ -62,6 +63,7 @@ void DMGCPU::setCycleCallback(CycleCallback cycleCallback)
 void DMGCPU::flagInterrupt(int interrupt)
 {
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
+    serviceableInterrupts = mem.readIOReg(IO_IF) & mem.readIOReg(IO_IE);
 }
 
 uint8_t DMGCPU::readMem(uint16_t addr) const
@@ -122,6 +124,16 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
         }
         else if((addr & 0xFF) == IO_KEY1)
             speedSwitch = data & 1;
+        else if((addr & 0xFF) == IO_IF)
+        {
+            serviceableInterrupts = data & mem.readIOReg(IO_IE);
+            mem.write(addr, data);
+        }
+        else if((addr & 0xFF) == IO_IE)
+        {
+            serviceableInterrupts = data & mem.readIOReg(IO_IF);
+            mem.write(addr, data);
+        }
         else
             mem.write(addr, data);
         return;
@@ -2014,29 +2026,28 @@ void DMGCPU::updateTimer(int cycles)
 
 bool DMGCPU::serviceInterrupts()
 {
-    const auto flag = mem.readIOReg(IO_IF);
-    const auto enabled = mem.readIOReg(IO_IE);
     static const uint16_t vectors[]{0x40, 0x48, 0x50, 0x58, 0x60};
 
-    int servicable = enabled & flag;
+    halted = false; // un-halt even if interrupts are disabled
+
+    if(!masterInterruptEnable)
+        return false;
+
+    int servicable = serviceableInterrupts;
 
     for(int i = 0; servicable; i++, servicable >>= 1)
     {
         if(servicable & 1)
         {
-            halted = false; // un-halt even if interrupts are disabled
+            masterInterruptEnable = false;
+            mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) & ~(1 << i));
+            serviceableInterrupts &= ~(1 << i);
 
-            if(masterInterruptEnable)
-            {
-                masterInterruptEnable = false;
-                mem.writeIOReg(IO_IF, flag & ~(1 << i));
-
-                // call vector
-                sp -= 2;
-                writeMem16(sp, pc);
-                pc = vectors[i];
-                return true;
-            }
+            // call vector
+            sp -= 2;
+            writeMem16(sp, pc);
+            pc = vectors[i];
+            return true;
         }
     }
 
