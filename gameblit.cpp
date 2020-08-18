@@ -175,12 +175,7 @@ void openROM(std::string filename)
         if(file.get_ptr())
             mem.loadCartridgeRAM(file.get_ptr(), ramLen);
         else
-        {
-            auto ramData = new uint8_t[ramLen];
-            file.read(0, ramLen, (char *)ramData);
-            mem.loadCartridgeRAM(ramData, ramLen);
-            delete[] ramData;
-        }
+            file.read(0, mem.getCartridgeRAMSize(), (char *)mem.getCartridgeRAM());
     }
 
     apu.reset();
