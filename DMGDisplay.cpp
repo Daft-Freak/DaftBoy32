@@ -219,7 +219,7 @@ void DMGDisplay::drawScanLine(int y)
     // this is reduced to a priority flag on GBC
     if(lcdc & LCDC_BGDisp || isColour)
     {
-        uint8_t windowX = screenWidth, windowY = 0;
+        int windowX = screenWidth, windowY = 0;
         bool yIsWin = false;
 
         int x = 0;
@@ -296,7 +296,7 @@ void DMGDisplay::drawScanLine(int y)
             auto scrollX = mem.readIOReg(IO_SCX);
             auto scrollY = mem.readIOReg(IO_SCY);
 
-            copyTiles(bgMapPtr, std::min(windowX, static_cast<uint8_t>(screenWidth)), scrollX, scrollY);
+            copyTiles(bgMapPtr, windowX < screenWidth ? windowX : screenWidth, scrollX, scrollY);
         }
 
         // window
