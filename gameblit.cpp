@@ -178,6 +178,8 @@ void openROM(std::string filename)
             file.read(0, mem.getCartridgeRAMSize(), (char *)mem.getCartridgeRAM());
     }
 
+    mem.setCartROM(romFile.get_ptr());
+
     apu.reset();
     cpu.reset();
     loaded = true;

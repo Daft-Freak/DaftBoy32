@@ -12,6 +12,11 @@ void DMGMemory::setROMBankCallback(ROMBankCallback callback)
     this->romBankCallback = callback;
 }
 
+void DMGMemory::setCartROM(const uint8_t *rom)
+{
+    cartROM = rom;
+}
+
 void DMGMemory::loadCartridgeRAM(const uint8_t *ram, uint32_t len)
 {
     memcpy(cartRam, ram, len);
@@ -69,7 +74,7 @@ void DMGMemory::reset()
     // load some ROM
     cartROMCurBank = cartROMBankCache;
     romBankCallback(0, cartROMBank0);
-    romBankCallback(1, cartROMCurBank);
+    romBankCallback(1, cartROMBankCache);
 
     cachedROMBanks.clear();
     for(int i = 0; i < romBankCacheSize; i++)
@@ -348,6 +353,13 @@ void DMGMemory::updateCurrentROMBank()
         return;
     }
 
+    // entire ROM is loaded
+    if(cartROM)
+    {
+        cartROMCurBank = cartROM + mbcROMBank * 0x4000;
+        return;
+    }
+
     for(auto it = cachedROMBanks.begin(); it != cachedROMBanks.end(); ++it)
     {
         if(it->bank == mbcROMBank)
@@ -362,7 +374,7 @@ void DMGMemory::updateCurrentROMBank()
     auto it = std::prev(cachedROMBanks.end());
 
     cartROMCurBank = it->ptr;
-    romBankCallback(mbcROMBank, cartROMCurBank);
+    romBankCallback(mbcROMBank, it->ptr);
     it->bank = mbcROMBank;
     cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
 }

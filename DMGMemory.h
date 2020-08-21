@@ -13,6 +13,7 @@ public:
     using CartRamUpdateCallback = void(*)(uint8_t *, unsigned int);
 
     void setROMBankCallback(ROMBankCallback callback);
+    void setCartROM(const uint8_t *rom);
     void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
     void reset();
 
@@ -72,7 +73,8 @@ private:
     unsigned int cartRamSize = 0;
 
     uint8_t cartROMBank0[0x4000];
-    uint8_t *cartROMCurBank;
+    const uint8_t *cartROMCurBank;
+    const uint8_t *cartROM = nullptr; // used if entire rom is loaded somewhere
 
     // cache as much as possible in RAM
     static const int romBankCacheSize = 6;
