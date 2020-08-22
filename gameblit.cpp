@@ -166,6 +166,10 @@ void updateAudio(void *arg)
 void openROM(std::string filename)
 {
     romFile.open(filename);
+    mem.setCartROM(romFile.get_ptr());
+
+    apu.reset();
+    cpu.reset();
 
     if(blit::file_exists(filename + ".ram"))
     {
@@ -178,10 +182,6 @@ void openROM(std::string filename)
             file.read(0, mem.getCartridgeRAMSize(), (char *)mem.getCartridgeRAM());
     }
 
-    mem.setCartROM(romFile.get_ptr());
-
-    apu.reset();
-    cpu.reset();
     loaded = true;
     loadedFilename = filename;
 }
