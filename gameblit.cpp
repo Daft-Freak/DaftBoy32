@@ -284,8 +284,11 @@ void render(uint32_t time_ms)
             }
 
             // one pixel left
-            auto v = (gbScreen[159 + y * 160] + gbScreen[159 + y1 * 160]) / 2;
-            *ptr++ = v; *ptr++ = v; *ptr++ = v;
+            uint8_t r1, g1, b1, r2, g2, b2;
+            expandCol(gbScreen[159 + y * 160], r1, g1, b1);
+            expandCol(gbScreen[159 + y1 * 160], r2, g2, b2);
+
+            *ptr++ = (r1 + r2) / 2; *ptr++ = (g1 + g2) / 2; *ptr++ = (b1 + b2) / 2;
         };
         for(int y = 0; y < 144; y += 3)
         {
