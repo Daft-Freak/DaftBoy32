@@ -267,15 +267,29 @@ void DMGDisplay::drawScanLine(int y)
                 // palette
                 const auto bgPal = bgPalette + (mapAttrs & 0x7) * 4;
 
-                // attempt to copy as much of the tile as possible
-                const int limit = std::min(x + 8 - tx, xLimit);
-
-                for(; x < limit; x++, d <<= 1)
+                auto bgPixel = [&]()
                 {
                     int palIndex = ((d & 0x80) >> 7) | ((d & 0x8000) >> 14);
 
-                    *(rawOut++) = (lcdc & LCDC_BGDisp) ? palIndex | tilePriority : 0;
+                    if(lcdc & LCDC_BGDisp)
+                        *(rawOut++) = palIndex | tilePriority;
                     *(out++) = bgPal[palIndex];
+                };
+
+                if(!tx && x + 8 < xLimit)
+                {
+                    // copy entire row
+                    for(int i = 0; i < 8; i++, d <<= 1)
+                        bgPixel();
+                    x += 8;
+                }
+                else
+                {
+                    // attempt to copy as much of the tile as possible
+                    const int limit = std::min(x + 8 - tx, xLimit);
+
+                    for(; x < limit; x++, d <<= 1)
+                        bgPixel();
                 }
             }
         };
