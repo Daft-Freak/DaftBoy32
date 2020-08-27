@@ -104,12 +104,12 @@ uint8_t onRead(uint16_t addr, uint8_t val)
 {
     if((addr & 0xFF) == IO_JOYP)
     {
-        int ret = val & 0xF0;
+        int ret = 0xF;
         if(!(val & JOYP_SelectDir))
-            ret |= (~inputs) & 0xF;
+            ret &= (~inputs) & 0xF;
         if(!(val & JOYP_SelectButtons))
-            ret |= ((~inputs) >> 4) & 0xF;
-        return ret;
+            ret &= ((~inputs) >> 4) & 0xF;
+        return (val & 0xF0) | ret;
     }
 
     if((addr & 0xFF) < IO_LCDC)
