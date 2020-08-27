@@ -46,10 +46,7 @@ void DMGDisplay::update(int cycles)
     bool displayEnabled = mem.readIOReg(IO_LCDC) & LCDC_DisplayEnable;
 
     if(!displayEnabled)
-    {
-        // TODO: set mode for off
         return;
-    }
 
     remainingScanlineCycles -= cycles;
 
@@ -138,6 +135,17 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
     switch(addr & 0xFF)
     {
+        case IO_LCDC:
+        {
+            if(!(data & LCDC_DisplayEnable))
+            {
+                // reset
+                remainingScanlineCycles = scanlineCycles;
+                statMode = 0;
+                y = 0;
+            }
+            break;
+        }
         case IO_LY:
             y = 0;
             return true;
