@@ -110,6 +110,7 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
         {
             // 4bit tiles
             uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (tileMeta & 0x3FF) * 32)[tty];
+            auto tilePal = palRam + ((tileMeta & 0xF000) >> 8);
 
             // h flip
             if(tileMeta & (1 << 10))
@@ -118,13 +119,26 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
                 tileRow = ((tileRow & 0xF0F0F0F0) >> 4) | ((tileRow & 0x0F0F0F0F) << 4);
             }
 
-            tileRow >>= (tx * 4);
-
-            for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
+            if(!tx && x + 8 < 240)
             {
-                auto palIndex = ((tileMeta & 0xF000) >> 8) | (tileRow & 0xF);
-                if(palIndex & 0xF)
-                    *scanLine = palRam[palIndex];
+                // full tile
+                x += 8;
+                for(; tx < 8; tx++, tileRow >>= 4, scanLine++)
+                {
+                    if(tileRow & 0xF)
+                        *scanLine = tilePal[tileRow & 0xF];
+                }
+            }
+            else
+            {
+                // edges
+                tileRow >>= (tx * 4);
+
+                for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
+                {
+                    if(tileRow & 0xF)
+                        *scanLine = tilePal[tileRow & 0xF];
+                }
             }
         }
     }
