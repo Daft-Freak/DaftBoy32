@@ -83,21 +83,28 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
         if(control & BGCNT_SinglePal)
         {
             // 8bit tiles
+            uint64_t tileRow = reinterpret_cast<uint64_t *>(charPtr + (tileMeta & 0x3FF) * 64)[tty];
 
             // h flip
             if(tileMeta & (1 << 10))
+                tileRow = __builtin_bswap64(tileRow);
+
+            auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow) + tx;
+
+            if(!tx && x + 8 < 240)
             {
-                auto tilePtr = charPtr + (tileMeta & 0x3FF) * 64 + tty * 8 + 7 - tx;
-                for(; tx < 8 && x < 240; tx++, x++, scanLine++)
+                // full tile
+                x += 8;
+                for(; tx < 8; tx++, scanLine++)
                 {
-                    auto palIndex = *tilePtr--;
+                    auto palIndex = *tilePtr++;
                     if(palIndex)
                         *scanLine = palRam[palIndex];
                 }
             }
             else
             {
-                auto tilePtr = charPtr + (tileMeta & 0x3FF) * 64 + tty * 8 + tx;
+                // edges
                 for(; tx < 8 && x < 240; tx++, x++, scanLine++)
                 {
                     auto palIndex = *tilePtr++;
