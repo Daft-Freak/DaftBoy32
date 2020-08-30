@@ -323,10 +323,7 @@ int AGBCPU::executeARMInstruction()
                 else
                 {
                     carry = ret & (1 << (shiftAmount - 1));
-                    ret >>= shiftAmount;
-
-                    if(sign)
-                        ret |= ~(0xFFFFFFFF >> shiftAmount);
+                    ret = static_cast<int32_t>(ret) >> shiftAmount;
                 }
                 break;
             }
@@ -1077,11 +1074,8 @@ int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
                 if(offset == 32)
                     res = sign ? 0xFFFFFFFF : 0;
                 else
-                {
-                    res >>= offset;
-                    if(sign)
-                        res |= ~(0xFFFFFFFF >> offset);
-                }
+                    res = static_cast<int32_t>(res) >> offset;
+
                 break;
             }
             default:
@@ -1216,10 +1210,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
             else if(op2)
             {
                 carry = op1 & (1 << (op2 - 1));
-                res = op1 >> op2;
-
-                if(sign)
-                    res |= ~(0xFFFFFFFF >> op2);
+                res = static_cast<int32_t>(op1) >> op2;
 
                 reg(dstReg) = res;
             }
