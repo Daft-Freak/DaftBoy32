@@ -899,7 +899,8 @@ int AGBCPU::executeARMInstruction()
 int AGBCPU::executeTHUMBInstruction()
 {
     auto &pc = loReg(Reg::PC); // not a low reg, but not banked
-    auto opcode = mem.read16Fast(pc & ~1);
+    assert(!(pc & 1));
+    auto opcode = mem.read16Fast(pc);
 
     pc += 2;
 
@@ -1370,6 +1371,9 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
         default:
             assert(!"Invalid format 5 op!");
     }
+
+    if(dstReg == Reg::PC)
+        pc &= ~1;
 
     return mem.getAccessCycles(pc, 2, true);
 }
