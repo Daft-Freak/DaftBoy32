@@ -214,9 +214,17 @@ void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
                         timerPrescalers[index] = prescalers[data & TMCNTH_Prescaler];
 
                     timerEnabled |= (1 << index);
+
+                    if(data & TMCNTH_IRQEnable)
+                        timerInterruptEnabled |= (1 << index);
+                    else
+                        timerInterruptEnabled &= ~(1 << index);
                 }
                 else
+                {
                     timerEnabled &= ~(1 << index);
+                    timerInterruptEnabled &= ~(1 << index);
+                }
 
                 break;
             }
@@ -1786,7 +1794,8 @@ void AGBCPU::updateTimers(int cycles)
         {
             overflow |= (1 << i);
             timerCounters[i] = mem.readIOReg(IO_TM0CNT_L + i * 4);
-            flagInterrupt(Int_Timer0 << i);
+            if(timerInterruptEnabled & (1 << i))
+                flagInterrupt(Int_Timer0 << i);
         }
     }
     timer += cycles;

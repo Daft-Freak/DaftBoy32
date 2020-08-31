@@ -212,7 +212,7 @@ private:
 
     // timers
     uint32_t timer = 0; // just counts cycles
-    uint8_t timerEnabled = 0;
+    uint8_t timerEnabled = 0, timerInterruptEnabled = 0;
 
     uint16_t timerCounters[4]{};
     int timerPrescalers[4]{};
