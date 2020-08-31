@@ -281,7 +281,10 @@ void AGBCPU::writeMem32(uint32_t addr, uint32_t data)
 int AGBCPU::executeARMInstruction()
 {
     auto &pc = loReg(Reg::PC); // not a low reg, but not banked
-    auto opcode = readMem32Aligned(pc);
+    //auto opcode = readMem32Aligned(pc);
+    // skip overhead and read directly
+    auto opcode = mem.read32Fast(pc);
+
     auto timing = mem.getAccessCycles(pc, 4, true);
 
     pc += 4;
@@ -896,7 +899,7 @@ int AGBCPU::executeARMInstruction()
 int AGBCPU::executeTHUMBInstruction()
 {
     auto &pc = loReg(Reg::PC); // not a low reg, but not banked
-    auto opcode = readMem16Aligned(pc & ~1);
+    auto opcode = mem.read16Fast(pc & ~1);
 
     pc += 2;
 
