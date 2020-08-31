@@ -1003,7 +1003,7 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCon
 
 int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
 {
-    auto instOp = opcode >> 11;
+    auto instOp = (opcode >> 11) & 0x3;
     auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
     auto dstReg = static_cast<Reg>(opcode & 7);
 
@@ -1349,7 +1349,7 @@ int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
 
     // pc + 4, bit 1 forced to 0
     auto base = (pc + 2) & ~2;
-    loReg(dstReg) = readMem32(base + (word << 2));
+    loReg(dstReg) = readMem32Aligned(base + (word << 2));
 
     return mem.getAccessCycles(pc, 2, true);
 }
@@ -1670,9 +1670,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
 
 int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
 {
-    uint32_t offset = (opcode & 0x7FF) << 1;
-    if(offset & 0x800)
-        offset |= 0xFFFFF000;
+    uint32_t offset = static_cast<int16_t>(opcode << 5) >> 4; // sign extend and * 2
 
     pc += offset + 2 /*prefetch*/;
 
