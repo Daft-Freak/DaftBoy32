@@ -53,7 +53,13 @@ void AGBCPU::run(int ms)
         if(currentInterrupts)
             serviceInterrupts(); // cycles?
 
-        updateTimers(exec);
+        if(timerInterruptEnabled)
+        {
+            updateTimers(timerDelayed + exec);
+            timerDelayed = 0;
+        }
+        else
+            timerDelayed += exec;
 
         cycles -= exec;
 
@@ -95,7 +101,7 @@ uint8_t AGBCPU::readMem8(uint32_t addr) const
     return mem.read8(addr);
 }
 
-uint32_t AGBCPU::readMem16(uint32_t addr) const
+uint32_t AGBCPU::readMem16(uint32_t addr)
 {
     // this returns the 32-bit result of an unaligned 16-bit read
     auto aligned = addr & ~1;
@@ -107,7 +113,7 @@ uint32_t AGBCPU::readMem16(uint32_t addr) const
     return (val >> 8) | (val << 24);
 }
 
-uint16_t AGBCPU::readMem16Aligned(uint32_t addr) const
+uint16_t AGBCPU::readMem16Aligned(uint32_t addr)
 {
     assert((addr & 1) == 0);
 
@@ -116,20 +122,20 @@ uint16_t AGBCPU::readMem16Aligned(uint32_t addr) const
         switch(addr & 0xFFFFFF)
         {
             case IO_TM0CNT_L:
-                return timerCounters[0];
             case IO_TM1CNT_L:
-                return timerCounters[1];
             case IO_TM2CNT_L:
-                return timerCounters[2];
             case IO_TM3CNT_L:
-                return timerCounters[3];
+                // sync
+                updateTimers(timerDelayed);
+                timerDelayed = 0;
+                return timerCounters[((addr & 0xFFFFFF) - IO_TM0CNT_L) / 12];
         }
     }
 
     return mem.read16(addr);
 }
 
-uint32_t AGBCPU::readMem32(uint32_t addr) const
+uint32_t AGBCPU::readMem32(uint32_t addr)
 {
     auto aligned = addr & ~3;
     uint32_t val = readMem32Aligned(aligned);
@@ -141,7 +147,7 @@ uint32_t AGBCPU::readMem32(uint32_t addr) const
     return (val >> shift) | (val << (32 - shift));
 }
 
-uint32_t AGBCPU::readMem32Aligned(uint32_t addr) const
+uint32_t AGBCPU::readMem32Aligned(uint32_t addr)
 {
     assert((addr & 3) == 0);
     return readMem16Aligned(addr) | (readMem16Aligned(addr + 2) << 16);
@@ -195,6 +201,17 @@ void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
                 break;
             }
 
+            case IO_TM0CNT_L:
+            case IO_TM1CNT_L:
+            case IO_TM2CNT_L:
+            case IO_TM3CNT_L:
+            {
+                // sync
+                updateTimers(timerDelayed);
+                timerDelayed = 0;
+                break;
+            }
+
             case IO_TM0CNT_H:
             case IO_TM1CNT_H:
             case IO_TM2CNT_H:
@@ -202,6 +219,10 @@ void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
             {
                 int index = ((addr & 0xFFFFFF) - IO_TM0CNT_H) >> 2;
                 static const int prescalers[]{1, 64, 256, 1024};
+
+                // sync
+                updateTimers(timerDelayed);
+                timerDelayed = 0;
 
                 if(data & TMCNTH_Enable)
                 {

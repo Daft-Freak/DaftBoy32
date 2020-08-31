@@ -160,10 +160,10 @@ private:
     }
 
     uint8_t readMem8(uint32_t addr) const;
-    uint32_t readMem16(uint32_t addr) const;
-    uint16_t readMem16Aligned(uint32_t addr) const;
-    uint32_t readMem32(uint32_t addr) const;
-    uint32_t readMem32Aligned(uint32_t addr) const;
+    uint32_t readMem16(uint32_t addr);
+    uint16_t readMem16Aligned(uint32_t addr);
+    uint32_t readMem32(uint32_t addr);
+    uint32_t readMem32Aligned(uint32_t addr);
     void writeMem8(uint32_t addr, uint8_t data);
     void writeMem16(uint32_t addr, uint16_t data);
     void writeMem32(uint32_t addr, uint32_t data);
@@ -212,6 +212,7 @@ private:
 
     // timers
     uint32_t timer = 0; // just counts cycles
+    uint32_t timerDelayed = 0; // cycles since last update
     uint8_t timerEnabled = 0, timerInterruptEnabled = 0;
 
     uint16_t timerCounters[4]{};
