@@ -1381,7 +1381,7 @@ int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
 
     // pc + 4, bit 1 forced to 0
     auto base = (pc + 2) & ~2;
-    loReg(dstReg) = readMem32Aligned(base + (word << 2));
+    loReg(dstReg) = mem.read32Fast(base + (word << 2));
 
     return mem.getAccessCycles(pc, 2, true);
 }
