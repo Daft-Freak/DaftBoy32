@@ -1252,50 +1252,63 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
     auto op2 = loReg(srcReg);
 
     uint32_t res;
-    bool carry = cpsr & Flag_C, overflow = cpsr & Flag_V; // preserved if logical op
+    uint32_t carry, overflow; // preserved if logical op
 
     switch(instOp)
     {
         case 0x0: // AND
             reg(dstReg) = res = op1 & op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
             break;
         case 0x1: // EOR
             reg(dstReg) = res = op1 ^ op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
             break;
         case 0x2: // LSL
+            carry = cpsr & Flag_C;
+
             if(op2 >= 32)
             {
                 carry = op2 == 32 ? (op1 & 1) : 0;
+                carry = carry ? Flag_C : 0;
                 reg(dstReg) = res = 0;
             }
             else if(op2)
             {
-                carry = op1 & (1 << (32 - op2));
+                carry = op1 & (1 << (32 - op2)) ? Flag_C : 0;
                 reg(dstReg) = res = op1 << op2;
             }
             else
                 res = op1;
+
+            cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
             break;
         case 0x3: // LSR
+            carry = cpsr & Flag_C;
+
             if(op2 >= 32)
             {
                 carry = op2 == 32 ? (op1 & (1 << 31)) : 0;
+                carry = carry ? Flag_C : 0;
                 reg(dstReg) = res = 0;
             }
             else if(op2)
             {
-                carry = op1 & (1 << (op2 - 1));
+                carry = op1 & (1 << (op2 - 1)) ? Flag_C : 0;
                 reg(dstReg) = res = op1 >> op2;
             }
             else
                 res = op1;
+
+            cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
             break;
         case 0x4: // ASR
         {
+            carry = cpsr & Flag_C;
             auto sign = op1 & signBit;
             if(op2 >= 32)
             {
-                carry = sign;
+                carry = sign ? Flag_C : 0;
                 reg(dstReg) = res = sign ? 0xFFFFFFFF : 0;
             }
             else if(op2)
@@ -1308,75 +1321,81 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
             else
                 res = op1;
 
+            cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
             break;
         }
         case 0x5: // ADC
         {
-            int c = carry ? 1 : 0;
+            int c = (cpsr & Flag_C) ? 1 : 0;
             reg(dstReg) = res = op1 + op2 + c;
-            carry = res < op1 || (res == op1 && c);
-            overflow = !((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
-
+            carry = res < op1 || (res == op1 && c) ? Flag_C : 0;
+            overflow = ~((op1 ^ op2) & signBit) & ((op1 ^ res) & signBit);
+            cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
             break;
         }
         case 0x6: // SBC
         {
-            int c = carry ? 1 : 0;
+            int c = (cpsr & Flag_C) ? 1 : 0;
             res = op1 - op2 + c - 1;
-            carry = !(op2 > op1 || (op2 == op1 && !c));
-            overflow = ((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
+            carry = !(op2 > op1 || (op2 == op1 && !c)) ? Flag_C : 0;
+            overflow = ((op1 ^ op2) & signBit) & ((op1 ^ res) & signBit);
+            cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
             break;
         }
         case 0x7: // ROR
         {
+            carry = cpsr & Flag_C;
             int shift = op2 & 0x1F;
 
             if(op2)
-                carry = op1 & (1 << (shift - 1));
+                carry = op1 & (1 << (shift - 1)) ? Flag_C : 0;
 
             reg(dstReg) = res = (op1 >> shift) | (op1 << (32 - shift));
+            cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
             break;
         }
         case 0x8: // TST
             res = op1 & op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
             break;
         case 0x9: // NEG
         {
             reg(dstReg) = res = 0 - op2;
-            carry = !(op2 > 0); //?
-            overflow = (op2 & signBit) && (res & signBit);
+            carry = !(op2 > 0) ? Flag_C : 0; //?
+            overflow = (op2 & signBit) & (res & signBit);
+            cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
             break;
         }
         case 0xA: // CMP
             res = op1 - op2;
-            carry = !(op2 > op1);
-            overflow = ((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit); // different signs and sign changed
+            carry = !(op2 > op1) ? Flag_C : 0;
+            overflow = ((op1 ^ op2) & signBit) & ((op1 ^ res) & signBit); // different signs and sign changed
+            cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
             break;
         case 0xB: // CMN
             res = op1 + op2;
-            carry = res < op1;
-            overflow = !((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit); // same signs and sign changed
+            carry = res < op1 ? Flag_C : 0;
+            overflow = ~((op1 ^ op2) & signBit) & ((op1 ^ res) & signBit); // same signs and sign changed
+            cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
             break;
         case 0xC: // ORR
             reg(dstReg) = res = op1 | op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
             break;
         case 0xD: // MUL
             // carry is meaningless, v is unaffected
             reg(dstReg) = res = op1 * op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
             break;
         case 0xE: // BIC
             reg(dstReg) = res = op1 & ~op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
             break;
         case 0xF: // MVN
             reg(dstReg) = res = ~op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
             break;
-
-        default:
-            assert(!"Invalid format 4 op!");
     }
-
-    // cond code
-    cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
 
     return mem.getAccessCycles(pc, 2, true);
 }
