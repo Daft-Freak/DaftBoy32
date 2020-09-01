@@ -729,6 +729,8 @@ int AGBCPU::executeARMInstruction()
                 }
                 else
                     cpsr = (cpsr & ~mask) | (val & mask);
+
+                return timing;
             }
 
             setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
