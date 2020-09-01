@@ -192,6 +192,8 @@ private:
     int doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc);
     int doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc);
 
+    void updateTHUMBPC(uint32_t pc);
+
     bool serviceInterrupts();
 
     int dmaTransfer(int channel);
@@ -200,6 +202,8 @@ private:
 
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
+
+    const uint16_t *thumbPCPtr = nullptr;
 
     // internal state
     //bool stopped, halted;

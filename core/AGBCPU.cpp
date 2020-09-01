@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib> //exit
 #include <cstring>
+#include <utility>
 
 #include "AGBCPU.h"
 #include "AGBMemory.h"
@@ -465,7 +466,10 @@ int AGBCPU::executeARMInstruction()
                 assert(instOp == 1); //
                 auto newPC = reg(static_cast<Reg>(opcode & 0xF));
                 if(newPC & 1)
+                {
                     cpsr |= Flag_T;
+                    updateTHUMBPC(newPC & ~1);
+                }
 
                 pc = newPC & 0xFFFFFFFE;
                 return timing; // TODO: timing
@@ -900,7 +904,8 @@ int AGBCPU::executeTHUMBInstruction()
 {
     auto &pc = loReg(Reg::PC); // not a low reg, but not banked
     assert(!(pc & 1));
-    auto opcode = mem.read16Fast(pc);
+    assert(*thumbPCPtr == mem.read16Fast(pc));
+    auto opcode = *thumbPCPtr++;
 
     pc += 2;
 
@@ -1026,7 +1031,11 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCon
     if(setCondCode)
     {
         if(destReg == Reg::PC)
+        {
             cpsr = getSPSR(); // restore
+            if(cpsr & Flag_T)
+                updateTHUMBPC(reg(Reg::PC));
+        }
         else
             cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
     }
@@ -1365,6 +1374,7 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
                 cpsr &= ~Flag_T;
 
             pc = newPC & 0xFFFFFFFE;
+            updateTHUMBPC(pc);
             break;
         }
 
@@ -1373,7 +1383,10 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
     }
 
     if(dstReg == Reg::PC)
+    {
         pc &= ~1;
+        updateTHUMBPC(pc);
+    }
 
     return mem.getAccessCycles(pc, 2, true);
 }
@@ -1577,6 +1590,7 @@ int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
         if(pclr)
         {
             pc = readMem32(addr) & ~1; /*ignore thumb bit*/
+            updateTHUMBPC(pc);
             addr += 4;
         }
 
@@ -1698,7 +1712,10 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
         }
 
         if(condVal)
+        {
             pc += offset * 2 + 2 /*prefetch*/;
+            updateTHUMBPC(pc);
+        }
     }
 
     return mem.getAccessCycles(pc, 2, true);
@@ -1709,6 +1726,7 @@ int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
     uint32_t offset = static_cast<int16_t>(opcode << 5) >> 4; // sign extend and * 2
 
     pc += offset + 2 /*prefetch*/;
+    updateTHUMBPC(pc);
 
     return mem.getAccessCycles(pc, 2, true);
 }
@@ -1730,9 +1748,17 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
         auto temp = pc;
         pc = reg(Reg::LR) + (offset << 1);
         reg(Reg::LR) = temp | 1; // magic switch to thumb bit...
+
+        updateTHUMBPC(pc);
     }
 
     return mem.getAccessCycles(pc, 2, true);
+}
+
+void AGBCPU::updateTHUMBPC(uint32_t pc)
+{
+    // called when PC is updated in THUMB mode (except for incrementing)
+    thumbPCPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc)); // force const mapAddress
 }
 
 bool AGBCPU::serviceInterrupts()
