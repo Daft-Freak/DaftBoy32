@@ -1111,19 +1111,19 @@ int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
         else
             op2 = loReg(static_cast<Reg>((opcode >> 6) & 7));
 
-        bool carry, overflow;
+        uint32_t carry, overflow;
 
         if(isSub)
         {
             res = op1 - op2;
-            carry = !(op2 > op1);
-            overflow = ((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
+            carry = !(op2 > op1) ? Flag_C : 0;
+            overflow = ((op1 ^ op2) & signBit) & ((op1 ^ res) & signBit);
         }
         else
         {
             res = op1 + op2;
-            carry = res < op1;
-            overflow = !((op1 ^ op2) & signBit) && ((op1 ^ res) & signBit);
+            carry = res < op1 ? Flag_C : 0;
+            overflow = ~((op1 ^ op2) & signBit) & ((op1 ^ res) & signBit);
         }
 
         loReg(dstReg) = res;
@@ -1131,28 +1131,30 @@ int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
         cpsr = (cpsr & 0x0FFFFFFF)
                 | (res & signBit ? Flag_N : 0)
                 | (res == 0 ? Flag_Z : 0)
-                | (carry ? Flag_C : 0)
-                | (overflow ? Flag_V : 0);
+                | carry
+                | (overflow >> 3);
     }
     else // format 1, move shifted register
     {
         auto offset = (opcode >> 6) & 0x1F;
         auto res = loReg(srcReg);
 
-        if(!offset && instOp) offset = 32; // shift by 0 is really 32 (except for LSL)
-
-        bool carry = cpsr & Flag_C;
+        uint32_t carry;
         switch(instOp)
         {
             case 0: // LSL
                 if(offset != 0)
                 {
-                    carry = res & (1 << (32 - offset));
+                    carry = res & (1 << (32 - offset)) ? Flag_C : 0;
                     res <<= offset;
                 }
+                else
+                    carry = cpsr & Flag_C; // preserve
                 break;
             case 1: // LSR
-                carry = res & (1 << (offset - 1));
+                if(!offset) offset = 32; // shift by 0 is really 32
+
+                carry = res & (1 << (offset - 1)) ? Flag_C : 0;
                 if(offset == 32)
                     res = 0;
                 else
@@ -1160,8 +1162,10 @@ int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
                 break;
             case 2: // ASR
             {
+                if(!offset) offset = 32;
+
                 auto sign = res & signBit;
-                carry = res & (1 << (offset - 1));
+                carry = res & (1 << (offset - 1)) ? Flag_C : 0;
                 if(offset == 32)
                     res = sign ? 0xFFFFFFFF : 0;
                 else
@@ -1176,9 +1180,9 @@ int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
         loReg(dstReg) = res;
 
         cpsr = (cpsr & 0x1FFFFFFF)
-                | (res & signBit ? Flag_N : 0)
-                | (res == 0 ? Flag_Z : 0)
-                | (carry ? Flag_C : 0);
+             | (res & signBit ? Flag_N : 0)
+             | (res == 0 ? Flag_Z : 0)
+             | carry;
     }
 
     return mem.getAccessCycles(pc, 2, true);
