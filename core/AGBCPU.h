@@ -171,7 +171,8 @@ private:
     int executeARMInstruction();
     int executeTHUMBInstruction();
 
-    int doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCondCode, bool carry);
+    int doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry);
+    int doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2);
 
     int doTHUMB0102(uint16_t opcode, uint32_t &pc);
     int doTHUMB03(uint16_t opcode, uint32_t &pc);

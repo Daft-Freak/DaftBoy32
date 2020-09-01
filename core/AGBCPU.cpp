@@ -681,7 +681,7 @@ int AGBCPU::executeARMInstruction()
                 if(op1Reg == Reg::PC)
                     op1 += (op2Shift & 1) ? 8 : 4;
 
-                doALUOp(instOp, destReg, op1, op2, setCondCode, carry);
+                setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
                 return timing + (op2Shift & 1); // +1I if shift by reg
             }
             
@@ -731,7 +731,7 @@ int AGBCPU::executeARMInstruction()
                     cpsr = (cpsr & ~mask) | (val & mask);
             }
 
-            doALUOp(instOp, destReg, op1, op2, setCondCode, carry);
+            setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
             return timing;
         }
         case 0x4: // Single Data Transfer (I = 0, P = 0)
@@ -945,7 +945,7 @@ int AGBCPU::executeTHUMBInstruction()
     __builtin_unreachable();
 }
 
-int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCondCode, bool carry)
+int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
 {
     // output
     uint32_t res;
@@ -1024,20 +1024,67 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool setCon
             reg(destReg) = res = ~op2;
             break;
         default:
-            assert(!"Invalid ALU op!");
+            __builtin_unreachable();
     }
 
     // cond code
-    if(setCondCode)
+    if(destReg == Reg::PC)
     {
-        if(destReg == Reg::PC)
-        {
-            cpsr = getSPSR(); // restore
-            if(cpsr & Flag_T)
-                updateTHUMBPC(reg(Reg::PC));
-        }
-        else
-            cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
+        cpsr = getSPSR(); // restore
+        if(cpsr & Flag_T)
+            updateTHUMBPC(reg(Reg::PC));
+    }
+    else
+        cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
+
+    return 1;
+}
+
+int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
+{
+    auto &dest = reg(destReg);
+
+    switch(op)
+    {
+        case 0x0: // AND
+            dest = op1 & op2;
+            break;
+        case 0x1: // EOR
+            dest = op1 ^ op2;
+            break;
+        case 0x2: // SUB
+            dest = op1 - op2;
+            break;
+        case 0x3: // RSB
+            dest = op2 - op1;
+            break;
+        case 0x4: // ADD
+            dest = op1 + op2;
+            break;
+        case 0x5: // ADC
+            dest = op1 + op2 + (cpsr & Flag_C ? 1 : 0);
+            break;
+        case 0x6: // SBC
+            dest = op1 - op2 + (cpsr & Flag_C ? 1 : 0) - 1;
+            break;
+        case 0x7: // RSC
+            dest = op2 - op1 + (cpsr & Flag_C ? 1 : 0) - 1;
+            break;
+        // TST-CMN should not get here
+        case 0xC: // ORR
+            dest = op1 | op2;
+            break;
+        case 0xD: // MOV
+            dest = op2;
+            break;
+        case 0xE: // BIC
+            dest = op1 & ~op2;
+            break;
+        case 0xF: // MVN
+            dest = ~op2;
+            break;
+        default:
+            __builtin_unreachable();
     }
 
     return 1;
