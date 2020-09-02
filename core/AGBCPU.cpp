@@ -32,16 +32,19 @@ void AGBCPU::run(int ms)
 
     while(cycles > 0)
     {
-        int exec = 0;
+        unsigned int exec;
 
         // DMA
         if(dmaTriggered)
         {
-            for(int chan = 0; dmaTriggered; chan++, dmaTriggered >>= 1)
+            exec = 0;
+            auto trig = dmaTriggered;
+            for(int chan = 0; chan < 4 && dmaTriggered; chan++, trig >>= 1)
             {
-                if(dmaTriggered & 1)
+                if(trig & 1)
                     exec += dmaTransfer(chan);
             }
+            dmaTriggered = trig;
         }
         else if(!halted)
         {
