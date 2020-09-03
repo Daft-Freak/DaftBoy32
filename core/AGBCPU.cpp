@@ -15,6 +15,8 @@ void AGBCPU::reset()
 {
     cpsr = Flag_I | Flag_F | 0x13 /*supervisor mode*/;
     loReg(Reg::PC) = 0;
+    curSP = Reg::R13_svc;
+    curLR = Reg::R14_svc;
     halted = false;
 
     timer = 0;
@@ -657,7 +659,11 @@ int AGBCPU::executeARMInstruction()
                         spsr = (spsr & ~mask) | (val & mask);
                     }
                     else
+                    {
                         cpsr = (cpsr & ~mask) | (val & mask);
+                        curSP = mapReg(Reg::SP);
+                        curLR = mapReg(Reg::LR);
+                    }
                 }
                 else // MRS
                 {
@@ -731,7 +737,11 @@ int AGBCPU::executeARMInstruction()
                     spsr = (spsr & ~mask) | (val & mask);
                 }
                 else
+                {
                     cpsr = (cpsr & ~mask) | (val & mask);
+                    curSP = mapReg(Reg::SP);
+                    curLR = mapReg(Reg::LR);
+                }
 
                 return timing;
             }
@@ -892,7 +902,9 @@ int AGBCPU::executeARMInstruction()
 
             pc = 8;
             cpsr = (cpsr & ~0x1F) | Flag_I | 0x13; //supervisor mode
-            reg(Reg::LR) = ret;
+            curSP = mapReg(Reg::SP);
+            curLR = mapReg(Reg::LR);
+            loReg(curLR) = ret;
             break;
         }
 
@@ -1036,6 +1048,9 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
     if(destReg == Reg::PC)
     {
         cpsr = getSPSR(); // restore
+        curSP = mapReg(Reg::SP);
+        curLR = mapReg(Reg::LR);
+
         if(cpsr & Flag_T)
             updateTHUMBPC(reg(Reg::PC));
     }
@@ -1730,7 +1745,9 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
 
         pc = 8;
         cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x13; //supervisor mode
-        reg(Reg::LR) = ret;
+        curSP = mapReg(Reg::SP);
+        curLR = mapReg(Reg::LR);
+        loReg(curLR) = ret;
     }
     else // format 16, conditional branch
     {
@@ -1849,7 +1866,9 @@ bool AGBCPU::serviceInterrupts()
 
     loReg(Reg::PC) = 0x18;
     cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x12; // irq mode
-    reg(Reg::LR) = ret;
+    curSP = mapReg(Reg::SP);
+    curLR = mapReg(Reg::LR);
+    loReg(curLR) = ret;
     return true;
 }
 

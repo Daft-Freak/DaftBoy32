@@ -136,7 +136,7 @@ private:
     uint32_t reg(Reg r) const {return regs[static_cast<int>(mapReg(r))];}
     uint32_t &reg(Reg r) {return regs[static_cast<int>(mapReg(r))];}
 
-    // THUMB, first 8 regs
+    // THUMB, first 8 regs, also used when we don't want to map
     uint32_t loReg(Reg r) const {return regs[static_cast<int>(r)];}
     uint32_t &loReg(Reg r) {return regs[static_cast<int>(r)];}
 
@@ -227,6 +227,8 @@ private:
     uint32_t regs[31]{};
     uint32_t cpsr;
     uint32_t spsr[6]; // fiq, svc, abt, irq, und
+
+    Reg curSP = Reg::SP, curLR = Reg::LR;
 
     AGBMemory &mem;
 
