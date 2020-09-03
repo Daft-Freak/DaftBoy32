@@ -1756,7 +1756,12 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
             case 0x5: // BPL
                 condVal = !(cpsr & Flag_N);
                 break;
-            // BVS BVC
+            case 0x6: // BVS
+                condVal = cpsr & Flag_V;
+                break;
+            case 0x7: // BVC
+                condVal = !(cpsr & Flag_V);
+                break;
             case 0x8: // BHI
                 condVal = (cpsr & Flag_C) && !(cpsr & Flag_Z);
                 break;
@@ -1779,8 +1784,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
             // F is SWI
 
             default:
-                printf("THUMB cond %x @%x\n", cond, pc - 2);
-                exit(0);
+                assert(!"Invalid THUMB cond");
         }
 
         if(condVal)
