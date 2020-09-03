@@ -1604,9 +1604,9 @@ int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
     auto word = (opcode & 0xFF) << 2;
 
     if(isLoad)
-        loReg(dstReg) = readMem32(reg(Reg::SP) + word);
+        loReg(dstReg) = mem.read32Fast(loReg(curSP) + word);
     else
-        writeMem32(reg(Reg::SP) + word, loReg(dstReg));
+        writeMem32(loReg(curSP) + word, loReg(dstReg));
 
     return pcAccessCycles;
 }
@@ -1618,7 +1618,7 @@ int AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t &pc)
     auto word = (opcode & 0xFF) << 2;
 
     if(isSP)
-        loReg(dstReg) = reg(Reg::SP) + word;
+        loReg(dstReg) = loReg(curSP) + word;
     else
         loReg(dstReg) = ((pc + 2) & ~2) + word; // + 4, bit 1 forced to 0
 
@@ -1639,9 +1639,9 @@ int AGBCPU::doTHUMB13SPOffset(uint16_t opcode, uint32_t &pc)
     int off = (opcode & 0x7F) << 2;
 
     if(isNeg)
-        reg(Reg::SP) -= off;
+        loReg(curSP) -= off;
     else
-        reg(Reg::SP) += off;
+        loReg(curSP) += off;
 
     return pcAccessCycles;
 }
@@ -1652,54 +1652,51 @@ int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
     bool pclr = opcode & (1 << 8); // store LR/load PC
     uint8_t regList = opcode & 0xFF;
 
-    // count regs
-    int numRegs = pclr ? 1 : 0;
-
-    for(uint8_t t = regList; t; t >>= 1)
-    {
-        if(t & 1)
-            numRegs++;
-    }
-
     if(isLoad) // POP
     {
-        auto addr = reg(Reg::SP);
+        auto addr = loReg(curSP);
 
         int i = 0;
         for(; regList; regList >>= 1, i++)
         {
             if(regList & 1)
             {
-                regs[i] = readMem32(addr);
+                regs[i] = mem.read32Fast(addr); // assume alignment (misalgned SP is bad?)
                 addr += 4;
             }
         }
         if(pclr)
         {
-            pc = readMem32(addr) & ~1; /*ignore thumb bit*/
+            pc = mem.read32Fast(addr) & ~1; /*ignore thumb bit*/
             updateTHUMBPC(pc);
             addr += 4;
         }
 
-        reg(Reg::SP) = addr;
+        loReg(curSP) = addr;
     }
     else // PUSH
     {
-        auto addr = reg(Reg::SP) - numRegs * 4;
-        reg(Reg::SP) = addr;
+        auto addr = loReg(curSP) - (pclr ? 4 : 0);
+
+        // offset
+        for(uint8_t t = regList; t; t >>= 1)
+        {
+            if(t & 1)
+                addr -= 4;
+        }
+        loReg(curSP) = addr;
+
+        auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(addr & ~3));
 
         int i = 0;
         for(; regList; regList >>= 1, i++)
         {
             if(regList & 1)
-            {
-                writeMem32(addr, regs[i]);
-                addr += 4;
-            }
+                *ptr++ = regs[i];
         }
 
         if(pclr)
-            writeMem32(addr, reg(Reg::LR));
+            *ptr++ = loReg(curLR);
     }
 
     return pcAccessCycles;
