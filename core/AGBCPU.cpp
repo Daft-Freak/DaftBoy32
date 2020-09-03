@@ -1212,28 +1212,22 @@ int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
             res = dst - offset;
             carry = !(offset > dst) ? Flag_C : 0;
             overflow = (dst & signBit) & ((dst ^ res) & signBit); // offset cannot be negative
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3); // overflow is either 0 or 0x80000000, shift it down
             break;
         case 2: // ADD
             loReg(dstReg) = res = dst + offset;
             carry = res < dst ? Flag_C : 0;
             overflow = ~(dst & signBit) & ((dst ^ res) & signBit);
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
             break;
         case 3: // SUB
             loReg(dstReg) = res = dst - offset;
             carry = !(offset > dst) ? Flag_C : 0;
             overflow = (dst & signBit) & ((dst ^ res) & signBit);
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
             break;
         default:
             __builtin_unreachable();
-    }
-
-    if(instOp) // not MOV
-    {
-        cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V))
-                | ((res & signBit) ? Flag_N : 0)
-                | (res == 0 ? Flag_Z : 0)
-                | carry
-                | (overflow >> 3); // overflow is either 0 or 0x80000000, shift it down
     }
 
     return mem.getAccessCycles(pc, 2, true);
