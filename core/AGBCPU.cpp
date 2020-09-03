@@ -1546,19 +1546,22 @@ int AGBCPU::doTHUMB09LoadStore(uint16_t opcode, uint32_t &pc)
 
     auto base = loReg(baseReg);
 
-    if(isLoad)
+    auto &val = loReg(dstReg);
+    if(isByte)
     {
-        if(isByte) // LDRB
-            loReg(dstReg) = readMem8(base + offset);
-        else // LDR
-            loReg(dstReg) = readMem32(base + (offset << 2));
+        auto addr = base + offset;
+        if(isLoad) // LDRB
+            val = readMem8(addr);
+        else // STRB
+            writeMem8(addr, val);
     }
     else
     {
-        if(isByte) // STRB
-            writeMem8(base + offset, loReg(dstReg));
+        auto addr = base + (offset << 2);
+        if(isLoad) // LDR
+            val = readMem32(addr);
         else // STR
-            writeMem32(base + (offset << 2), loReg(dstReg));
+            writeMem32(addr, val);
     }
 
     return mem.getAccessCycles(pc, 2, true);
