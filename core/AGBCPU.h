@@ -205,6 +205,7 @@ private:
     static const uint32_t signBit = 0x80000000;
 
     const uint16_t *thumbPCPtr = nullptr;
+    int pcAccessCycles = 0; // currently only for thumb...
 
     // internal state
     //bool stopped, halted;
