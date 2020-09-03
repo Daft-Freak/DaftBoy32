@@ -1831,13 +1831,13 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
         offset <<= 12;
         if(offset & (1 << 22))
             offset |= 0xFF800000; //sign extend
-        reg(Reg::LR) = pc + 2 + offset;
+        loReg(curLR) = pc + 2 + offset;
     }
     else // second half
     {
         auto temp = pc;
-        pc = reg(Reg::LR) + (offset << 1);
-        reg(Reg::LR) = temp | 1; // magic switch to thumb bit...
+        pc = loReg(curLR) + (offset << 1);
+        loReg(curLR) = temp | 1; // magic switch to thumb bit...
 
         updateTHUMBPC(pc);
     }
