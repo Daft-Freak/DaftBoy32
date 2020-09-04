@@ -103,6 +103,13 @@ void AGBCPU::triggerDMA(int trigger)
 
 uint8_t AGBCPU::readMem8(uint32_t addr) const
 {
+    // handle IO reads as 16-bit
+    if((addr >> 24) == 0x4)
+    {
+        auto tmp = mem.read16(addr & ~1);
+        return (addr & 1) ? tmp >> 8 : tmp;
+    }
+
     return mem.read8(addr);
 }
 
@@ -160,19 +167,19 @@ void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
 {
     if((addr >> 24) == 0x4)
     {
-        // need to modify these internally, promote to 16-bit
-        if((addr >= 0x4000200 && addr <= 0x4000203) /*IE/IF*/ || addr == 0x4000208 /*IME*/ || (addr >= 0x40000BA && addr <= 0x40000DE) /*DMA*/ || (addr >= 0x4000100 && addr <= 0x400010E) /*timers*/)
-        {
-            auto tmp = readMem8(addr ^ 1);
-            writeMem16(addr & ~1, addr & 1 ? tmp | (data << 8) : (tmp << 8) | data);
-            return;
-        }
-        else if(addr == 0x4000301/*HALTCNT*/)
+        if(addr == 0x4000301/*HALTCNT*/)
         {
             if(data & 0x80)
                 printf("STOP\n");
             else
                 halted = true;
+        }
+        else
+        {
+            // promote IO to 16-bit
+            auto tmp = mem.readIOReg((addr & ~1) & 0x3FF);
+            writeMem16(addr & ~1, addr & 1 ? (tmp & 0xFF) | (data << 8) : (tmp & 0xFF00) | data);
+            return;
         }
     }
 
