@@ -111,26 +111,13 @@ private:
     Reg mapReg(Reg r) const
     {
         int iReg = static_cast<int>(r);
-        int mode = cpsr & 0x1F;
-        if(mode == 0x10/*User*/ || mode == 0x1F /*System*/ || r == Reg::PC || iReg < 8 || (mode != 0x11/*FIQ*/ && iReg < 13))
+        if(!regBankOffset || iReg < 8 || r == Reg::PC)
             return r;
 
-        if(mode == 0x11) // FIQ
-            return static_cast<Reg>(iReg + 8);
+        if(regBankOffset != 8/*FIQ*/ && iReg < 13)
+            return r;
 
-        if(mode == 0x13) // SVC
-            return static_cast<Reg>(iReg + 10);
-        
-        if(mode == 0x17) // ABT
-            return static_cast<Reg>(iReg + 12);
-
-        if(mode == 0x12) // IRQ
-            return static_cast<Reg>(iReg + 14);
-
-        if(mode == 0x1B) // UND
-            return static_cast<Reg>(iReg + 16);
-
-        return r; // invalid mode!
+        return static_cast<Reg>(iReg + regBankOffset);
     }
 
     uint32_t reg(Reg r) const {return regs[static_cast<int>(mapReg(r))];}
@@ -157,6 +144,35 @@ private:
         }
 
         return spsr[5]; // invalid mode!
+    }
+
+    void modeChanged() // possibly
+    {
+        switch(cpsr & 0x1F)
+        {
+            case 0x10: // User
+            case 0x1F: // System
+                regBankOffset = 0;
+                break;
+            case 0x11: // FIQ
+                regBankOffset = static_cast<int>(Reg::R8_fiq) - static_cast<int>(Reg::R8);
+                break;
+            case 0x13: // SVC
+                regBankOffset = static_cast<int>(Reg::R13_svc) - static_cast<int>(Reg::R13);
+                break;
+            case 0x17: // ABT
+                regBankOffset = static_cast<int>(Reg::R13_abt) - static_cast<int>(Reg::R13);
+                break;
+            case 0x12: // IRQ
+                regBankOffset = static_cast<int>(Reg::R13_irq) - static_cast<int>(Reg::R13);
+                break;
+            case 0x1B: // UND
+                regBankOffset = static_cast<int>(Reg::R13_und) - static_cast<int>(Reg::R13);
+                break;
+        }
+
+        curSP = mapReg(Reg::SP);
+        curLR = mapReg(Reg::LR);
     }
 
     uint8_t readMem8(uint32_t addr) const;
@@ -230,6 +246,7 @@ private:
     uint32_t spsr[6]; // fiq, svc, abt, irq, und
 
     Reg curSP = Reg::SP, curLR = Reg::LR;
+    int regBankOffset = 0;
 
     AGBMemory &mem;
 
