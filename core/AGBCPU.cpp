@@ -933,21 +933,15 @@ int AGBCPU::executeARMInstruction()
         }
         case 0xA: // Branch (B)
         {
-            auto offset = (opcode & 0xFFFFFF) << 2;
-            if(offset & 0x2000000)
-                offset |= 0xFC000000; // sign extend
-
-            pc += static_cast<int32_t>(offset) + 4/*prefetch*/;
+            auto offset = (static_cast<int32_t>(opcode & 0xFFFFFF) << 8) >> 6;
+            pc += offset + 4/*prefetch*/;
             break;
         }
         case 0xB: // Branch with Link (BL)
         {
-            auto offset = (opcode & 0xFFFFFF) << 2;
-            if(offset & 0x2000000)
-                offset |= 0xFC000000; // sign extend
-
+            auto offset = (static_cast<int32_t>(opcode & 0xFFFFFF) << 8) >> 6;
             reg(Reg::LR) = pc;
-            pc += static_cast<int32_t>(offset) + 4/*prefetch*/;
+            pc += offset + 4/*prefetch*/;
             break;
         }
 
