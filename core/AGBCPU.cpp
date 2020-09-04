@@ -389,6 +389,77 @@ int AGBCPU::executeARMInstruction()
         return ret;
     };
 
+    const auto halfwordTransfer = [this](uint32_t opcode)
+    {
+        bool isPre = opcode & (1 << 24);
+        bool isUp = opcode & (1 << 23);
+        bool isImm = opcode & (1 << 22);
+        bool writeBack = opcode & (1 << 21);
+        bool isLoad = opcode & (1 << 20);
+        auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
+        auto srcDestReg = static_cast<Reg>((opcode >> 12) & 0xF);
+        bool sign = opcode & (1 << 6);
+        bool halfWords = opcode & (1 << 5);
+        auto offReg = static_cast<Reg>(opcode & 0xF);
+
+        int offset;
+
+        if(isImm)
+            offset = ((opcode >> 4) & 0xF0) | (opcode & 0xF);
+        else
+        {
+            offset = reg(offReg);
+            assert((opcode & 0xF00) == 0);
+        }
+
+        if(!isUp)
+            offset = -offset;
+
+        auto addr = reg(baseReg);
+
+        // pc offset
+        if(baseReg == Reg::PC)
+            addr += 4;
+
+        if(isPre)
+            addr += offset;
+        else
+            assert(!writeBack); // bad
+
+        if(writeBack || !isPre)
+            reg(baseReg) += offset;
+
+        if(isLoad)
+        {
+            if(halfWords && (!sign || !(addr & 1))) // check alignment for signed load...
+            {
+                auto val = readMem16(addr); // LDRH/LDRSH
+
+                if(sign && (val & (1 << 15)))
+                    reg(srcDestReg) = val | 0xFFFF0000; // sign extend
+                else
+                    reg(srcDestReg) = val;
+            }
+            else // LDRSB ... or misaligned LDRSH
+            {
+                auto val = readMem8(addr);
+                if(val & (1 << 7))
+                    reg(srcDestReg) = val | 0xFFFFFF00;
+                else
+                    reg(srcDestReg) = val;
+            }
+        }
+        else
+        {
+            assert(halfWords);
+            assert(!sign);
+
+            // FIXME: PC is + 12
+            assert(srcDestReg != Reg::PC);
+            writeMem16(addr, reg(srcDestReg)); // STRH
+        }
+    };
+
     // condition
     auto cond = opcode >> 28;
 
@@ -460,119 +531,17 @@ int AGBCPU::executeARMInstruction()
 
     switch((opcode >> 24) & 0xF)
     {
-        case 0x0: // data processing with register
-        case 0x1: // and more...
+        case 0x0: // data processing with register (and halfword transfer/multiply)
         {
-            if((opcode & 0x0FFFFF00) == 0x012FFF00) // Branch and Exchange (BX)
-            {
-                auto instOp = (opcode >> 4) & 0xF;
-                assert(instOp == 1); //
-                auto newPC = reg(static_cast<Reg>(opcode & 0xF));
-                if(newPC & 1)
-                {
-                    cpsr |= Flag_T;
-                    updateTHUMBPC(newPC & ~1);
-                }
-
-                pc = newPC & 0xFFFFFFFE;
-                return timing; // TODO: timing
-            }
-
             if(((opcode >> 4) & 9) == 9)
             {
                 if((opcode >> 5) & 3) // halfword transfer 
                 {
-                    bool isPre = opcode & (1 << 24);
-                    bool isUp = opcode & (1 << 23);
-                    bool isImm = opcode & (1 << 22);
-                    bool writeBack = opcode & (1 << 21);
-                    bool isLoad = opcode & (1 << 20);
-                    auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
-                    auto srcDestReg = static_cast<Reg>((opcode >> 12) & 0xF);
-                    bool sign = opcode & (1 << 6);
-                    bool halfWords = opcode & (1 << 5);
-                    auto offReg = static_cast<Reg>(opcode & 0xF);
-
-                    int offset;
-                    
-                    if(isImm)
-                        offset = ((opcode >> 4) & 0xF0) | (opcode & 0xF);
-                    else
-                    {
-                        offset = reg(offReg);
-                        assert((opcode & 0xF00) == 0);
-                    }
-
-                    if(!isUp)
-                        offset = -offset;
-
-                    auto addr = reg(baseReg);
-
-                    // pc offset
-                    if(baseReg == Reg::PC)
-                        addr += 4;
-
-                    if(isPre)
-                        addr += offset;
-                    else
-                        assert(!writeBack); // bad
-
-                    if(writeBack || !isPre)
-                        reg(baseReg) += offset;
-
-                    if(isLoad)
-                    {
-                        if(halfWords && (!sign || !(addr & 1))) // check alignment for signed load...
-                        {
-                            auto val = readMem16(addr); // LDRH/LDRSH
-
-                            if(sign && (val & (1 << 15)))
-                                reg(srcDestReg) = val | 0xFFFF0000; // sign extend
-                            else
-                                reg(srcDestReg) = val;
-                        }
-                        else // LDRSB ... or misaligned LDRSH
-                        {
-                            auto val = readMem8(addr);
-                            if(val & (1 << 7))
-                                reg(srcDestReg) = val | 0xFFFFFF00;
-                            else
-                                reg(srcDestReg) = val;
-                        }
-                    }
-                    else
-                    {
-                        assert(halfWords);
-                        assert(!sign);
-
-                        // FIXME: PC is + 12
-                        assert(srcDestReg != Reg::PC);
-                        writeMem16(addr, reg(srcDestReg)); // STRH
-                    }
+                    halfwordTransfer(opcode);
+                    break;
                 }
-                else if(opcode & (1 << 24))
-                {
-                    bool isByte = opcode & (1 << 22);
-                    auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
-                    auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
-                    auto srcReg = static_cast<Reg>(opcode & 0xF);
 
-                    auto addr = reg(baseReg);
-
-                    if(isByte)
-                    {
-                        auto v = readMem8(addr);
-                        writeMem8(addr, reg(srcReg));
-                        reg(destReg) = v;
-                    }
-                    else
-                    {
-                        auto v = readMem32(addr);
-                        writeMem32(addr, reg(srcReg));
-                        reg(destReg) = v;
-                    }
-                }
-                else if(opcode & (1 << 23)) // MULL/MLAL
+                if(opcode & (1 << 23)) // MULL/MLAL
                 {
                     bool isSigned = opcode & (1 << 22);
                     bool accumulate = opcode & (1 << 21);
@@ -636,6 +605,75 @@ int AGBCPU::executeARMInstruction()
             auto instOp = (opcode >> 21) & 0xF;
             bool setCondCode = (opcode & (1 << 20));
     
+            auto op1Reg = static_cast<Reg>((opcode >> 16) & 0xF);
+            auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
+            auto op2Shift = (opcode >> 4) & 0xFF;
+            auto op2Reg = static_cast<Reg>(opcode & 0xF);
+            auto op1 = reg(op1Reg);
+
+            // reg arg2
+            bool carry;
+            auto op2 = getShiftedReg(op2Reg, op2Shift, carry);
+
+            if(op1Reg == Reg::PC)
+                op1 += (op2Shift & 1) ? 8 : 4;
+
+            setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
+            return timing + (op2Shift & 1); // +1I if shift by reg
+        }
+        case 0x1: // data processing with register (and branch exchange/swap)
+        {
+            if((opcode & 0x0FFFFF00) == 0x012FFF00) // Branch and Exchange (BX)
+            {
+                auto instOp = (opcode >> 4) & 0xF;
+                assert(instOp == 1); //
+                auto newPC = reg(static_cast<Reg>(opcode & 0xF));
+                if(newPC & 1)
+                {
+                    cpsr |= Flag_T;
+                    updateTHUMBPC(newPC & ~1);
+                }
+
+                pc = newPC & 0xFFFFFFFE;
+                return timing; // TODO: timing
+            }
+
+            if(((opcode >> 4) & 9) == 9)
+            {
+                if((opcode >> 5) & 3) // halfword transfer
+                {
+                    halfwordTransfer(opcode);
+                    break;
+                }
+                else // SWP
+                {
+                    bool isByte = opcode & (1 << 22);
+                    auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
+                    auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
+                    auto srcReg = static_cast<Reg>(opcode & 0xF);
+
+                    auto addr = reg(baseReg);
+
+                    if(isByte)
+                    {
+                        auto v = readMem8(addr);
+                        writeMem8(addr, reg(srcReg));
+                        reg(destReg) = v;
+                    }
+                    else
+                    {
+                        auto v = readMem32(addr);
+                        writeMem32(addr, reg(srcReg));
+                        reg(destReg) = v;
+                    }
+                }
+
+                return timing; // TODO: timing
+            }
+
+            auto instOp = (opcode >> 21) & 0xF;
+            bool setCondCode = (opcode & (1 << 20));
+
             if(!setCondCode && (instOp >= 0x8/*TST*/ && instOp <= 0xB /*CMN*/)) // PSR Transfer
             {
                 bool isSPSR = opcode & (1 << 22);
@@ -695,7 +733,6 @@ int AGBCPU::executeARMInstruction()
             break;
         }
         case 0x2: // data processing with immediate
-        case 0x3:
         {
             auto instOp = (opcode >> 21) & 0xF;
             bool setCondCode = (opcode & (1 << 20));
@@ -713,7 +750,28 @@ int AGBCPU::executeARMInstruction()
             bool carry = shift ? op2 & (1 << (shift - 1)) : cpsr & Flag_C;
             op2 = (op2 >> shift) | (op2 << (32 - shift));
 
-            // TODO: a bit duplicated with above
+            setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
+            return timing;
+        }
+        case 0x3: // same as above, but also possibly MSR
+        {
+            auto instOp = (opcode >> 21) & 0xF;
+            bool setCondCode = (opcode & (1 << 20));
+            auto op1Reg = static_cast<Reg>((opcode >> 16) & 0xF);
+            auto op1 = reg(op1Reg);
+            auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
+
+            if(op1Reg == Reg::PC)
+                op1 += 4;
+
+            // get the immediate value
+            uint32_t op2 = opcode & 0xFF;
+            int shift = ((opcode >> 8) & 0xF) * 2;
+
+            bool carry = shift ? op2 & (1 << (shift - 1)) : cpsr & Flag_C;
+            op2 = (op2 >> shift) | (op2 << (32 - shift));
+
+            // TODO: a bit duplicated with 0/1
             if(!setCondCode && (instOp >= 0x8/*TST*/ && instOp <= 0xB /*CMN*/)) // MSR
             {
                 bool isSPSR = opcode & (1 << 22);
