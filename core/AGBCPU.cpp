@@ -312,12 +312,28 @@ int AGBCPU::executeARMInstruction()
     {
         auto ret = reg(r);
 
+        // prefetch
+        if(r == Reg::PC)
+            ret += (shift & 1) ? 8 : 4;
+
+        if(!shift) // left shift by immediate 0, do nothing and preserve carry
+        {
+            carry = cpsr & Flag_C;
+            return ret;
+        }
+
         int shiftType = (shift >> 1) & 3;
         int shiftAmount;
         if(shift & 1)
         {
             assert((shift & (1 << 3)) == 0);
             shiftAmount = reg(static_cast<Reg>(shift >> 4)) & 0xFF;
+
+            if(!shiftAmount)
+            {
+                carry = cpsr & Flag_C;
+                return ret;
+            }
         }
         else
         {
@@ -326,16 +342,6 @@ int AGBCPU::executeARMInstruction()
                 shiftAmount = 32;
         }
 
-        // prefetch
-        if(r == Reg::PC)
-            ret += (shift & 1) ? 8 : 4;
-
-        if(shiftAmount == 0) // do nothing, preserve carry if 0
-        {
-            carry = cpsr & Flag_C;
-            return ret;
-        }
-    
         switch(shiftType)
         {
             case 0: // LSL
