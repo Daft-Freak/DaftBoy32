@@ -39,6 +39,11 @@ uint16_t AGBMemory::read16(uint32_t addr) const
     return ret;
 }
 
+uint32_t AGBMemory::read32(uint32_t addr) const
+{
+    return *reinterpret_cast<const uint32_t *>(mapAddress(addr));
+}
+
 void AGBMemory::write8(uint32_t addr, uint8_t data)
 {
     if((addr >> 24) == 0x7 || ((addr >> 24) == 0x6 && (addr &  0x1FFFF) >= 0x10000)) // OAM / OBJ VRAM ignores byte writes
@@ -74,6 +79,16 @@ void AGBMemory::write16(uint32_t addr, uint16_t data)
     }
 
     //printf("write %x = %x\n", addr, data);
+}
+
+void AGBMemory::write32(uint32_t addr, uint32_t data)
+{
+    auto ptr = mapAddress(addr);
+    if(ptr)
+    {
+        *reinterpret_cast<uint32_t *>(ptr) = data;
+        return;
+    }
 }
 
 const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
