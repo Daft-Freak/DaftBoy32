@@ -1997,24 +1997,29 @@ int AGBCPU::dmaTransfer(int channel)
 
     //printf("DMA%i %xx%i %x -> %x\n", channel, count, is32Bit ? 4 : 2, srcAddr, dstAddr);
 
-    int cycles = count * 2 + 2; // FIXME: 1N + (n-1)S read + 1N + (n-1)S write + 2I (or 4I if both addrs in gamepak)
+    int width = is32Bit ? 4 : 2;
+    int cycles = mem.getAccessCycles(srcAddr, width, false) + mem.getAccessCycles(srcAddr, width, true) * (count - 1) // 1N + (n-1)S read
+               + mem.getAccessCycles(dstAddr, width, false) + mem.getAccessCycles(dstAddr, width, true) * (count - 1) // 1N + (n-1)S write
+               + 2; // TODO: 2I (or 4I if both addrs in gamepak)
+
+    srcAddr &= ~(width - 1);
 
     while(count--)
     {
         if(is32Bit)
-            writeMem32(dstAddr, readMem32(srcAddr & ~3));
+            writeMem32(dstAddr, readMem32Aligned(srcAddr));
         else
-            writeMem16(dstAddr, readMem16(srcAddr & ~1));
+            writeMem16(dstAddr, readMem16Aligned(srcAddr));
 
         if(dstMode == 0 || dstMode == 3)
-            dstAddr += is32Bit ? 4 : 2;
+            dstAddr += width;
         else if(dstMode == 1)
-            dstAddr -= is32Bit ? 4 : 2;
+            dstAddr -= width;
 
         if(srcMode == 0)
-            srcAddr += is32Bit ? 4 : 2;
+            srcAddr += width;
         else if(srcMode == 1)
-            srcAddr -= is32Bit ? 4 : 2;
+            srcAddr -= width;
     }
 
     if(!(dmaControl & DAMCNTH_Repeat))
