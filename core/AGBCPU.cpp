@@ -473,6 +473,20 @@ int AGBCPU::executeARMInstruction()
         }
     };
 
+    // 0-3
+    const auto doDataProcessing = [this](uint32_t opcode, uint32_t op2, bool carry, int pcInc = 4)
+    {
+        auto op1Reg = static_cast<Reg>((opcode >> 16) & 0xF);
+        auto op1 = reg(op1Reg);
+        if(op1Reg == Reg::PC)
+            op1 += pcInc;
+
+        auto instOp = (opcode >> 21) & 0xF;
+        bool setCondCode = (opcode & (1 << 20));
+        auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
+        setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
+    };
+
     //4-7
     const auto doSingleDataTransfer = [this, timing, pc, &getShiftedReg](uint32_t opcode, bool isReg, bool isPre) __attribute__((always_inline))
     {
@@ -771,23 +785,14 @@ int AGBCPU::executeARMInstruction()
                 return timing; // TODO: timing
             }
 
-            auto instOp = (opcode >> 21) & 0xF;
-            bool setCondCode = (opcode & (1 << 20));
-    
-            auto op1Reg = static_cast<Reg>((opcode >> 16) & 0xF);
-            auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
             auto op2Shift = (opcode >> 4) & 0xFF;
             auto op2Reg = static_cast<Reg>(opcode & 0xF);
-            auto op1 = reg(op1Reg);
 
             // reg arg2
             bool carry;
             auto op2 = getShiftedReg(op2Reg, op2Shift, carry);
+            doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 8 : 4);
 
-            if(op1Reg == Reg::PC)
-                op1 += (op2Shift & 1) ? 8 : 4;
-
-            setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
             return timing + (op2Shift & 1); // +1I if shift by reg
         }
         case 0x1: // data processing with register (and branch exchange/swap)
@@ -881,47 +886,29 @@ int AGBCPU::executeARMInstruction()
                     else
                         reg(destReg) = cpsr;
                 }
+
+                break;
             }
-            else
-            {
-                auto op1Reg = static_cast<Reg>((opcode >> 16) & 0xF);
-                auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
-                auto op2Shift = (opcode >> 4) & 0xFF;
-                auto op2Reg = static_cast<Reg>(opcode & 0xF);
-                auto op1 = reg(op1Reg);
 
-                // reg arg2
-                bool carry;
-                auto op2 = getShiftedReg(op2Reg, op2Shift, carry);
+            auto op2Shift = (opcode >> 4) & 0xFF;
+            auto op2Reg = static_cast<Reg>(opcode & 0xF);
 
-                if(op1Reg == Reg::PC)
-                    op1 += (op2Shift & 1) ? 8 : 4;
+            // reg arg2
+            bool carry;
+            auto op2 = getShiftedReg(op2Reg, op2Shift, carry);
+            doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 8 : 4);
 
-                setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
-                return timing + (op2Shift & 1); // +1I if shift by reg
-            }
-            
-            break;
+            return timing + (op2Shift & 1); // +1I if shift by reg
         }
         case 0x2: // data processing with immediate
         {
-            auto instOp = (opcode >> 21) & 0xF;
-            bool setCondCode = (opcode & (1 << 20));
-            auto op1Reg = static_cast<Reg>((opcode >> 16) & 0xF);
-            auto op1 = reg(op1Reg);
-            auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
-
-            if(op1Reg == Reg::PC)
-                op1 += 4;
-
             // get the immediate value
             uint32_t op2 = opcode & 0xFF;
             int shift = ((opcode >> 8) & 0xF) * 2;
-
-            bool carry = shift ? op2 & (1 << (shift - 1)) : cpsr & Flag_C;
             op2 = (op2 >> shift) | (op2 << (32 - shift));
+            bool carry = shift ? op2 & (1 << 31) : cpsr & Flag_C;
 
-            setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
+            doDataProcessing(opcode, op2, carry);
             return timing;
         }
         case 0x3: // same as above, but also possibly MSR
@@ -939,8 +926,8 @@ int AGBCPU::executeARMInstruction()
             uint32_t op2 = opcode & 0xFF;
             int shift = ((opcode >> 8) & 0xF) * 2;
 
-            bool carry = shift ? op2 & (1 << (shift - 1)) : cpsr & Flag_C;
             op2 = (op2 >> shift) | (op2 << (32 - shift));
+            bool carry = shift ? op2 & (1 << 31) : cpsr & Flag_C;
 
             // TODO: a bit duplicated with 0/1
             if(!setCondCode && (instOp >= 0x8/*TST*/ && instOp <= 0xB /*CMN*/)) // MSR
@@ -972,7 +959,7 @@ int AGBCPU::executeARMInstruction()
                 return timing;
             }
 
-            setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
+            doDataProcessing(opcode, op2, carry);
             return timing;
         }
         case 0x4: // Single Data Transfer (I = 0, P = 0)
