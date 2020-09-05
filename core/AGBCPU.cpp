@@ -1712,7 +1712,7 @@ int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
     if(isLoad)
         loReg(dstReg) = mem.read32Fast(loReg(curSP) + word);
     else
-        writeMem32(loReg(curSP) + word, loReg(dstReg));
+        mem.write32(loReg(curSP) + word, loReg(dstReg));
 
     return pcAccessCycles;
 }
@@ -1761,19 +1761,21 @@ int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
     if(isLoad) // POP
     {
         auto addr = loReg(curSP);
+        auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(addr & ~3));
 
         int i = 0;
         for(; regList; regList >>= 1, i++)
         {
             if(regList & 1)
             {
-                regs[i] = mem.read32Fast(addr); // assume alignment (misalgned SP is bad?)
+                regs[i] = *ptr++;
                 addr += 4;
             }
         }
+
         if(pclr)
         {
-            pc = mem.read32Fast(addr) & ~1; /*ignore thumb bit*/
+            pc = *ptr++ & ~1; /*ignore thumb bit*/
             updateTHUMBPC(pc);
             addr += 4;
         }
