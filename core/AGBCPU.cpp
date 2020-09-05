@@ -300,7 +300,7 @@ int AGBCPU::executeARMInstruction()
     pc += 4;
 
     // helpers
-    auto getShiftedReg = [this, opcode, pc](Reg r, uint8_t shift, bool &carry)
+    const auto getShiftedReg = [this, opcode, pc](Reg r, uint8_t shift, bool &carry)
     {
         auto ret = reg(r);
 
@@ -395,75 +395,218 @@ int AGBCPU::executeARMInstruction()
         return ret;
     };
 
-    const auto halfwordTransfer = [this](uint32_t opcode)
+    const auto halfwordTransfer = [this](uint32_t opcode, bool isPre)
     {
-        bool isPre = opcode & (1 << 24);
-        bool isUp = opcode & (1 << 23);
-        bool isImm = opcode & (1 << 22);
-        bool writeBack = opcode & (1 << 21);
-        bool isLoad = opcode & (1 << 20);
-        auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
-        auto srcDestReg = static_cast<Reg>((opcode >> 12) & 0xF);
-        bool sign = opcode & (1 << 6);
-        bool halfWords = opcode & (1 << 5);
-        auto offReg = static_cast<Reg>(opcode & 0xF);
+        //bool isUp = opcode & (1 << 23);
+        //bool isImm = opcode & (1 << 22);
+        //bool writeBack = opcode & (1 << 21);
+        //bool isLoad = opcode & (1 << 20);
+        auto baseReg = mapReg(static_cast<Reg>((opcode >> 16) & 0xF));
+        auto srcDestReg = mapReg(static_cast<Reg>((opcode >> 12) & 0xF));
 
         int offset;
 
-        if(isImm)
+        if(opcode & (1 << 22)) // immediate
             offset = ((opcode >> 4) & 0xF0) | (opcode & 0xF);
         else
         {
-            offset = reg(offReg);
+            offset = reg(static_cast<Reg>(opcode & 0xF));
             assert((opcode & 0xF00) == 0);
         }
 
-        if(!isUp)
+        if(!(opcode & (1 << 23))) // !up
             offset = -offset;
 
-        auto addr = reg(baseReg);
+        auto addr = loReg(baseReg);
 
         // pc offset
         if(baseReg == Reg::PC)
             addr += 4;
 
         if(isPre)
-            addr += offset;
-        else
-            assert(!writeBack); // bad
-
-        if(writeBack || !isPre)
-            reg(baseReg) += offset;
-
-        if(isLoad)
         {
-            if(halfWords && (!sign || !(addr & 1))) // check alignment for signed load...
-            {
-                auto val = readMem16(addr); // LDRH/LDRSH
-
-                if(sign && (val & (1 << 15)))
-                    reg(srcDestReg) = val | 0xFFFF0000; // sign extend
-                else
-                    reg(srcDestReg) = val;
-            }
-            else // LDRSB ... or misaligned LDRSH
-            {
-                auto val = readMem8(addr);
-                if(val & (1 << 7))
-                    reg(srcDestReg) = val | 0xFFFFFF00;
-                else
-                    reg(srcDestReg) = val;
-            }
+            addr += offset;
+            if(opcode & (1 << 21)) // write back
+                loReg(baseReg) = addr;
         }
         else
         {
-            assert(halfWords);
-            assert(!sign);
+            assert(!(opcode & (1 << 21))); // writeback should not be set
+            loReg(baseReg) += offset; // always writes back
+        }
+
+        if(opcode & (1 << 20)) // load
+        {
+            bool sign = opcode & (1 << 6);
+            bool halfWords = opcode & (1 << 5);
+
+            if(halfWords && !sign)
+                loReg(srcDestReg) = readMem16(addr); // LDRH
+            else if(halfWords && !(addr & 1)) // LDRSH (aligned)
+                loReg(srcDestReg) = static_cast<int16_t>(readMem16Aligned(addr)); // sign extend
+            else // LDRSB ... or misaligned LDRSH
+                loReg(srcDestReg) = static_cast<int8_t>(readMem8(addr)); // sign extend
+        }
+        else
+        {
+            // only unsigned halfword stores
+            assert(opcode & (1 << 5)); // half
+            assert(!(opcode & (1 << 6))); // sign
 
             // FIXME: PC is + 12
             assert(srcDestReg != Reg::PC);
-            writeMem16(addr, reg(srcDestReg)); // STRH
+            writeMem16(addr, loReg(srcDestReg)); // STRH
         }
+    };
+
+    //4-7
+    const auto doSingleDataTransfer = [this, timing, pc, &getShiftedReg](uint32_t opcode, bool isReg, bool isPre) __attribute__((always_inline))
+    {
+        //bool isUp = opcode & (1 << 23);
+        //bool writeBack = opcode & (1 << 21);
+        //bool isLoad = opcode & (1 << 20);
+        auto baseReg = mapReg(static_cast<Reg>((opcode >> 16) & 0xF));
+        auto srcDestReg = mapReg(static_cast<Reg>((opcode >> 12) & 0xF));
+        int offset;
+
+        if(!isReg) // immediate
+            offset = opcode & 0xFFF;
+        else
+        {
+            assert((opcode & (1 << 4)) == 0); // no reg shift
+            bool carry;
+            offset = getShiftedReg(static_cast<Reg>(opcode & 0xF), (opcode >> 4) & 0xFE, carry);
+        }
+
+        if(!(opcode & (1 << 23))) // !up
+            offset = -offset;
+
+        auto addr = loReg(baseReg);
+
+        // pc offset
+        if(baseReg == Reg::PC)
+            addr += 4;
+
+        if(isPre)
+        {
+            addr += offset;
+            if(opcode & (1 << 21)) // write back
+                loReg(baseReg) = addr;
+        }
+        else
+        {
+            assert(!(opcode & (1 << 21))); // non-privileged transfer
+            loReg(baseReg) += offset; // always writes back
+        }
+
+        bool isByte = opcode & (1 << 22);
+        if(opcode & (1 << 20)) // load
+        {
+            if(isByte)
+                loReg(srcDestReg) = readMem8(addr);
+            else
+                loReg(srcDestReg) = readMem32(addr);
+
+            return timing + mem.getAccessCycles(addr, isByte ? 1 : 4, false) + 1; // 1S + 1N + 1I
+            // TODO: +1S+1N if dst == PC
+        }
+        else
+        {
+            // FIXME: PC is + 12
+            assert(srcDestReg != Reg::PC);
+            if(isByte)
+                writeMem8(addr, loReg(srcDestReg));
+            else
+                writeMem32(addr, loReg(srcDestReg));
+
+            return mem.getAccessCycles(pc, 4, false) + mem.getAccessCycles(addr, isByte ? 1 : 4, false); // 2N
+        }
+    };
+
+    // 8-9
+    const auto doBlockDataTransfer = [this](uint32_t opcode, bool preIndex)
+    {
+        bool isUp = opcode & (1 << 23);
+        bool isLoadForce = opcode & (1 << 22);
+        bool writeBack = opcode & (1 << 21);
+        bool isLoad = opcode & (1 << 20);
+        auto baseReg = mapReg(static_cast<Reg>((opcode >> 16) & 0xF));
+        uint16_t regList = opcode;
+
+        if(isLoadForce)
+        {
+            //assert(!writeBack); // "should not be used"
+            assert(!isLoad || !(regList & (1 << 15))); // TODO: load with r15 (mode change)
+        }
+
+        auto addr = loReg(baseReg) & ~3;
+
+        // flip decrement addressing around so that regs are stored in the right order
+        uint32_t lowAddr;
+        if(!isUp)
+        {
+            for(uint16_t t = regList; t; t >>= 1)
+            {
+                if(t & 1)
+                    addr -= 4;
+            }
+            lowAddr = addr;
+
+            if(!preIndex)
+                addr += 4;
+        }
+        else if(preIndex)
+            addr += 4;
+
+        if(isLoad && regList & (1 << static_cast<int>(baseReg)))
+            writeBack = false; // don't override
+
+        int i = 0;
+        if(baseReg == curSP)
+        {
+            // stack push/pull, we can assume RAM
+            auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(addr));
+
+            for(; regList && i < 16; regList >>= 1, i++)
+            {
+                if(!(regList & 1))
+                    continue;
+
+                // directly index to force user
+                auto reg = isLoadForce ? static_cast<Reg>(i): mapReg(static_cast<Reg>(i));
+
+                if(isLoad)
+                    loReg(reg) = *ptr++;
+                else
+                    *ptr++ = loReg(reg);
+
+                addr += 4;
+            }
+        }
+        else
+        {
+            for(; regList; regList >>= 1, i++)
+            {
+                if(!(regList & 1))
+                    continue;
+
+                // directly index to force user
+                auto reg = isLoadForce ? static_cast<Reg>(i) : mapReg(static_cast<Reg>(i));
+
+                if(isLoad)
+                    loReg(reg) = readMem32Aligned(addr);
+                else
+                    writeMem32(addr, loReg(reg));
+
+                addr += 4;
+            }
+        }
+
+        if(preIndex && writeBack)
+            addr -= 4;
+
+        if(writeBack)
+            loReg(baseReg) = isUp ? addr : lowAddr;
     };
 
     // condition
@@ -543,7 +686,7 @@ int AGBCPU::executeARMInstruction()
             {
                 if((opcode >> 5) & 3) // halfword transfer 
                 {
-                    halfwordTransfer(opcode);
+                    halfwordTransfer(opcode, false);
                     break;
                 }
 
@@ -648,7 +791,7 @@ int AGBCPU::executeARMInstruction()
             {
                 if((opcode >> 5) & 3) // halfword transfer
                 {
-                    halfwordTransfer(opcode);
+                    halfwordTransfer(opcode, true);
                     break;
                 }
                 else // SWP
@@ -810,131 +953,19 @@ int AGBCPU::executeARMInstruction()
             return timing;
         }
         case 0x4: // Single Data Transfer (I = 0, P = 0)
+            return doSingleDataTransfer(opcode, false, false);
         case 0x5: // Single Data Transfer (I = 0, P = 1)
+            return doSingleDataTransfer(opcode, false, true);
         case 0x6: // Single Data Transfer (I = 1, P = 0)
+            return doSingleDataTransfer(opcode, true, false);
         case 0x7: // Single Data Transfer (I = 1, P = 1)
-        {
-            bool isReg = opcode & (1 << 25);
-            bool isPre = opcode & (1 << 24);
-            bool isUp = opcode & (1 << 23);
-            bool isByte = opcode & (1 << 22);
-            bool writeBack = opcode & (1 << 21);
-            bool isLoad = opcode & (1 << 20);
-            auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
-            auto srcDestReg = static_cast<Reg>((opcode >> 12) & 0xF);
-            int offset;
-            
-            if(!isReg) // immediate
-                offset = opcode & 0xFFF;
-            else
-            {
-                assert((opcode & (1 << 4)) == 0); // no reg shift
-                bool carry;
-                offset = getShiftedReg(static_cast<Reg>(opcode & 0xF), (opcode >> 4) & 0xFF, carry);
-            }
-
-            if(!isUp)
-                offset = -offset;
-
-            auto addr = reg(baseReg);
-
-            // pc offset
-            if(baseReg == Reg::PC)
-                addr += 4;
-
-            if(isPre)
-                addr += offset;
-            else
-                assert(!writeBack); // non-privileged transfer
-
-            if(writeBack || !isPre) // post inc always writes back
-                reg(baseReg) += offset;
-
-            if(isLoad)
-            {
-                if(isByte)
-                    reg(srcDestReg) = readMem8(addr);
-                else
-                    reg(srcDestReg) = readMem32(addr);
-
-                return timing + mem.getAccessCycles(addr, isByte ? 1 : 4, false) + 1; // 1S + 1N + 1I
-                // TODO: +1S+1N if dst == PC
-            }
-            else
-            {
-                // FIXME: PC is + 12
-                assert(srcDestReg != Reg::PC);
-                if(isByte)
-                    writeMem8(addr, reg(srcDestReg));
-                else
-                    writeMem32(addr, reg(srcDestReg));
-
-                return mem.getAccessCycles(pc, 4, false) + mem.getAccessCycles(addr, isByte ? 1 : 4, false); // 2N
-            }
-
-            break;
-        }
+            return doSingleDataTransfer(opcode, true, true);
         case 0x8: // Block Data Transfer (P = 0)
-        case 0x9: // Block Data Transfer (P = 1)
-        {
-            bool preIndex = opcode & (1 << 24);
-            bool isUp = opcode & (1 << 23);
-            bool isLoadForce = opcode & (1 << 22);
-            bool writeBack = opcode & (1 << 21);
-            bool isLoad = opcode & (1 << 20);
-            auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
-            uint16_t regList = opcode;
-
-            if(isLoadForce)
-            {
-                //assert(!writeBack); // "should not be used"
-                assert(!isLoad || !(regList & (1 << 15))); // TODO: load with r15 (mode change)
-            }
-
-            auto addr = reg(baseReg) & ~3;
-
-            // flip decrement addressing around so that regs are stored in the right order
-            if(!isUp)
-            {
-                preIndex = !preIndex;
-                for(uint16_t t = regList; t; t >>= 1)
-                {
-                    if(t & 1)
-                        addr -= 4;
-                }
-            }
-
-            uint32_t lowAddr = addr;
-
-            int i = 0;
-            for(; regList; regList >>= 1, i++)
-            {
-                if(!(regList & 1))
-                    continue;
-
-                if(preIndex)
-                    addr += 4;
-
-                if(isLoad && static_cast<Reg>(i) == baseReg)
-                    writeBack = false; // don't override
-
-                // directly index to force user
-                auto &regRef = isLoadForce ? regs[i] : reg(static_cast<Reg>(i));
-
-                if(isLoad)
-                    regRef = readMem32(addr);
-                else
-                    writeMem32(addr, regRef);
-
-                if(!preIndex)
-                    addr += 4;
-            }
-
-            if(writeBack)
-                reg(baseReg) = isUp ? addr : lowAddr;
-
+            doBlockDataTransfer(opcode, false);
             break;
-        }
+        case 0x9: // Block Data Transfer (P = 1)
+            doBlockDataTransfer(opcode, true);
+            break;
         case 0xA: // Branch (B)
         {
             auto offset = (static_cast<int32_t>(opcode & 0xFFFFFF) << 8) >> 6;
