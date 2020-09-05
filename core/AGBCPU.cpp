@@ -16,6 +16,7 @@ void AGBCPU::reset()
     cpsr = Flag_I | Flag_F | 0x13 /*supervisor mode*/;
     loReg(Reg::PC) = 0;
     modeChanged();
+    updateARMPC();
     halted = false;
 
     timer = 0;
@@ -299,11 +300,10 @@ void AGBCPU::writeMem32(uint32_t addr, uint32_t data)
 int AGBCPU::executeARMInstruction()
 {
     auto &pc = loReg(Reg::PC); // not a low reg, but not banked
-    //auto opcode = readMem32Aligned(pc);
-    // skip overhead and read directly
-    auto opcode = mem.read32Fast(pc);
+    assert(*armPCPtr == mem.read32Fast(pc));
+    auto opcode = *armPCPtr++;
 
-    auto timing = mem.getAccessCycles(pc, 4, true);
+    auto timing = pcAccessCycles;
 
     pc += 4;
 
@@ -515,6 +515,9 @@ int AGBCPU::executeARMInstruction()
             else
                 loReg(srcDestReg) = readMem32(addr);
 
+            if(srcDestReg == Reg::PC)
+                updateARMPC();
+
             return timing + mem.getAccessCycles(addr, isByte ? 1 : 4, false) + 1; // 1S + 1N + 1I
             // TODO: +1S+1N if dst == PC
         }
@@ -615,6 +618,9 @@ int AGBCPU::executeARMInstruction()
 
         if(writeBack)
             loReg(baseReg) = isUp ? addr : lowAddr;
+
+        if(isLoad && (opcode & (1 << 15))) // load PC
+            updateARMPC();
     };
 
     // condition
@@ -785,13 +791,16 @@ int AGBCPU::executeARMInstruction()
                 auto instOp = (opcode >> 4) & 0xF;
                 assert(instOp == 1); //
                 auto newPC = reg(static_cast<Reg>(opcode & 0xF));
+                pc = newPC & 0xFFFFFFFE;
+
                 if(newPC & 1)
                 {
                     cpsr |= Flag_T;
-                    updateTHUMBPC(newPC & ~1);
+                    updateTHUMBPC(pc);
                 }
+                else
+                    updateARMPC();
 
-                pc = newPC & 0xFFFFFFFE;
                 return timing; // TODO: timing
             }
 
@@ -978,6 +987,7 @@ int AGBCPU::executeARMInstruction()
         {
             auto offset = (static_cast<int32_t>(opcode & 0xFFFFFF) << 8) >> 6;
             pc += offset + 4/*prefetch*/;
+            updateARMPC();
             break;
         }
         case 0xB: // Branch with Link (BL)
@@ -985,6 +995,7 @@ int AGBCPU::executeARMInstruction()
             auto offset = (static_cast<int32_t>(opcode & 0xFFFFFF) << 8) >> 6;
             reg(Reg::LR) = pc;
             pc += offset + 4/*prefetch*/;
+            updateARMPC();
             break;
         }
 
@@ -996,6 +1007,7 @@ int AGBCPU::executeARMInstruction()
             pc = 8;
             cpsr = (cpsr & ~0x1F) | Flag_I | 0x13; //supervisor mode
             modeChanged();
+            updateARMPC();
             loReg(curLR) = ret;
             break;
         }
@@ -1144,6 +1156,8 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
 
         if(cpsr & Flag_T)
             updateTHUMBPC(reg(Reg::PC));
+        else
+            updateARMPC();
     }
     else
         cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
@@ -1197,6 +1211,9 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
         default:
             __builtin_unreachable();
     }
+
+    if(destReg == Reg::PC)
+        updateARMPC();
 
     return 1;
 }
@@ -1545,11 +1562,16 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
         case 3: // BX
         {
             auto newPC = src;
-            if(!(newPC & 1))
-                cpsr &= ~Flag_T;
-
             pc = newPC & 0xFFFFFFFE;
-            updateTHUMBPC(pc);
+
+            if(!(newPC & 1))
+            {
+                cpsr &= ~Flag_T;
+                updateARMPC();
+            }
+            else
+                updateTHUMBPC(pc);
+
             break;
         }
 
@@ -1834,6 +1856,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
         pc = 8;
         cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x13; //supervisor mode
         modeChanged();
+        updateARMPC();
         loReg(curLR) = ret;
     }
     else // format 16, conditional branch
@@ -1935,6 +1958,12 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
     return pcAccessCycles;
 }
 
+void AGBCPU::updateARMPC()
+{
+    armPCPtr = reinterpret_cast<const uint32_t *>(std::as_const(mem).mapAddress(loReg(Reg::PC)));
+    pcAccessCycles = mem.getAccessCycles(loReg(Reg::PC), 4, true);
+}
+
 void AGBCPU::updateTHUMBPC(uint32_t pc)
 {
     // called when PC is updated in THUMB mode (except for incrementing)
@@ -1955,6 +1984,7 @@ bool AGBCPU::serviceInterrupts()
     loReg(Reg::PC) = 0x18;
     cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x12; // irq mode
     modeChanged();
+    updateARMPC();
     loReg(curLR) = ret;
     return true;
 }

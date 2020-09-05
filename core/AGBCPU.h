@@ -209,6 +209,7 @@ private:
     int doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc);
     int doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc);
 
+    void updateARMPC();
     void updateTHUMBPC(uint32_t pc);
 
     bool serviceInterrupts();
@@ -220,8 +221,9 @@ private:
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
 
+    const uint32_t *armPCPtr = nullptr;
     const uint16_t *thumbPCPtr = nullptr;
-    int pcAccessCycles = 0; // currently only for thumb...
+    int pcAccessCycles = 0;
 
     // internal state
     //bool stopped, halted;
