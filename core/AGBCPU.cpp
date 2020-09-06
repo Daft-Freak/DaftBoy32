@@ -1026,6 +1026,7 @@ int AGBCPU::executeTHUMBInstruction()
     switch(opcode >> 12)
     {
         case 0x0: // format 1
+            return doTHUMB01MoveShifted(opcode, pc);
         case 0x1: // formats 1-2
             return doTHUMB0102(opcode, pc);
         case 0x2: // format 3, mov/cmp immediate
@@ -1212,6 +1213,50 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
     return 1;
 }
 
+int AGBCPU::doTHUMB01MoveShifted(uint16_t opcode, uint32_t &pc)
+{
+    auto instOp = (opcode >> 11) & 0x1;
+    auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    auto offset = (opcode >> 6) & 0x1F;
+    auto res = loReg(srcReg);
+
+    uint32_t carry;
+    switch(instOp)
+    {
+        case 0: // LSL
+            if(offset != 0)
+            {
+                carry = res & (1 << (32 - offset)) ? Flag_C : 0;
+                res <<= offset;
+            }
+            else
+                carry = cpsr & Flag_C; // preserve
+            break;
+        case 1: // LSR
+            if(!offset) offset = 32; // shift by 0 is really 32
+
+            carry = res & (1 << (offset - 1)) ? Flag_C : 0;
+            if(offset == 32)
+                res = 0;
+            else
+                res >>= offset;
+            break;
+        default:
+            assert(!"Invalid format 1 shift type");
+    }
+
+    loReg(dstReg) = res;
+
+    cpsr = (cpsr & 0x1FFFFFFF)
+         | (res & signBit ? Flag_N : 0)
+         | (res == 0 ? Flag_Z : 0)
+         | carry;
+
+    return pcAccessCycles;
+}
+
 int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
 {
     auto instOp = (opcode >> 11) & 0x3;
@@ -1259,43 +1304,18 @@ int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
         auto offset = (opcode >> 6) & 0x1F;
         auto res = loReg(srcReg);
 
+        assert(instOp == 2); // others are handled elsewhere
+
         uint32_t carry;
-        switch(instOp)
-        {
-            case 0: // LSL
-                if(offset != 0)
-                {
-                    carry = res & (1 << (32 - offset)) ? Flag_C : 0;
-                    res <<= offset;
-                }
-                else
-                    carry = cpsr & Flag_C; // preserve
-                break;
-            case 1: // LSR
-                if(!offset) offset = 32; // shift by 0 is really 32
 
-                carry = res & (1 << (offset - 1)) ? Flag_C : 0;
-                if(offset == 32)
-                    res = 0;
-                else
-                    res >>= offset;
-                break;
-            case 2: // ASR
-            {
-                if(!offset) offset = 32;
+        if(!offset) offset = 32;
 
-                auto sign = res & signBit;
-                carry = res & (1 << (offset - 1)) ? Flag_C : 0;
-                if(offset == 32)
-                    res = sign ? 0xFFFFFFFF : 0;
-                else
-                    res = static_cast<int32_t>(res) >> offset;
-
-                break;
-            }
-            default:
-                assert(!"Invalid format 1 shift type");
-        }
+        auto sign = res & signBit;
+        carry = res & (1 << (offset - 1)) ? Flag_C : 0;
+        if(offset == 32)
+            res = sign ? 0xFFFFFFFF : 0;
+        else
+            res = static_cast<int32_t>(res) >> offset;
 
         loReg(dstReg) = res;
 

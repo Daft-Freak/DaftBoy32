@@ -190,6 +190,7 @@ private:
     int doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry);
     int doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2);
 
+    int doTHUMB01MoveShifted(uint16_t opcode, uint32_t &pc);
     int doTHUMB0102(uint16_t opcode, uint32_t &pc);
     int doTHUMB03(uint16_t opcode, uint32_t &pc);
     int doTHUMB040506(uint16_t opcode, uint32_t &pc);
