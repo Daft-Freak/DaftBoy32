@@ -197,7 +197,8 @@ private:
     int doTHUMB05HiReg(uint16_t opcode, uint32_t &pc);
     int doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc);
     int doTHUMB0708(uint16_t opcode, uint32_t &pc);
-    int doTHUMB09LoadStore(uint16_t opcode, uint32_t &pc);
+    int doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t &pc);
+    int doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t &pc);
     int doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t &pc);
     int doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc);
     int doTHUMB12LoadAddr(uint16_t opcode, uint32_t &pc);

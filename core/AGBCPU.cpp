@@ -1035,9 +1035,10 @@ int AGBCPU::executeTHUMBInstruction()
             return doTHUMB040506(opcode, pc);
         case 0x5: // formats 7-8
             return doTHUMB0708(opcode, pc);
-        case 0x6: // format 9, load/store with imm offset
-        case 0x7:
-            return doTHUMB09LoadStore(opcode, pc);
+        case 0x6: // format 9, load/store with imm offset (words)
+            return doTHUMB09LoadStoreWord(opcode, pc);
+        case 0x7: // ... (bytes)
+            return doTHUMB09LoadStoreByte(opcode, pc);
         case 0x8: // format 10, load/store halfword
             return doTHUMB10LoadStoreHalf(opcode, pc);
         case 0x9: // format 11, SP-relative load/store
@@ -1657,33 +1658,34 @@ int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
     return pcAccessCycles;
 }
 
-int AGBCPU::doTHUMB09LoadStore(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t &pc)
 {
-    bool isByte = opcode & (1 << 12);
     bool isLoad = opcode & (1 << 11);
     auto offset = ((opcode >> 6) & 0x1F);
     auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
     auto dstReg = static_cast<Reg>(opcode & 7);
 
-    auto base = loReg(baseReg);
+    auto addr = loReg(baseReg) + (offset << 2);
+    if(isLoad) // LDR
+        loReg(dstReg) = readMem32(addr);
+    else // STR
+        writeMem32(addr, loReg(dstReg));
 
-    auto &val = loReg(dstReg);
-    if(isByte)
-    {
-        auto addr = base + offset;
-        if(isLoad) // LDRB
-            val = readMem8(addr);
-        else // STRB
-            writeMem8(addr, val);
-    }
-    else
-    {
-        auto addr = base + (offset << 2);
-        if(isLoad) // LDR
-            val = readMem32(addr);
-        else // STR
-            writeMem32(addr, val);
-    }
+    return pcAccessCycles;
+}
+
+int AGBCPU::doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t &pc)
+{
+    bool isLoad = opcode & (1 << 11);
+    auto offset = ((opcode >> 6) & 0x1F);
+    auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    auto addr = loReg(baseReg) + offset;
+    if(isLoad) // LDRB
+        loReg(dstReg) = readMem8(addr);
+    else // STRB
+        writeMem8(addr, loReg(dstReg));
 
     return pcAccessCycles;
 }
