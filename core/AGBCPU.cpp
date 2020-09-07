@@ -1420,7 +1420,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
                 res = op1;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
-            break;
+            return pcAccessCycles + 1; // +1I for shift by register
         case 0x3: // LSR
             carry = cpsr & Flag_C;
 
@@ -1439,7 +1439,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
                 res = op1;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
-            break;
+            return pcAccessCycles + 1;
         case 0x4: // ASR
         {
             carry = cpsr & Flag_C;
@@ -1460,7 +1460,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
                 res = op1;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
-            break;
+            return pcAccessCycles + 1;
         }
         case 0x5: // ADC
         {
@@ -1490,7 +1490,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
 
             reg(dstReg) = res = (op1 >> shift) | (op1 << (32 - shift));
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
-            break;
+            return pcAccessCycles + 1;
         }
         case 0x8: // TST
             res = op1 & op2;
