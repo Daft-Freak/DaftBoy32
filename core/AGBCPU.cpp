@@ -1417,7 +1417,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
                 reg(dstReg) = res = op1 << op2;
             }
             else
-                res = op1;
+                reg(dstReg) = res = op1;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
             return pcAccessCycles + 1; // +1I for shift by register
@@ -1436,7 +1436,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
                 reg(dstReg) = res = op1 >> op2;
             }
             else
-                res = op1;
+                reg(dstReg) = res = op1;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
             return pcAccessCycles + 1;
@@ -1457,7 +1457,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
                 reg(dstReg) = res;
             }
             else
-                res = op1;
+                reg(dstReg) = res = op1;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
             return pcAccessCycles + 1;
