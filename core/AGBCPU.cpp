@@ -1063,29 +1063,43 @@ int AGBCPU::executeTHUMBInstruction()
 
 int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
 {
+    if(destReg == Reg::PC)
+    {
+        doALUOpNoCond(op, destReg, op1, op2);
+
+        cpsr = getSPSR(); // restore
+        modeChanged();
+
+        if(cpsr & Flag_T)
+            updateTHUMBPC(reg(Reg::PC));
+
+        return 1;
+    }
+
     // output
     uint32_t res;
-    bool overflow = cpsr & Flag_V; // preserved if logical op
 
-    auto doAdd = [&res, &carry, &overflow](uint32_t a, uint32_t b, int c = 0)
+    auto doAdd = [this](uint32_t a, uint32_t b, int c = 0)
     {
-        res = a + b + c;
-        carry = res < a || (res == a && c) /*for adc*/;
-        overflow = !((a ^ b) & signBit) && ((a ^ res) & signBit);  // same sign and sign changed
+        uint32_t res = a + b + c;
+        bool carry = res < a || (res == a && c) /*for adc*/;
+        bool overflow = !((a ^ b) & signBit) && ((a ^ res) & signBit);  // same sign and sign changed
 
         assert(carry == !!((static_cast<uint64_t>(a) + b + c) & (1ull << 32)));
 
+        cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
         return res;
     };
 
-    auto doSub = [&res, &carry, &overflow, &doAdd](uint32_t a, uint32_t b, int c = 1)
+    auto doSub = [this](uint32_t a, uint32_t b, int c = 1)
     {
-        res = a - b + c - 1;
-        carry = !(b > a || (b == a && !c) /*for sbc*/);
-        overflow = ((a ^ b) & signBit) && ((a ^ res) & signBit);  // different sign and sign changed
+        uint32_t res = a - b + c - 1;
+        bool carry = !(b > a || (b == a && !c) /*for sbc*/);
+        bool overflow = ((a ^ b) & signBit) && ((a ^ res) & signBit);  // different sign and sign changed
 
         assert(carry == !((static_cast<uint64_t>(a) - b + c - 1) & (1ull << 32)));
 
+        cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
         return res;
     };
 
@@ -1093,9 +1107,11 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
     {
         case 0x0: // AND
             reg(destReg) = res = op1 & op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0);
             break;
         case 0x1: // EOR
             reg(destReg) = res = op1 ^ op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0);
             break;
         case 0x2: // SUB
             reg(destReg) = doSub(op1, op2);
@@ -1117,9 +1133,11 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
             break;
         case 0x8: // TST
             res = op1 & op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0);
             break;
         case 0x9: // TEQ
             res = op1 ^ op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0);
             break;
         case 0xA: // CMP
             doSub(op1, op2);
@@ -1129,33 +1147,23 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
             break;
         case 0xC: // ORR
             reg(destReg) = res = op1 | op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0);
             break;
         case 0xD: // MOV
             reg(destReg) = res = op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0);
             break;
         case 0xE: // BIC
             reg(destReg) = res = op1 & ~op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0);
             break;
         case 0xF: // MVN
             reg(destReg) = res = ~op2;
+            cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0);
             break;
         default:
             __builtin_unreachable();
     }
-
-    // cond code
-    if(destReg == Reg::PC)
-    {
-        cpsr = getSPSR(); // restore
-        modeChanged();
-
-        if(cpsr & Flag_T)
-            updateTHUMBPC(reg(Reg::PC));
-        else
-            updateARMPC();
-    }
-    else
-        cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit ? Flag_N : 0) | (res == 0 ? Flag_Z : 0) | (carry ? Flag_C : 0) | (overflow ? Flag_V : 0);
 
     return 1;
 }
