@@ -303,7 +303,7 @@ int AGBCPU::executeARMInstruction()
     assert(*armPCPtr == mem.read32Fast(pc));
     auto opcode = *armPCPtr++;
 
-    auto timing = pcAccessCycles;
+    auto timing = pcSCycles;
 
     pc += 4;
 
@@ -1254,7 +1254,7 @@ int AGBCPU::doTHUMB01MoveShifted(uint16_t opcode, uint32_t &pc)
          | (res == 0 ? Flag_Z : 0)
          | carry;
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
@@ -1325,7 +1325,7 @@ int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
              | carry;
     }
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
@@ -1367,7 +1367,7 @@ int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
             __builtin_unreachable();
     }
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB040506(uint16_t opcode, uint32_t &pc)
@@ -1420,7 +1420,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
                 reg(dstReg) = res = op1;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
-            return pcAccessCycles + 1; // +1I for shift by register
+            return pcSCycles + 1; // +1I for shift by register
         case 0x3: // LSR
             carry = cpsr & Flag_C;
 
@@ -1439,7 +1439,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
                 reg(dstReg) = res = op1;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
-            return pcAccessCycles + 1;
+            return pcSCycles + 1;
         case 0x4: // ASR
         {
             carry = cpsr & Flag_C;
@@ -1460,7 +1460,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
                 reg(dstReg) = res = op1;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
-            return pcAccessCycles + 1;
+            return pcSCycles + 1;
         }
         case 0x5: // ADC
         {
@@ -1490,7 +1490,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
 
             reg(dstReg) = res = (op1 >> shift) | (op1 << (32 - shift));
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
-            return pcAccessCycles + 1;
+            return pcSCycles + 1;
         }
         case 0x8: // TST
             res = op1 & op2;
@@ -1535,7 +1535,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
             break;
     }
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
@@ -1599,7 +1599,7 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
         updateTHUMBPC(pc);
     }
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
@@ -1611,7 +1611,7 @@ int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
     auto base = (pc + 2) & ~2;
     loReg(dstReg) = mem.read32Fast(base + (word << 2));
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
@@ -1675,7 +1675,7 @@ int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
         }
     }
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t &pc)
@@ -1691,7 +1691,7 @@ int AGBCPU::doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t &pc)
     else // STR
         writeMem32(addr, loReg(dstReg));
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t &pc)
@@ -1707,7 +1707,7 @@ int AGBCPU::doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t &pc)
     else // STRB
         writeMem8(addr, loReg(dstReg));
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t &pc)
@@ -1722,7 +1722,7 @@ int AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t &pc)
     else // STRH
         writeMem16(loReg(baseReg) + offset, loReg(dstReg));
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
@@ -1736,7 +1736,7 @@ int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
     else
         mem.write32(loReg(curSP) + word, loReg(dstReg));
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t &pc)
@@ -1750,7 +1750,7 @@ int AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t &pc)
     else
         loReg(dstReg) = ((pc + 2) & ~2) + word; // + 4, bit 1 forced to 0
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB1314(uint16_t opcode, uint32_t &pc)
@@ -1771,7 +1771,7 @@ int AGBCPU::doTHUMB13SPOffset(uint16_t opcode, uint32_t &pc)
     else
         loReg(curSP) += off;
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
@@ -1829,7 +1829,7 @@ int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
             *ptr++ = loReg(curLR);
     }
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
@@ -1859,7 +1859,7 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
     if(!isLoad || !baseInList)
         reg(baseReg) = addr;
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
@@ -1938,7 +1938,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
         }
     }
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
@@ -1948,7 +1948,7 @@ int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
     pc += offset + 2 /*prefetch*/;
     updateTHUMBPC(pc);
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
@@ -1972,20 +1972,20 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
         updateTHUMBPC(pc);
     }
 
-    return pcAccessCycles;
+    return pcSCycles;
 }
 
 void AGBCPU::updateARMPC()
 {
     armPCPtr = reinterpret_cast<const uint32_t *>(std::as_const(mem).mapAddress(loReg(Reg::PC)));
-    pcAccessCycles = mem.getAccessCycles(loReg(Reg::PC), 4, true);
+    pcSCycles = mem.getAccessCycles(loReg(Reg::PC), 4, true);
 }
 
 void AGBCPU::updateTHUMBPC(uint32_t pc)
 {
     // called when PC is updated in THUMB mode (except for incrementing)
     thumbPCPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc)); // force const mapAddress
-    pcAccessCycles = mem.getAccessCycles(pc, 2, true);
+    pcSCycles = mem.getAccessCycles(pc, 2, true);
 }
 
 bool AGBCPU::serviceInterrupts()
