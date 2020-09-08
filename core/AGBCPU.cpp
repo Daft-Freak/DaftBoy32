@@ -1528,10 +1528,18 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
             cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
             break;
         case 0xD: // MUL
+        {
             // carry is meaningless, v is unaffected
             reg(dstReg) = res = op1 * op2;
             cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
-            break;
+
+            // leading 0s or 1s
+            int prefix = op1 & (1 << 31) ? __builtin_clz(~op1) : __builtin_clz(op1);
+
+            // more cycles the more bytes are non 0/ff
+            int iCycles = prefix == 32 ? 1 : (4 - prefix / 8);
+            return pcSCycles + iCycles;
+        }
         case 0xE: // BIC
             reg(dstReg) = res = op1 & ~op2;
             cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
