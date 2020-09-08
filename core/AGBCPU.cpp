@@ -1275,37 +1275,36 @@ int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
     {
         bool isImm = opcode & (1 << 10);
         bool isSub = opcode & (1 << 9);
-        uint32_t op1 = loReg(srcReg), op2;
+        uint32_t op1 = loReg(srcReg), op2 = (opcode >> 6) & 7;
 
         uint32_t res;
 
-        if(isImm)
-            op2 = (opcode >> 6) & 7;
-        else
-            op2 = loReg(static_cast<Reg>((opcode >> 6) & 7));
+        if(!isImm)
+            op2 = loReg(static_cast<Reg>(op2));
 
         uint32_t carry, overflow;
+
+        cpsr &= 0x0FFFFFFF;
 
         if(isSub)
         {
             res = op1 - op2;
-            carry = !(op2 > op1) ? Flag_C : 0;
-            overflow = ((op1 ^ op2) & signBit) & ((op1 ^ res) & signBit);
+            carry = !(res > op1) ? Flag_C : 0;
+            overflow = ((op1 ^ op2) & (op1 ^ res)) & signBit;
         }
         else
         {
             res = op1 + op2;
             carry = res < op1 ? Flag_C : 0;
-            overflow = ~((op1 ^ op2) & signBit) & ((op1 ^ res) & signBit);
+            overflow = (~(op1 ^ op2) & (op1 ^ res)) & signBit;
         }
 
         loReg(dstReg) = res;
 
-        cpsr = (cpsr & 0x0FFFFFFF)
-                | (res & signBit ? Flag_N : 0)
-                | (res == 0 ? Flag_Z : 0)
-                | carry
-                | (overflow >> 3);
+        cpsr |= (res & signBit ? Flag_N : 0)
+             | (res == 0 ? Flag_Z : 0)
+             | carry
+             | (overflow >> 3);
     }
     else // format 1, move shifted register
     {
@@ -1344,7 +1343,7 @@ int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
 
     auto dst = loReg(dstReg);
 
-    uint32_t res = 0;
+    uint32_t res;
     uint32_t carry, overflow;
 
     switch(instOp)
@@ -1355,20 +1354,20 @@ int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
             break;
         case 1: // CMP
             res = dst - offset;
-            carry = !(offset > dst) ? Flag_C : 0;
-            overflow = (dst & signBit) & ((dst ^ res) & signBit); // offset cannot be negative
+            carry = !(res > dst) ? Flag_C : 0;
+            overflow = (dst & ~res) & signBit; // offset cannot be negative, simplifies overflow checks
             cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3); // overflow is either 0 or 0x80000000, shift it down
             break;
         case 2: // ADD
             loReg(dstReg) = res = dst + offset;
             carry = res < dst ? Flag_C : 0;
-            overflow = ~(dst & signBit) & ((dst ^ res) & signBit);
+            overflow = (~dst & res) & signBit;
             cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
             break;
         case 3: // SUB
             loReg(dstReg) = res = dst - offset;
-            carry = !(offset > dst) ? Flag_C : 0;
-            overflow = (dst & signBit) & ((dst ^ res) & signBit);
+            carry = !(res > dst) ? Flag_C : 0;
+            overflow = (dst & ~res) & signBit;
             cpsr = (cpsr & ~(Flag_N | Flag_Z | Flag_C | Flag_V)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
             break;
         default:
