@@ -225,7 +225,7 @@ private:
 
     const uint32_t *armPCPtr = nullptr;
     const uint16_t *thumbPCPtr = nullptr;
-    int pcSCycles = 0;
+    int pcSCycles = 0, pcNCycles = 0;
 
     // internal state
     //bool stopped, halted;

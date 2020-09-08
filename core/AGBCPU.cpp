@@ -1626,7 +1626,7 @@ int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
     auto base = (pc + 2) & ~2;
     loReg(dstReg) = mem.read32Fast(base + (word << 2));
 
-    return pcSCycles;
+    return pcSCycles + pcNCycles + 1;
 }
 
 int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
@@ -1651,6 +1651,8 @@ int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
                     loReg(dstReg) = val | 0xFFFF0000;
                 else
                     loReg(dstReg) = val;
+
+                return pcSCycles + mem.getAccessCycles(addr, 2, false) + 1;
             }
             else // LDRSB
             {
@@ -1659,14 +1661,22 @@ int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
                     loReg(dstReg) = val | 0xFFFFFF00;
                 else
                     loReg(dstReg) = val;
+
+                return pcSCycles + mem.getAccessCycles(addr, 1, false) + 1; // a little off if this was a misaligned LDRSH
             }
         }
         else
         {
             if(hFlag) // LDRH
+            {
                 loReg(dstReg) = readMem16(addr);
+                return pcSCycles + mem.getAccessCycles(addr, 2, false) + 1;
+            }
             else // STRH
+            {
                 writeMem16(addr, loReg(dstReg));
+                return pcNCycles + mem.getAccessCycles(addr, 2, false);
+            }
         }
     }
     else // format 7, load/store with reg offset
@@ -1680,6 +1690,8 @@ int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
                 loReg(dstReg) = readMem8(addr);
             else // LDR
                 loReg(dstReg) = readMem32(addr);
+
+            return pcSCycles + mem.getAccessCycles(addr, isByte ? 1 : 4, false) + 1;
         }
         else
         {
@@ -1687,10 +1699,10 @@ int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
                 writeMem8(addr, loReg(dstReg));
             else // STR
                 writeMem32(addr, loReg(dstReg));
+
+            return pcNCycles + mem.getAccessCycles(addr, isByte ? 1 : 4, false);
         }
     }
-
-    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t &pc)
@@ -1702,11 +1714,15 @@ int AGBCPU::doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t &pc)
 
     auto addr = loReg(baseReg) + (offset << 2);
     if(isLoad) // LDR
+    {
         loReg(dstReg) = readMem32(addr);
+        return pcSCycles + mem.getAccessCycles(addr, 4, false) + 1;
+    }
     else // STR
+    {
         writeMem32(addr, loReg(dstReg));
-
-    return pcSCycles;
+        return pcNCycles + mem.getAccessCycles(addr, 4, false);
+    }
 }
 
 int AGBCPU::doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t &pc)
@@ -1718,11 +1734,15 @@ int AGBCPU::doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t &pc)
 
     auto addr = loReg(baseReg) + offset;
     if(isLoad) // LDRB
+    {
         loReg(dstReg) = readMem8(addr);
+        return pcSCycles + mem.getAccessCycles(addr, 1, false) + 1;
+    }
     else // STRB
+    {
         writeMem8(addr, loReg(dstReg));
-
-    return pcSCycles;
+        return pcNCycles + mem.getAccessCycles(addr, 1, false);
+    }
 }
 
 int AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t &pc)
@@ -1732,12 +1752,17 @@ int AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t &pc)
     auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
     auto dstReg = static_cast<Reg>(opcode & 7);
 
+    auto addr = loReg(baseReg) + offset;
     if(isLoad) // LDRH
-        loReg(dstReg) = readMem16(loReg(baseReg) + offset);
+    {
+        loReg(dstReg) = readMem16(addr);
+        return pcSCycles + mem.getAccessCycles(addr, 2, false) + 1;
+    }
     else // STRH
-        writeMem16(loReg(baseReg) + offset, loReg(dstReg));
-
-    return pcSCycles;
+    {
+        writeMem16(addr, loReg(dstReg));
+        return pcNCycles + mem.getAccessCycles(addr, 2, false);
+    }
 }
 
 int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
@@ -1746,12 +1771,18 @@ int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
     auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
     auto word = (opcode & 0xFF) << 2;
 
-    if(isLoad)
-        loReg(dstReg) = mem.read32Fast(loReg(curSP) + word);
-    else
-        mem.write32(loReg(curSP) + word, loReg(dstReg));
+    auto addr = loReg(curSP) + word;
 
-    return pcSCycles;
+    if(isLoad)
+    {
+        loReg(dstReg) = mem.read32Fast(addr);
+        return pcSCycles + mem.getAccessCycles(addr, 4, false) + 1;
+    }
+    else
+    {
+        mem.write32(addr, loReg(dstReg));
+        return pcNCycles + mem.getAccessCycles(addr, 4, false);
+    }
 }
 
 int AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t &pc)
@@ -1953,7 +1984,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
         }
     }
 
-    return pcSCycles;
+    return pcSCycles * 2 + pcNCycles; // 2S + 1N, probably a bit wrong for SWI
 }
 
 int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
@@ -1963,7 +1994,7 @@ int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
     pc += offset + 2 /*prefetch*/;
     updateTHUMBPC(pc);
 
-    return pcSCycles;
+    return pcSCycles * 2 + pcNCycles; // 2S + 1N
 }
 
 int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
@@ -1977,6 +2008,8 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
         if(offset & (1 << 22))
             offset |= 0xFF800000; //sign extend
         loReg(curLR) = pc + 2 + offset;
+
+        return pcSCycles;
     }
     else // second half
     {
@@ -1984,16 +2017,19 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
         pc = loReg(curLR) + (offset << 1);
         loReg(curLR) = temp | 1; // magic switch to thumb bit...
 
-        updateTHUMBPC(pc);
-    }
+        auto ret = pcNCycles;
 
-    return pcSCycles;
+        updateTHUMBPC(pc);
+
+        return ret + pcSCycles * 2; //?
+    }
 }
 
 void AGBCPU::updateARMPC()
 {
     armPCPtr = reinterpret_cast<const uint32_t *>(std::as_const(mem).mapAddress(loReg(Reg::PC)));
     pcSCycles = mem.getAccessCycles(loReg(Reg::PC), 4, true);
+    pcNCycles = mem.getAccessCycles(loReg(Reg::PC), 4, false);
 }
 
 void AGBCPU::updateTHUMBPC(uint32_t pc)
@@ -2001,6 +2037,7 @@ void AGBCPU::updateTHUMBPC(uint32_t pc)
     // called when PC is updated in THUMB mode (except for incrementing)
     thumbPCPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc)); // force const mapAddress
     pcSCycles = mem.getAccessCycles(pc, 2, true);
+    pcNCycles = mem.getAccessCycles(pc, 2, false);
 }
 
 bool AGBCPU::serviceInterrupts()
