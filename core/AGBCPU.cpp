@@ -484,7 +484,7 @@ int AGBCPU::executeARMInstruction()
         auto instOp = (opcode >> 21) & 0xF;
         bool setCondCode = (opcode & (1 << 20));
         auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
-        setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
+        return setCondCode ? doALUOp(instOp, destReg, op1, op2, carry) : doALUOpNoCond(instOp, destReg, op1, op2);
     };
 
     //4-7
@@ -807,9 +807,8 @@ int AGBCPU::executeARMInstruction()
             // reg arg2
             bool carry;
             auto op2 = getShiftedReg(op2Reg, op2Shift, carry);
-            doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 8 : 4);
 
-            return timing + (op2Shift & 1); // +1I if shift by reg
+            return doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 8 : 4) + (op2Shift & 1); // +1I if shift by reg
         }
         case 0x1: // data processing with register (and branch exchange/swap)
         {
@@ -912,9 +911,8 @@ int AGBCPU::executeARMInstruction()
             // reg arg2
             bool carry;
             auto op2 = getShiftedReg(op2Reg, op2Shift, carry);
-            doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 8 : 4);
 
-            return timing + (op2Shift & 1); // +1I if shift by reg
+            return doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 8 : 4) + (op2Shift & 1); // +1I if shift by reg
         }
         case 0x2: // data processing with immediate
         {
@@ -924,19 +922,12 @@ int AGBCPU::executeARMInstruction()
             op2 = (op2 >> shift) | (op2 << (32 - shift));
             bool carry = shift ? op2 & (1 << 31) : cpsr & Flag_C;
 
-            doDataProcessing(opcode, op2, carry);
-            return timing;
+            return doDataProcessing(opcode, op2, carry);
         }
         case 0x3: // same as above, but also possibly MSR
         {
             auto instOp = (opcode >> 21) & 0xF;
             bool setCondCode = (opcode & (1 << 20));
-            auto op1Reg = static_cast<Reg>((opcode >> 16) & 0xF);
-            auto op1 = reg(op1Reg);
-            auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
-
-            if(op1Reg == Reg::PC)
-                op1 += 4;
 
             // get the immediate value
             uint32_t op2 = opcode & 0xFF;
@@ -975,8 +966,7 @@ int AGBCPU::executeARMInstruction()
                 return timing;
             }
 
-            doDataProcessing(opcode, op2, carry);
-            return timing;
+            return doDataProcessing(opcode, op2, carry);
         }
         case 0x4: // Single Data Transfer (I = 0, P = 0)
             return doSingleDataTransfer(opcode, false, false);
@@ -1081,7 +1071,7 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
 {
     if(destReg == Reg::PC)
     {
-        doALUOpNoCond(op, destReg, op1, op2);
+        int ret = doALUOpNoCond(op, destReg, op1, op2);
 
         cpsr = getSPSR(); // restore
         modeChanged();
@@ -1089,7 +1079,7 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
         if(cpsr & Flag_T)
             updateTHUMBPC(reg(Reg::PC));
 
-        return 1;
+        return ret;
     }
 
     // output
@@ -1181,7 +1171,7 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
             __builtin_unreachable();
     }
 
-    return 1;
+    return pcSCycles;
 }
 
 int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
@@ -1234,7 +1224,7 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
     if(destReg == Reg::PC)
         updateARMPC();
 
-    return 1;
+    return pcSCycles;
 }
 
 int AGBCPU::doTHUMB01MoveShifted(uint16_t opcode, uint32_t &pc)
