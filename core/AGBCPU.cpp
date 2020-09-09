@@ -734,12 +734,14 @@ int AGBCPU::executeARMInstruction()
                     auto op2Reg = static_cast<Reg>((opcode >> 8) & 0xF);
                     auto op1Reg = static_cast<Reg>(opcode & 0xF);
 
+                    auto op2 = reg(op2Reg);
+
                     uint64_t res;
 
                     if(isSigned) // SMULL
-                        res = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(reg(op1Reg))) * static_cast<int32_t>(reg(op2Reg)));
+                        res = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(reg(op1Reg))) * static_cast<int32_t>(op2));
                     else // UMULL
-                        res = static_cast<uint64_t>(reg(op1Reg)) * reg(op2Reg);
+                        res = static_cast<uint64_t>(reg(op1Reg)) * op2;
                     
                     if(accumulate) // S/UMLAL
                         res += (static_cast<uint64_t>(reg(destHiReg)) << 32) | reg(destLoReg);
@@ -754,6 +756,13 @@ int AGBCPU::executeARMInstruction()
                              | (res & (1ull << 63) ? Flag_N : 0)
                              | (res == 0 ? Flag_Z : 0);
                     }
+
+                    // leading 0s or 1s
+                    int prefix = (isSigned && (op2 & (1 << 31))) ? __builtin_clz(~op2) : __builtin_clz(op2);
+
+                    // more cycles the more bytes are non 0/ff (or just non 0 for unsigned)
+                    int iCycles = prefix == 32 ? 1 : (4 - prefix / 8) + (accumulate ? 1 : 0);
+                    return pcSCycles + iCycles + 1;
                 }
                 else // MUL/MLA
                 {
@@ -764,7 +773,9 @@ int AGBCPU::executeARMInstruction()
                     auto op2Reg = static_cast<Reg>((opcode >> 8) & 0xF);
                     auto op1Reg = static_cast<Reg>(opcode & 0xF);
 
-                    uint32_t res = reg(op1Reg) * reg(op2Reg);
+                    auto op2 = reg(op2Reg);
+
+                    uint32_t res = reg(op1Reg) * op2;
 
                     if(accumulate)
                         res += reg(op3Reg);
@@ -780,9 +791,14 @@ int AGBCPU::executeARMInstruction()
                              | (res & signBit ? Flag_N : 0)
                              | (res == 0 ? Flag_Z : 0);
                     }
-                }
 
-                return timing; // TODO: timing
+                    // leading 0s or 1s
+                    int prefix = op2 & (1 << 31) ? __builtin_clz(~op2) : __builtin_clz(op2);
+
+                    // more cycles the more bytes are non 0/ff
+                    int iCycles = prefix == 32 ? 1 : (4 - prefix / 8) + (accumulate ? 1 : 0);
+                    return pcSCycles + iCycles;
+                }
             }
 
             auto op2Shift = (opcode >> 4) & 0xFF;
