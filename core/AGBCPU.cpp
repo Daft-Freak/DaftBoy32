@@ -460,6 +460,8 @@ int AGBCPU::executeARMInstruction()
                 loReg(srcDestReg) = static_cast<int16_t>(readMem16Aligned(addr)); // sign extend
             else // LDRSB ... or misaligned LDRSH
                 loReg(srcDestReg) = static_cast<int8_t>(readMem8(addr)); // sign extend
+
+            return pcSCycles + mem.getAccessCycles(addr, halfWords ? 2 : 1, false) + 1; // 1S + 1N + 1I
         }
         else
         {
@@ -470,6 +472,8 @@ int AGBCPU::executeARMInstruction()
             // FIXME: PC is + 12
             assert(srcDestReg != Reg::PC);
             writeMem16(addr, loReg(srcDestReg)); // STRH
+
+            return pcNCycles + mem.getAccessCycles(addr, 2, false);
         }
     };
 
@@ -718,11 +722,8 @@ int AGBCPU::executeARMInstruction()
         {
             if(((opcode >> 4) & 9) == 9)
             {
-                if((opcode >> 5) & 3) // halfword transfer 
-                {
-                    halfwordTransfer(opcode, false);
-                    break;
-                }
+                if((opcode >> 5) & 3) // halfword transfer
+                    return halfwordTransfer(opcode, false);
 
                 if(opcode & (1 << 23)) // MULL/MLAL
                 {
@@ -833,31 +834,27 @@ int AGBCPU::executeARMInstruction()
             if(((opcode >> 4) & 9) == 9)
             {
                 if((opcode >> 5) & 3) // halfword transfer
+                    return halfwordTransfer(opcode, true);
+
+                // SWP
+                bool isByte = opcode & (1 << 22);
+                auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
+                auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
+                auto srcReg = static_cast<Reg>(opcode & 0xF);
+
+                auto addr = reg(baseReg);
+
+                if(isByte)
                 {
-                    halfwordTransfer(opcode, true);
-                    break;
+                    auto v = readMem8(addr);
+                    writeMem8(addr, reg(srcReg));
+                    reg(destReg) = v;
                 }
-                else // SWP
+                else
                 {
-                    bool isByte = opcode & (1 << 22);
-                    auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
-                    auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
-                    auto srcReg = static_cast<Reg>(opcode & 0xF);
-
-                    auto addr = reg(baseReg);
-
-                    if(isByte)
-                    {
-                        auto v = readMem8(addr);
-                        writeMem8(addr, reg(srcReg));
-                        reg(destReg) = v;
-                    }
-                    else
-                    {
-                        auto v = readMem32(addr);
-                        writeMem32(addr, reg(srcReg));
-                        reg(destReg) = v;
-                    }
+                    auto v = readMem32(addr);
+                    writeMem32(addr, reg(srcReg));
+                    reg(destReg) = v;
                 }
 
                 return timing; // TODO: timing
