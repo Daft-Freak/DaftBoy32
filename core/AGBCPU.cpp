@@ -492,7 +492,7 @@ int AGBCPU::executeARMInstruction()
     };
 
     //4-7
-    const auto doSingleDataTransfer = [this, timing, pc, &getShiftedReg](uint32_t opcode, bool isReg, bool isPre) __attribute__((always_inline))
+    const auto doSingleDataTransfer = [this, &getShiftedReg](uint32_t opcode, bool isReg, bool isPre) __attribute__((always_inline))
     {
         //bool isUp = opcode & (1 << 23);
         //bool writeBack = opcode & (1 << 21);
@@ -542,7 +542,7 @@ int AGBCPU::executeARMInstruction()
             if(srcDestReg == Reg::PC)
                 updateARMPC();
 
-            return timing + mem.getAccessCycles(addr, isByte ? 1 : 4, false) + 1; // 1S + 1N + 1I
+            return pcSCycles + mem.getAccessCycles(addr, isByte ? 1 : 4, false) + 1; // 1S + 1N + 1I
             // TODO: +1S+1N if dst == PC
         }
         else
@@ -554,7 +554,7 @@ int AGBCPU::executeARMInstruction()
             else
                 writeMem32(addr, loReg(srcDestReg));
 
-            return mem.getAccessCycles(pc, 4, false) + mem.getAccessCycles(addr, isByte ? 1 : 4, false); // 2N
+            return pcNCycles + mem.getAccessCycles(addr, isByte ? 1 : 4, false); // 2N
         }
     };
 
