@@ -308,7 +308,7 @@ int AGBCPU::executeARMInstruction()
     pc += 4;
 
     // helpers
-    const auto getShiftedReg = [this, opcode, pc](Reg r, uint8_t shift, bool &carry)
+    const auto getShiftedReg = [this](Reg r, uint8_t shift, bool &carry)
     {
         auto ret = reg(r);
 
@@ -338,7 +338,7 @@ int AGBCPU::executeARMInstruction()
         else
         {
             shiftAmount = shift >> 3;
-            if(shiftType && shiftAmount == 0) // lsr/asr shift by 32 instead of 0 
+            if(shiftAmount == 0) // lsr/asr shift by 32 instead of 0
                 shiftAmount = 32;
         }
 
@@ -396,9 +396,9 @@ int AGBCPU::executeARMInstruction()
                 else // ROR
                 {
                     shiftAmount &= 0x1F;
-                                            
-                    carry = ret & (1 << (shiftAmount - 1));
+
                     ret = (ret >> shiftAmount) | (ret << (32 - shiftAmount));
+                    carry = ret & (1 << 31);
                 }
                 break;
 
