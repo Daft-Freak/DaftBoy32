@@ -25,7 +25,8 @@ void Menu::render()
 
     r.x += itemPadding;
     r.w -= itemPadding * 2;
-    blit::screen.text(std::string(title), font, r, true, blit::TextAlign::center_left, clipped);
+    blit::screen.clip = clipped;
+    blit::screen.text(std::string(title), font, r, true, blit::TextAlign::center_left);
 
     // items list
     // reserve space to display title
@@ -67,7 +68,8 @@ void Menu::render()
             blit::screen.pen = blit::Pen(0x11, 0x11, 0x11);
 
         blit::Rect r(itemsDisplayRect.x, itemsDisplayRect.y + yOff + y, itemsDisplayRect.w, itemHeight);
-        blit::Rect clipped = r.intersection(itemsDisplayRect);
+        auto &clipped = blit::screen.clip;
+        clipped = r.intersection(itemsDisplayRect);
 
         blit::screen.rectangle(clipped);
 
@@ -89,7 +91,7 @@ void Menu::render()
         r.x += itemPadding;
         r.w -= itemPadding * 2;
 
-        blit::screen.text(std::string(f.text), font, r, true, blit::TextAlign::center_left, clipped);
+        blit::screen.text(std::string(f.text), font, r, true, blit::TextAlign::center_left);
 
         // right icon / secondary text
         if(i == selectedItem)
@@ -98,13 +100,15 @@ void Menu::render()
             blit::Point iconPos = r.tr() + blit::Point(-iconSize, (itemHeight - font.char_h) / 2); // from the top-right
             r.w -= iconSize + 2;
 
-            blit::screen.text(secondaryText, font, r, true, blit::TextAlign::center_right, clipped);
+            blit::screen.text(secondaryText, font, r, true, blit::TextAlign::center_right);
             controlIcons.render(ControlIcons::Icon::A, iconPos, blit::Pen(0x22, 0x22, 0x22), iconSize);
         }
 
         y += itemHeight;
         i++;
     }
+
+    blit::screen.clip = blit::Rect(blit::Point(0), blit::screen.bounds);
 }
 
 void Menu::update(uint32_t time)
