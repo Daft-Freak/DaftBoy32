@@ -42,13 +42,15 @@ void FileBrowser::render()
 
     r.x += itemPadding;
     r.w -= itemPadding * 2;
-    blit::screen.text(curDir + "/", font, r, true, blit::TextAlign::center_left, clipped);
+    blit::screen.clip = clipped;
+    blit::screen.text(curDir + "/", font, r, true, blit::TextAlign::center_left);
 
     // back icon
     if(!curDir.empty())
     {
         blit::Point iconOffset(-(backTextWidth + iconSize + 2), (itemHeight - font.char_h) / 2); // from the top-right
 
+        blit::screen.clip.w += backIconSpaceW;
         blit::screen.text("Back", font, r, true, blit::TextAlign::center_right);
         controlIcons.render(ControlIcons::Icon::B, r.tr() + iconOffset, blit::Pen(0x22, 0x22, 0x22), iconSize);
     }
@@ -95,7 +97,8 @@ void FileBrowser::render()
         auto str = f.name + ((f.flags & blit::FileFlags::directory) ? "/" : "");
 
         blit::Rect r(filesDisplayRect.x, filesDisplayRect.y + yOff + y, filesDisplayRect.w, itemHeight);
-        blit::Rect clipped = r.intersection(filesDisplayRect);
+        auto &clipped = blit::screen.clip;
+        clipped = r.intersection(filesDisplayRect);
 
         blit::screen.rectangle(clipped);
 
@@ -112,7 +115,7 @@ void FileBrowser::render()
         r.x += itemPadding;
         r.w -= itemPadding * 2;
 
-        blit::screen.text(str, font, r, true, blit::TextAlign::center_left, clipped);
+        blit::screen.text(str, font, r, true, blit::TextAlign::center_left);
 
         // open icon
         if(i == selectedFile)
@@ -120,13 +123,15 @@ void FileBrowser::render()
             clipped.w += openIconSpaceW;
             blit::Point iconOffset(-(openTextWidth + iconSize + 2), (itemHeight - font.char_h) / 2); // from the top-right
 
-            blit::screen.text("Open", font, r, true, blit::TextAlign::center_right, clipped);
+            blit::screen.text("Open", font, r, true, blit::TextAlign::center_right);
             controlIcons.render(ControlIcons::Icon::A, r.tr() + iconOffset, blit::Pen(0x22, 0x22, 0x22), iconSize);
         }
 
         y += itemHeight;
         i++;
     }
+
+    blit::screen.clip = blit::Rect(blit::Point(0), blit::screen.bounds);
 }
 
 void FileBrowser::update(uint32_t time)
