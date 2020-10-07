@@ -61,14 +61,14 @@ enum class MenuItem
 
 Menu menu("Menu",
 {
-    {"Save Cart RAM", static_cast<int>(MenuItem::SaveRAM)},
-    {"Reset", static_cast<int>(MenuItem::Reset)},
-    {"Switch Game", static_cast<int>(MenuItem::SwitchGame)}
+    {static_cast<int>(MenuItem::SaveRAM), "Save Cart RAM"},
+    {static_cast<int>(MenuItem::Reset), "Reset"},
+    {static_cast<int>(MenuItem::SwitchGame), "Switch Game"}
 }, tallFont);
 
 bool menuOpen = false;
 
-void onMenuItemPressed(Menu::Item &item, int index)
+void onMenuItemPressed(const Menu::Item &item)
 {
     switch(static_cast<MenuItem>(item.id))
     {
@@ -212,8 +212,8 @@ void init()
 
     fileBrowser.init();
 
-    menu.setDisplayRect(blit::Rect(5, 5, 100, blit::screen.bounds.h - 10));
-    menu.setOnItemPressed(onMenuItemPressed);
+    menu.set_display_rect(blit::Rect(5, 5, 100, blit::screen.bounds.h - 10));
+    menu.set_on_item_activated(onMenuItemPressed);
 
     cpu.setCycleCallback(onCyclesExeceuted);
     mem.setROMBankCallback(getROMBank);
