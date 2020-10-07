@@ -9,7 +9,6 @@ Menu::Menu(std::string_view title, std::vector<Item> items, const blit::Font &fo
     num_items = items_vec.size();
 
     item_h = font.char_h + 2;
-    item_padding_x = 2;
     item_adjust_y = 0;
 
     header_h = item_h;

@@ -201,7 +201,6 @@ void init()
     }
 
     fileBrowser.set_extensions({".gb"});
-    fileBrowser.set_display_rect(blit::Rect(5, 5, blit::screen.bounds.w - 10, blit::screen.bounds.h - 10));
     fileBrowser.set_on_file_open(openROM);
 
     // embed test ROM
@@ -212,7 +211,7 @@ void init()
 
     fileBrowser.init();
 
-    menu.set_display_rect(blit::Rect(5, 5, 100, blit::screen.bounds.h - 10));
+    menu.set_display_rect(blit::Rect(0, 0, 100, blit::screen.bounds.h));
     menu.set_on_item_activated(onMenuItemPressed);
 
     cpu.setCycleCallback(onCyclesExeceuted);
