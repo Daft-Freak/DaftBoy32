@@ -200,9 +200,9 @@ void init()
         blit::channels[0].trigger_sustain();
     }
 
-    fileBrowser.setExtensions({".gb"});
-    fileBrowser.setDisplayRect(blit::Rect(5, 5, blit::screen.bounds.w - 10, blit::screen.bounds.h - 10));
-    fileBrowser.setOnFileOpen(openROM);
+    fileBrowser.set_extensions({".gb"});
+    fileBrowser.set_display_rect(blit::Rect(5, 5, blit::screen.bounds.w - 10, blit::screen.bounds.h - 10));
+    fileBrowser.set_on_file_open(openROM);
 
     // embed test ROM
 #if 0

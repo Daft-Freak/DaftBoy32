@@ -2,222 +2,74 @@
 
 #include "control-icons.hpp"
 
-#include "engine/api.hpp"
 #include "engine/engine.hpp"
-#include "engine/input.hpp"
 
-FileBrowser::FileBrowser(const blit::Font &font) : font(font)
-{
+FileBrowser::FileBrowser(const blit::Font &font) : Menu("", nullptr, 0, font) {
     // too early
     //files = blit::list_files("");
+
+    item_h = font.char_h + 2;
+    item_padding_x = 2;
+    item_adjust_y = 0;
+
+    header_h = item_h;
+    footer_h = 0;
+    margin_y = 0;
+
+    background_colour = blit::Pen(0x11, 0x11, 0x11);
+    foreground_colour = blit::Pen(0xF7, 0xF7, 0xF7);
+    selected_item_background = blit::Pen(0x22, 0x22, 0x22);
 }
 
-void FileBrowser::init()
-{
-    updateList();
-
-    // default
-    if(displayRect.w == 0 && displayRect.h == 0)
-        displayRect = blit::Rect(blit::Point(0, 0), blit::screen.bounds);
+void FileBrowser::init() {
+    update_list();
 }
 
 void FileBrowser::render()
 {
-    const int itemHeight = font.char_h + 2;
+    blit::Menu::render();
+
     const int iconSize = font.char_h > 8 ? 12 : 8;
 
-    const int32_t openTextWidth = blit::screen.measure_text("Open", font).w;
-    const int openIconSpaceW = openTextWidth + iconSize + itemPadding + 4;
-
     const int32_t backTextWidth = blit::screen.measure_text("Back", font).w;
-    const int backIconSpaceW = backTextWidth + iconSize + itemPadding + 4;
 
-    // current dir info
-    blit::Rect r(displayRect.tl(), blit::Size(displayRect.w, itemHeight));
-    blit::Rect clipped = r;
-    clipped.w -= backIconSpaceW;
-    blit::screen.pen = blit::Pen(0xD7, 0xD7, 0xD7);
-    blit::screen.rectangle(r);
-    blit::screen.pen = blit::Pen(0x22, 0x22, 0x22);
+    blit::Rect r(display_rect.tl(), blit::Size(display_rect.w, header_h));
 
-    r.x += itemPadding;
-    r.w -= itemPadding * 2;
-    blit::screen.clip = clipped;
-    blit::screen.text(curDir + "/", font, r, true, blit::TextAlign::center_left);
+    blit::screen.pen = header_foreground;
+
+    r.x += item_padding_x;
+    r.w -= item_padding_x * 2;
 
     // back icon
-    if(!curDir.empty())
-    {
-        blit::Point iconOffset(-(backTextWidth + iconSize + 2), (itemHeight - font.char_h) / 2); // from the top-right
+    if(!cur_dir.empty()) {
+        blit::Point iconOffset(-(backTextWidth + iconSize + 2), 1); // from the top-right
 
-        blit::screen.clip.w += backIconSpaceW;
         blit::screen.text("Back", font, r, true, blit::TextAlign::center_right);
-        controlIcons.render(ControlIcons::Icon::B, r.tr() + iconOffset, blit::Pen(0x22, 0x22, 0x22), iconSize);
+        controlIcons.render(ControlIcons::Icon::B, r.tr() + iconOffset, header_foreground, iconSize);
     }
-
-    // files list
-    // reserve space to display current dir
-    auto filesDisplayRect = displayRect;
-    filesDisplayRect.h -= itemHeight;
-    filesDisplayRect.y += itemHeight;
-
-    int y = 0;
-    int i = 0;
-
-    // scrolling
-    int totalHeight = files.size() * itemHeight;
-    int selectedY = selectedFile * itemHeight;
-    int yOff = filesDisplayRect.h / 2 - selectedY;
-
-    if(yOff < -(totalHeight - filesDisplayRect.h))
-        yOff = -(totalHeight - filesDisplayRect.h);
-
-    yOff = std::min(0, yOff);
-
-    for(auto &f : files)
-    {
-        if(y + yOff > filesDisplayRect.h)
-            break;
-
-        if(y + yOff + itemHeight < 0)
-        {
-            i++;
-            y += itemHeight;
-            continue;
-        }
-
-        // background
-        if(i == selectedFile)
-            blit::screen.pen = blit::Pen(0xF7, 0xF7, 0xF7);
-        else if(i % 2)
-            blit::screen.pen = blit::Pen(0x22, 0x22, 0x22);
-        else
-            blit::screen.pen = blit::Pen(0x11, 0x11, 0x11);
-
-        auto str = f.name + ((f.flags & blit::FileFlags::directory) ? "/" : "");
-
-        blit::Rect r(filesDisplayRect.x, filesDisplayRect.y + yOff + y, filesDisplayRect.w, itemHeight);
-        auto &clipped = blit::screen.clip;
-        clipped = r.intersection(filesDisplayRect);
-
-        blit::screen.rectangle(clipped);
-
-        if(i == selectedFile)
-        {
-            clipped.w -= openIconSpaceW; // clip out the open icon
-            blit::screen.pen = blit::Pen(0x22, 0x22, 0x22);
-        }
-        else
-            blit::screen.pen = blit::Pen(0xF7, 0xF7, 0xF7);
-
-        r.h += font.spacing_y; // account for vertical spacing in alignment
-
-        r.x += itemPadding;
-        r.w -= itemPadding * 2;
-
-        blit::screen.text(str, font, r, true, blit::TextAlign::center_left);
-
-        // open icon
-        if(i == selectedFile)
-        {
-            clipped.w += openIconSpaceW;
-            blit::Point iconOffset(-(openTextWidth + iconSize + 2), (itemHeight - font.char_h) / 2); // from the top-right
-
-            blit::screen.text("Open", font, r, true, blit::TextAlign::center_right);
-            controlIcons.render(ControlIcons::Icon::A, r.tr() + iconOffset, blit::Pen(0x22, 0x22, 0x22), iconSize);
-        }
-
-        y += itemHeight;
-        i++;
-    }
-
-    blit::screen.clip = blit::Rect(blit::Point(0), blit::screen.bounds);
 }
 
-void FileBrowser::update(uint32_t time)
-{
-    unsigned int upDown = blit::Button::DPAD_UP | blit::Button::DPAD_DOWN;
-
-    if((blit::buttons & upDown) != (lastButtonState & upDown))
-        repeatStartTime = time;
-
-    // repeat delay
-    if((time - repeatStartTime) % 200 == 0)
-    {
-        if(blit::buttons & blit::Button::DPAD_UP)
-            selectedFile--;
-        else if(blit::buttons & blit::Button::DPAD_DOWN)
-            selectedFile++;
-
-        if(selectedFile == -1)
-            selectedFile = files.size() - 1;
-        else if(selectedFile >= static_cast<int>(files.size()))
-            selectedFile = 0;
-    }
-
-    // A released
-    if((lastButtonState & blit::Button::A) && !(blit::buttons & blit::Button::A))
-    {
-        if(files[selectedFile].flags & blit::FileFlags::directory)
-        {
-            if(!curDir.empty())
-                curDir += "/";
-
-            curDir += files[selectedFile].name;
-            updateList();
-        }
-        else if(onFileOpen)
-            onFileOpen(curDir + (curDir.empty() ? "" : "/") + files[selectedFile].name);
-    }
-    // B released
-    else if((lastButtonState & blit::Button::B) && !(blit::buttons & blit::Button::B))
-    {
-        if(!curDir.empty())
-        {
-            // go up
-            auto pos = curDir.find_last_of('/');
-            if(pos == std::string::npos)
-                curDir = "";
-            else
-                curDir = curDir.substr(0, pos);
-
-            updateList();
-        }
-    }
-
-    lastButtonState = blit::buttons;
+void FileBrowser::set_extensions(std::set<std::string> exts) {
+    file_exts = exts;
 }
 
-void FileBrowser::setDisplayRect(blit::Rect r)
-{
-    displayRect = r;
+void FileBrowser::set_on_file_open(void (*func)(std::string)) {
+    on_file_open = func;
 }
 
-void FileBrowser::setExtensions(std::set<std::string> exts)
-{
-    fileExts = exts;
-}
+void FileBrowser::update_list() {
+    title = cur_dir.empty() ? "/" : cur_dir.c_str();
 
-void FileBrowser::setOnFileOpen(void (*func)(std::string))
-{
-    onFileOpen = func;
-}
-
-void FileBrowser::updateList()
-{
-    files = blit::list_files(curDir);
-    selectedFile = 0;
+    files = blit::list_files(cur_dir);
 
     std::sort(files.begin(), files.end(), [](blit::FileInfo &a, blit::FileInfo & b){return a.name < b.name;});
 
-    if(fileExts.empty())
+    if(file_exts.empty())
         return;
 
     // filter by extensions
-    files.erase(std::remove_if(files.begin(), files.end(), [this](const blit::FileInfo &f)
-    {
-        if(!(f.flags & blit::FileFlags::directory))
-        {
+    files.erase(std::remove_if(files.begin(), files.end(), [this](const blit::FileInfo &f) {
+        if(!(f.flags & blit::FileFlags::directory)) {
             std::string ext;
             auto dotPos = f.name.find_last_of('.');
             if(dotPos != std::string::npos)
@@ -226,10 +78,60 @@ void FileBrowser::updateList()
             // convert to lower case
             std::for_each(ext.begin(), ext.end(), [](char & c) {c = tolower(c);});
 
-            if(fileExts.find(ext) == fileExts.end())
+            if(file_exts.find(ext) == file_exts.end())
                 return true;
         }
 
         return false;
     }), files.end());
+
+    // update menu items
+    file_items.resize(files.size());
+
+    unsigned int i = 0;
+    for(auto &file : files) {
+        if(file.flags & blit::FileFlags::directory)
+            file.name += "/";
+
+        file_items[i].id = i;
+        file_items[i++].label = file.name.c_str();
+    }
+
+    set_items(file_items.data(), file_items.size());
+}
+
+void FileBrowser::render_item(const Item &item, int y, int index) const {
+    blit::Menu::render_item(item, y, index);
+
+    if(index == current_item) {
+        const int iconSize = font.char_h > 8 ? 12 : 8;
+
+        blit::Rect r(display_rect.x + item_padding_x, y, display_rect.w - item_padding_x * 2 - iconSize - 2, item_h);
+        blit::Point iconPos = blit::Point(display_rect.x + display_rect.w - item_padding_x -iconSize, y + 1); // from the top-right
+        controlIcons.render(ControlIcons::Icon::A, iconPos, foreground_colour, iconSize);
+    }
+}
+
+void FileBrowser::update_item(const Item &item) {
+    if(blit::buttons.released & blit::Button::B) {
+        if(!cur_dir.empty()) {
+            // go up
+            auto pos = cur_dir.find_last_of('/', cur_dir.length() - 2);
+            if(pos == std::string::npos)
+                cur_dir = "";
+            else
+                cur_dir = cur_dir.substr(0, pos);
+
+            update_list();
+        }
+    }
+}
+
+void FileBrowser::item_activated(const Item &item){
+    if(files[current_item].flags & blit::FileFlags::directory) {
+        cur_dir += files[current_item].name;
+        update_list();
+    }
+    else if(on_file_open)
+        on_file_open(cur_dir + files[current_item].name);
 }
