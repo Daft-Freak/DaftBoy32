@@ -57,9 +57,9 @@ void FileBrowser::set_on_file_open(void (*func)(std::string)) {
 }
 
 void FileBrowser::update_list() {
-    title = cur_dir.empty() ? "/" : cur_dir.c_str();
+    title = cur_dir;
 
-    files = blit::list_files(cur_dir);
+    files = blit::list_files(cur_dir.substr(0, cur_dir.length() - 1));
 
     std::sort(files.begin(), files.end(), [](blit::FileInfo &a, blit::FileInfo & b){return a.name < b.name;});
 
@@ -119,7 +119,7 @@ void FileBrowser::update_item(const Item &item) {
             if(pos == std::string::npos)
                 cur_dir = "";
             else
-                cur_dir = cur_dir.substr(0, pos);
+                cur_dir = cur_dir.substr(0, pos + 1);
 
             update_list();
         }

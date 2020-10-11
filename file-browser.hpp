@@ -31,7 +31,7 @@ private:
 
     std::vector<blit::FileInfo> files;
     std::vector<Item> file_items;
-    std::string cur_dir;
+    std::string cur_dir = "/";
 
     std::set<std::string> file_exts;
     void (*on_file_open)(std::string) = nullptr;
