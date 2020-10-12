@@ -113,7 +113,7 @@ void FileBrowser::render_item(const Item &item, int y, int index) const {
 
 void FileBrowser::update_item(const Item &item) {
     if(blit::buttons.released & blit::Button::B) {
-        if(!cur_dir.empty()) {
+        if(cur_dir != "/") {
             // go up
             auto pos = cur_dir.find_last_of('/', cur_dir.length() - 2);
             if(pos == std::string::npos)
@@ -127,6 +127,9 @@ void FileBrowser::update_item(const Item &item) {
 }
 
 void FileBrowser::item_activated(const Item &item){
+    if(!num_items)
+        return;
+
     if(files[current_item].flags & blit::FileFlags::directory) {
         cur_dir += files[current_item].name;
         update_list();
