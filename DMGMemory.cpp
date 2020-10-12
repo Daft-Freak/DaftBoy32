@@ -210,10 +210,7 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
         auto ptr = mapAddress(addr);
         if(ptr)
         {
-            if(ptr == cartRam)
-                cartRamWritten = true;
-
-            ptr[addr] = data;
+            *ptr = data;
             return;
         }
     }
@@ -226,7 +223,7 @@ void DMGMemory::setCartRamUpdateCallback(CartRamUpdateCallback callback)
     cartRamUpdateCallback = callback;
 }
 
-uint8_t *DMGMemory::mapAddress(uint16_t &addr)
+uint8_t *DMGMemory::mapAddress(uint16_t addr)
 {
     if(addr < 0x8000)
     {
@@ -235,37 +232,33 @@ uint8_t *DMGMemory::mapAddress(uint16_t &addr)
     }
     else if(addr < 0xA000)
     {
-        addr = (addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/;
-        return vram;
+        return vram + (addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/;
     }
     else if(addr < 0xC000)
     {
-        addr = (addr & 0x1FFF) + (mbcRAMBank << 13);
-        return mbcRAMEnabled ? cartRam : nullptr;
+        cartRamWritten = true; // this should only be used for writes
+
+        return mbcRAMEnabled ? cartRam + (addr & 0x1FFF) + (mbcRAMBank << 13) : nullptr;
     }
     else if(addr < 0xD000)
     {
-        addr &= 0xFFF;
-        return wram;
+        return wram + (addr & 0xFFF);
     }
     else if(addr < 0xE000)
     {
-        addr = (addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/;
-        return wram;
+        return wram + (addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/;
     }
     else if(addr < 0xFE00)
     {} // echo
     else if(addr < 0xFEA0)
     {
-        addr &= 0xFF;
-        return oam;
+        return oam + (addr & 0xFF);
     }
     else if(addr < 0xFF00)
     {} //unusable
     else
     {
-        addr = addr & 0xFF;
-        return iohram;
+        return iohram + (addr & 0xFF);
     }
 
     return nullptr;
