@@ -5,6 +5,9 @@ enum IOReg
 {
     IO_JOYP = 0x00,
 
+    IO_SB,
+    IO_SC,
+
     IO_DIV = 0x04,
     IO_TIMA,
     IO_TMA,
@@ -88,6 +91,13 @@ enum JOYPBits
 
     JOYP_SelectDir     = 1 << 4,
     JOYP_SelectButtons = 1 << 5
+};
+
+enum SCBits
+{
+    SC_IntClock      = 1 << 0,
+    SC_Fast          = 1 << 1,
+    SC_StartTransfer = 1 << 7
 };
 
 enum TACBits
