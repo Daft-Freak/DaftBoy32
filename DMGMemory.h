@@ -36,9 +36,6 @@ public:
     int getCartridgeRAMSize() {return cartRamSize;}
     void setCartRamUpdateCallback(CartRamUpdateCallback callback);
 
-    const uint8_t *mapAddress(uint16_t addr) const;
-    uint8_t *mapAddress(uint16_t addr);
-
 private:
     void writeMBC(uint16_t addr, uint8_t data);
     void updateCurrentROMBank();

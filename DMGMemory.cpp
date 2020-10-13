@@ -148,25 +148,59 @@ void DMGMemory::setWriteCallback(WriteCallback writeCallback)
     this->writeCallback = writeCallback;
 }
 
+
 uint8_t DMGMemory::read(uint16_t addr) const
 {
-    if(addr >= 0xFF00)
+    switch((addr >> 12) & 0xF)
     {
-        auto val = iohram[addr & 0xFF];
+        case 0x0:
+        case 0x1:
+        case 0x2:
+        case 0x3:
+            return cartROMBank0[addr];
+        
+        case 0x4:
+        case 0x5:
+        case 0x6:
+        case 0x7:
+            return cartROMCurBank[addr];
 
-        if((addr & 0xFF) == IO_VBK)
-            return vramBank;
+        case 0x8:
+        case 0x9:
+            return vram[(addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/];
 
-        if(readCallback)
-            val = readCallback(addr, val);
+        case 0xA:
+        case 0xB:
+            return cartRam[(addr & 0x1FFF) + (mbcRAMBank << 13)];
 
-        return val;
-    }
-    else
-    {
-        auto ptr = mapAddress(addr);
-        if(ptr)
-            return *ptr;
+        case 0xC:
+            return wram[addr & 0xFFF];
+
+        case 0xD:
+            return wram[(addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/];
+
+        case 0xE:
+            break; //echo
+    
+        case 0xF:
+        {
+            if(addr < 0xFE00)
+                break; // echo
+            if(addr < 0xFEA0)
+                return oam[addr & 0xFF];
+            if(addr < 0xFF00)
+                break; //unusable
+
+            auto val = iohram[addr & 0xFF];
+
+            if((addr & 0xFF) == IO_VBK)
+                return vramBank;
+
+            if(readCallback)
+                val = readCallback(addr, val);
+
+            return val;
+        }
     }
 
     printf("read %x\n", addr);
@@ -175,30 +209,61 @@ uint8_t DMGMemory::read(uint16_t addr) const
 
 void DMGMemory::write(uint16_t addr, uint8_t data)
 {
-    if(addr < 0x8000)
+    switch(addr >> 12)
     {
-        writeMBC(addr, data); // cart rom
-        return;
-    }
-    else if(addr >= 0xFF00)
-    {
-        if((addr & 0xFF) == IO_VBK)
-            vramBank = data & 1;
-        else if((addr & 0xFF) == IO_SVBK)
-            wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
-        else if(writeCallback && writeCallback(addr, data))
+        case 0x0:
+        case 0x1:
+        case 0x2:
+        case 0x3:
+        
+        case 0x4:
+        case 0x5:
+        case 0x6:
+        case 0x7:
+            writeMBC(addr, data); // cart rom
+
+        case 0x8:
+        case 0x9:
+            vram[(addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/] = data;
             return;
-        iohram[addr & 0xFF] = data;
-        return;
-    }
-    else if(addr >= 0xFEA0 && addr < 0xFF00)
-        return; // unusable
-    else
-    {
-        auto ptr = mapAddress(addr);
-        if(ptr)
+
+        case 0xA:
+        case 0xB:
+            cartRamWritten = true;
+            cartRam[(addr & 0x1FFF) + (mbcRAMBank << 13)] = data;
+            return;
+
+        case 0xC:
+            wram[addr & 0xFFF] = data;
+            return;
+
+        case 0xD:
+            wram[(addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/] = data;
+            return;
+
+        case 0xE:
+            break; //echo
+    
+        case 0xF:
         {
-            *ptr = data;
+            if(addr < 0xFE00)
+                break; // echo
+            if(addr < 0xFEA0)
+            {
+                oam[addr & 0xFF] = data;
+                return;
+            }
+            if(addr < 0xFF00)
+                break; //unusable
+
+            if((addr & 0xFF) == IO_VBK)
+                vramBank = data & 1;
+            else if((addr & 0xFF) == IO_SVBK)
+                wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
+            else if(writeCallback && writeCallback(addr, data))
+                return;
+
+            iohram[addr & 0xFF] = data;
             return;
         }
     }
@@ -209,105 +274,6 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
 void DMGMemory::setCartRamUpdateCallback(CartRamUpdateCallback callback)
 {
     cartRamUpdateCallback = callback;
-}
-
-const uint8_t *DMGMemory::mapAddress(uint16_t addr) const
-{
-    switch((addr >> 12) & 0xF)
-    {
-        case 0x0:
-        case 0x1:
-        case 0x2:
-        case 0x3:
-            return cartROMBank0 + addr;
-        
-        case 0x4:
-        case 0x5:
-        case 0x6:
-        case 0x7:
-            return cartROMCurBank + addr;
-
-        case 0x8:
-        case 0x9:
-            return vram + (addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/;
-
-        case 0xA:
-        case 0xB:
-            return cartRam + (addr & 0x1FFF) + (mbcRAMBank << 13);
-
-        case 0xC:
-            return wram + (addr & 0xFFF);
-
-        case 0xD:
-            return wram + (addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/;
-
-        case 0xE:
-            return nullptr; //echo
-    
-        case 0xF:
-        {
-            if(addr < 0xFE00)
-                return nullptr; // echo
-            if(addr < 0xFEA0)
-                return oam + (addr & 0xFF);
-            if(addr < 0xFF00)
-                return nullptr; //unusable
-
-            return iohram + (addr & 0xFF);
-        }
-    }
-
-    return nullptr;
-}
-
-uint8_t *DMGMemory::mapAddress(uint16_t addr)
-{
-    switch(addr >> 12)
-    {
-        case 0x0:
-        case 0x1:
-        case 0x2:
-        case 0x3:
-            return nullptr; // ROM
-        
-        case 0x4:
-        case 0x5:
-        case 0x6:
-        case 0x7:
-            return nullptr; // ROM
-
-        case 0x8:
-        case 0x9:
-            return vram + (addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/;
-
-        case 0xA:
-        case 0xB:
-            cartRamWritten = true; // this should only be used for writes
-            return cartRam + (addr & 0x1FFF) + (mbcRAMBank << 13);
-
-        case 0xC:
-            return wram + (addr & 0xFFF);
-
-        case 0xD:
-            return wram + (addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/;
-
-        case 0xE:
-            return nullptr; //echo
-    
-        case 0xF:
-        {
-            if(addr < 0xFE00)
-                return nullptr; // echo
-            if(addr < 0xFEA0)
-                return oam + (addr & 0xFF);
-            if(addr < 0xFF00)
-                return nullptr; //unusable
-
-            return iohram + (addr & 0xFF);
-        }
-    }
-
-    return nullptr;
 }
 
 void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
