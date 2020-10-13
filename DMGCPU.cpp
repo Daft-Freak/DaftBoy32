@@ -1283,11 +1283,10 @@ int DMGCPU::executeExInstruction()
     // RLC
     const auto rotLeftNoCarry = [this](Reg r)
     {
-        bool c = reg(r) & 0x80;
         uint8_t res = (reg(r) << 1) | (reg(r) >> 7);
         reg(r) = res;
 
-        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+        reg(Reg::F) = (res & 1 ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
 
         return 8;
     };
@@ -1295,11 +1294,10 @@ int DMGCPU::executeExInstruction()
     // RRC
     const auto rotRightNoCarry = [this](Reg r)
     {
-        bool c = reg(r) & 1;
         uint8_t res = (reg(r) >> 1) | (reg(r) << 7);
         reg(r) = res;
 
-        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+        reg(Reg::F) = ((res & 0x80) >> 3) | (res == 0 ? Flag_Z : 0);
 
         return 8;
     };
@@ -1307,11 +1305,11 @@ int DMGCPU::executeExInstruction()
     // RL
     const auto rotLeft = [this](Reg r)
     {
-        bool c = reg(r) & 0x80;
-        uint8_t res = (reg(r) << 1) | ((reg(Reg::F) & Flag_C) ? 0x01 : 0);
+        auto c = (reg(r) & 0x80) >> 3; // shift to where the carry bit is
+        uint8_t res = (reg(r) << 1) | ((reg(Reg::F) & Flag_C) >> 4);
         reg(r) = res;
 
-        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+        reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
 
         return 8;
     };
@@ -1319,11 +1317,11 @@ int DMGCPU::executeExInstruction()
     // RR
     const auto rotRight = [this](Reg r)
     {
-        bool c = reg(r) & 1;
-        uint8_t res = (reg(r) >> 1) | ((reg(Reg::F) & Flag_C) ? 0x80 : 0);
+        auto c = (reg(r) & 0x1) << 4; // shift to where the carry bit is
+        uint8_t res = (reg(r) >> 1) | ((reg(Reg::F) & Flag_C) << 3);
         reg(r) = res;
 
-        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+        reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
 
         return 8;
     };
@@ -1331,11 +1329,11 @@ int DMGCPU::executeExInstruction()
     // SLA
     const auto shiftLeft = [this](Reg r)
     {
-        bool c = reg(r) & 0x80;
+        auto c = (reg(r) & 0x80) >> 3; // shift to where the carry bit is
         uint8_t res = reg(r) << 1;
         reg(r) = res;
 
-        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+        reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
 
         return 8;
     };
@@ -1343,11 +1341,11 @@ int DMGCPU::executeExInstruction()
     // SRA
     const auto shiftRightArith = [this](Reg r)
     {
-        bool c = reg(r) & 0x1;
-        uint8_t res = reg(r) >> 1 | (reg(r) & 0x80);
+        auto c = (reg(r) & 0x1) << 4; // shift to where the carry bit is
+        uint8_t res = static_cast<int8_t>(reg(r)) >> 1;
         reg(r) = res;
 
-        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+        reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
 
         return 8;
     };
@@ -1355,28 +1353,28 @@ int DMGCPU::executeExInstruction()
     // SRL
     const auto shiftRight = [this](Reg r)
     {
-        bool c = reg(r) & 0x1;
+        auto c = (reg(r) & 1) << 4; // shift to where the carry bit is
         uint8_t res = reg(r) >> 1;
         reg(r) = res;
 
-        reg(Reg::F) = (c ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
+        reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
 
         return 8;
     };
 
     const auto testBit = [this](Reg r, int bit)
     {
-        bool set = !!(reg(r) & (1 << bit));
+        auto zero = ~(reg(r) << (7 - bit)) & Flag_Z; // invert and shift to zero flag
+        reg(Reg::F) = (reg(Reg::F) & Flag_C) | Flag_H | zero;
 
-        reg(Reg::F) = (reg(Reg::F) & Flag_C) | Flag_H | (set ? 0 : Flag_Z);
         return 8;
     };
 
     const auto testBitHL = [this](int bit)
     {
-        bool set = !!(readMem(reg(WReg::HL)) & (1 << bit));
+        auto zero = ~(readMem(reg(WReg::HL)) << (7 - bit)) & Flag_Z; // invert and shift to zero flag
+        reg(Reg::F) = (reg(Reg::F) & Flag_C) | Flag_H | zero;
 
-        reg(Reg::F) = (reg(Reg::F) & Flag_C) | Flag_H | (set ? 0 : Flag_Z);
         return 12;
     };
 
@@ -1388,7 +1386,8 @@ int DMGCPU::executeExInstruction()
 
     const auto setHL = [this](int bit)
     {
-        writeMem(reg(WReg::HL), readMem(reg(WReg::HL)) | (1 << bit));
+        auto val = readMem(reg(WReg::HL));
+        writeMem(reg(WReg::HL), val | (1 << bit));
         return 16;
     };
 
@@ -1400,7 +1399,8 @@ int DMGCPU::executeExInstruction()
 
     const auto resetHL = [this](int bit)
     {
-        writeMem(reg(WReg::HL), readMem(reg(WReg::HL)) & ~(1 << bit));
+        auto val = readMem(reg(WReg::HL));
+        writeMem(reg(WReg::HL), val & ~(1 << bit));
         return 16;
     };
 
@@ -1424,9 +1424,9 @@ int DMGCPU::executeExInstruction()
         {
             auto v = readMem(reg(WReg::HL));
             v = (v << 1) | (v >> 7);
+            reg(Reg::F) = ((v & 0x1) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
             writeMem(reg(WReg::HL), v);
 
-            reg(Reg::F) = ((v & 0x1) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
             return 16;
         }
         case 0x07: // RLC A
@@ -1448,9 +1448,9 @@ int DMGCPU::executeExInstruction()
         {
             auto v = readMem(reg(WReg::HL));
             v = (v >> 1) | (v << 7);
+            reg(Reg::F) = ((v & 0x80) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
             writeMem(reg(WReg::HL), v);
 
-            reg(Reg::F) = ((v & 0x80) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
             return 16;
         }
         case 0x0F: // RRC A
@@ -1470,12 +1470,12 @@ int DMGCPU::executeExInstruction()
             return rotLeft(Reg::L);
         case 0x16: // RL (HL)
         {
-            auto v = readMem(reg(WReg::HL));
-            bool c = v & 0x80;
-            v = (v << 1) | ((reg(Reg::F) & Flag_C) ? 0x01 : 0);
+            uint16_t v = readMem(reg(WReg::HL));
+            v = (v << 1) | ((reg(Reg::F) & Flag_C) >> 4);
+
+            reg(Reg::F) = ((v & 0x100) ? Flag_C : 0) | ((v & 0xFF) == 0 ? Flag_Z : 0);
             writeMem(reg(WReg::HL), v);
 
-            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
             return 16;
         }
         case 0x17: // RL A
@@ -1497,10 +1497,10 @@ int DMGCPU::executeExInstruction()
         {
             auto v = readMem(reg(WReg::HL));
             bool c = v & 0x01;
-            v = (v >> 1) | ((reg(Reg::F) & Flag_C) ? 0x80 : 0);
+            v = (v >> 1) | ((reg(Reg::F) & Flag_C) << 3);
+            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
             writeMem(reg(WReg::HL), v);
 
-            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
             return 16;
         }
         case 0x1F: // RR A
@@ -1520,12 +1520,10 @@ int DMGCPU::executeExInstruction()
             return shiftLeft(Reg::L);
         case 0x26: // SLA (HL)
         {
-            auto v = readMem(reg(WReg::HL));
-            bool c = v & 0x80;
+            uint16_t v = readMem(reg(WReg::HL));
             v = v << 1;
+            reg(Reg::F) = ((v & 0x100) ? Flag_C : 0) | ((v & 0xFF) == 0 ? Flag_Z : 0);
             writeMem(reg(WReg::HL), v);
-
-            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
 
             return 16;
         }
@@ -1546,12 +1544,11 @@ int DMGCPU::executeExInstruction()
             return shiftRightArith(Reg::L);
         case 0x2E: // SRA (HL)
         {
-            auto v = readMem(reg(WReg::HL));
-            bool c = v & 0x01;
-            v = v >> 1 | (v & 0x80);
-            writeMem(reg(WReg::HL), v);
+            int8_t v = readMem(reg(WReg::HL));
+            reg(Reg::F) = ((v & 1) << 4) | ((v & 0xFE) == 0 ? Flag_Z : 0);
 
-            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+            v = v >> 1;
+            writeMem(reg(WReg::HL), v);
 
             return 16;
         }
@@ -1574,9 +1571,8 @@ int DMGCPU::executeExInstruction()
         {
             auto v = readMem(reg(WReg::HL));
             v = (v << 4) | (v >> 4);
-            writeMem(reg(WReg::HL), v);
-
             reg(Reg::F) = (v == 0 ? Flag_Z : 0);
+            writeMem(reg(WReg::HL), v);
 
             return 16;
         }
@@ -1598,11 +1594,10 @@ int DMGCPU::executeExInstruction()
         case 0x3E: // SRL (HL)
         {
             auto v = readMem(reg(WReg::HL));
-            bool c = v & 0x01;
+            reg(Reg::F) = ((v & 1) << 4) | ((v & 0xFE) == 0 ? Flag_Z : 0);
             v = v >> 1;
-            writeMem(reg(WReg::HL), v);
 
-            reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
+            writeMem(reg(WReg::HL), v);
 
             return 16;
         }
