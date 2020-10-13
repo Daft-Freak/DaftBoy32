@@ -329,8 +329,7 @@ void DMGDisplay::drawScanLine(int y)
     if(lcdc & LCDC_OBJDisp)
     {
         // sprites
-        uint16_t addr = 0xFE00;
-        auto oam = mem.mapAddress(addr);
+        auto oam = mem.getOAM();
 
         // 10 sprites per line limit
         uint8_t lineSprites[10];
