@@ -225,7 +225,7 @@ const uint8_t *DMGMemory::mapAddress(uint16_t addr) const
         case 0x5:
         case 0x6:
         case 0x7:
-            return cartROMCurBank + (addr & 0x3FFF);
+            return cartROMCurBank + addr;
 
         case 0x8:
         case 0x9:
@@ -388,14 +388,14 @@ void DMGMemory::updateCurrentROMBank()
 {
     if(mbcROMBank == 0)
     {
-        cartROMCurBank = cartROMBank0;
+        cartROMCurBank = cartROMBank0 - 0x4000;
         return;
     }
 
     // entire ROM is loaded
     if(cartROM)
     {
-        cartROMCurBank = cartROM + mbcROMBank * 0x4000;
+        cartROMCurBank = cartROM + (mbcROMBank - 1) * 0x4000;
         return;
     }
 
@@ -403,7 +403,7 @@ void DMGMemory::updateCurrentROMBank()
     {
         if(it->bank == mbcROMBank)
         {
-            cartROMCurBank = it->ptr;
+            cartROMCurBank = it->ptr - 0x4000;
             cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
             return;
         }
@@ -412,7 +412,7 @@ void DMGMemory::updateCurrentROMBank()
     // reuse the last (least recently used) bank
     auto it = std::prev(cachedROMBanks.end());
 
-    cartROMCurBank = it->ptr;
+    cartROMCurBank = it->ptr - 0x4000;
     romBankCallback(mbcROMBank, it->ptr);
     it->bank = mbcROMBank;
     cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
