@@ -112,10 +112,12 @@ uint8_t onRead(uint16_t addr, uint8_t val)
         return (val & 0xF0) | ret;
     }
 
-    if((addr & 0xFF) < IO_LCDC)
+    if((addr & 0xFF) >= IO_NR10 && (addr & 0xFF) < IO_LCDC)
         return apu.readReg(addr, val);
-    else
+    else if((addr & 0xFF) >= IO_LCDC && (addr & 0xFF) <= IO_WX)
         return display.readReg(addr, val);
+    else
+        return cpu.readReg(addr, val);
 }
 
 bool onWrite(uint16_t addr, uint8_t val)
@@ -124,6 +126,9 @@ bool onWrite(uint16_t addr, uint8_t val)
         return true;
 
     if(display.writeReg(addr, val))
+        return true;
+
+    if(cpu.writeReg(addr, val))
         return true;
 
     return false;

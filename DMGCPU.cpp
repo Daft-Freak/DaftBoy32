@@ -74,16 +74,69 @@ void DMGCPU::flagInterrupt(int interrupt)
     serviceableInterrupts = mem.readIOReg(IO_IF) & mem.readIOReg(IO_IE);
 }
 
+uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
+{
+    if((addr & 0xFF) == IO_DIV)
+        return divCounter >> 8;
+    else if((addr & 0xFF) == IO_KEY1)
+        return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
+
+    return val;
+}
+
+bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
+{
+    if((addr & 0xFF) == 0x46)
+    {
+        //TODO: put this not here
+        //printf("DMA from %x @~%x\n", data << 8, pc);
+        for(int i = 0; i < 0xA0; i++)
+            writeMem(0xFE00 + i, readMem((data << 8) + i));
+
+        return true;
+    }
+    else if((addr & 0xFF) == IO_HDMA5)
+    {
+        uint16_t src = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
+        uint16_t dst = 0x8000 | ((mem.readIOReg(IO_HDMA3) & 0x1F) << 8) | (mem.readIOReg(IO_HDMA4) & 0xF0);
+        uint16_t count = ((data & 0x7F) + 1) << 4;
+
+        if(data & 0x80) // HDMA
+            printf("HDMA %03X %04X -> %04X\n", count, src, dst);
+        else
+        {
+            // GDMA
+            // TODO: also move, timing
+            for(; count; count--, src++, dst++)
+                writeMem(dst, readMem(src));
+
+            mem.writeIOReg(IO_HDMA5, 0xFF);
+        }
+        return true;
+    }
+    else if((addr & 0xFF) == IO_DIV)
+    {
+        divCounter = 0;
+        return true;
+    }
+    else if((addr & 0xFF) == IO_TAC)
+    {
+        const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
+        timerEnabled = data & TAC_Start;
+        timerBit = timerBits[data & TAC_Clock];
+    }
+    else if((addr & 0xFF) == IO_KEY1)
+        speedSwitch = data & 1;
+    else if((addr & 0xFF) == IO_IF)
+        serviceableInterrupts = data & mem.readIOReg(IO_IE);
+    else if((addr & 0xFF) == IO_IE)
+        serviceableInterrupts = data & mem.readIOReg(IO_IF);
+
+    return false;
+}
+
 uint8_t DMGCPU::readMem(uint16_t addr) const
 {
-    if(addr >= 0xFF00)
-    {
-        if((addr & 0xFF) == IO_DIV)
-            return divCounter >> 8;
-        else if((addr & 0xFF) == IO_KEY1)
-            return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
-    }
-
     return mem.read(addr);
 }
 
@@ -94,59 +147,6 @@ uint16_t DMGCPU::readMem16(uint16_t addr) const
 
 void DMGCPU::writeMem(uint16_t addr, uint8_t data)
 {
-    if(addr >= 0xFF00)
-    {
-        if((addr & 0xFF) == 0x46)
-        {
-            //TODO: put this not here
-            //printf("DMA from %x @~%x\n", data << 8, pc);
-            for(int i = 0; i < 0xA0; i++)
-                writeMem(0xFE00 + i, readMem((data << 8) + i));
-        }
-        else if((addr & 0xFF) == IO_HDMA5)
-        {
-            uint16_t src = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
-            uint16_t dst = 0x8000 | ((mem.readIOReg(IO_HDMA3) & 0x1F) << 8) | (mem.readIOReg(IO_HDMA4) & 0xF0);
-            uint16_t count = ((data & 0x7F) + 1) << 4;
-
-            if(data & 0x80) // HDMA
-                printf("HDMA %03X %04X -> %04X\n", count, src, dst);
-            else
-            {
-                // GDMA
-                // TODO: also move, timing
-                for(; count; count--, src++, dst++)
-                    writeMem(dst, readMem(src));
-
-                data = 0xFF;
-            }
-        }
-
-        else if((addr & 0xFF) == IO_DIV)
-            divCounter = 0;
-        else if((addr & 0xFF) == IO_TAC)
-        {
-            const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
-            timerEnabled = data & TAC_Start;
-            timerBit = timerBits[data & TAC_Clock];
-        }
-        else if((addr & 0xFF) == IO_KEY1)
-            speedSwitch = data & 1;
-        else if((addr & 0xFF) == IO_IF)
-        {
-            serviceableInterrupts = data & mem.readIOReg(IO_IE);
-            mem.write(addr, data);
-        }
-        else if((addr & 0xFF) == IO_IE)
-        {
-            serviceableInterrupts = data & mem.readIOReg(IO_IF);
-            mem.write(addr, data);
-        }
-        else
-            mem.write(addr, data);
-        return;
-    }
-
     mem.write(addr, data);
 }
 

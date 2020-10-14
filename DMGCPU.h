@@ -27,6 +27,9 @@ public:
 
     void flagInterrupt(int interrupt);
 
+    uint8_t readReg(uint16_t addr, uint8_t val);
+    bool writeReg(uint16_t addr, uint8_t data);
+
     DMGMemory &getMem() {return mem;}
 
     uint16_t getInternalTimer() const {return divCounter;}
