@@ -72,7 +72,7 @@ void DMGMemory::reset()
     memset(vram, 0, sizeof(vram));
 
     // load some ROM
-    cartROMCurBank = cartROMBankCache;
+    cartROMCurBank = cartROMBankCache - 0x4000;
     romBankCallback(0, cartROMBank0);
     romBankCallback(1, cartROMBankCache);
 
