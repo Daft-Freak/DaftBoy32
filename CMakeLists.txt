@@ -20,3 +20,4 @@ blit_executable(gameblit
     menu.cpp
 )
 blit_assets_yaml(gameblit assets.yml)
+blit_metadata(gameblit metadata.yml)
