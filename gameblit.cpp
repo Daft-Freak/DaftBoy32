@@ -351,7 +351,7 @@ void update(uint32_t time_ms)
     inputs = (blit::buttons & 0x7C) | // UP/DOWN/A/B match, select -> X
              ((blit::buttons & blit::Button::DPAD_RIGHT) >> 1) |
              ((blit::buttons & blit::Button::DPAD_LEFT) << 1) |
-             ((blit::buttons & blit::Button::HOME) >> 2); // start -> home
+             ((blit::buttons & blit::Button::MENU) >> 2); // start -> menu
 
     if(oldInputs == 0 && inputs != 0)
         cpu.flagInterrupt(Int_Joypad);
