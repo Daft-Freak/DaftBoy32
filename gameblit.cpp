@@ -439,10 +439,9 @@ void update(uint32_t time_ms)
     // translate inputs
     // TODO: move input handling?
     auto oldInputs = inputs;
-    inputs = (blit::buttons & 0x7C) | // UP/DOWN/A/B match, select -> X
+    inputs = (blit::buttons & 0xFC) | // UP/DOWN/A/B match, select -> X, start -> Y
              ((blit::buttons & blit::Button::DPAD_RIGHT) >> 1) |
-             ((blit::buttons & blit::Button::DPAD_LEFT) << 1) |
-             ((blit::buttons & blit::Button::Y) >> 2); // start -> Y
+             ((blit::buttons & blit::Button::DPAD_LEFT) << 1); // start -> Y
 
     if(oldInputs == 0 && inputs != 0)
         cpu.flagInterrupt(Int_Joypad);
