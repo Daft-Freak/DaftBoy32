@@ -69,6 +69,7 @@ Menu menu("Menu",
 bool menuOpen = false;
 
 bool redwawBG = true;
+uint32_t lastUpdate = 0;
 
 int log2i(unsigned int x)
 {
@@ -311,7 +312,9 @@ void render(uint32_t time_ms)
         return;
     }
 
-    if(redwawBG)
+    bool updateRunning = time_ms - lastUpdate < 20;
+
+    if(redwawBG || !updateRunning)
     {
         if(awfulScale)
         {
@@ -321,7 +324,7 @@ void render(uint32_t time_ms)
         else
             packedToRGB(asset_background, blit::screen.data); // unpack directly to the screen
 
-        redwawBG = false;
+        redwawBG = !updateRunning;
     }
 
     auto gbScreen = display.getData();
@@ -408,6 +411,8 @@ void render(uint32_t time_ms)
 
 void update(uint32_t time_ms)
 {
+    lastUpdate = time_ms;
+
     if(!loaded)
     {
         fileBrowser.update(time_ms);
