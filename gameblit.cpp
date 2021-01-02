@@ -68,6 +68,78 @@ Menu menu("Menu",
 
 bool menuOpen = false;
 
+bool redwawBG = true;
+
+int log2i(unsigned int x)
+{
+    return 8 * sizeof(unsigned int) - __builtin_clz(x) - 1;
+}
+
+// assuming RLE/palette and that data is the right size
+void packedToRGB(const uint8_t *packed_data, uint8_t *data)
+{
+    auto image = *(const blit::packed_image *)packed_data;
+
+    int palette_entry_count = image.palette_entry_count;
+    if(palette_entry_count == 0)
+      palette_entry_count = 256;
+
+    uint8_t bit_depth = log2i(std::max(1, palette_entry_count - 1)) + 1;
+
+    auto palette = (const blit::Pen *)(packed_data + sizeof(blit::packed_image));
+    auto image_data = packed_data + sizeof(blit::packed_image) + palette_entry_count * 4;
+    auto end = packed_data + image.byte_count;
+
+    uint8_t *pdest = (uint8_t *)data;
+    int parse_state = 0;
+    uint8_t count = 0, col = 0, bit = 0;
+
+    for (auto bytes = image_data; bytes < end; ++bytes) {
+        uint8_t b = *bytes;
+
+        for (auto j = 0; j < 8; j++)
+        {
+            switch (parse_state)
+            {
+                case 0: // flag
+                    if(b & (0b10000000 >> j))
+                        parse_state = 1;
+                    else
+                        parse_state = 2;
+                    break;
+                case 1: // repeat count
+                    count <<= 1;
+                    count |= ((0b10000000 >> j) & b) ? 1 : 0;
+                    if(++bit == 8)
+                    {
+                        parse_state = 2;
+                        bit = 0;
+                    }
+                    break;
+
+                case 2: // value
+                    col <<= 1;
+                    col |= ((0b10000000 >> j) & b) ? 1 : 0;
+
+                    if(++bit == bit_depth)
+                    {
+                        for (int c = 0; c <= count; c++)
+                        {
+                            *pdest++ = palette[col].r;
+                            *pdest++ = palette[col].g;
+                            *pdest++ = palette[col].b;
+                        }
+
+                        bit = 0; col = 0;
+                        parse_state = 0;
+                        count = 0;
+                    }
+                    break;
+            }
+        }
+    }
+}
+
 void onMenuItemPressed(const Menu::Item &item)
 {
     switch(static_cast<MenuItem>(item.id))
@@ -232,13 +304,24 @@ void init()
 
 void render(uint32_t time_ms)
 {
-    blit::screen.pen = blit::Pen(20, 30, 40);
-    blit::screen.clear();
 
     if(!loaded)
     {
         fileBrowser.render();
         return;
+    }
+
+    if(redwawBG)
+    {
+        if(awfulScale)
+        {
+            blit::screen.pen = blit::Pen(145, 142, 147);
+            blit::screen.clear();
+        }
+        else
+            packedToRGB(asset_background, blit::screen.data); // unpack directly to the screen
+
+        redwawBG = false;
     }
 
     auto gbScreen = display.getData();
@@ -317,7 +400,10 @@ void render(uint32_t time_ms)
     }
 
     if(menuOpen)
+    {
         menu.render();
+        redwawBG = true;
+    }
 }
 
 void update(uint32_t time_ms)
@@ -358,7 +444,10 @@ void update(uint32_t time_ms)
 
     // toggle the awful 1.5x scale
     if(blit::buttons.released & blit::Button::Y)
+    {
         awfulScale = !awfulScale;
+        redwawBG = true;
+    }
 
     if(apu.getNumSamples() < 1024 - 225) // single update generates ~220 samples
         cpu.run(10);

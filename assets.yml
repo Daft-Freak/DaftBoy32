@@ -5,3 +5,5 @@ assets.cpp:
     type: font/image
     vertical_spacing: 0
     space_width: 4
+
+  assets/bg.png: asset_background
