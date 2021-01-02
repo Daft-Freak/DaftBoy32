@@ -415,7 +415,7 @@ void update(uint32_t time_ms)
     }
 
     // menu
-    if(blit::buttons.released & blit::Button::JOYSTICK)
+    if(blit::buttons.released & blit::Button::MENU)
         menuOpen = !menuOpen;
 
     if(menuOpen)
@@ -437,13 +437,13 @@ void update(uint32_t time_ms)
     inputs = (blit::buttons & 0x7C) | // UP/DOWN/A/B match, select -> X
              ((blit::buttons & blit::Button::DPAD_RIGHT) >> 1) |
              ((blit::buttons & blit::Button::DPAD_LEFT) << 1) |
-             ((blit::buttons & blit::Button::MENU) >> 2); // start -> menu
+             ((blit::buttons & blit::Button::Y) >> 2); // start -> Y
 
     if(oldInputs == 0 && inputs != 0)
         cpu.flagInterrupt(Int_Joypad);
 
     // toggle the awful 1.5x scale
-    if(blit::buttons.released & blit::Button::Y)
+    if(blit::buttons.released & blit::Button::JOYSTICK)
     {
         awfulScale = !awfulScale;
         redwawBG = true;
