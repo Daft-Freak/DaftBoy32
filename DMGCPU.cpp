@@ -116,14 +116,35 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
     }
     else if((addr & 0xFF) == IO_DIV)
     {
+        // falling edge gets triggered by reset
+        if(timerEnabled && (divCounter & timerBit))
+            incrementTimer();
+
         divCounter = 0;
+        timerOldVal = false;
         return true;
     }
     else if((addr & 0xFF) == IO_TAC)
     {
+        bool wasEnabled = timerEnabled;
+        int oldBit = timerBit;
         const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
         timerEnabled = data & TAC_Start;
         timerBit = timerBits[data & TAC_Clock];
+
+        if(wasEnabled)
+        {
+            // timer glitches
+            if(!timerEnabled) // disable
+            {
+                if(divCounter & oldBit)
+                    incrementTimer();
+
+                timerOldVal = false;
+            }
+            else if((divCounter & oldBit) && !(divCounter & timerBit)) // clock switch
+                incrementTimer();
+        }
     }
     else if((addr & 0xFF) == IO_KEY1)
         speedSwitch = data & 1;
@@ -1996,7 +2017,7 @@ int DMGCPU::executeExInstruction()
 
 void DMGCPU::updateTimer(int cycles)
 {
-    if(!timerEnabled && !timerOldVal)
+    if(!timerEnabled)
     {
         divCounter += cycles;
         return;
@@ -2007,11 +2028,13 @@ void DMGCPU::updateTimer(int cycles)
     {
         divCounter += 4;
 
-        bool val = (divCounter & timerBit) && timerEnabled; // enable is ANDed with the selected bit
+        bool val = (divCounter & timerBit);
 
         // timer (incremented on falling edge)
         if(timerOldVal && !val)
         {
+            // this is identical to the code in incrementTimer
+            // calling that from here is bad for perf
             auto &tima = mem.getIOReg(IO_TIMA);
             if(tima == 0xFF)
             {
@@ -2025,6 +2048,20 @@ void DMGCPU::updateTimer(int cycles)
 
         timerOldVal = val;
     }
+
+}
+
+void DMGCPU::incrementTimer()
+{
+    auto &tima = mem.getIOReg(IO_TIMA);
+    if(tima == 0xFF)
+    {
+        //overflow
+        tima = mem.readIOReg(IO_TMA);
+        flagInterrupt(Int_Timer);
+    }
+    else
+        tima++;
 }
 
 bool DMGCPU::serviceInterrupts()

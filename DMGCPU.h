@@ -81,6 +81,7 @@ private:
     int executeExInstruction();
 
     void updateTimer(int cycles);
+    void incrementTimer();
     bool serviceInterrupts();
 
     static const uint32_t clockSpeed = 4194304;
