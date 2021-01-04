@@ -217,7 +217,7 @@ bool onWrite(uint16_t addr, uint8_t val)
 
 void getROMBank(uint8_t bank, uint8_t *ptr)
 {
-    printf("loading bank %i\n", bank);
+    blit::debugf("loading bank %i\n", bank);
     romFile.read(bank * 0x4000, 0x4000, (char *)ptr);
 }
 
