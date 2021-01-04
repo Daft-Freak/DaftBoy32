@@ -11,6 +11,13 @@
 #include "file-browser.hpp"
 #include "menu.hpp"
 
+#ifdef PROFILER
+#include "engine/profiler.hpp"
+
+blit::Profiler profiler;
+blit::ProfilerProbe *profilerUpdateProbe, *profilerRenderProbe;
+#endif
+
 // catch running out of memory
 #ifdef TARGET_32BLIT_HW
 extern "C" void *_sbrk(ptrdiff_t incr)
@@ -301,14 +308,35 @@ void init()
     // autostart
     if(blit::file_exists("auto.gb"))
         openROM("auto.gb");
+
+#ifdef PROFILER
+    profiler.set_display_size(blit::screen.bounds.w, blit::screen.bounds.h);
+    profiler.set_rows(5);
+    profiler.set_alpha(200);
+    profiler.display_history(true);
+
+    profiler.setup_graph_element(blit::Profiler::dmCur, true, true, blit::Pen(0, 255, 0));
+    profiler.setup_graph_element(blit::Profiler::dmAvg, true, true, blit::Pen(0, 255, 255));
+    profiler.setup_graph_element(blit::Profiler::dmMax, true, true, blit::Pen(255, 0, 0));
+    profiler.setup_graph_element(blit::Profiler::dmMin, true, true, blit::Pen(255, 255, 0));
+
+    profilerUpdateProbe = profiler.add_probe("Update", 300);
+    profilerRenderProbe = profiler.add_probe("Render", 300);
+#endif
 }
 
 void render(uint32_t time_ms)
 {
+#ifdef PROFILER
+    profilerRenderProbe->start();
+#endif
 
     if(!loaded)
     {
         fileBrowser.render();
+#ifdef PROFILER
+        profilerRenderProbe->store_elapsed_us();
+#endif
         return;
     }
 
@@ -407,10 +435,20 @@ void render(uint32_t time_ms)
         menu.render();
         redwawBG = true;
     }
+
+#ifdef PROFILER
+    profilerRenderProbe->store_elapsed_us();
+
+    profiler.set_graph_time(profilerRenderProbe->elapsed_metrics().uMaxElapsedUs);
+#endif
 }
 
 void update(uint32_t time_ms)
 {
+#ifdef PROFILER
+    blit::ScopedProfilerProbe scopedProbe(profilerUpdateProbe);
+#endif
+
     lastUpdate = time_ms;
 
     if(!loaded)
@@ -467,4 +505,13 @@ void update(uint32_t time_ms)
         cpu.run(1);
     }
 
+#ifdef PROFILER
+    static int lastLogTime = time_ms;
+
+    if(time_ms - lastLogTime >= 1000)
+    {
+        profiler.log_probes();
+        lastLogTime = time_ms;
+    }
+#endif
 }
