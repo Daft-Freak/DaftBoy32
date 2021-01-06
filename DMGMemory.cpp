@@ -179,13 +179,13 @@ uint8_t DMGMemory::read(uint16_t addr) const
         case 0xD:
             return wram[(addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/];
 
-        case 0xE:
-            break; //echo
+        case 0xE: // echo
+            return wram[addr & 0xFFF];
     
         case 0xF:
         {
             if(addr < 0xFE00)
-                break; // echo
+                break; // echo of D (does this bank switch as well?)
             if(addr < 0xFEA0)
                 return oam[addr & 0xFF];
             if(addr < 0xFF00)
@@ -241,8 +241,8 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
             wram[(addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/] = data;
             return;
 
-        case 0xE:
-            break; //echo
+        case 0xE: // echo
+            wram[addr & 0xFFF] = data;
     
         case 0xF:
         {
