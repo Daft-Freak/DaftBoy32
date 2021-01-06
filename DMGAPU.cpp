@@ -613,36 +613,41 @@ void DMGAPU::updateFrameSequencer()
 void DMGAPU::updateFreq()
 {
     // channel 1
-    ch1FreqTimer -= cyclesPassed;
     if(channelEnabled & (1 << 0))
     {
-        while(ch1FreqTimer <= 0)
+        int timer = ch1FreqTimer;
+        timer -= cyclesPassed;
+        while(timer <= 0)
         {
-            ch1FreqTimer += ch1FreqTimerPeriod;
+            timer += ch1FreqTimerPeriod;
             ch1DutyStep++;
             ch1DutyStep &= 7;
         }
+        ch1FreqTimer = timer;
     }
 
     // channel 2
-    ch2FreqTimer -= cyclesPassed;
     if(channelEnabled & (1 << 1))
     {
-        while(ch2FreqTimer <= 0)
+        int timer = ch2FreqTimer;
+        timer -= cyclesPassed;
+        while(timer <= 0)
         {
-            ch2FreqTimer += ch2FreqTimerPeriod;
+            timer += ch2FreqTimerPeriod;
             ch2DutyStep++;
             ch2DutyStep &= 7;
         }
+        ch2FreqTimer = timer;
     }
 
     // channel 3
-    ch3FreqTimer -= cyclesPassed;
     if(channelEnabled & (1 << 2))
     {
-        while(ch3FreqTimer <= 0)
+        int timer = ch3FreqTimer;
+        timer -= cyclesPassed;
+        while(timer <= 0)
         {
-            ch3FreqTimer += ch3FreqTimerPeriod;
+            timer += ch3FreqTimerPeriod;
             ch3SampleIndex = (ch3SampleIndex + 1) % 32;
 
             auto sampleByte = cpu.getMem().readIOReg(0x30 + (ch3SampleIndex / 2));
@@ -652,17 +657,20 @@ void DMGAPU::updateFreq()
             else
                 ch3Sample = sampleByte >> 4;
         }
+
+        ch3FreqTimer = timer;
     }
 
     // channel 4
-    ch4FreqTimer -= cyclesPassed;
     if(channelEnabled & (1 << 3))
     {
-        while(ch4FreqTimer <= 0)
+        int timer = ch4FreqTimer;
+        timer -= cyclesPassed;
+        while(timer <= 0)
         {
-            ch4FreqTimer += ch4FreqTimerPeriod;
+            timer += ch4FreqTimerPeriod;
             // make noise
-            bool bit = ((ch4LFSRBits >> 1) ^ ch4LFSRBits) & 1;
+            int bit = ((ch4LFSRBits >> 1) ^ ch4LFSRBits) & 1;
             ch4LFSRBits >>= 1;
             ch4LFSRBits |= bit << 14; // bit 15
 
@@ -671,6 +679,7 @@ void DMGAPU::updateFreq()
 
             ch4Val = ch4LFSRBits & 1;
         }
+        ch4FreqTimer = timer;
     }
 
     cyclesPassed = 0;
