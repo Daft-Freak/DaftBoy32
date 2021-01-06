@@ -54,6 +54,9 @@ private:
         uint8_t bank;
     };
 
+    // memory map with pointers offset so that regions[addr >> 12][addr] works
+    const uint8_t *regions[16];
+
     uint8_t vram[0x2000 * 2]; // 8k @ 0x8000, two banks on GBC
     uint8_t wram[0x1000 * 8]; // 8k @ 0xC000, second half switchable on GBC
     uint8_t oam[0xA0]; // @ 0xFE00
@@ -65,14 +68,13 @@ private:
     // cartridge
     MBCType mbcType = MBCType::None;
     bool mbcRAMEnabled = false;
-    int mbcROMBank = 1, mbcRAMBank = 0;
+    int mbcROMBank = 1;
     bool mbcRAMBankMode = false;
     uint8_t cartRam[0x8000];
     bool cartRamWritten = false;
     unsigned int cartRamSize = 0;
 
     uint8_t cartROMBank0[0x4000];
-    const uint8_t *cartROMCurBank;
     const uint8_t *cartROM = nullptr; // used if entire rom is loaded somewhere
 
     // cache as much as possible in RAM

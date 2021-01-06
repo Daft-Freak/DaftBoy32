@@ -72,7 +72,6 @@ void DMGMemory::reset()
     memset(vram, 0, sizeof(vram));
 
     // load some ROM
-    cartROMCurBank = cartROMBankCache - 0x4000;
     romBankCallback(0, cartROMBank0);
     romBankCallback(1, cartROMBankCache);
 
@@ -134,8 +133,24 @@ void DMGMemory::reset()
 
     mbcRAMEnabled = false;
     mbcROMBank = 1;
-    mbcRAMBank = 0;
     mbcRAMBankMode = false;
+
+    regions[0x0] =
+    regions[0x1] =
+    regions[0x2] =
+    regions[0x3] = cartROMBank0;
+    regions[0x4] =
+    regions[0x5] =
+    regions[0x6] =
+    regions[0x7] = cartROMBankCache - 0x4000;
+    regions[0x8] = vram - 0x8000; // banked
+    regions[0x9] = vram - 0x8000; // banked
+    regions[0xA] = cartRam - 0xA000; // banked
+    regions[0xB] = cartRam - 0xA000; // banked
+    regions[0xC] = wram - 0xC000;
+    regions[0xD] = wram - 0xC000; // banked
+    regions[0xE] = wram - 0xC000;
+    regions[0xF] = nullptr;
 }
 
 void DMGMemory::setReadCallback(ReadCallback readCallback)
@@ -148,127 +163,69 @@ void DMGMemory::setWriteCallback(WriteCallback writeCallback)
     this->writeCallback = writeCallback;
 }
 
-
 uint8_t DMGMemory::read(uint16_t addr) const
 {
-    switch((addr >> 12) & 0xF)
-    {
-        case 0x0:
-        case 0x1:
-        case 0x2:
-        case 0x3:
-            return cartROMBank0[addr];
-        
-        case 0x4:
-        case 0x5:
-        case 0x6:
-        case 0x7:
-            return cartROMCurBank[addr];
+    int region = addr >> 12;
 
-        case 0x8:
-        case 0x9:
-            return vram[(addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/];
+    if(regions[region])
+        return regions[region][addr];
 
-        case 0xA:
-        case 0xB:
-            return cartRam[(addr & 0x1FFF) + (mbcRAMBank << 13)];
+    // must be Fxxx
 
-        case 0xC:
-            return wram[addr & 0xFFF];
+    if(addr < 0xFE00)
+        return 0; // echo of D (does this bank switch as well?)
+    if(addr < 0xFEA0)
+        return oam[addr & 0xFF];
+    if(addr < 0xFF00)
+        return 0; //unusable
 
-        case 0xD:
-            return wram[(addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/];
+    auto val = iohram[addr & 0xFF];
 
-        case 0xE: // echo
-            return wram[addr & 0xFFF];
-    
-        case 0xF:
-        {
-            if(addr < 0xFE00)
-                break; // echo of D (does this bank switch as well?)
-            if(addr < 0xFEA0)
-                return oam[addr & 0xFF];
-            if(addr < 0xFF00)
-                break; //unusable
+    if((addr & 0xFF) == IO_VBK)
+        return vramBank;
 
-            auto val = iohram[addr & 0xFF];
+    if(readCallback)
+        val = readCallback(addr, val);
 
-            if((addr & 0xFF) == IO_VBK)
-                return vramBank;
-
-            if(readCallback)
-                val = readCallback(addr, val);
-
-            return val;
-        }
-    }
-
-    printf("read %x\n", addr);
-    return 0;
+    return val;
 }
 
 void DMGMemory::write(uint16_t addr, uint8_t data)
 {
-    switch(addr >> 12)
+    int region = addr >> 12;
+    if(region < 8)
+        writeMBC(addr, data); // cart rom
+    else if(regions[region])
+        const_cast<uint8_t *>(regions[region])[addr] = data; // these are the non-const ones...
+    else 
     {
-        case 0x0:
-        case 0x1:
-        case 0x2:
-        case 0x3:
-        
-        case 0x4:
-        case 0x5:
-        case 0x6:
-        case 0x7:
-            writeMBC(addr, data); // cart rom
+        // must be Fxxx
 
-        case 0x8:
-        case 0x9:
-            vram[(addr & 0x1FFF) + (vramBank << 13) /* * 0x2000*/] = data;
-            return;
-
-        case 0xA:
-        case 0xB:
-            cartRamWritten = true;
-            cartRam[(addr & 0x1FFF) + (mbcRAMBank << 13)] = data;
-            return;
-
-        case 0xC:
-            wram[addr & 0xFFF] = data;
-            return;
-
-        case 0xD:
-            wram[(addr & 0xFFF) + (wramBank << 12) /* * 0x1000*/] = data;
-            return;
-
-        case 0xE: // echo
-            wram[addr & 0xFFF] = data;
-    
-        case 0xF:
+        if(addr < 0xFE00)
+            return; // echo
+        if(addr < 0xFEA0)
         {
-            if(addr < 0xFE00)
-                break; // echo
-            if(addr < 0xFEA0)
-            {
-                oam[addr & 0xFF] = data;
-                return;
-            }
-            if(addr < 0xFF00)
-                break; //unusable
-
-            if((addr & 0xFF) == IO_VBK)
-                vramBank = data & 1;
-            else if((addr & 0xFF) == IO_SVBK)
-                wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
-            else if(writeCallback && writeCallback(addr, data))
-                return;
-
-            iohram[addr & 0xFF] = data;
+            oam[addr & 0xFF] = data;
             return;
         }
-    }
+        if(addr < 0xFF00)
+            return; //unusable
 
-    printf("write %x = %x\n", addr, data);
+        if((addr & 0xFF) == IO_VBK)
+        {
+            vramBank = data & 1;
+            regions[0x8] = regions[0x9] = vram + (vramBank * 0x2000) - 0x8000;
+        }
+        else if((addr & 0xFF) == IO_SVBK)
+        {
+            wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
+            regions[0xD] = wram + (wramBank * 0x1000) - 0xD000;
+        }
+        else if(writeCallback && writeCallback(addr, data))
+            return;
+
+        iohram[addr & 0xFF] = data;
+    }
 }
 
 void DMGMemory::setCartRamUpdateCallback(CartRamUpdateCallback callback)
@@ -324,10 +281,16 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
     else if(addr < 0x6000)
     {
         if(mbcType == MBCType::MBC5)
-            mbcRAMBank = data & 0xF;
+        {
+            int bank = data & 0xF;
+            regions[0xA] = regions[0xB] = cartRam + (bank * 0x2000) - 0xA000;
+        }
         // high 2 bits of rom bank / ram bank
         else if(mbcRAMBankMode || mbcType != MBCType::MBC3)
-            mbcRAMBank = data & 0x3;
+        {
+            int bank = data & 0x3;
+            regions[0xA] = regions[0xB] = cartRam + (bank * 0x2000) - 0xA000;
+        }
         else
         {
             mbcROMBank = (mbcROMBank & 0x1F) | (data & 0xE0);
@@ -345,7 +308,10 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
             if(mbcRAMBankMode)
                 mbcROMBank &= 0x1F;
             else
-                mbcRAMBank = 0;
+            {
+                // bank 0
+                regions[0xA] = regions[0xB] = cartRam- 0xA000;
+            }
         }
     }
 }
@@ -354,14 +320,16 @@ void DMGMemory::updateCurrentROMBank()
 {
     if(mbcROMBank == 0)
     {
-        cartROMCurBank = cartROMBank0 - 0x4000;
+        for(int i = 4; i < 8; i++)
+            regions[i] = cartROMBank0 - 0x4000;
         return;
     }
 
     // entire ROM is loaded
     if(cartROM)
     {
-        cartROMCurBank = cartROM + (mbcROMBank - 1) * 0x4000;
+        for(int i = 4; i < 8; i++)
+            regions[i] = cartROM + (mbcROMBank - 1) * 0x4000;
         return;
     }
 
@@ -369,7 +337,9 @@ void DMGMemory::updateCurrentROMBank()
     {
         if(it->bank == mbcROMBank)
         {
-            cartROMCurBank = it->ptr - 0x4000;
+            for(int i = 4; i < 8; i++)
+                regions[i] = it->ptr - 0x4000;
+
             cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
             return;
         }
@@ -378,7 +348,9 @@ void DMGMemory::updateCurrentROMBank()
     // reuse the last (least recently used) bank
     auto it = std::prev(cachedROMBanks.end());
 
-    cartROMCurBank = it->ptr - 0x4000;
+    for(int i = 4; i < 8; i++)
+        regions[i] = it->ptr - 0x4000;
+
     romBankCallback(mbcROMBank, it->ptr);
     it->bank = mbcROMBank;
     cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
