@@ -41,6 +41,33 @@ extern "C" void *_sbrk(ptrdiff_t incr)
 }
 #endif
 
+void addAppendedFiles()
+{
+#ifdef TARGET_32BLIT_HW
+    extern char _flash_end;
+
+    if(memcmp(&_flash_end, "APPFILES", 8) != 0)
+        return;
+
+    uint32_t numFiles = *reinterpret_cast<uint32_t *>(&_flash_end + 8);
+
+    const int headerSize = 12, fileHeaderSize = 8;
+
+    auto dataPtr = &_flash_end + headerSize + fileHeaderSize * numFiles;
+
+    for(auto i = 0u; i < numFiles; i++)
+    {
+        auto filenameLength = *reinterpret_cast<uint16_t *>(&_flash_end + headerSize + i * fileHeaderSize);
+        auto fileLength = *reinterpret_cast<uint32_t *>(&_flash_end + headerSize + i * fileHeaderSize + 4);
+
+        blit::File::add_buffer_file("/" + std::string(dataPtr, filenameLength), reinterpret_cast<uint8_t *>(dataPtr + filenameLength), fileLength);
+
+        dataPtr += filenameLength + fileLength;
+    }
+
+#endif
+}
+
 const blit::Font tallFont(tall_font);
 FileBrowser fileBrowser(tallFont);
 
@@ -300,6 +327,8 @@ void init()
     blit::File::add_buffer_file("auto.gb", test_rom, test_rom_length);
     blit::File::add_buffer_file("auto.gb.ram", test_ram, test_ram_length);
 #endif
+
+    addAppendedFiles();
 
     fileBrowser.init();
 
