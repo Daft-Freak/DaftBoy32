@@ -99,6 +99,11 @@ private:
     bool isGBC = false;
     bool doubleSpeed = false, speedSwitch = false;
 
+    int oamDMACount;
+    const uint8_t *oamDMASrc = nullptr;
+    uint8_t *oamDMADest = nullptr;
+    bool gdmaTriggered;
+
     // registers
     uint16_t regs[4];
     uint16_t pc, sp;

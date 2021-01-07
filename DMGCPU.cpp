@@ -22,6 +22,9 @@ void DMGCPU::reset()
     isGBC = false;
     doubleSpeed = speedSwitch = false;
 
+    gdmaTriggered = 0;
+    oamDMACount = 0;
+
     // values after boot rom
     pc = 0x100;
     reg(WReg::AF) = 0x01B0;
@@ -53,6 +56,36 @@ void DMGCPU::run(int ms)
 
         if(serviceableInterrupts && serviceInterrupts())
             exec += 5 * 4;
+
+        // OAM DMA
+        if(oamDMACount)
+        {
+            *oamDMADest++ = *oamDMASrc++;
+            oamDMACount--;
+        }
+
+        if(gdmaTriggered) // GDMA (stops execution)
+        {
+            uint16_t srcAddr = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
+            uint16_t dstAddr = 0x8000 | ((mem.readIOReg(IO_HDMA3) & 0x1F) << 8) | (mem.readIOReg(IO_HDMA4) & 0xF0);
+            uint16_t count = ((mem.readIOReg(IO_HDMA5) & 0x7F) + 1) << 4;
+
+            auto src = mem.mapAddress(srcAddr);
+            auto dst = const_cast<uint8_t *>(mem.mapAddress(dstAddr)); // always VRAM
+
+            // twice the cycles in double speed + overhead
+            // (doubleSpeed ? 16 : 8) * (count / 16) + 4
+            exec += (doubleSpeed ? count : count / 2) + 4;
+
+            if(src) // super unlikely to be false
+            {
+                for(; count; count--, src++, dst++)
+                    *dst = *src;
+            }
+
+            mem.writeIOReg(IO_HDMA5, 0xFF);
+            gdmaTriggered = false;
+        }
 
         cycles -= exec;
 
@@ -88,31 +121,21 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
 {
     if((addr & 0xFF) == 0x46)
     {
-        //TODO: put this not here
-        //printf("DMA from %x @~%x\n", data << 8, pc);
-        for(int i = 0; i < 0xA0; i++)
-            writeMem(0xFE00 + i, readMem((data << 8) + i));
+        oamDMACount = 0xA0;
+        oamDMASrc = mem.mapAddress(data << 8); // shouldn't hit the invalid region
+        oamDMADest = mem.getOAM();
 
         return true;
     }
     else if((addr & 0xFF) == IO_HDMA5)
     {
-        uint16_t src = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
-        uint16_t dst = 0x8000 | ((mem.readIOReg(IO_HDMA3) & 0x1F) << 8) | (mem.readIOReg(IO_HDMA4) & 0xF0);
-        uint16_t count = ((data & 0x7F) + 1) << 4;
-
         if(data & 0x80) // HDMA
-            printf("HDMA %03X %04X -> %04X\n", count, src, dst);
+            printf("HDMA\n");
         else
         {
             // GDMA
-            // TODO: also move, timing
-            for(; count; count--, src++, dst++)
-                writeMem(dst, readMem(src));
-
-            mem.writeIOReg(IO_HDMA5, 0xFF);
+            gdmaTriggered = true;
         }
-        return true;
     }
     else if((addr & 0xFF) == IO_DIV)
     {
