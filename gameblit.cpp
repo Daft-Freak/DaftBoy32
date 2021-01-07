@@ -11,6 +11,8 @@
 #include "file-browser.hpp"
 #include "menu.hpp"
 
+#include "engine/api_private.hpp" // err...
+
 #ifdef PROFILER
 #include "engine/profiler.hpp"
 
@@ -214,11 +216,16 @@ bool onWrite(uint16_t addr, uint8_t val)
     return false;
 }
 
+int loadedBanks = 0;
+int bankLoadTime = 0;
 
 void getROMBank(uint8_t bank, uint8_t *ptr)
 {
-    blit::debugf("loading bank %i\n", bank);
+    //blit::debugf("loading bank %i\n", bank);
+    loadedBanks++;
+    auto start = blit::api.get_us_timer();
     romFile.read(bank * 0x4000, 0x4000, (char *)ptr);
+    bankLoadTime += blit::api.get_us_timer() - start;
 }
 
 void updateCartRAM(uint8_t *cartRam, unsigned int size)
@@ -491,10 +498,18 @@ void update(uint32_t time_ms)
         redwawBG = true;
     }
 
+    loadedBanks = 0;
+    bankLoadTime = 0;
+
     if(apu.getNumSamples() < 1024 - 225) // single update generates ~220 samples
         cpu.run(10);
     else
         printf("CPU stalled, no audio room!\n");
+
+    auto end = blit::now();
+
+    if(end - start > 10)
+        blit::debugf("running slow! %ims %i banks/%ius\n", end-start, loadedBanks, bankLoadTime);
 
     // SPEEEEEEEED
     while(turbo && blit::now() - start < 9)
