@@ -149,7 +149,7 @@ void DMGMemory::reset()
     regions[0xB] = cartRam - 0xA000; // banked
     regions[0xC] = wram - 0xC000;
     regions[0xD] = wram - 0xC000; // banked
-    regions[0xE] = wram - 0xC000;
+    regions[0xE] = wram - 0xE000;
     regions[0xF] = nullptr;
 }
 
