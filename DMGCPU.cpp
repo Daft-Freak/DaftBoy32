@@ -54,45 +54,52 @@ void DMGCPU::run(int ms)
 
     while(!stopped && cycles > 0)
     {
-        int exec = halted ? 4 : executeInstruction();
-
-        if(serviceableInterrupts && serviceInterrupts())
-            exec += 5 * 4;
-
-        // OAM DMA
-        if(oamDMACount)
+        int exec = 4;
+        if(!halted)
         {
-            *oamDMADest++ = *oamDMASrc++;
-            oamDMACount--;
-        }
+            exec = executeInstruction();
 
-        if(gdmaTriggered) // GDMA (stops execution)
-        {
-            uint16_t srcAddr = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
-            uint16_t dstAddr = 0x8000 | ((mem.readIOReg(IO_HDMA3) & 0x1F) << 8) | (mem.readIOReg(IO_HDMA4) & 0xF0);
-            uint16_t count = ((mem.readIOReg(IO_HDMA5) & 0x7F) + 1) << 4;
-
-            auto src = mem.mapAddress(srcAddr);
-            auto dst = const_cast<uint8_t *>(mem.mapAddress(dstAddr)); // always VRAM
-
-            // twice the cycles in double speed + overhead
-            // (doubleSpeed ? 16 : 8) * (count / 16) + 4
-            exec += (doubleSpeed ? count : count / 2) + 4;
-
-            if(src) // super unlikely to be false
+            // OAM DMA
+            if(oamDMACount)
             {
-                for(; count; count--, src++, dst++)
-                    *dst = *src;
+                *oamDMADest++ = *oamDMASrc++;
+                oamDMACount--;
             }
 
-            mem.writeIOReg(IO_HDMA5, 0xFF);
-            gdmaTriggered = false;
+            if(gdmaTriggered) // GDMA (stops execution)
+            {
+                uint16_t srcAddr = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
+                uint16_t dstAddr = 0x8000 | ((mem.readIOReg(IO_HDMA3) & 0x1F) << 8) | (mem.readIOReg(IO_HDMA4) & 0xF0);
+                uint16_t count = ((mem.readIOReg(IO_HDMA5) & 0x7F) + 1) << 4;
+
+                auto src = mem.mapAddress(srcAddr);
+                auto dst = const_cast<uint8_t *>(mem.mapAddress(dstAddr)); // always VRAM
+
+                // twice the cycles in double speed + overhead
+                // (doubleSpeed ? 16 : 8) * (count / 16) + 4
+                exec += (doubleSpeed ? count : count / 2) + 4;
+
+                if(src) // super unlikely to be false
+                {
+                    for(; count; count--, src++, dst++)
+                        *dst = *src;
+                }
+
+                mem.writeIOReg(IO_HDMA5, 0xFF);
+                gdmaTriggered = false;
+            }
         }
 
-        cycles -= exec;
+        do {
+            if(serviceableInterrupts && serviceInterrupts())
+                exec += 5 * 4;
 
-        cycleCallback(exec);
-        updateTimer(exec);
+            cycles -= exec;
+
+            cycleCallback(exec);
+            updateTimer(exec);
+            exec = 4;
+        } while(halted && cycles > 0); // wait until not halted
     }
 }
 
