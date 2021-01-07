@@ -292,7 +292,7 @@ void init()
         blit::channels[0].trigger_sustain();
     }
 
-    fileBrowser.set_extensions({".gb"});
+    fileBrowser.set_extensions({".gb", ".gbc"});
     fileBrowser.set_on_file_open(openROM);
 
     // embed test ROM
