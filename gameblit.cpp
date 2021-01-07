@@ -313,7 +313,10 @@ void init()
     mem.setCartRamUpdateCallback(updateCartRAM);
 
     // autostart
-    if(blit::file_exists("auto.gb"))
+    auto launchPath = blit::get_launch_path();
+    if(launchPath)
+        openROM(launchPath);
+    else if(blit::file_exists("auto.gb"))
         openROM("auto.gb");
 
 #ifdef PROFILER
