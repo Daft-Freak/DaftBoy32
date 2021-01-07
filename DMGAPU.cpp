@@ -47,8 +47,8 @@ void DMGAPU::update(int cycles)
     }
 
     // output clock - attempt to get close to 22050Hz
-    const int clocksPerSample = (4194304u * 1000) / 22050;
-    sampleClock += cycles * 1000;
+    const int clocksPerSample = (4194304ull * 1024) / 22050;
+    sampleClock += cycles * 1024;
 
     if(sampleClock >= clocksPerSample)
     {
