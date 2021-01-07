@@ -190,6 +190,23 @@ uint8_t DMGMemory::read(uint16_t addr) const
     return val;
 }
 
+const uint8_t *DMGMemory::mapAddress(uint16_t addr) const
+{
+    int region = addr >> 12;
+
+    if(regions[region])
+        return regions[region] + addr;
+
+    if(addr < 0xFE00)
+        return regions[0xD] + addr - 0x2000; //echo (?)
+    if(addr < 0xFEA0)
+        return oam;
+    if(addr < 0xFF00)
+        return nullptr;
+
+    return iohram;
+}
+
 void DMGMemory::write(uint16_t addr, uint8_t data)
 {
     int region = addr >> 12;

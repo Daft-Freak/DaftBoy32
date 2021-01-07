@@ -23,6 +23,8 @@ public:
 
     uint8_t read(uint16_t addr) const;
     void write(uint16_t addr, uint8_t data);
+
+    const uint8_t *mapAddress(uint16_t addr) const;
     
     // fast access to IO regs
     uint8_t readIOReg(uint8_t addr) const {return iohram[addr];}
