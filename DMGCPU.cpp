@@ -549,6 +549,7 @@ int DMGCPU::executeInstruction()
             {
                 speedSwitch = false;
                 doubleSpeed = !doubleSpeed;
+                divCounter = 0;
             }
             else
                 stopped = true;
