@@ -109,6 +109,11 @@ void DMGMemory::reset()
             mbcType = MBCType::MBC1;
             break;
 
+        case 5:
+        case 6: // + Battery
+            mbcType = MBCType::MBC2;
+            break;
+
         case 0x0F: // + Timer + Battery
         case 0x10: // + Timer + RAM + Battery
         case 0x11:
@@ -274,6 +279,29 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
             regions[0xA] = regions[0xB] = cartRam + off - 0xA000;
         }
     };
+
+    // MBC2 is a bit different (and simpler)
+    if(mbcType == MBCType::MBC2)
+    {
+        // TODO: RAM is 4 bit and only 512 bytes
+        if(addr < 0x4000)
+        {
+            if(addr & 0x100) // ROM bank
+            {
+                mbcROMBank = data & 0xF; // 4 bit rom bank
+                if(mbcROMBank == 0)
+                    mbcROMBank = 1; // bank 0 is handled as bank 1
+
+                updateCurrentROMBank();
+            }
+            else // RAM enable
+            {
+                mbcRAMEnabled = (data & 0xF) == 0xA;
+                updateRAMBank();
+            }
+        }
+        return;
+    }
 
     // MBC1/3/5
 

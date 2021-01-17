@@ -46,6 +46,7 @@ private:
     {
         None = 0,
         MBC1,
+        MBC2,
         MBC3,
         MBC5
     };
