@@ -133,6 +133,7 @@ void DMGMemory::reset()
 
     mbcRAMEnabled = false;
     mbcROMBank = 1;
+    mbcRAMBank = 0;
     mbcRAMBankMode = false;
 
     regions[0x0] =
@@ -145,8 +146,8 @@ void DMGMemory::reset()
     regions[0x7] = cartROMBankCache - 0x4000;
     regions[0x8] = vram - 0x8000; // banked
     regions[0x9] = vram - 0x8000; // banked
-    regions[0xA] = cartRam - 0xA000; // banked
-    regions[0xB] = cartRam - 0xA000; // banked
+    regions[0xA] = nullptr; // cart RAM - banked
+    regions[0xB] = nullptr; // cart RAM - banked
     regions[0xC] = wram - 0xC000;
     regions[0xD] = wram - 0xC000; // banked
     regions[0xE] = wram - 0xE000;
@@ -169,6 +170,10 @@ uint8_t DMGMemory::read(uint16_t addr) const
 
     if(regions[region])
         return regions[region][addr];
+
+    // handle disabled RAM
+    if(!mbcRAMEnabled && region != 0xF)
+        return 0xFF;
 
     // must be Fxxx
 
@@ -212,6 +217,8 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
     int region = addr >> 12;
     if(region < 8)
         writeMBC(addr, data); // cart rom
+    else if(!mbcRAMEnabled && (region == 0xA || region == 0xB))
+        return;
     else if(regions[region])
         const_cast<uint8_t *>(regions[region])[addr] = data; // these are the non-const ones...
     else 
@@ -255,6 +262,19 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
     if(mbcType == MBCType::None)
         return;
 
+    auto updateRAMBank = [this]()
+    {
+        if(!mbcRAMEnabled)
+            regions[0xA] = regions[0xB] = nullptr; // RAM disabled
+        else if(mbcType == MBCType::MBC1 && !mbcRAMBankMode) // no banking, use bank 0
+            regions[0xA] = regions[0xB] = cartRam - 0xA000;
+        else
+        {
+            int off = (mbcRAMBank * 0x2000) & (cartRamSize - 1); // limit to RAM size
+            regions[0xA] = regions[0xB] = cartRam + off - 0xA000;
+        }
+    };
+
     // MBC1/3/5
 
     if(addr < 0x2000)
@@ -263,6 +283,8 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
             mbcRAMEnabled = data == 0xA;
         else
             mbcRAMEnabled = (data & 0xF) == 0xA;
+
+        updateRAMBank();
 
         // on disable sync the ram if changed
         if(!mbcRAMEnabled)
@@ -303,8 +325,8 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
         // MBC3/5 RAM banking
         if(mbcType == MBCType::MBC5 || mbcType == MBCType::MBC3)
         {
-            int bank = mbcType == MBCType::MBC5 ? data & 0xF : data & 0x3;
-            regions[0xA] = regions[0xB] = cartRam + (bank * 0x2000) - 0xA000;
+            mbcRAMBank = mbcType == MBCType::MBC5 ? data & 0xF : data & 0x3;
+            updateRAMBank();
 
             // TODO: MBC3 bank >= 8 maps RTC regs
         }
@@ -312,8 +334,8 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
         {
             if(mbcRAMBankMode)
             {
-                int bank = data & 0x3;
-                regions[0xA] = regions[0xB] = cartRam + (bank * 0x2000) - 0xA000;
+                mbcRAMBank = data & 0x3;
+                updateRAMBank();
 
                 // TODO: this also affetcts the bank at 0-3FFF
             }
@@ -329,11 +351,7 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
         if(mbcType == MBCType::MBC1)
         {
             mbcRAMBankMode = data == 1;
-            if(!mbcRAMBankMode)
-            {
-                // bank 0
-                regions[0xA] = regions[0xB] = cartRam - 0xA000;
-            }
+            updateRAMBank();
         }
     }
 }

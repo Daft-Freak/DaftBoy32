@@ -71,7 +71,7 @@ private:
     // cartridge
     MBCType mbcType = MBCType::None;
     bool mbcRAMEnabled = false;
-    int mbcROMBank = 1;
+    int mbcROMBank = 1, mbcRAMBank = 0;
     bool mbcRAMBankMode = false;
     uint8_t cartRam[0x8000];
     bool cartRamWritten = false;
