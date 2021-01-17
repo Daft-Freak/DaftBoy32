@@ -40,7 +40,8 @@ void DMGCPU::reset()
     // enable color mode
     if(console == Console::CGB || (console == Console::Auto && mem.read(0x143) & 0x80))
     {
-        isGBC = true;
+        isGBC = mem.read(0x143) & 0x80; // only set if a GBC game
+        // TODO: CGB in DMG mode likely needs some fixups
         reg(Reg::A) = 0x11;
     }
 }

@@ -31,6 +31,8 @@ public:
     void run(int ms);
 
     void setCycleCallback(CycleCallback cycleCallback);
+
+    Console getConsole() {return console;}
     void setConsole(Console c) {console = c;}
 
     void flagInterrupt(int interrupt);
@@ -42,7 +44,7 @@ public:
 
     uint16_t getInternalTimer() const {return divCounter;}
 
-    bool getColourMode() const {return isGBC;}
+    bool getColourMode() const {return isGBC;} // CGB in CGB mode
     bool getDoubleSpeedMode() const {return doubleSpeed;}
 
 private:
