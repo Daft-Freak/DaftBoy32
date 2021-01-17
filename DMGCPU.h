@@ -15,6 +15,13 @@ enum Interrupts
 class DMGCPU final
 {
 public:
+    enum class Console
+    {
+        Auto,
+        DMG,
+        CGB
+    };
+
     DMGCPU(DMGMemory &mem);
 
     using CycleCallback = void(*)(int);
@@ -24,6 +31,7 @@ public:
     void run(int ms);
 
     void setCycleCallback(CycleCallback cycleCallback);
+    void setConsole(Console c) {console = c;}
 
     void flagInterrupt(int interrupt);
 
@@ -97,6 +105,7 @@ private:
     bool timerOldVal = false;
 
     bool isGBC = false;
+    Console console = Console::Auto;
     bool doubleSpeed = false, speedSwitch = false;
 
     int oamDMACount;

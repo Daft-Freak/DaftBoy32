@@ -38,7 +38,7 @@ void DMGCPU::reset()
     mem.reset();
 
     // enable color mode
-    if(mem.read(0x143) & 0x80)
+    if(console == Console::CGB || (console == Console::Auto && mem.read(0x143) & 0x80))
     {
         isGBC = true;
         reg(Reg::A) = 0x11;
