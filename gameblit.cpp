@@ -186,8 +186,8 @@ void onMenuItemPressed(const Menu::Item &item)
             break;
 
         case MenuItem::Reset:
-            apu.reset();
             cpu.reset();
+            apu.reset();
             break;
 
         case MenuItem::SwitchGame:
@@ -287,8 +287,8 @@ void openROM(std::string filename)
     romFile.open(filename);
     mem.setCartROM(romFile.get_ptr());
 
-    apu.reset();
     cpu.reset();
+    apu.reset();
 
     if(blit::file_exists(filename + ".ram"))
     {
