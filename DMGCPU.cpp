@@ -32,7 +32,7 @@ void DMGCPU::reset()
     reg(WReg::AF) = 0x01B0;
     reg(WReg::BC) = 0x0013;
     reg(WReg::DE) = 0x00D8;
-    reg(WReg::HL) = 0x01D4;
+    reg(WReg::HL) = 0x014D;
     sp = 0xFFFE;
 
     mem.reset();
