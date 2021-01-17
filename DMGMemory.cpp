@@ -259,7 +259,10 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
 
     if(addr < 0x2000)
     {
-        mbcRAMEnabled = (data & 0xF) == 0xA;
+        if(mbcType == MBCType::MBC5) // MBC5 doesn't ignore the top bits
+            mbcRAMEnabled = data == 0xA;
+        else
+            mbcRAMEnabled = (data & 0xF) == 0xA;
 
         // on disable sync the ram if changed
         if(!mbcRAMEnabled)
@@ -297,24 +300,28 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
     }
     else if(addr < 0x6000)
     {
-        if(mbcType == MBCType::MBC5)
+        // MBC3/5 RAM banking
+        if(mbcType == MBCType::MBC5 || mbcType == MBCType::MBC3)
         {
-            int bank = data & 0xF;
+            int bank = mbcType == MBCType::MBC5 ? data & 0xF : data & 0x3;
             regions[0xA] = regions[0xB] = cartRam + (bank * 0x2000) - 0xA000;
+
+            // TODO: MBC3 bank >= 8 maps RTC regs
         }
-        // high 2 bits of rom bank / ram bank
-        else if(mbcRAMBankMode || mbcType != MBCType::MBC3)
+        else // MBC1 high 2 bits of rom bank / ram bank
         {
-            int bank = data & 0x3;
-            regions[0xA] = regions[0xB] = cartRam + (bank * 0x2000) - 0xA000;
-        }
-        else
-        {
-            mbcROMBank = (mbcROMBank & 0x1F) | (data & 0xE0);
+            if(mbcRAMBankMode)
+            {
+                int bank = data & 0x3;
+                regions[0xA] = regions[0xB] = cartRam + (bank * 0x2000) - 0xA000;
+
+                // TODO: this also affetcts the bank at 0-3FFF
+            }
+
+            // ROM is always banked
+            mbcROMBank = (mbcROMBank & 0x1F) | ((data & 0x3) << 5);
             updateCurrentROMBank();
         }
-
-        // TODO: MBC3 bank >= 8 maps RTC regs
     }
     else // < 0x8000
     {
@@ -322,12 +329,10 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
         if(mbcType == MBCType::MBC1)
         {
             mbcRAMBankMode = data == 1;
-            if(mbcRAMBankMode)
-                mbcROMBank &= 0x1F;
-            else
+            if(!mbcRAMBankMode)
             {
                 // bank 0
-                regions[0xA] = regions[0xB] = cartRam- 0xA000;
+                regions[0xA] = regions[0xB] = cartRam - 0xA000;
             }
         }
     }
