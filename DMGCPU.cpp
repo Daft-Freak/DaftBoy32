@@ -135,8 +135,6 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
         oamDMACount = 0xA0;
         oamDMASrc = mem.mapAddress(data << 8); // shouldn't hit the invalid region
         oamDMADest = mem.getOAM();
-
-        return true;
     }
     else if((addr & 0xFF) == IO_HDMA5)
     {
