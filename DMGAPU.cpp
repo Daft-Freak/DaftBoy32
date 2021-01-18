@@ -21,6 +21,16 @@ void DMGAPU::reset()
 
     sampleClock = 0;
     readOff = 0, writeOff = 64;
+
+    // init wave RAM if we're a CGB (even in DMG mode)
+    if(cpu.getConsole() == DMGCPU::Console::CGB || cpu.getColourMode())
+    {
+        for(int i = 0x30; i < 0x40;)
+        {
+            cpu.getMem().writeIOReg(i++, 0x00);
+            cpu.getMem().writeIOReg(i++, 0xFF);
+        }
+    }
 }
 
 void DMGAPU::update(int cycles)
