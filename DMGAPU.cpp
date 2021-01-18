@@ -451,6 +451,9 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
                 channelEnabled = 0;
                 frameSeqClock = 0;
+
+                ch1DutyStep = ch2DutyStep = 0;
+                ch3SampleIndex = 0;
             }
             else if(!enabled && (data & NR52_Enable))
                 frameSeqClock = 7; // make the next frame be 0
