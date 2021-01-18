@@ -44,6 +44,11 @@ void DMGCPU::reset()
         // TODO: CGB in DMG mode likely needs some fixups
         reg(Reg::A) = 0x11;
     }
+
+    // make sure display sets up the default palette for !GBC
+    // TODO: display::reset?
+    for(int i = IO_BGP; i <= IO_OBP1; i++)
+        mem.write(0xFF00 | i, mem.readIOReg(i));
 }
 
 void DMGCPU::run(int ms)

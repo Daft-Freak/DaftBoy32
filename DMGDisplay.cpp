@@ -38,7 +38,7 @@ static uint16_t reverseBitsPerByte(uint16_t v)
 DMGDisplay::DMGDisplay(DMGCPU &cpu) : cpu(cpu), mem(cpu.getMem())
 {
     memset(bgPalette, 0xFF, sizeof(bgPalette));
-    memset(objPalette, 0xFF, sizeof(objPalette));
+    memset(objPalette, 0xFF, sizeof(objPalette)); // not initialised
 }
 
 void DMGDisplay::update(int cycles)
@@ -131,7 +131,7 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
     if(addr < 0xFF00)
         return false;
 
-    const uint16_t colMap[]{0xFFFF, 0x6739, 0x39CE, 0};
+    const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0};
 
     switch(addr & 0xFF)
     {
@@ -153,18 +153,27 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
         // grey palettes
         case IO_BGP:
         {
+            if(cpu.getColourMode())
+                break;
+
             for(int i = 0; i < 4; i++)
                 bgPalette[i] = colMap[(data >> (2 * i)) & 0x3];
             break;
         }
         case IO_OBP0:
         {
+            if(cpu.getColourMode())
+                break;
+
             for(int i = 0; i < 4; i++)
                 objPalette[i] = colMap[(data >> (2 * i)) & 0x3];
             break;
         }
         case IO_OBP1:
         {
+            if(cpu.getColourMode())
+                break;
+
             for(int i = 0; i < 4; i++)
                 objPalette[i + 4] = colMap[(data >> (2 * i)) & 0x3];
             break;
