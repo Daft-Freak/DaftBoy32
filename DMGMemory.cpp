@@ -222,8 +222,14 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
     int region = addr >> 12;
     if(region < 8)
         writeMBC(addr, data); // cart rom
-    else if(!mbcRAMEnabled && (region == 0xA || region == 0xB))
-        return;
+    else if(region == 0xA || region == 0xB)
+    {
+        if(mbcRAMEnabled)
+        {
+            const_cast<uint8_t *>(regions[region])[addr] = data;
+            cartRamWritten = true;
+        }
+    }
     else if(regions[region])
         const_cast<uint8_t *>(regions[region])[addr] = data; // these are the non-const ones...
     else 
