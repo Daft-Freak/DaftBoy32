@@ -42,6 +42,8 @@ public:
 
     DMGMemory &getMem() {return mem;}
 
+    bool getBreakpointTriggered() {return breakpoint;}
+
     uint16_t getInternalTimer() const {return divCounter;}
 
     bool getColourMode() const {return isGBC;} // CGB in CGB mode
@@ -97,7 +99,7 @@ private:
     static const uint32_t clockSpeed = 4194304;
 
     // internal state
-    bool stopped, halted;
+    bool stopped, halted, breakpoint;
     bool masterInterruptEnable;
     uint8_t serviceableInterrupts;
 

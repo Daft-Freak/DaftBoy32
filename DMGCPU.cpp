@@ -13,7 +13,7 @@ DMGCPU::DMGCPU(DMGMemory &mem) : mem(mem), cycleCallback(stubCallback)
 
 void DMGCPU::reset()
 {
-    stopped = halted = false;
+    stopped = halted = breakpoint = false;
     masterInterruptEnable = false; //?
     serviceableInterrupts = 0;
     divCounter = 0xABCC;
@@ -781,6 +781,7 @@ int DMGCPU::executeInstruction()
             return 4;
 
         case 0x40: // LD B,B
+            breakpoint = true;
             return copy8(Reg::B, Reg::B);
         case 0x41: // LD B,C
             return copy8(Reg::B, Reg::C);
