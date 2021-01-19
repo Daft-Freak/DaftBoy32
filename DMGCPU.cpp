@@ -138,6 +138,11 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
     if((addr & 0xFF) == 0x46)
     {
         oamDMACount = 0xA0;
+
+        // can't access OAM/regs, redirect to echo RAM
+        if(data >= 0xF0)
+            data -= 0x20;
+
         oamDMASrc = mem.mapAddress(data << 8); // shouldn't hit the invalid region
         oamDMADest = mem.getOAM();
     }
