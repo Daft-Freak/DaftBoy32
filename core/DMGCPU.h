@@ -97,6 +97,8 @@ private:
     int executeInstruction();
     int executeExInstruction();
 
+    void cycleExecuted();
+
     void updateTimer(int cycles);
     void incrementTimer();
     bool serviceInterrupts();
@@ -107,6 +109,8 @@ private:
     bool stopped, halted, breakpoint;
     bool masterInterruptEnable;
     uint8_t serviceableInterrupts;
+
+    int cyclesToRun = 0;
 
     uint16_t divCounter = 0;
     bool timerEnabled = false;
