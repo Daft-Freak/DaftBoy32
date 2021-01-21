@@ -43,6 +43,8 @@ void DMGCPU::reset()
         isGBC = mem.read(0x143) & 0x80; // only set if a GBC game
         // TODO: CGB in DMG mode likely needs some fixups
         reg(Reg::A) = 0x11;
+
+        mem.setGBC(isGBC);
     }
 
     // make sure display sets up the default palette for !GBC

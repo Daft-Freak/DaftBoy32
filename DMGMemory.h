@@ -16,6 +16,7 @@ public:
     void setCartROM(const uint8_t *rom);
     void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
     void reset();
+    void setGBC(bool gbc) {isGBC = gbc;}
 
     // only covers io registers
     void setReadCallback(ReadCallback readCallback);
@@ -66,6 +67,7 @@ private:
     uint8_t wram[0x1000 * 8]; // 8k @ 0xC000, second half switchable on GBC
     uint8_t oam[0xA0]; // @ 0xFE00
 
+    bool isGBC = false;
     uint8_t vramBank = 0;
     uint8_t wramBank = 1;
 
