@@ -29,10 +29,6 @@ void DMGCPU::reset()
 
     // values after boot rom
     pc = 0x100;
-    reg(WReg::AF) = 0x01B0;
-    reg(WReg::BC) = 0x0013;
-    reg(WReg::DE) = 0x00D8;
-    reg(WReg::HL) = 0x014D;
     sp = 0xFFFE;
 
     mem.reset();
@@ -42,10 +38,22 @@ void DMGCPU::reset()
     {
         isGBC = mem.read(0x143) & 0x80; // only set if a GBC game
         // TODO: CGB in DMG mode likely needs some fixups
-        reg(Reg::A) = 0x11;
-
-        mem.setGBC(isGBC);
+        reg(WReg::AF) = 0x1180;
+        reg(WReg::BC) = 0x0000;
+        reg(WReg::DE) = 0x0008;
+        reg(WReg::HL) = 0x007C;
     }
+    else
+    {
+        reg(WReg::AF) = 0x01B0;
+        reg(WReg::BC) = 0x0013;
+        reg(WReg::DE) = 0x00D8;
+        reg(WReg::HL) = 0x014D;
+
+        isGBC = false;
+    }
+
+    mem.setGBC(isGBC);
 
     // make sure display sets up the default palette for !GBC
     // TODO: display::reset?
