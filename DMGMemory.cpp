@@ -191,7 +191,7 @@ uint8_t DMGMemory::read(uint16_t addr) const
 
     auto val = iohram[addr & 0xFF];
 
-    if((addr & 0xFF) == IO_VBK)
+    if((addr & 0xFF) == IO_VBK && isGBC)
         return vramBank;
 
     if(readCallback)

@@ -137,7 +137,7 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
 {
     if((addr & 0xFF) == IO_DIV)
         return divCounter >> 8;
-    else if((addr & 0xFF) == IO_KEY1)
+    else if((addr & 0xFF) == IO_KEY1 && isGBC)
         return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
 
     return val;
