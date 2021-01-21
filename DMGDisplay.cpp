@@ -100,13 +100,15 @@ void DMGDisplay::update(int cycles)
     else
     {
         if(y > 153)
+        {
             y = windowY = 0; // end vblank
 
-        // new scanline
-        statMode = 2; // oam search
+            // new scanline
+            statMode = 2; // oam search
 
-        if(stat & STAT_OAMInt)
-            cpu.flagInterrupt(Int_LCDStat);
+            if(stat & STAT_OAMInt)
+                cpu.flagInterrupt(Int_LCDStat);
+        }
     }
 }
 
