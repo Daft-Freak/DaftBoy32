@@ -100,7 +100,7 @@ void DMGDisplay::update(int cycles)
     else
     {
         if(y > 153)
-            y = 0; // end vblank
+            y = windowY = 0; // end vblank
 
         // new scanline
         statMode = 2; // oam search
@@ -142,12 +142,12 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
                 // reset
                 remainingScanlineCycles = scanlineCycles;
                 statMode = 0;
-                y = 0;
+                y = windowY = 0;
             }
             break;
         }
         case IO_LY:
-            y = 0;
+            y = windowY = 0;
             return true;
 
         // grey palettes
@@ -236,17 +236,15 @@ void DMGDisplay::drawScanLine(int y)
     // this is reduced to a priority flag on GBC
     if(lcdc & LCDC_BGDisp || isColour)
     {
-        int windowX = screenWidth, windowY = 0;
-        bool yIsWin = false;
+        int windowX = screenWidth;
+        bool isWindow = false;
 
         int x = 0;
         auto out = scanLine;
         auto rawOut = bgRaw;
 
-        auto copyTiles = [this, &x, y, lcdc, isColour, tileDataPtr, &out, &rawOut](uint8_t *mapPtr, int xLimit, int offsetX, int offsetY)
+        auto copyTiles = [this, &x, lcdc, isColour, tileDataPtr, &out, &rawOut](uint8_t *mapPtr, int xLimit, int offsetX, uint8_t oy)
         {
-            const uint8_t oy = y + offsetY;
-
             while(x < xLimit)
             {
                 uint8_t ox = x + offsetX;
@@ -313,11 +311,13 @@ void DMGDisplay::drawScanLine(int y)
 
         if(lcdc & LCDC_WindowEnable)
         {
-            windowY = mem.readIOReg(IO_WY);
+            int windowY = mem.readIOReg(IO_WY);
             if(y >= windowY)
             {
-                yIsWin = true;
                 windowX = mem.readIOReg(IO_WX) - 7;
+
+                if(windowX < screenWidth)
+                    isWindow = true;
             }
         }
 
@@ -327,12 +327,12 @@ void DMGDisplay::drawScanLine(int y)
             auto scrollX = mem.readIOReg(IO_SCX);
             auto scrollY = mem.readIOReg(IO_SCY);
 
-            copyTiles(bgMapPtr, windowX < screenWidth ? windowX : screenWidth, scrollX, scrollY);
+            copyTiles(bgMapPtr, windowX < screenWidth ? windowX : screenWidth, scrollX, y + scrollY);
         }
 
         // window
-        if(yIsWin)
-            copyTiles(winMapPtr, screenWidth, -windowX, -windowY);
+        if(isWindow)
+            copyTiles(winMapPtr, screenWidth, -windowX, windowY++);
     }
 
     if(lcdc & LCDC_OBJDisp)
