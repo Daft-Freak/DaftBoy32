@@ -239,6 +239,23 @@ void DMGCPU::setInputs(uint8_t newInputs)
 
 uint8_t DMGCPU::readMem(uint16_t addr) const
 {
+    // OAM DMA bus conflicts
+    if(oamDMACount)
+    {
+        if(addr >= 0xFE00 && addr < 0xFEA0) // no OAM access
+            return 0xFF;
+
+        if(addr < 0xFF00) // hiram is okay
+        {
+            auto oamSrc = mem.readIOReg(IO_DMA);
+
+            if((addr < 0x8000 || addr >= 0xA000) && (oamSrc < 0x80 || oamSrc >= 0xA0)) // external bus
+                return *oamDMASrc;
+            else if(addr >= 0x8000 && addr < 0xA000 && oamSrc >= 0x80 && oamSrc < 0xA0) // vram
+                return *oamDMASrc;
+        }
+    }
+
     return mem.read(addr);
 }
 
@@ -249,6 +266,11 @@ uint16_t DMGCPU::readMem16(uint16_t addr) const
 
 void DMGCPU::writeMem(uint16_t addr, uint8_t data)
 {
+    // OAM DMA conflict
+    // proably more complicated than this
+    if(oamDMACount && addr < 0xFF00)
+        return;
+
     mem.write(addr, data);
 }
 
