@@ -166,7 +166,7 @@ uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
 
 bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 {
-    const uint8_t dutyPatterns[]{0b00000001, 0b10000001, 0b10000111, 0b01111110};
+    const uint8_t dutyPatterns[]{0b01000000, 0b11000000, 0b11110000, 0b00111111};
 
     if(addr < (0xFF00 | IO_NR10) || addr > 0xFF3F/* end of wave ram*/)
         return false;
