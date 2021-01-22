@@ -199,11 +199,10 @@ void onMenuItemPressed(const Menu::Item &item)
 }
 
 // CPU callbacks
-void onCyclesExeceuted(int cycles)
+void onCycleExeceuted()
 {
-    // these still work at normal speed
-    if(cpu.getDoubleSpeedMode())
-        cycles >>= 1;
+    // these always work at normal speed
+    int cycles = cpu.getDoubleSpeedMode() ? 2 : 4;
 
     apu.update(cycles);
     display.update(cycles);
@@ -335,7 +334,7 @@ void init()
     menu.set_display_rect(blit::Rect(0, 0, 100, blit::screen.bounds.h));
     menu.set_on_item_activated(onMenuItemPressed);
 
-    cpu.setCycleCallback(onCyclesExeceuted);
+    cpu.setCycleCallback(onCycleExeceuted);
     mem.setROMBankCallback(getROMBank);
     mem.setReadCallback(onRead);
     mem.setWriteCallback(onWrite);

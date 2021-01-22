@@ -24,7 +24,7 @@ public:
 
     DMGCPU(DMGMemory &mem);
 
-    using CycleCallback = void(*)(int);
+    using CycleCallback = void(*)();
 
     void reset();
 

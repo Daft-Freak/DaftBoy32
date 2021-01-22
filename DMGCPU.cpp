@@ -6,7 +6,7 @@
 #include "DMGMemory.h"
 #include "DMGRegs.h"
 
-static void stubCallback(int){}
+static void stubCallback(){}
 
 DMGCPU::DMGCPU(DMGMemory &mem) : mem(mem), cycleCallback(stubCallback)
 {}
@@ -2210,7 +2210,7 @@ void DMGCPU::executeExInstruction()
 void DMGCPU::cycleExecuted()
 {
     cyclesToRun -= 4;
-    cycleCallback(4);
+    cycleCallback();
     updateTimer();
 
     if(halted) return;
