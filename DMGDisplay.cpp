@@ -218,9 +218,6 @@ void DMGDisplay::drawScanLine(int y)
 
     auto vram = mem.getVRAM();
 
-    auto tileDataPtr = (lcdc & LCDC_TileData8000) ? vram : vram + 0x800;
-    auto bgMapPtr = (lcdc & LCDC_BGTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
-    auto winMapPtr = (lcdc & LCDC_WindowTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
     auto spriteDataPtr = vram;
 
     const int tileDataSize = 16;
@@ -238,6 +235,10 @@ void DMGDisplay::drawScanLine(int y)
     // this is reduced to a priority flag on GBC
     if(lcdc & LCDC_BGDisp || isColour)
     {
+        auto tileDataPtr = (lcdc & LCDC_TileData8000) ? vram : vram + 0x800;
+        auto bgMapPtr = (lcdc & LCDC_BGTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
+        auto winMapPtr = (lcdc & LCDC_WindowTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
+
         int windowX = screenWidth;
         bool isWindow = false;
 
