@@ -182,22 +182,25 @@ uint8_t DMGMemory::read(uint16_t addr) const
 
     // must be Fxxx
 
+    if(addr >= 0xFF00)
+    {
+        auto val = iohram[addr & 0xFF];
+
+        if((addr & 0xFF) == IO_VBK && isGBC)
+            return vramBank;
+
+        if(readCallback)
+            val = readCallback(addr, val);
+
+        return val;
+    }
+
     if(addr < 0xFE00)
         return regions[0xD][addr - 0x2000]; // echo of D
     if(addr < 0xFEA0)
         return oam[addr & 0xFF];
-    if(addr < 0xFF00)
-        return 0; //unusable
 
-    auto val = iohram[addr & 0xFF];
-
-    if((addr & 0xFF) == IO_VBK && isGBC)
-        return vramBank;
-
-    if(readCallback)
-        val = readCallback(addr, val);
-
-    return val;
+    return 0; // FEA0 - FF00 = unusable
 }
 
 const uint8_t *DMGMemory::mapAddress(uint16_t addr) const
