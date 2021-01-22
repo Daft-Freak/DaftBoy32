@@ -91,6 +91,9 @@ void DMGCPU::run(int ms)
                 auto src = mem.mapAddress(srcAddr);
                 auto dst = const_cast<uint8_t *>(mem.mapAddress(dstAddr)); // always VRAM
 
+                srcAddr += count;
+                dstAddr += count;
+
                 // twice the cycles in double speed + overhead
                 // (doubleSpeed ? 16 : 8) * (count / 16) + 4
                 exec += (doubleSpeed ? count : count / 2) + 4;
@@ -100,6 +103,13 @@ void DMGCPU::run(int ms)
                     for(; count; count--, src++, dst++)
                         *dst = *src;
                 }
+
+                // write the addresses back
+                // these aren't readable, but the value needs to persist
+                mem.writeIOReg(IO_HDMA1, srcAddr >> 8);
+                mem.writeIOReg(IO_HDMA2, srcAddr & 0xFF);
+                mem.writeIOReg(IO_HDMA3, dstAddr >> 8);
+                mem.writeIOReg(IO_HDMA4, dstAddr & 0xFF);
 
                 mem.writeIOReg(IO_HDMA5, 0xFF);
                 gdmaTriggered = false;
@@ -139,6 +149,8 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
         return divCounter >> 8;
     else if((addr & 0xFF) == IO_KEY1 && isGBC)
         return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
+    else if((addr & 0xFF) >= IO_HDMA1 && (addr & 0xFF) <= IO_HDMA4)
+        return 0xFF;
 
     return val;
 }
