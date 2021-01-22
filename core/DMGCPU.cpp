@@ -276,9 +276,11 @@ int DMGCPU::executeInstruction()
 
     const auto load16 = [this](WReg r)
     {
-        reg(r) = readMem16(pc);
-        pc += 2;
-        return 8;
+        reg(r) = readMem(pc++);
+        cycleExecuted();
+        reg(r) |= readMem(pc++) << 8;
+
+        return 4;
     };
 
     const auto push = [this](WReg r)
