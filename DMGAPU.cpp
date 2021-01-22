@@ -15,7 +15,7 @@ void DMGAPU::reset()
 
     cyclesPassed = 0;
     frameSeqClock = 0;
-    channelEnabled = 0;
+    channelEnabled = 1;
 
     //... incomplete
 
