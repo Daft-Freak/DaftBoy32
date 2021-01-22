@@ -334,7 +334,10 @@ void DMGDisplay::drawScanLine(int y)
 
         // window
         if(isWindow)
-            copyTiles(winMapPtr, screenWidth, -windowX, windowY++);
+        {
+            copyTiles(winMapPtr, screenWidth, -windowX, windowY);
+            windowY++;
+        }
     }
 
     if(lcdc & LCDC_OBJDisp)

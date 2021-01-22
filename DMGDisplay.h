@@ -23,7 +23,7 @@ private:
     DMGMemory &mem;
 
     uint8_t y = 0;
-    uint8_t windowY = 0;
+    int windowY = 0;
     int statMode = 0;
 
     static const int scanlineCycles = 456;
