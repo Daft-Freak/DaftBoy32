@@ -43,9 +43,7 @@ DMGDisplay::DMGDisplay(DMGCPU &cpu) : cpu(cpu), mem(cpu.getMem())
 
 void DMGDisplay::update(int cycles)
 {
-    bool displayEnabled = mem.readIOReg(IO_LCDC) & LCDC_DisplayEnable;
-
-    if(!displayEnabled)
+    if(!enabled)
         return;
 
     remainingScanlineCycles -= cycles;
@@ -146,6 +144,7 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
                 statMode = 0;
                 y = windowY = 0;
             }
+            enabled = data & LCDC_DisplayEnable;
             break;
         }
         case IO_LY:
