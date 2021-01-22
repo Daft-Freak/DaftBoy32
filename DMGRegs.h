@@ -73,6 +73,9 @@ enum IOReg
 
     IO_SVBK = 0x70,
 
+    IO_PCM12 = 0x76,
+    IO_PCM34,
+
     IO_IF = 0x0F, // interrupt flag
     IO_IE = 0xFF // interrupt enable
 };
