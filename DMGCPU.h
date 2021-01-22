@@ -94,7 +94,7 @@ private:
 
     void cycleExecuted();
 
-    void updateTimer(int cycles);
+    void updateTimer();
     void incrementTimer();
     bool serviceInterrupts();
 
