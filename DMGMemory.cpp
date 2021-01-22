@@ -183,7 +183,7 @@ uint8_t DMGMemory::read(uint16_t addr) const
     // must be Fxxx
 
     if(addr < 0xFE00)
-        return 0; // echo of D (does this bank switch as well?)
+        return regions[0xD][addr - 0x2000]; // echo of D
     if(addr < 0xFEA0)
         return oam[addr & 0xFF];
     if(addr < 0xFF00)
@@ -236,8 +236,12 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
     {
         // must be Fxxx
 
-        if(addr < 0xFE00)
-            return; // echo
+        if(addr < 0xFE00) // echo
+        {
+            const_cast<uint8_t *>(regions[0xD])[addr - 0x2000] = data;
+            return;
+        }
+
         if(addr < 0xFEA0)
         {
             oam[addr & 0xFF] = data;
