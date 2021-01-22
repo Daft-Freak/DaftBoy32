@@ -121,7 +121,7 @@ private:
     Console console = Console::Auto;
     bool doubleSpeed = false, speedSwitch = false;
 
-    int oamDMACount;
+    int oamDMACount, oamDMADelay;
     const uint8_t *oamDMASrc = nullptr;
     uint8_t *oamDMADest = nullptr;
     bool gdmaTriggered;
