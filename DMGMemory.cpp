@@ -250,7 +250,9 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
         if(addr < 0xFF00)
             return; //unusable
 
-        if((addr & 0xFF) == IO_VBK)
+        if(addr == 0xFF50) // boot flag, not writable
+            return;
+        else if((addr & 0xFF) == IO_VBK)
         {
             vramBank = data & 1;
             regions[0x8] = regions[0x9] = vram + (vramBank * 0x2000) - 0x8000;
