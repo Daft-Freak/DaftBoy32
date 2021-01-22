@@ -68,10 +68,9 @@ void DMGCPU::run(int ms)
 
     while(!stopped && cyclesToRun > 0)
     {
-        int exec = 4;
         if(!halted)
         {
-            exec = executeInstruction();
+            executeInstruction();
 
             if(gdmaTriggered) // GDMA (stops execution)
             {
@@ -87,7 +86,7 @@ void DMGCPU::run(int ms)
 
                 // twice the cycles in double speed + overhead
                 // (doubleSpeed ? 16 : 8) * (count / 16) + 4
-                exec += (doubleSpeed ? count : count / 2) + 4;
+                int exec = (doubleSpeed ? count : count / 2) + 4;
 
                 if(src) // super unlikely to be false
                 {
@@ -104,26 +103,25 @@ void DMGCPU::run(int ms)
 
                 mem.writeIOReg(IO_HDMA5, 0xFF);
                 gdmaTriggered = false;
+
+                while(exec)
+                {
+                    cycleExecuted();
+                    exec -= 4;
+                }
             }
         }
 
-        // finish instruction cycles
-        while(exec)
-        {
-            cycleExecuted();
-            exec -= 4;
-        }
-
         do {
+            if(halted)
+                cycleExecuted(); // single cycle while halted
+
             if(serviceableInterrupts && serviceInterrupts())
             {
                 for(int i = 0; i < 5; i++)
                     cycleExecuted();
             }
-            else if(exec)
-                cycleExecuted(); // single cycle while halted
 
-            exec = 4;
         } while(halted && cyclesToRun > 0); // wait until not halted
     }
 }
@@ -281,19 +279,18 @@ void DMGCPU::writeMem16(uint16_t addr, uint16_t data)
 }
 
 // returns cycle count
-int DMGCPU::executeInstruction()
+void DMGCPU::executeInstruction()
 {
     // helpers
     const auto load8 = [this](Reg r)
     {
         reg(r) = readMem(pc++);
-        return 4;
+        cycleExecuted();
     };
 
     const auto copy8 = [this](Reg dst, Reg src)
     {
         reg(dst) = reg(src);
-        return 0;
     };
 
     const auto load16 = [this](WReg r)
@@ -301,8 +298,7 @@ int DMGCPU::executeInstruction()
         reg(r) = readMem(pc++);
         cycleExecuted();
         reg(r) |= readMem(pc++) << 8;
-
-        return 4;
+        cycleExecuted();
     };
 
     const auto push = [this](WReg r)
@@ -314,8 +310,7 @@ int DMGCPU::executeInstruction()
         cycleExecuted();
 
         writeMem(--sp, val & 0xFF);
-
-        return 4;
+        cycleExecuted();
     };
 
     const auto pop = [this](WReg r)
@@ -323,14 +318,13 @@ int DMGCPU::executeInstruction()
         uint16_t val = readMem(sp++);
         cycleExecuted();
         val |= readMem(sp++) << 8;
+        cycleExecuted();
 
         reg(r) = val;
 
         // low bits in F can never be set
         if(r == WReg::AF)
             reg(Reg::F) &= 0xF0;
-
-        return 4;
     };
 
     const auto doAdd = [this](uint8_t a, uint8_t b, uint8_t c = 0)
@@ -350,8 +344,6 @@ int DMGCPU::executeInstruction()
         auto a = reg(Reg::A);
         auto b = reg(r);
         doAdd(a, b);
-
-        return 0;
     };
 
     const auto addWithCarry = [this, &doAdd](Reg r)
@@ -359,8 +351,6 @@ int DMGCPU::executeInstruction()
         auto a = reg(Reg::A);
         auto b = reg(r);
         doAdd(a, b, (reg(Reg::F) & Flag_C) ? 1 : 0);
-
-        return 0;
     };
 
     const auto doSub = [this](uint8_t a, uint8_t b, uint8_t c = 0)
@@ -381,8 +371,6 @@ int DMGCPU::executeInstruction()
         auto a = reg(Reg::A);
         auto b = reg(r);
         doSub(a, b);
-
-        return 0;
     };
 
     const auto subWithCarry = [this, &doSub](Reg r)
@@ -390,8 +378,6 @@ int DMGCPU::executeInstruction()
         auto a = reg(Reg::A);
         auto b = reg(r);
         doSub(a, b, (reg(Reg::F) & Flag_C) ? 1 : 0);
-
-        return 0;
     };
 
     const auto bitAnd = [this](Reg r)
@@ -399,7 +385,6 @@ int DMGCPU::executeInstruction()
         auto res = reg(Reg::A) & reg(r);
         reg(Reg::A) = res;
         reg(Reg::F) = Flag_H | (res == 0 ? Flag_Z : 0);
-        return 0;
     };
 
     const auto bitOr = [this](Reg r)
@@ -407,7 +392,6 @@ int DMGCPU::executeInstruction()
         auto res = reg(Reg::A) | reg(r);
         reg(Reg::A) = res;
         reg(Reg::F) = res == 0 ? Flag_Z : 0;
-        return 0;
     };
 
     const auto bitXor = [this](Reg r)
@@ -415,7 +399,6 @@ int DMGCPU::executeInstruction()
         auto res = reg(Reg::A) ^ reg(r);
         reg(Reg::A) = res;
         reg(Reg::F) = res == 0 ? Flag_Z : 0;
-        return 0;
     };
 
     const auto cmp = [this](Reg r)
@@ -429,7 +412,6 @@ int DMGCPU::executeInstruction()
                       Flag_N |
                       (a == b ? Flag_Z : 0);
 
-        return 0;
     };
 
     const auto inc = [this](Reg r)
@@ -440,7 +422,6 @@ int DMGCPU::executeInstruction()
                       ((v & 0xF) == 0xF ? Flag_H : 0) |
                       (v == 0xFF ? Flag_Z : 0);
 
-        return 0;
     };
 
     const auto dec = [this](Reg r)
@@ -451,8 +432,6 @@ int DMGCPU::executeInstruction()
                       ((v & 0xF) == 0 ? Flag_H : 0) |
                       Flag_N |
                       (v == 1 ? Flag_Z : 0);
-
-        return 0;
     };
 
     const auto doAdd16 = [this](uint16_t a, uint16_t b)
@@ -471,19 +450,21 @@ int DMGCPU::executeInstruction()
         auto b = reg(r);
         doAdd16(a, b);
 
-        return 4;
+        cycleExecuted();
     };
 
     const auto inc16 = [this](WReg r)
     {
         reg(r)++;
-        return 4;
+
+        cycleExecuted();
     };
 
     const auto dec16 = [this](WReg r)
     {
         reg(r)--;
-        return 4;
+
+        cycleExecuted();
     };
 
     const auto jump = [this](int flag = 0, bool set = true)
@@ -496,22 +477,20 @@ int DMGCPU::executeInstruction()
         if(flag == 0 || !!(reg(Reg::F) & flag) == set)
         {
             pc = addr;
-            return 4;
+            cycleExecuted();
         }
-
-        return 0;
     };
 
     const auto jumpRel = [this](int flag = 0, bool set = true)
     {
         int8_t off = readMem(pc++);
+        cycleExecuted();
+
         if(flag == 0 || !!(reg(Reg::F) & flag) == set)
         {
             pc += off;
-            return 8;
+            cycleExecuted();
         }
-
-        return 4;
     };
 
     const auto call = [this](int flag = 0, bool set = true)
@@ -528,12 +507,10 @@ int DMGCPU::executeInstruction()
             writeMem(--sp, pc >> 8);
             cycleExecuted();
             writeMem(--sp, pc & 0xFF);
+            cycleExecuted();
 
             pc = addr;
-            return 4;
         }
-
-        return 0;
     };
 
     const auto reset = [this](int addr)
@@ -542,8 +519,9 @@ int DMGCPU::executeInstruction()
         writeMem(--sp, pc >> 8);
         cycleExecuted();
         writeMem(--sp, pc & 0xFF);
+        cycleExecuted();
+
         pc = addr;
-        return 4;
     };
 
     const auto ret = [this](int flag = 0, bool set = true)
@@ -559,11 +537,8 @@ int DMGCPU::executeInstruction()
             cycleExecuted();
 
             pc = addr;
-
-            return 4;
+            cycleExecuted();
         }
-
-        return 0;
     };
 
     auto opcode = readMem(pc++);
@@ -572,14 +547,15 @@ int DMGCPU::executeInstruction()
     switch(opcode)
     {
         case 0x00: // NOP
-            return 0;
+            break;
 
         case 0x01: // LD BC,nn
             return load16(WReg::BC);
 
         case 0x02: // LD (BC),A
             writeMem(reg(WReg::BC), reg(Reg::A));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x03: // INC BC
             return inc16(WReg::BC);
@@ -600,15 +576,22 @@ int DMGCPU::executeInstruction()
 
             reg(Reg::F) = (c ? Flag_C : 0);
 
-            return 0;
+            break;
         }
 
         case 0x08: // LD, (nn),SP
         {
-            auto addr = readMem16(pc);
-            pc += 2;
-            writeMem16(addr, sp);
-            return 16;
+            uint16_t addr = readMem(pc++);
+            cycleExecuted();
+            addr |= readMem(pc++) << 8;
+            cycleExecuted();
+
+            writeMem(addr++, sp & 0xFF);
+            cycleExecuted();
+            writeMem(addr, sp >> 8);
+            cycleExecuted();
+
+            break;
         }
 
         case 0x09: // ADD HL,BC
@@ -616,7 +599,8 @@ int DMGCPU::executeInstruction()
 
         case 0x0A: // LDI A,BC
             reg(Reg::A) = readMem(reg(WReg::BC));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x0B: // DEC BC
             return dec16(WReg::BC);
@@ -639,7 +623,7 @@ int DMGCPU::executeInstruction()
 
             reg(Reg::F) = (c ? Flag_C : 0);
 
-            return 0;
+            break;
         }
 
         case 0x10: // STOP
@@ -658,7 +642,8 @@ int DMGCPU::executeInstruction()
 
         case 0x12: // LD (DE),A
             writeMem(reg(WReg::DE), reg(Reg::A));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x13: // INC DE
             return inc16(WReg::DE);
@@ -680,7 +665,7 @@ int DMGCPU::executeInstruction()
 
             reg(Reg::F) = (c ? Flag_C : 0);
 
-            return 0;
+            break;
         }
 
         case 0x18: // JR m
@@ -691,7 +676,8 @@ int DMGCPU::executeInstruction()
 
         case 0x1A: // LDI A,DE
             reg(Reg::A) = readMem(reg(WReg::DE));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x1B: // DEC DE
             return dec16(WReg::DE);
@@ -713,7 +699,7 @@ int DMGCPU::executeInstruction()
 
             reg(Reg::F) = (c ? Flag_C : 0);
 
-            return 0;
+            break;
         }
 
         case 0x20: // JR NZ,n
@@ -724,7 +710,8 @@ int DMGCPU::executeInstruction()
 
         case 0x22: // LDI (HL),A
             writeMem(reg(WReg::HL)++, reg(Reg::A));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x23: // INC HL
             return inc16(WReg::HL);
@@ -767,7 +754,7 @@ int DMGCPU::executeInstruction()
             reg(Reg::A) = val;
             reg(Reg::F) = newFlags | (val == 0 ? Flag_Z : 0);
 
-            return 0;
+            break;
         }
 
         case 0x28: // JR Z,n
@@ -778,7 +765,8 @@ int DMGCPU::executeInstruction()
 
         case 0x2A: // LDI A,(HL)
             reg(Reg::A) = readMem(reg(WReg::HL)++);
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x2B: // DEC HL
             return dec16(WReg::HL);
@@ -795,48 +783,54 @@ int DMGCPU::executeInstruction()
         case 0x2F: // CPL
             reg(Reg::A) = ~reg(Reg::A);
             reg(Reg::F) |= Flag_H | Flag_N;
-            return 0;
+            break;
 
         case 0x30: // JR NC,n
             return jumpRel(Flag_C, false);
 
         case 0x31: // LD SP,nn
-            sp = readMem16(pc);
-            pc += 2;
-            return 8;
+            sp = readMem(pc++);
+            cycleExecuted();
+            sp |= readMem(pc++) << 8;
+            cycleExecuted();
+            break;
 
         case 0x32: // LDD (HL), A
             writeMem(reg(WReg::HL)--, reg(Reg::A));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x33: // INC SP
             sp++;
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x34: // INC (HL)
         {
             auto v = readMem(reg(WReg::HL));
             cycleExecuted();
             writeMem(reg(WReg::HL), v + 1);
+            cycleExecuted();
 
             reg(Reg::F) = (reg(Reg::F) & Flag_C) |
                           ((v & 0xF) == 0xF ? Flag_H : 0) |
                           (v == 0xFF ? Flag_Z : 0);
 
-            return 4;
+            break;
         }
         case 0x35: // DEC (HL)
         {
             auto v = readMem(reg(WReg::HL));
             cycleExecuted();
             writeMem(reg(WReg::HL), v - 1);
+            cycleExecuted();
 
             reg(Reg::F) = (reg(Reg::F) & Flag_C) |
                           ((v & 0xF) == 0 ? Flag_H : 0) |
                           Flag_N |
                           (v == 1 ? Flag_Z : 0);
 
-            return 4;
+            break;
         }
 
         case 0x36: // LD (HL),n
@@ -844,27 +838,31 @@ int DMGCPU::executeInstruction()
             auto val = readMem(pc++);
             cycleExecuted();
             writeMem(reg(WReg::HL), val);
-            return 4;
+            cycleExecuted();
+            break;
         }
 
         case 0x37: // SCF
             reg(Reg::F) = Flag_C | (reg(Reg::F) & Flag_Z);
-            return 0;
+            break;
 
         case 0x38: // JR C,n
             return jumpRel(Flag_C);
 
         case 0x39: // ADD HL,SP
             doAdd16(reg(WReg::HL), sp);
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x3A: // LDD A,(HL)
             reg(Reg::A) = readMem(reg(WReg::HL)--);
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x3B: // DEC SP
             sp--;
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x3C: // INC A
             return inc(Reg::A);
@@ -874,11 +872,12 @@ int DMGCPU::executeInstruction()
 
         case 0x3E: // LD A,#
             reg(Reg::A) = readMem(pc++);
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x3F: // CCF
             reg(Reg::F) = (~reg(Reg::F) & Flag_C) | (reg(Reg::F) & Flag_Z);
-            return 0;
+            break;
 
         case 0x40: // LD B,B
             breakpoint = true;
@@ -895,7 +894,8 @@ int DMGCPU::executeInstruction()
             return copy8(Reg::B, Reg::L);
         case 0x46: // LD B,(HL)
             reg(Reg::B) = readMem(reg(WReg::HL));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x47: // LD B,A
             return copy8(Reg::B, Reg::A);
         case 0x48: // LD C,B
@@ -912,7 +912,8 @@ int DMGCPU::executeInstruction()
             return copy8(Reg::C, Reg::L);
         case 0x4E: // LD C,(HL)
             reg(Reg::C) = readMem(reg(WReg::HL));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x4F: // LD C,A
             return copy8(Reg::C, Reg::A);
         case 0x50: // LD D,B
@@ -929,7 +930,8 @@ int DMGCPU::executeInstruction()
             return copy8(Reg::D, Reg::L);
         case 0x56: // LD D,(HL)
             reg(Reg::D) = readMem(reg(WReg::HL));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x57: // LD D,A
             return copy8(Reg::D, Reg::A);
         case 0x58: // LD E,B
@@ -946,7 +948,8 @@ int DMGCPU::executeInstruction()
             return copy8(Reg::E, Reg::L);
         case 0x5E: // LD E,(HL)
             reg(Reg::E) = readMem(reg(WReg::HL));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x5F: // LD E,A
             return copy8(Reg::E, Reg::A);
         case 0x60: // LD H,B
@@ -963,7 +966,8 @@ int DMGCPU::executeInstruction()
             return copy8(Reg::H, Reg::L);
         case 0x66: // LD H,(HL)
             reg(Reg::H) = readMem(reg(WReg::HL));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x67: // LD H,A
             return copy8(Reg::H, Reg::A);
         case 0x68: // LD L,B
@@ -980,36 +984,44 @@ int DMGCPU::executeInstruction()
             return copy8(Reg::L, Reg::L);
         case 0x6E: // LD L,(HL)
             reg(Reg::L) = readMem(reg(WReg::HL));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x6F: // LD L,A
             return copy8(Reg::L, Reg::A);
 
         case 0x70: // LD (HL),B
             writeMem(reg(WReg::HL), reg(Reg::B));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x71: // LD (HL),C
             writeMem(reg(WReg::HL), reg(Reg::C));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x72: // LD (HL),D
             writeMem(reg(WReg::HL), reg(Reg::D));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x73: // LD (HL),E
             writeMem(reg(WReg::HL), reg(Reg::E));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x74: // LD (HL),H
             writeMem(reg(WReg::HL), reg(Reg::H));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x75: // LD (HL),L
             writeMem(reg(WReg::HL), reg(Reg::L));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x76: // HALT
             halted = true;
-            return 0;
+            break;
 
         case 0x77: // LD (HL),A
             writeMem(reg(WReg::HL), reg(Reg::A));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0x78: // LD A,B
             return copy8(Reg::A, Reg::B);
@@ -1025,7 +1037,8 @@ int DMGCPU::executeInstruction()
             return copy8(Reg::A, Reg::L);
         case 0x7E: // LD A,(HL)
             reg(Reg::A) = readMem(reg(WReg::HL));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x7F: // LD A,A
             return copy8(Reg::A, Reg::A);
 
@@ -1043,7 +1056,8 @@ int DMGCPU::executeInstruction()
             return add(Reg::L);
         case 0x86: // ADD A (HL)
             doAdd(reg(Reg::A), readMem(reg(WReg::HL)));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x87: // ADD A A
             return add(Reg::A);
 
@@ -1061,7 +1075,8 @@ int DMGCPU::executeInstruction()
             return addWithCarry(Reg::L);
         case 0x8E: // ADC A (HL)
             doAdd(reg(Reg::A), readMem(reg(WReg::HL)), (reg(Reg::F) & Flag_C) ? 1 : 0);
-            return 4;
+            cycleExecuted();
+            break;
         case 0x8F: // ADC A,L
             return addWithCarry(Reg::A);
 
@@ -1079,7 +1094,8 @@ int DMGCPU::executeInstruction()
             return sub(Reg::L);
         case 0x96: // SUB (HL)
             doSub(reg(Reg::A), readMem(reg(WReg::HL)));
-            return 4;
+            cycleExecuted();
+            break;
         case 0x97: // SUB A
             return sub(Reg::A);
 
@@ -1097,7 +1113,8 @@ int DMGCPU::executeInstruction()
             return subWithCarry(Reg::L);
         case 0x9E: // SBC (HL)
             doSub(reg(Reg::A), readMem(reg(WReg::HL)), (reg(Reg::F) & Flag_C) ? 1 : 0);
-            return 4;
+            cycleExecuted();
+            break;
         case 0x9F: // SBC A
             return subWithCarry(Reg::A);
 
@@ -1118,7 +1135,8 @@ int DMGCPU::executeInstruction()
             auto res = reg(Reg::A) & readMem(reg(WReg::HL));
             reg(Reg::A) = res;
             reg(Reg::F) = Flag_H | (res == 0 ? Flag_Z : 0);
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0xA7: // AND A
             return bitAnd(Reg::A);
@@ -1139,12 +1157,13 @@ int DMGCPU::executeInstruction()
         {
             auto res = reg(Reg::A) = reg(Reg::A) ^ readMem(reg(WReg::HL));
             reg(Reg::F) = res == 0 ? Flag_Z : 0;
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0xAF: // XOR A
             reg(Reg::A) = 0; // A ^ A == 0
             reg(Reg::F) = Flag_Z;
-            return 0;
+            break;
 
         case 0xB0: // OR B
             return bitOr(Reg::B);
@@ -1162,7 +1181,8 @@ int DMGCPU::executeInstruction()
         {
             auto res = reg(Reg::A) = reg(Reg::A) | readMem(reg(WReg::HL));
             reg(Reg::F) = res == 0 ? Flag_Z : 0;
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0xB7: // OR A
             return bitOr(Reg::A); // just a Z flag update...
@@ -1189,7 +1209,8 @@ int DMGCPU::executeInstruction()
                         Flag_N |
                         (a == b ? Flag_Z : 0);
 
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0xBF: // CP A
             return cmp(Reg::A);
@@ -1214,7 +1235,8 @@ int DMGCPU::executeInstruction()
 
         case 0xC6: // ADD A,#
             doAdd(reg(Reg::A), readMem(pc++));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0xC7: // RST 0
             return reset(0x00);
@@ -1238,7 +1260,8 @@ int DMGCPU::executeInstruction()
 
         case 0xCE: // ADC A,#
             doAdd(reg(Reg::A), readMem(pc++), (reg(Reg::F) & Flag_C) ? 1 : 0);
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0xCF: // RST 08
             return reset(0x08);
@@ -1259,7 +1282,8 @@ int DMGCPU::executeInstruction()
 
         case 0xD6: // SUB #
             doSub(reg(Reg::A), readMem(pc++));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0xD7: // RST 10
             return reset(0x10);
@@ -1278,7 +1302,8 @@ int DMGCPU::executeInstruction()
 
         case 0xDE: // SBC A,#
             doSub(reg(Reg::A), readMem(pc++), (reg(Reg::F) & Flag_C) ? 1 : 0);
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0xDF: // RST 18
             return reset(0x18);
@@ -1288,7 +1313,8 @@ int DMGCPU::executeInstruction()
             auto addr = 0xFF00 | readMem(pc++);
             cycleExecuted();
             writeMem(addr, reg(Reg::A));
-            return 4;
+            cycleExecuted();
+            break;
         }
 
         case 0xE1: // POP HL
@@ -1296,7 +1322,8 @@ int DMGCPU::executeInstruction()
 
         case 0xE2: // LDH (C),A
             writeMem(0xFF00 | reg(Reg::C), reg(Reg::A));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0xE5: // PUSH HL
             return push(WReg::HL);
@@ -1306,7 +1333,8 @@ int DMGCPU::executeInstruction()
             auto v = reg(Reg::A) & readMem(pc++);
             reg(Reg::A) = v;
             reg(Reg::F) = Flag_H | (v == 0 ? Flag_Z : 0);
-            return 4;
+            cycleExecuted();
+            break;
         }
 
         case 0xE7: // RST 20
@@ -1326,12 +1354,16 @@ int DMGCPU::executeInstruction()
             reg(Reg::F) = (v > 0xFF ? Flag_C : 0) |
                         (hV > 0xF ? Flag_H : 0);
 
-            return 8;
+            // 2x delay
+            cycleExecuted();
+            cycleExecuted();
+
+            break;
         }
 
         case 0xE9: // JP (HL)
             pc = reg(WReg::HL);
-            return 0;
+            break;
 
         case 0xEA: // LD (nn),A
         {
@@ -1340,7 +1372,8 @@ int DMGCPU::executeInstruction()
             addr |= (readMem(pc++) << 8);
             cycleExecuted();
             writeMem(addr, reg(Reg::A));
-            return 4;
+            cycleExecuted();
+            break;
         }
 
         case 0xEE: // XOR #
@@ -1348,7 +1381,8 @@ int DMGCPU::executeInstruction()
             auto v = reg(Reg::A) ^ readMem(pc++);
             reg(Reg::A) = v;
             reg(Reg::F) = (v == 0 ? Flag_Z : 0);
-            return 4;
+            cycleExecuted();
+            break;
         }
 
         case 0xEF: // RST 28
@@ -1359,7 +1393,8 @@ int DMGCPU::executeInstruction()
             auto addr = 0xFF00 | readMem(pc++);
             cycleExecuted();
             reg(Reg::A) = readMem(addr);
-            return 4;
+            cycleExecuted();
+            break;
         }
 
         case 0xF1: // POP AF
@@ -1367,11 +1402,12 @@ int DMGCPU::executeInstruction()
 
         case 0xF2: // LDH A,(C)
             reg(Reg::A) = readMem(0xFF00 | reg(Reg::C));
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0xF3: // DI
             masterInterruptEnable = false; // TODO: after next instruction
-            return 0;
+            break;
 
         case 0xF5: // PUSH AF
             return push(WReg::AF);
@@ -1381,7 +1417,8 @@ int DMGCPU::executeInstruction()
             auto res = reg(Reg::A) | readMem(pc++);
             reg(Reg::A) = res;
             reg(Reg::F) = res == 0 ? Flag_Z : 0;
-            return 4;
+            cycleExecuted();
+            break;
         }
 
         case 0xF7: // RST 30
@@ -1392,6 +1429,8 @@ int DMGCPU::executeInstruction()
             // flags are set as if this is an 8 bit op
             auto a = sp & 0xFF;
             auto b = readMem(pc++);
+            cycleExecuted();
+
             uint16_t v = a + b;
             reg(WReg::HL) = sp + (int8_t)b;
 
@@ -1399,12 +1438,15 @@ int DMGCPU::executeInstruction()
 
             reg(Reg::F) = (v > 0xFF ? Flag_C : 0) |
                         (hV > 0xF ? Flag_H : 0);
-            return 8;
+
+            cycleExecuted();
+            break;
         }
 
         case 0xF9: // LD SP,HL
             sp = reg(WReg::HL);
-            return 4;
+            cycleExecuted();
+            break;
 
         case 0xFA: // LD A,(nn)
         {
@@ -1412,13 +1454,15 @@ int DMGCPU::executeInstruction()
             cycleExecuted();
             addr |= (readMem(pc++) << 8);
             cycleExecuted();
+
             reg(Reg::A) = readMem(addr);
-            return 4;
+            cycleExecuted();
+            break;
         }
 
         case 0xFB: // EI
             masterInterruptEnable = true; // TODO: after next instruction
-            return 0;
+            break;
 
         case 0xFE: // CP n
         {
@@ -1431,7 +1475,8 @@ int DMGCPU::executeInstruction()
                         Flag_N |
                         (a == b ? Flag_Z : 0);
 
-            return 4;
+            cycleExecuted();
+            break;
         }
 
         case 0xFF: // RST 38
@@ -1442,10 +1487,9 @@ int DMGCPU::executeInstruction()
             stopped = true;
             break;
     }
-    return 0;
 }
 
-int DMGCPU::executeExInstruction()
+void DMGCPU::executeExInstruction()
 {
     // helpers
     const auto swap = [this](Reg r)
@@ -1455,8 +1499,6 @@ int DMGCPU::executeExInstruction()
         reg(r) = v;
 
         reg(Reg::F) = v == 0 ? Flag_Z : 0;
-
-        return 0;
     };
 
     // RLC
@@ -1466,8 +1508,6 @@ int DMGCPU::executeExInstruction()
         reg(r) = res;
 
         reg(Reg::F) = (res & 1 ? Flag_C : 0) | (res == 0 ? Flag_Z : 0);
-
-        return 0;
     };
 
     // RRC
@@ -1477,8 +1517,6 @@ int DMGCPU::executeExInstruction()
         reg(r) = res;
 
         reg(Reg::F) = ((res & 0x80) >> 3) | (res == 0 ? Flag_Z : 0);
-
-        return 0;
     };
 
     // RL
@@ -1489,8 +1527,6 @@ int DMGCPU::executeExInstruction()
         reg(r) = res;
 
         reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
-
-        return 0;
     };
 
     // RR
@@ -1501,8 +1537,6 @@ int DMGCPU::executeExInstruction()
         reg(r) = res;
 
         reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
-
-        return 0;
     };
 
     // SLA
@@ -1513,8 +1547,6 @@ int DMGCPU::executeExInstruction()
         reg(r) = res;
 
         reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
-
-        return 0;
     };
 
     // SRA
@@ -1525,8 +1557,6 @@ int DMGCPU::executeExInstruction()
         reg(r) = res;
 
         reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
-
-        return 0;
     };
 
     // SRL
@@ -1537,16 +1567,12 @@ int DMGCPU::executeExInstruction()
         reg(r) = res;
 
         reg(Reg::F) = c | (res == 0 ? Flag_Z : 0);
-
-        return 0;
     };
 
     const auto testBit = [this](Reg r, int bit)
     {
         auto zero = ~(reg(r) << (7 - bit)) & Flag_Z; // invert and shift to zero flag
         reg(Reg::F) = (reg(Reg::F) & Flag_C) | Flag_H | zero;
-
-        return 0;
     };
 
     const auto testBitHL = [this](int bit)
@@ -1554,13 +1580,12 @@ int DMGCPU::executeExInstruction()
         auto zero = ~(readMem(reg(WReg::HL)) << (7 - bit)) & Flag_Z; // invert and shift to zero flag
         reg(Reg::F) = (reg(Reg::F) & Flag_C) | Flag_H | zero;
 
-        return 4;
+        cycleExecuted();
     };
 
     const auto set = [this](Reg r, int bit)
     {
         reg(r) |= (1 << bit);
-        return 0;
     };
 
     const auto setHL = [this](int bit)
@@ -1568,13 +1593,12 @@ int DMGCPU::executeExInstruction()
         auto val = readMem(reg(WReg::HL));
         cycleExecuted();
         writeMem(reg(WReg::HL), val | (1 << bit));
-        return 4;
+        cycleExecuted();
     };
 
     const auto reset = [this](Reg r, int bit)
     {
         reg(r) &= ~(1 << bit);
-        return 0;
     };
 
     const auto resetHL = [this](int bit)
@@ -1582,7 +1606,7 @@ int DMGCPU::executeExInstruction()
         auto val = readMem(reg(WReg::HL));
         cycleExecuted();
         writeMem(reg(WReg::HL), val & ~(1 << bit));
-        return 4;
+        cycleExecuted();
     };
 
     auto opcode = readMem(pc++);
@@ -1605,13 +1629,14 @@ int DMGCPU::executeExInstruction()
         case 0x06: // RLC (HL)
         {
             auto v = readMem(reg(WReg::HL));
+            cycleExecuted();
+    
             v = (v << 1) | (v >> 7);
             reg(Reg::F) = ((v & 0x1) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
 
-            cycleExecuted();
             writeMem(reg(WReg::HL), v);
-
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0x07: // RLC A
             return rotLeftNoCarry(Reg::A);
@@ -1631,13 +1656,14 @@ int DMGCPU::executeExInstruction()
         case 0x0E: // RRC (HL)
         {
             auto v = readMem(reg(WReg::HL));
+            cycleExecuted();
+
             v = (v >> 1) | (v << 7);
             reg(Reg::F) = ((v & 0x80) ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
 
-            cycleExecuted();
             writeMem(reg(WReg::HL), v);
-
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0x0F: // RRC A
             return rotRightNoCarry(Reg::A);
@@ -1657,14 +1683,15 @@ int DMGCPU::executeExInstruction()
         case 0x16: // RL (HL)
         {
             uint16_t v = readMem(reg(WReg::HL));
+            cycleExecuted();
+
             v = (v << 1) | ((reg(Reg::F) & Flag_C) >> 4);
 
             reg(Reg::F) = ((v & 0x100) ? Flag_C : 0) | ((v & 0xFF) == 0 ? Flag_Z : 0);
 
-            cycleExecuted();
             writeMem(reg(WReg::HL), v);
-
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0x17: // RL A
             return rotLeft(Reg::A);
@@ -1684,14 +1711,15 @@ int DMGCPU::executeExInstruction()
         case 0x1E: // RR (HL)
         {
             auto v = readMem(reg(WReg::HL));
+            cycleExecuted();
+
             bool c = v & 0x01;
             v = (v >> 1) | ((reg(Reg::F) & Flag_C) << 3);
             reg(Reg::F) = (c ? Flag_C : 0) | (v == 0 ? Flag_Z : 0);
 
-            cycleExecuted();
             writeMem(reg(WReg::HL), v);
-
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0x1F: // RR A
             return rotRight(Reg::A);
@@ -1711,13 +1739,13 @@ int DMGCPU::executeExInstruction()
         case 0x26: // SLA (HL)
         {
             uint16_t v = readMem(reg(WReg::HL));
+            cycleExecuted();
             v = v << 1;
             reg(Reg::F) = ((v & 0x100) ? Flag_C : 0) | ((v & 0xFF) == 0 ? Flag_Z : 0);
 
-            cycleExecuted();
             writeMem(reg(WReg::HL), v);
-
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0x27: // SLA A
             return shiftLeft(Reg::A);
@@ -1737,14 +1765,14 @@ int DMGCPU::executeExInstruction()
         case 0x2E: // SRA (HL)
         {
             int8_t v = readMem(reg(WReg::HL));
+            cycleExecuted();
             reg(Reg::F) = ((v & 1) << 4) | ((v & 0xFE) == 0 ? Flag_Z : 0);
 
             v = v >> 1;
 
-            cycleExecuted();
             writeMem(reg(WReg::HL), v);
-
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0x2F: // SRA A
             return shiftRightArith(Reg::A);
@@ -1764,13 +1792,14 @@ int DMGCPU::executeExInstruction()
         case 0x36: // SWAP (HL)
         {
             auto v = readMem(reg(WReg::HL));
+            cycleExecuted();
+
             v = (v << 4) | (v >> 4);
             reg(Reg::F) = (v == 0 ? Flag_Z : 0);
 
-            cycleExecuted();
             writeMem(reg(WReg::HL), v);
-
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0x37: // SWAP A
             return swap(Reg::A);
@@ -1790,13 +1819,14 @@ int DMGCPU::executeExInstruction()
         case 0x3E: // SRL (HL)
         {
             auto v = readMem(reg(WReg::HL));
+            cycleExecuted();
+
             reg(Reg::F) = ((v & 1) << 4) | ((v & 0xFE) == 0 ? Flag_Z : 0);
             v = v >> 1;
 
-            cycleExecuted();
             writeMem(reg(WReg::HL), v);
-
-            return 4;
+            cycleExecuted();
+            break;
         }
         case 0x3F: // SRL A
             return shiftRight(Reg::A);
@@ -2188,7 +2218,6 @@ int DMGCPU::executeExInstruction()
         case 0xFF: // SET 7,A
             return set(Reg::A, 7);
     }
-    return 0;
 }
 
 void DMGCPU::cycleExecuted()

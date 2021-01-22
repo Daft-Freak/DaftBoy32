@@ -94,8 +94,8 @@ private:
     void writeMem(uint16_t addr, uint8_t data);
     void writeMem16(uint16_t addr, uint16_t data);
 
-    int executeInstruction();
-    int executeExInstruction();
+    void executeInstruction();
+    void executeExInstruction();
 
     void cycleExecuted();
 
