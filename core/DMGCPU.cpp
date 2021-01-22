@@ -2233,7 +2233,7 @@ void DMGCPU::cycleExecuted()
     apu.update(extCycles);
     display.update(extCycles);
 
-    updateTimer(4);
+    updateTimer();
 
     if(halted) return;
 
@@ -2256,47 +2256,43 @@ void DMGCPU::cycleExecuted()
     }
 }
 
-void DMGCPU::updateTimer(int cycles)
+void DMGCPU::updateTimer()
 {
     if(!timerEnabled)
     {
-        divCounter += cycles;
+        divCounter += 4;
         return;
     }
 
     // skip ahead if we're not going to cause the bit to change
-    if((divCounter & (timerBit - 1)) + cycles < timerBit)
+    if((divCounter & (timerBit - 1)) + 4 < timerBit)
     {
-        divCounter += cycles;
+        divCounter += 4;
         return;
     }
 
     // increment the internal timer
-    for(;cycles > 0; cycles -= 4)
+    divCounter += 4;
+
+    bool val = (divCounter & timerBit);
+
+    // timer (incremented on falling edge)
+    if(timerOldVal && !val)
     {
-        divCounter += 4;
-
-        bool val = (divCounter & timerBit);
-
-        // timer (incremented on falling edge)
-        if(timerOldVal && !val)
+        // this is identical to the code in incrementTimer
+        // calling that from here is bad for perf
+        auto &tima = mem.getIOReg(IO_TIMA);
+        if(tima == 0xFF)
         {
-            // this is identical to the code in incrementTimer
-            // calling that from here is bad for perf
-            auto &tima = mem.getIOReg(IO_TIMA);
-            if(tima == 0xFF)
-            {
-                //overflow
-                tima = mem.readIOReg(IO_TMA);
-                flagInterrupt(Int_Timer);
-            }
-            else
-                tima++;
+            //overflow
+            tima = mem.readIOReg(IO_TMA);
+            flagInterrupt(Int_Timer);
         }
-
-        timerOldVal = val;
+        else
+            tima++;
     }
 
+    timerOldVal = val;
 }
 
 void DMGCPU::incrementTimer()
