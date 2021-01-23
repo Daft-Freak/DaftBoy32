@@ -257,11 +257,15 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
             return;
         else if((addr & 0xFF) == IO_VBK)
         {
+            if(!isGBC) return;
+
             vramBank = data & 1;
             regions[0x8] = regions[0x9] = vram + (vramBank * 0x2000) - 0x8000;
         }
         else if((addr & 0xFF) == IO_SVBK)
         {
+            if(!isGBC) return;
+
             wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
             regions[0xD] = wram + (wramBank * 0x1000) - 0xD000;
         }
