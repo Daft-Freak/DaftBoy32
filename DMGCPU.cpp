@@ -78,8 +78,12 @@ void DMGCPU::run(int ms)
             // OAM DMA
             if(oamDMACount)
             {
-                *oamDMADest++ = *oamDMASrc++;
-                oamDMACount--;
+                int tmp = exec / 4;
+                while(tmp-- && oamDMACount)
+                {
+                    *oamDMADest++ = *oamDMASrc++;
+                    oamDMACount--;
+                }
             }
 
             if(gdmaTriggered) // GDMA (stops execution)
