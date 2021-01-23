@@ -170,7 +170,9 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
     }
     else if((addr & 0xFF) == IO_HDMA5)
     {
-        if(data & 0x80) // HDMA
+        if(!isGBC)
+            return true;
+        else if(data & 0x80) // HDMA
             printf("HDMA\n");
         else
         {
