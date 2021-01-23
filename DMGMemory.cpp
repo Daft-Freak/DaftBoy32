@@ -185,9 +185,7 @@ uint8_t DMGMemory::read(uint16_t addr) const
     if(addr >= 0xFF00)
     {
         auto val = iohram[addr & 0xFF];
-
-        if(readCallback)
-            val = readCallback(addr, val);
+        val = readCallback(addr, val);
 
         return val;
     }
@@ -267,7 +265,7 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
             wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
             regions[0xD] = wram + (wramBank * 0x1000) - 0xD000;
         }
-        else if(writeCallback && writeCallback(addr, data))
+        else if(writeCallback(addr, data))
             return;
 
         iohram[addr & 0xFF] = data;
