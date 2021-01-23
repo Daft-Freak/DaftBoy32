@@ -11,13 +11,15 @@ include(${32BLIT_PATH}/32blit.cmake)
 
 blit_executable(gameblit
     control-icons.cpp
+    file-browser.cpp
+    menu.cpp
+
+    gameblit.cpp
+
     DMGAPU.cpp
     DMGCPU.cpp
     DMGDisplay.cpp
     DMGMemory.cpp
-    file-browser.cpp
-    gameblit.cpp
-    menu.cpp
 )
 blit_assets_yaml(gameblit assets.yml)
 blit_metadata(gameblit metadata.yml)
