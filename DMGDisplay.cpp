@@ -112,9 +112,6 @@ void DMGDisplay::update(int cycles)
 
 uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
 {
-    if(addr < 0xFF00)
-        return val;
-
     switch(addr & 0xFF)
     {
         case IO_STAT:
@@ -128,9 +125,6 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
 
 bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 {
-    if(addr < 0xFF00)
-        return false;
-
     const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0};
 
     switch(addr & 0xFF)
