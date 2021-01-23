@@ -180,9 +180,16 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
             break;
         }
 
+        case IO_BCPS:
+        case IO_OCPS:
+            return !cpu.getColourMode(); // ignore write on !GBC
+
         // colour palettes
         case IO_BCPD:
         {
+            if(!cpu.getColourMode())
+                return true;
+
             auto bcps = mem.readIOReg(IO_BCPS);
             reinterpret_cast<uint8_t *>(bgPalette)[bcps & 0x3F] = data;
 
@@ -195,6 +202,9 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
         case IO_OCPD:
         {
+            if(!cpu.getColourMode())
+                return true;
+
             auto ocps = mem.readIOReg(IO_OCPS);
             reinterpret_cast<uint8_t *>(objPalette)[ocps & 0x3F] = data;
 
