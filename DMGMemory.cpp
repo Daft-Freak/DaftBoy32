@@ -186,9 +186,6 @@ uint8_t DMGMemory::read(uint16_t addr) const
     {
         auto val = iohram[addr & 0xFF];
 
-        if((addr & 0xFF) == IO_VBK && isGBC)
-            return vramBank;
-
         if(readCallback)
             val = readCallback(addr, val);
 
@@ -260,6 +257,7 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
             if(!isGBC) return;
 
             vramBank = data & 1;
+            data |= 0xFE; // make sure only the low bit reads back
             regions[0x8] = regions[0x9] = vram + (vramBank * 0x2000) - 0x8000;
         }
         else if((addr & 0xFF) == IO_SVBK)
