@@ -98,9 +98,10 @@ void DMGDisplay::update(int cycles)
     else
     {
         if(y > 153)
-        {
             y = windowY = 0; // end vblank
 
+        if(y < screenHeight)
+        {
             // new scanline
             statMode = 2; // oam search
 
