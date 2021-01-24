@@ -92,12 +92,6 @@ void DMGMemory::reset()
     if(cartRamSize > sizeof(cartRam))
         printf("Too much cart RAM! (%i > %i)\n", cartRamSize, sizeof(cartRam));
 
-    // use spare RAM as rom cache
-    if(cartRamSize == 0)
-        cachedROMBanks.emplace_back(ROMCacheEntry{cartRam, 0});
-    if(cartRamSize <= 0x4000)
-        cachedROMBanks.emplace_back(ROMCacheEntry{cartRam + 0x4000, 0});
-
     switch(cartROMBank0[0x147])
     {
         case 0:
@@ -135,6 +129,12 @@ void DMGMemory::reset()
             printf("unhandled cartridge type %x\n", cartROMBank0[0x147]);
             mbcType = MBCType::None;
     }
+
+    // use spare RAM as rom cache
+    if(cartRamSize == 0 && mbcType != MBCType::MBC2)
+        cachedROMBanks.emplace_back(ROMCacheEntry{cartRam, 0});
+    if(cartRamSize <= 0x4000)
+        cachedROMBanks.emplace_back(ROMCacheEntry{cartRam + 0x4000, 0});
 
     mbcRAMEnabled = false;
     mbcROMBank = 1;
