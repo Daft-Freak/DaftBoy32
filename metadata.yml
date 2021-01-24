@@ -7,4 +7,5 @@ icon:
 splash:
   file: splash.png
 category: emulator
+url: https://github.com/Daft-Freak/DaftBoy32
 filetypes: ["gb", "gbc"]
