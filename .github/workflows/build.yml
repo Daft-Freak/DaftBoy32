@@ -40,10 +40,10 @@ jobs:
             cmake-args: -D32BLIT_PATH=$GITHUB_WORKSPACE/32blit
             brew-packages: sdl2 sdl2_image sdl2_net
 
-          - os: windows-latest
-            name: Visual Studio
-            release-suffix: WIN64
-            cmake-args: -D32BLIT_PATH=$GITHUB_WORKSPACE/32blit
+          #- os: windows-latest
+          #  name: Visual Studio
+          #  release-suffix: WIN64
+          #  cmake-args: -D32BLIT_PATH=$GITHUB_WORKSPACE/32blit
 
     runs-on: ${{matrix.os}}
 
