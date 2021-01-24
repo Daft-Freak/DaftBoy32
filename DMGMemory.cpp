@@ -82,6 +82,19 @@ void DMGMemory::reset()
     for(int i = 0; i < extraROMBankCacheSize; i++)
         cachedROMBanks.emplace_back(ROMCacheEntry{extraROMBankCache + i * 0x4000, 0});
 
+    // get ROM size
+    int size = cartROMBank0[0x148];
+    if(size <= 8)
+        cartROMBanks = 2 << size;
+    else if(size == 0x52)
+        cartROMBanks = 72;
+    else if(size == 0x53)
+        cartROMBanks = 80;
+    else if(size == 0x54)
+        cartROMBanks = 96;
+    else
+        cartROMBanks = 0; // uhoh
+
     // check cart ram size
     static const unsigned int ramSizes[]{
         0, 2048, 8 * 1024, 32 * 1024, 128 * 1024, 64 * 1024
@@ -419,6 +432,8 @@ void DMGMemory::updateCurrentROMBank(unsigned int bank, int region)
 {
     // region is either 0 or 4
     int offset = region * 0x1000;
+
+    bank %= cartROMBanks;
 
     if(bank == 0)
     {
