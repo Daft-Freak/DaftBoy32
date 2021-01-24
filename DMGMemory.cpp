@@ -176,9 +176,15 @@ uint8_t DMGMemory::read(uint16_t addr) const
     if(regions[region])
         return regions[region][addr];
 
-    // handle disabled RAM
-    if(!mbcRAMEnabled && region != 0xF)
-        return 0xFF;
+    if(region != 0xF)
+    {
+        // handle disabled RAM
+        if(!mbcRAMEnabled)
+            return 0xFF;
+
+        // only other way to get here is MBC2
+        return cartRam[addr & 0x1FF];
+    }
 
     // must be Fxxx
 
@@ -224,7 +230,11 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
     {
         if(mbcRAMEnabled)
         {
-            const_cast<uint8_t *>(regions[region])[addr] = data;
+            // 512 4-bit values
+            if(mbcType == MBCType::MBC2)
+                cartRam[addr & 0x1FF] = data | 0xF0;
+            else
+                const_cast<uint8_t *>(regions[region])[addr] = data;
             cartRamWritten = true;
         }
     }
@@ -298,7 +308,6 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
     // MBC2 is a bit different (and simpler)
     if(mbcType == MBCType::MBC2)
     {
-        // TODO: RAM is 4 bit and only 512 bytes
         if(addr < 0x4000)
         {
             if(addr & 0x100) // ROM bank
@@ -312,7 +321,7 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
             else // RAM enable
             {
                 mbcRAMEnabled = (data & 0xF) == 0xA;
-                updateRAMBank();
+                // don't set the pointers as the RAM is tiny and weird
             }
         }
         return;
