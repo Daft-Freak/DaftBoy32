@@ -25,3 +25,9 @@ blit_assets_yaml(gameblit assets.yml)
 blit_metadata(gameblit metadata.yml)
 
 set_target_properties(gameblit PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+
+# setup release packages
+install (FILES ${PROJECT_DISTRIBS} DESTINATION .)
+set (CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+set (CPACK_GENERATOR "ZIP" "TGZ")
+include (CPack)
