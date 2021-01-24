@@ -307,7 +307,7 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
                 if(mbcROMBank == 0)
                     mbcROMBank = 1; // bank 0 is handled as bank 1
 
-                updateCurrentROMBank();
+                updateCurrentROMBank(mbcROMBank, 4);
             }
             else // RAM enable
             {
@@ -361,7 +361,7 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
                 mbcROMBank = (mbcROMBank & 0xFF) | ((data & 1) << 8);
         }
 
-        updateCurrentROMBank();
+        updateCurrentROMBank(mbcROMBank, 4);
     }
     else if(addr < 0x6000)
     {
@@ -380,12 +380,13 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
                 mbcRAMBank = data & 0x3;
                 updateRAMBank();
 
-                // TODO: this also affetcts the bank at 0-3FFF
+                // also affetcts the bank at 0-3FFF
+                updateCurrentROMBank((data & 0x3) << 5, 0);
             }
 
             // ROM is always banked
             mbcROMBank = (mbcROMBank & 0x1F) | ((data & 0x3) << 5);
-            updateCurrentROMBank();
+            updateCurrentROMBank(mbcROMBank, 4);
         }
     }
     else // < 0x8000
@@ -395,33 +396,42 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
         {
             mbcRAMBankMode = data == 1;
             updateRAMBank();
+
+            // update bank at 0-3FFF
+            if(mbcRAMBankMode)
+                updateCurrentROMBank(mbcROMBank & 0x60, 0);
+            else
+                updateCurrentROMBank(0, 0);
         }
     }
 }
 
-void DMGMemory::updateCurrentROMBank()
+void DMGMemory::updateCurrentROMBank(unsigned int bank, int region)
 {
-    if(mbcROMBank == 0)
+    // region is either 0 or 4
+    int offset = region * 0x1000;
+
+    if(bank == 0)
     {
-        for(int i = 4; i < 8; i++)
-            regions[i] = cartROMBank0 - 0x4000;
+        for(int i = 0; i < 4; i++)
+            regions[region + i] = cartROMBank0 - offset;
         return;
     }
 
     // entire ROM is loaded
     if(cartROM)
     {
-        for(int i = 4; i < 8; i++)
-            regions[i] = cartROM + (mbcROMBank - 1) * 0x4000;
+        for(int i = 0; i < 4; i++)
+            regions[region + i] = cartROM + bank * 0x4000 - offset;
         return;
     }
 
     for(auto it = cachedROMBanks.begin(); it != cachedROMBanks.end(); ++it)
     {
-        if(it->bank == mbcROMBank)
+        if(it->bank == bank)
         {
-            for(int i = 4; i < 8; i++)
-                regions[i] = it->ptr - 0x4000;
+            for(int i = 0; i < 4; i++)
+                regions[region + i] = it->ptr - offset;
 
             cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
             return;
@@ -431,10 +441,14 @@ void DMGMemory::updateCurrentROMBank()
     // reuse the last (least recently used) bank
     auto it = std::prev(cachedROMBanks.end());
 
-    for(int i = 4; i < 8; i++)
-        regions[i] = it->ptr - 0x4000;
+    // make sure it isn't being used by the other region
+    if(mbcType == MBCType::MBC1 && ((region == 0 && regions[4] == it->ptr - 0x4000) || (region == 4 && regions[0] == it->ptr)))
+        --it; // use the next one instead
 
-    romBankCallback(mbcROMBank, it->ptr);
-    it->bank = mbcROMBank;
+    for(int i = 0; i < 4; i++)
+        regions[region + i] = it->ptr - offset;
+
+    romBankCallback(bank, it->ptr);
+    it->bank = bank;
     cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
 }

@@ -41,7 +41,7 @@ public:
 
 private:
     void writeMBC(uint16_t addr, uint8_t data);
-    void updateCurrentROMBank();
+    void updateCurrentROMBank(unsigned int bank, int region);
 
     enum class MBCType
     {
