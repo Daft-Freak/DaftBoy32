@@ -63,6 +63,8 @@ void DMGDisplay::update(int cycles)
         {
             if(statMode)
             {
+                drawScanLine(y); // draw right before hblank
+
                 auto stat = mem.readIOReg(IO_STAT);
                 if(stat & STAT_HBlankInt)
                     cpu.flagInterrupt(Int_LCDStat);
@@ -76,10 +78,6 @@ void DMGDisplay::update(int cycles)
 
     // next scanline
     remainingScanlineCycles += scanlineCycles;
-
-    if(y < screenHeight)
-        drawScanLine(y);
-
     y++;
 
     // coincidince interrupt
