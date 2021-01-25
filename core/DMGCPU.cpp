@@ -1342,10 +1342,10 @@ void DMGCPU::executeInstruction()
 
         case 0xE8: // ADD SP,n
         {
-            cycleExecuted();
             // flags are set as if this is an 8 bit op
             auto a = sp & 0xFF;
             auto b = readMem(pc++);
+            cycleExecuted();
             uint16_t v = a + b;
             sp = sp + (int8_t)b;
 
