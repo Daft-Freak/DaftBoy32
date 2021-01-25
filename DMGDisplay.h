@@ -19,12 +19,15 @@ public:
 private:
     void drawScanLine(int y);
 
+    void updateCompare(bool newVal);
+
     DMGCPU &cpu;
     DMGMemory &mem;
 
     bool enabled = true;
     uint8_t y = 0;
     uint8_t statMode = 0;
+    bool compareMatch = false;
     int windowY = 0;
 
     static const int scanlineCycles = 456;

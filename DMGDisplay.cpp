@@ -83,7 +83,10 @@ void DMGDisplay::update(int cycles)
     // coincidince interrupt
     auto stat = mem.readIOReg(IO_STAT);
 
-    if((stat & STAT_CoincidenceInt) && y == mem.readIOReg(IO_LYC))
+    bool old = compareMatch;
+    compareMatch = y == mem.readIOReg(IO_LYC);
+
+    if((stat & STAT_CoincidenceInt) && !old && compareMatch)
         cpu.flagInterrupt(Int_LCDStat);
 
     if(y == screenHeight)
@@ -114,7 +117,7 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
     switch(addr & 0xFF)
     {
         case IO_STAT:
-            return (val & 0xF8) | (y == mem.readIOReg(IO_LYC) ? STAT_Coincidence : 0) | statMode | 0x80;
+            return (val & 0xF8) | (compareMatch ? STAT_Coincidence : 0) | statMode | 0x80;
         case IO_LY:
             return y;
     }
@@ -137,12 +140,20 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
                 statMode = 0;
                 y = windowY = 0;
             }
+            else if(!enabled) // enabling
+                updateCompare(y == mem.readIOReg(IO_LYC));
+
             enabled = data & LCDC_DisplayEnable;
             break;
         }
+
         case IO_LY:
-            y = windowY = 0;
             return true;
+        case IO_LYC:
+            if(enabled)
+                updateCompare(y == data);
+
+            break;
 
         // grey palettes
         case IO_BGP:
@@ -422,4 +433,12 @@ void DMGDisplay::drawScanLine(int y)
             }
         }
     }
+}
+
+void DMGDisplay::updateCompare(bool newVal)
+{
+    if((mem.readIOReg(IO_STAT) & STAT_CoincidenceInt) && !compareMatch && newVal)
+        cpu.flagInterrupt(Int_LCDStat);
+
+    compareMatch = newVal;
 }
