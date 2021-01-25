@@ -454,6 +454,8 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
                 ch1DutyStep = ch2DutyStep = 0;
                 ch3SampleIndex = 0;
+                ch3Sample = 0;
+                ch4Val = 0;
             }
             else if(!enabled && (data & NR52_Enable))
             {
