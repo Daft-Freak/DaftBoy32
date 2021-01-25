@@ -693,9 +693,9 @@ void DMGAPU::updateFreq()
             ch4LFSRBits |= bit << 14; // bit 15
 
             if(ch4Narrow)
-                ch4LFSRBits |= (bit << 6); // also set bit 7
+                ch4LFSRBits = (ch4LFSRBits & ~(1 << 6)) | (bit << 6); // also set bit 7
 
-            ch4Val = ch4LFSRBits & 1;
+            ch4Val = !(ch4LFSRBits & 1);
         }
         ch4FreqTimer = timer;
     }
