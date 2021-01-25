@@ -59,8 +59,8 @@ private:
 
     uint8_t iohram[0x100]; // io @ 0xFF00, hram @ 0xFF80, ie & 0xFFFF
 
-    uint8_t vram[0x2000 * 2]; // 8k @ 0x8000, two banks on GBC
-    uint8_t wram[0x1000 * 8]; // 8k @ 0xC000, second half switchable on GBC
+    uint8_t vram[0x2000/* * 2*/]; // 8k @ 0x8000, two banks on GBC
+    uint8_t wram[0x1000 * 2/* * 8*/]; // 8k @ 0xC000, second half switchable on GBC
     uint8_t oam[0xA0]; // @ 0xFE00
 
     bool isGBC = false;
@@ -81,7 +81,7 @@ private:
     unsigned int cartROMBanks = 0; // read from the header
 
     // cache as much as possible in RAM
-    static const int romBankCacheSize = 11;
+    static const int romBankCacheSize = 1;
     uint8_t cartROMBankCache[0x4000 * romBankCacheSize];
     std::list<ROMCacheEntry> cachedROMBanks;
 
