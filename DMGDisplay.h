@@ -7,6 +7,8 @@ class DMGMemory;
 class DMGDisplay
 {
 public:
+    using VBlankCallback = void(*)();
+
     DMGDisplay(DMGCPU &cpu);
 
     void reset();
@@ -17,6 +19,8 @@ public:
 
     uint8_t readReg(uint16_t addr, uint8_t val);
     bool writeReg(uint16_t addr, uint8_t data);
+
+    void setVBlankCallback(VBlankCallback callback){vBlankCallback = callback;}
 
 private:
     void drawScanLine(int y);
@@ -42,4 +46,6 @@ private:
 
     // GBC
     uint16_t bgPalette[8 * 4], objPalette[8 * 4];
+
+    VBlankCallback vBlankCallback = nullptr;
 };

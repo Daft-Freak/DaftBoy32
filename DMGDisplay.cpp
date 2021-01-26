@@ -114,6 +114,9 @@ void DMGDisplay::update(int cycles)
         statMode = 1;
         if(stat & STAT_VBlankInt)
             cpu.flagInterrupt(Int_LCDStat);
+
+        if(vBlankCallback)
+            vBlankCallback();
     }
     else
     {
