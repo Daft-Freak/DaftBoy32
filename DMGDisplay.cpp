@@ -252,7 +252,11 @@ static const int numSprites = 40;
 // handles x/y flips
 static uint16_t getTileRow(uint8_t lcdc, uint8_t *mapPtr, uint8_t *tileDataPtr, int tileY, int &attrs)
 {
+#ifdef NO_GBC
+    attrs = 0;
+#else
     attrs = mapPtr[0x2000]; // GBC, bank 1
+#endif
 
     // tile id is signed if addr == 0x8800
     int tileId = (lcdc & LCDC_TileData8000) ? *mapPtr : (int8_t)(*mapPtr) + 128;

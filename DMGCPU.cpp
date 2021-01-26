@@ -18,10 +18,13 @@ void DMGCPU::reset()
     timerEnabled = timerOldVal = false;
     timerBit = 1 << 9;
 
+#ifndef NO_GBC
     isGBC = false;
     doubleSpeed = speedSwitch = false;
 
     gdmaTriggered = false;
+#endif
+
     oamDMACount = 0;
 
     // values after boot rom
@@ -31,6 +34,9 @@ void DMGCPU::reset()
     mem.reset();
 
     // enable color mode
+#ifndef NO_GBC
+    isGBC = false;
+
     if(console == Console::CGB || (console == Console::Auto && mem.read(0x143) & 0x80))
     {
         isGBC = mem.read(0x143) & 0x80; // only set if a GBC game
@@ -41,16 +47,17 @@ void DMGCPU::reset()
         reg(WReg::HL) = 0x007C;
     }
     else
+#endif
     {
         reg(WReg::AF) = 0x01B0;
         reg(WReg::BC) = 0x0013;
         reg(WReg::DE) = 0x00D8;
         reg(WReg::HL) = 0x014D;
-
-        isGBC = false;
     }
 
+#ifndef NO_GBC
     mem.setGBC(isGBC);
+#endif
 
     apu.reset();
     display.reset();
@@ -60,8 +67,10 @@ void DMGCPU::run(int ms)
 {
     int cycles = (clockSpeed * ms) / 1000;
 
+#ifndef NO_GBC
     if(doubleSpeed)
         cycles *= 2;
+#endif
 
     while(!stopped && cycles > 0)
     {
@@ -81,6 +90,7 @@ void DMGCPU::run(int ms)
                 }
             }
 
+#ifndef NO_GBC
             if(gdmaTriggered) // GDMA (stops execution)
             {
                 uint16_t srcAddr = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
@@ -113,6 +123,7 @@ void DMGCPU::run(int ms)
                 mem.writeIOReg(IO_HDMA5, 0xFF);
                 gdmaTriggered = false;
             }
+#endif
         }
 
         do {
@@ -123,9 +134,11 @@ void DMGCPU::run(int ms)
 
             int extCycles = exec;
 
+#ifndef NO_GBC
             // these still work at normal speed
             if(doubleSpeed)
                 extCycles >>= 1;
+#endif
 
             apu.update(extCycles);
             display.update(extCycles);
@@ -161,8 +174,10 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
 
     if((addr & 0xFF) == IO_DIV)
         return divCounter >> 8;
+#ifndef NO_GBC
     else if((addr & 0xFF) == IO_KEY1 && isGBC)
         return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
+#endif
     else if((addr & 0xFF) >= IO_HDMA1 && (addr & 0xFF) <= IO_HDMA4)
         return 0xFF;
 
@@ -189,6 +204,8 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
     {
         if(!isGBC)
             return true;
+
+#ifndef NO_GBC
         else if(data & 0x80) // HDMA
             printf("HDMA\n");
         else
@@ -196,7 +213,9 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
             // GDMA
             gdmaTriggered = true;
         }
+#endif
     }
+
     else if((addr & 0xFF) == IO_DIV)
     {
         // falling edge gets triggered by reset
@@ -232,8 +251,9 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
     else if((addr & 0xFF) == IO_KEY1)
     {
         if(!isGBC) return true;
-
+#ifndef NO_GBC
         speedSwitch = data & 1;
+#endif
     }
     else if((addr & 0xFF) == IO_IF)
         serviceableInterrupts = data & mem.readIOReg(IO_IE);
@@ -607,6 +627,7 @@ int DMGCPU::executeInstruction()
         }
 
         case 0x10: // STOP
+#ifndef NO_GBC
             if(speedSwitch)
             {
                 speedSwitch = false;
@@ -614,6 +635,7 @@ int DMGCPU::executeInstruction()
                 divCounter = 0;
             }
             else
+#endif
                 stopped = true;
             break;
 
