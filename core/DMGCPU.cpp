@@ -22,10 +22,13 @@ void DMGCPU::reset()
     lastTimerUpdate = 0;
     nextTimerInterrupt = 0;
 
+#ifndef NO_GBC
     isGBC = false;
     doubleSpeed = speedSwitch = false;
 
     gdmaTriggered = false;
+#endif
+
     oamDMACount = 0;
     oamDMADelay = 0;
 
@@ -36,6 +39,9 @@ void DMGCPU::reset()
     mem.reset();
 
     // enable color mode
+#ifndef NO_GBC
+    isGBC = false;
+
     if(console == Console::CGB || (console == Console::Auto && mem.read(0x143) & 0x80))
     {
         isGBC = mem.read(0x143) & 0x80; // only set if a GBC game
@@ -48,18 +54,19 @@ void DMGCPU::reset()
         divCounter = 0x2678;
     }
     else
+#endif
     {
         reg(WReg::AF) = 0x01B0;
         reg(WReg::BC) = 0x0013;
         reg(WReg::DE) = 0x00D8;
         reg(WReg::HL) = 0x014D;
-
-        isGBC = false;
     }
 
     lastTimerDiv = divCounter;
 
+#ifndef NO_GBC
     mem.setGBC(isGBC);
+#endif
 
     apu.reset();
     display.reset();
@@ -69,8 +76,10 @@ void DMGCPU::run(int ms)
 {
     int cycles = (clockSpeed * ms) / 1000;
 
+#ifndef NO_GBC
     if(doubleSpeed)
         cycles *= 2;
+#endif
 
     cyclesToRun += cycles;
 
@@ -80,6 +89,7 @@ void DMGCPU::run(int ms)
         {
             executeInstruction();
 
+#ifndef NO_GBC
             if(gdmaTriggered) // GDMA (stops execution)
             {
                 uint16_t srcAddr = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
@@ -118,6 +128,7 @@ void DMGCPU::run(int ms)
                     exec -= 4;
                 }
             }
+#endif
         }
 
         do
@@ -193,6 +204,7 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
             display.update();
             return mem.readIOReg(IO_IF);
 
+#ifndef NO_GBC
         case IO_KEY1:
             if(isGBC)
                 return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
@@ -209,6 +221,7 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
         case IO_PCM12:
         case IO_PCM34:
             return isGBC ? apu.readReg(addr, val) : 0xFF;
+#endif
     }
 
     return val;
@@ -294,7 +307,8 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
             // need to delay two cycles
             oamDMADelay = 2; 
             break;
-        
+
+#ifndef NO_GBC
         case IO_KEY1:
             if(!isGBC) return true;
 
@@ -312,6 +326,7 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
                 gdmaTriggered = true;
             }
             break;
+#endif
 
         case IO_IE:
             serviceableInterrupts = data & mem.readIOReg(IO_IF) & 0x1F;
@@ -726,6 +741,7 @@ void DMGCPU::executeInstruction()
         }
 
         case 0x10: // STOP
+#ifndef NO_GBC
             if(speedSwitch)
             {
                 speedSwitch = false;
@@ -734,6 +750,7 @@ void DMGCPU::executeInstruction()
                 doubleSpeed = !doubleSpeed;
             }
             else
+#endif
             {
                 stopped = true;
                 display.update(); // force a screen update

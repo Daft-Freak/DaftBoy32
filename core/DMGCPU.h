@@ -49,8 +49,13 @@ public:
     uint32_t getCycleCount() const {return cycleCount;}
     uint16_t getInternalTimer() const {return divCounter;}
 
+#ifdef NO_GBC
+    constexpr bool getColourMode() const {return false;}
+    constexpr bool getDoubleSpeedMode() const {return false;}
+#else
     bool getColourMode() const {return isGBC;} // CGB in CGB mode
     bool getDoubleSpeedMode() const {return doubleSpeed;}
+#endif
 
     void setInputs(uint8_t newInputs);
 
@@ -124,14 +129,19 @@ private:
     uint16_t lastTimerDiv = 0; // div register at time of last update
     uint32_t nextTimerInterrupt = 0;
 
+#ifdef NO_GBC
+    const bool isGBC = false;
+    Console console = Console::DMG;
+#else
     bool isGBC = false;
     Console console = Console::Auto;
     bool doubleSpeed = false, speedSwitch = false;
+    bool gdmaTriggered;
+#endif
 
     int oamDMACount, oamDMADelay;
     const uint8_t *oamDMASrc = nullptr;
     uint8_t *oamDMADest = nullptr;
-    bool gdmaTriggered;
 
     // registers
     uint16_t regs[4];

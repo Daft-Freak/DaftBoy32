@@ -19,7 +19,10 @@ public:
     void addROMCache(uint8_t *ptr, uint32_t size);
 
     void reset();
+
+#ifndef NO_GBC
     void setGBC(bool gbc) {isGBC = gbc;}
+#endif
 
     uint8_t read(uint16_t addr) const;
     void write(uint16_t addr, uint8_t data);
@@ -63,13 +66,21 @@ private:
 
     uint8_t iohram[0x100]; // io @ 0xFF00, hram @ 0xFF80, ie & 0xFFFF
 
+    uint8_t oam[0xA0]; // @ 0xFE00
+
+#ifdef NO_GBC
+    uint8_t vram[0x2000]; // 8k @ 0x8000
+    uint8_t wram[0x1000 * 2]; // 8k @ 0xC000
+
+    static const bool isGBC = false;
+#else
     uint8_t vram[0x2000 * 2]; // 8k @ 0x8000, two banks on GBC
     uint8_t wram[0x1000 * 8]; // 8k @ 0xC000, second half switchable on GBC
-    uint8_t oam[0xA0]; // @ 0xFE00
 
     bool isGBC = false;
     uint8_t vramBank = 0;
     uint8_t wramBank = 1;
+#endif
 
     // cartridge
     MBCType mbcType = MBCType::None;
