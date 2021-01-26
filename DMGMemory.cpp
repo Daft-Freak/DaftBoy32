@@ -70,8 +70,16 @@ void DMGMemory::reset()
     memset(vram, 0, sizeof(vram));
 
     // load some ROM
-    romBankCallback(0, cartROMBank0);
-    romBankCallback(1, cartROMBankCache);
+    if(cartROM)
+    {
+        memcpy(cartROMBank0, cartROM, 0x4000);
+        memcpy(cartROMBankCache, cartROM + 0x4000, 0x4000);
+    }
+    else
+    {
+        romBankCallback(0, cartROMBank0);
+        romBankCallback(1, cartROMBankCache);
+    }
 
     cachedROMBanks.clear();
     for(int i = 0; i < romBankCacheSize; i++)
