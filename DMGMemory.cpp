@@ -25,8 +25,10 @@ void DMGMemory::loadCartridgeRAM(const uint8_t *ram, uint32_t len)
 
 void DMGMemory::reset()
 {
+#ifndef NO_GBC
     vramBank = 0;
     wramBank = 1;
+#endif
 
     // io regs
     memset(iohram, 0xFF, 0x80);
@@ -267,17 +269,19 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
         else if((addr & 0xFF) == IO_VBK)
         {
             if(!isGBC) return;
-
+#ifndef NO_GBC
             vramBank = data & 1;
             data |= 0xFE; // make sure only the low bit reads back
             regions[0x8] = regions[0x9] = vram + (vramBank * 0x2000) - 0x8000;
+#endif
         }
         else if((addr & 0xFF) == IO_SVBK)
         {
             if(!isGBC) return;
-
+#ifndef NO_GBC
             wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
             regions[0xD] = wram + (wramBank * 0x1000) - 0xD000;
+#endif
         }
         else if(cpu.writeReg(addr, data))
             return;
