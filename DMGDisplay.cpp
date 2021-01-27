@@ -240,31 +240,61 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
     return false;
 }
 
+// helpers/constants
+static const int tileDataSize = 16;
+static const int screenSizeTiles = 32; // 32x32 tiles
+
+static const int numSprites = 40;
+
+// get the two data bytes for a tile row
+// handles x/y flips
+static uint16_t getTileRow(uint8_t lcdc, uint8_t *mapPtr, uint8_t *tileDataPtr, int x, int y, int tileY, int &attrs)
+{
+    int tileId = x + y * screenSizeTiles;
+
+    attrs = mapPtr[tileId + 0x2000]; // GBC, bank 1
+
+    // tile id is signed if addr == 0x8800
+    tileId = (lcdc & LCDC_TileData8000) ? mapPtr[tileId] : (int8_t)mapPtr[tileId] + 128;
+
+    auto tileAddr = tileId * tileDataSize;
+
+    if(attrs & Tile_Bank)
+        tileAddr += 0x2000;
+
+    if(attrs & Tile_YFlip)
+        tileY = 7 - tileY;
+
+    auto d = reinterpret_cast<uint16_t *>(tileDataPtr + tileAddr)[tileY];
+
+    if(attrs & Tile_XFlip)
+        d = reverseBitsPerByte(d);
+
+    return d;
+};
+
+// gets the two bit index from the top of the two bytes
+inline int getPalIndex(uint16_t d)
+{
+    return ((d & 0x80) >> 7) | ((d >> 15) << 1);
+};
+
 void DMGDisplay::drawScanLine(int y)
 {
-    auto lcdc = mem.readIOReg(IO_LCDC);
-
-    const bool isColour = cpu.getColourMode();
-
-    auto vram = mem.getVRAM();
-
-    auto spriteDataPtr = vram;
-
-    const int tileDataSize = 16;
-    const int screenSizeTiles = 32; // 32x32 tiles
-
-    const int numSprites = 40;
-    const int spriteHeight = (lcdc & LCDC_Sprite8x16) ? 16 : 8;
-
     // contains palette index + a tile priority flag
     uint8_t bgRaw[screenWidth]{0};
 
     auto scanLine = screenData + y * screenWidth;
 
+    auto lcdc = mem.readIOReg(IO_LCDC);
+
+    const bool isColour = cpu.getColourMode();
+
     // active scanline
     // this is reduced to a priority flag on GBC
     if(lcdc & LCDC_BGDisp || isColour)
     {
+        auto vram = mem.getVRAM();
         auto tileDataPtr = (lcdc & LCDC_TileData8000) ? vram : vram + 0x800;
         auto bgMapPtr = (lcdc & LCDC_BGTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
         auto winMapPtr = (lcdc & LCDC_WindowTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
@@ -276,69 +306,57 @@ void DMGDisplay::drawScanLine(int y)
         auto out = scanLine;
         auto rawOut = bgRaw;
 
-        auto copyTiles = [this, &x, lcdc, isColour, tileDataPtr, &out, &rawOut](uint8_t *mapPtr, int xLimit, int offsetX, uint8_t oy)
+        auto copyPartialTile = [this, &x, lcdc, &out, &rawOut](int endX, uint16_t d, int tileAttrs)
         {
-            while(x < xLimit)
+            uint8_t tilePriority = (tileAttrs & Tile_BGPriority) ? 0x80 : 0;
+
+            // palette
+            const auto bgPal = bgPalette + (tileAttrs & 0x7) * 4;
+
+            for(; x < endX; x++, d <<= 1)
             {
-                uint8_t ox = x + offsetX;
+                int palIndex = getPalIndex(d);
 
-                int tileId = (ox / 8) + (oy / 8) * screenSizeTiles;
-                auto mapAttrs = mapPtr[tileId + 0x2000]; // GBC, bank 1
+                if(lcdc & LCDC_BGDisp)
+                    *(rawOut++) = palIndex | tilePriority;
+                *(out++) = bgPal[palIndex];
+            }
+        };
 
-                // tile id is signed if addr == 0x8800
-                tileId = (lcdc & LCDC_TileData8000) ? mapPtr[tileId] : (int8_t)mapPtr[tileId] + 128;
+        auto copyTiles = [this, &x, lcdc, tileDataPtr, &out, &rawOut, &copyPartialTile](uint8_t *mapPtr, int xLimit, int offsetX, uint8_t oy)
+        {
+            // full tiles
+            uint8_t ox = x + offsetX; // this is a uint8 so that it wraps
 
-                auto tileAddr = tileId * tileDataSize;
-
-                if(mapAttrs & Tile_Bank)
-                    tileAddr += 0x2000;
-
-                int ty = (oy & 7);
-                int tx = (ox & 7);
-
-                if(mapAttrs & Tile_YFlip)
-                    ty = 7 - ty;
+            while(x + 8 < xLimit)
+            {
+                int mapAttrs;
+                auto d = getTileRow(lcdc, mapPtr, tileDataPtr, ox / 8, oy / 8, oy & 7, mapAttrs);
 
                 uint8_t tilePriority = (mapAttrs & Tile_BGPriority) ? 0x80 : 0;
-
-                // get the two tile data bytes for this line
-                //uint8_t d1 = tileDataPtr[tileAddr + ty * 2];
-                //uint8_t d2 = tileDataPtr[tileAddr + ty * 2 + 1];
-                uint16_t d = reinterpret_cast<uint16_t *>(tileDataPtr + tileAddr)[ty];
-
-                if(mapAttrs & Tile_XFlip)
-                    d = reverseBitsPerByte(d);
-
-                // skip bits
-                d <<= tx;
 
                 // palette
                 const auto bgPal = bgPalette + (mapAttrs & 0x7) * 4;
 
-                auto bgPixel = [&]()
+                // copy entire row
+                for(int i = 0; i < 8; i++, d <<= 1)
                 {
-                    int palIndex = ((d & 0x80) >> 7) | ((d & 0x8000) >> 14);
+                    int palIndex = getPalIndex(d);
 
                     if(lcdc & LCDC_BGDisp)
                         *(rawOut++) = palIndex | tilePriority;
                     *(out++) = bgPal[palIndex];
-                };
-
-                if(!tx && x + 8 < xLimit)
-                {
-                    // copy entire row
-                    for(int i = 0; i < 8; i++, d <<= 1)
-                        bgPixel();
-                    x += 8;
                 }
-                else
-                {
-                    // attempt to copy as much of the tile as possible
-                    const int limit = std::min(x + 8 - tx, xLimit);
+                x += 8;
+                ox += 8;
+            }
 
-                    for(; x < limit; x++, d <<= 1)
-                        bgPixel();
-                }
+            if(x < xLimit)
+            {
+                int mapAttrs;
+                auto d = getTileRow(lcdc, mapPtr, tileDataPtr, ox / 8, oy / 8, oy & 7, mapAttrs);
+
+                copyPartialTile(xLimit, d, mapAttrs);
             }
         };
 
@@ -360,6 +378,19 @@ void DMGDisplay::drawScanLine(int y)
             auto scrollX = mem.readIOReg(IO_SCX);
             auto scrollY = mem.readIOReg(IO_SCY);
 
+            // partial tile at the start of the line
+            if(scrollX & 7)
+            {
+                uint8_t oy = y + scrollY;
+                int mapAttrs;
+                auto d = getTileRow(lcdc, bgMapPtr, tileDataPtr, scrollX / 8, oy / 8, oy & 7, mapAttrs);
+
+                // skip bits
+                d <<= scrollX & 7;
+
+                copyPartialTile(8 - (scrollX & 7), d, mapAttrs);
+            }
+
             copyTiles(bgMapPtr, windowX < screenWidth ? windowX : screenWidth, scrollX, y + scrollY);
         }
 
@@ -373,8 +404,11 @@ void DMGDisplay::drawScanLine(int y)
 
     if(lcdc & LCDC_OBJDisp)
     {
+        const int spriteHeight = (lcdc & LCDC_Sprite8x16) ? 16 : 8;
+
         // sprites
         auto oam = mem.getOAM();
+        auto spriteDataPtr = mem.getVRAM();
 
         // 10 sprites per line limit
         uint8_t lineSprites[10];
