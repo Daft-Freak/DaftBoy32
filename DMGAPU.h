@@ -66,7 +66,7 @@ private:
     uint8_t ch4Len = 0;
     uint8_t ch4EnvVolume, ch4EnvTimer;
     int ch4FreqTimer = 0;
-    int ch4FreqTimerPeriod = 1;
+    int ch4FreqTimerPeriod = 8;
     uint16_t ch4LFSRBits = 0; // really 15 bit
     bool ch4Narrow = false;
     bool ch4Val = false;

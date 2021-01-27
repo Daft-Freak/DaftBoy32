@@ -17,6 +17,8 @@ void DMGAPU::reset()
     frameSeqClock = 0;
     channelEnabled = 1;
 
+    ch4FreqTimerPeriod = 8;
+
     //... incomplete
 
     sampleClock = 0;
