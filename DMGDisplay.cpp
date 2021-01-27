@@ -352,6 +352,21 @@ void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)
         // palette
         const auto bgPal = bgPalette + (tileAttrs & 0x7) * 4;
 
+        // solid line
+        if(d == 0 || d == 0xFFFF || d == 0xFF00 || d == 0x00FF)
+        {
+            auto index = getPalIndex(d);
+            auto col = bgPal[index];
+
+            for(int i = 0; i < 8; i++)
+            {
+                *out++ = col;
+                if(lcdc & LCDC_BGDisp)
+                    *rawOut++ = index | tilePriority;
+            }
+            return;
+        }
+
         for(int i = 0; i < 8; i++, d <<= 1)
         {
             int palIndex = getPalIndex(d);
