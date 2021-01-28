@@ -285,6 +285,11 @@ void updateAudio(blit::AudioChannel &channel)
 void openROM(std::string filename)
 {
     romFile.open(filename);
+
+    // use flash cache for anything bigger than 256K
+    if(romFile.get_length() > 256 * 1024)
+        romFile.open(filename, blit::OpenMode::read | blit::OpenMode::cached);
+
     mem.setCartROM(romFile.get_ptr());
 
     cpu.reset();
