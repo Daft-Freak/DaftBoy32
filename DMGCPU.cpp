@@ -153,6 +153,16 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
     else if((addr & 0xFF) >= IO_LCDC && (addr & 0xFF) <= IO_WX)
         return display.readReg(addr, val);
 
+    if((addr & 0xFF) == IO_JOYP)
+    {
+        int ret = 0xF;
+        if(!(val & JOYP_SelectDir))
+            ret &= (~inputs) & 0xF;
+        if(!(val & JOYP_SelectButtons))
+            ret &= ((~inputs) >> 4) & 0xF;
+        return 0xC0 | (val & 0xF0) | ret;
+    }
+
     if((addr & 0xFF) == IO_DIV)
         return divCounter >> 8;
     else if((addr & 0xFF) == IO_KEY1 && isGBC)
@@ -235,6 +245,14 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
         serviceableInterrupts = data & mem.readIOReg(IO_IF);
 
     return false;
+}
+
+void DMGCPU::setInputs(uint8_t newInputs)
+{
+    if(inputs == 0 && newInputs != 0)
+        flagInterrupt(Int_Joypad);
+
+    inputs = newInputs;
 }
 
 uint8_t DMGCPU::readMem(uint16_t addr) const

@@ -52,6 +52,8 @@ public:
     bool getColourMode() const {return isGBC;} // CGB in CGB mode
     bool getDoubleSpeedMode() const {return doubleSpeed;}
 
+    void setInputs(uint8_t newInputs);
+
 private:
     enum class Reg
     {
@@ -129,4 +131,5 @@ private:
     
     DMGAPU apu;
     DMGDisplay display;
+    uint8_t inputs = 0;
 };
