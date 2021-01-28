@@ -5,9 +5,7 @@
 #include "DMGMemory.h"
 #include "DMGRegs.h"
 
-static void stubCallback(int){}
-
-DMGCPU::DMGCPU(DMGMemory &mem) : mem(mem), cycleCallback(stubCallback)
+DMGCPU::DMGCPU(DMGMemory &mem) : mem(mem), apu(*this), display(*this)
 {}
 
 void DMGCPU::reset()
@@ -58,6 +56,8 @@ void DMGCPU::reset()
     // TODO: display::reset?
     for(int i = IO_BGP; i <= IO_OBP1; i++)
         mem.write(0xFF00 | i, mem.readIOReg(i));
+
+    apu.reset();
 }
 
 void DMGCPU::run(int ms)
@@ -125,19 +125,19 @@ void DMGCPU::run(int ms)
 
             cycles -= exec;
 
-            cycleCallback(exec);
+            int extCycles = exec;
+
+            // these still work at normal speed
+            if(doubleSpeed)
+                extCycles >>= 1;
+
+            apu.update(extCycles);
+            display.update(extCycles);
+
             updateTimer(exec);
             exec = 4;
         } while(halted && cycles > 0); // wait until not halted
     }
-}
-
-void DMGCPU::setCycleCallback(CycleCallback cycleCallback)
-{
-    if(!cycleCallback)
-        this->cycleCallback = stubCallback;
-    else
-        this->cycleCallback = cycleCallback;
 }
 
 void DMGCPU::flagInterrupt(int interrupt)
@@ -148,6 +148,11 @@ void DMGCPU::flagInterrupt(int interrupt)
 
 uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
 {
+    if((addr & 0xFF) >= IO_NR10 && (addr & 0xFF) < IO_LCDC)
+        return apu.readReg(addr, val);
+    else if((addr & 0xFF) >= IO_LCDC && (addr & 0xFF) <= IO_WX)
+        return display.readReg(addr, val);
+
     if((addr & 0xFF) == IO_DIV)
         return divCounter >> 8;
     else if((addr & 0xFF) == IO_KEY1 && isGBC)
@@ -160,6 +165,9 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
 
 bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
 {
+    if(display.writeReg(addr, data) || apu.writeReg(addr, data))
+        return true;
+
     if((addr & 0xFF) == 0x46)
     {
         oamDMACount = 0xA0;

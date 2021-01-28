@@ -1,6 +1,9 @@
 #pragma once
 #include <cstdint>
 
+#include "DMGAPU.h"
+#include "DMGDisplay.h"
+
 class DMGMemory;
 
 enum Interrupts
@@ -30,8 +33,6 @@ public:
 
     void run(int ms);
 
-    void setCycleCallback(CycleCallback cycleCallback);
-
     Console getConsole() {return console;}
     void setConsole(Console c) {console = c;}
 
@@ -41,6 +42,8 @@ public:
     bool writeReg(uint16_t addr, uint8_t data);
 
     DMGMemory &getMem() {return mem;}
+    DMGAPU &getAPU(){return apu;}
+    DMGDisplay &getDisplay(){return display;}
 
     bool getBreakpointTriggered() {return breakpoint;}
 
@@ -123,7 +126,7 @@ private:
 
     // RAM
     DMGMemory &mem;
-
-    // callbacks
-    CycleCallback cycleCallback;
+    
+    DMGAPU apu;
+    DMGDisplay display;
 };

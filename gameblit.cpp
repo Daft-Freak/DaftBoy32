@@ -73,8 +73,6 @@ FileBrowser fileBrowser(tallFont);
 
 DMGMemory mem;
 DMGCPU cpu(mem);
-DMGDisplay display(cpu);
-DMGAPU apu(cpu);
 
 uint8_t inputs = 0;
 
@@ -187,7 +185,6 @@ void onMenuItemPressed(const Menu::Item &item)
 
         case MenuItem::Reset:
             cpu.reset();
-            apu.reset();
             break;
 
         case MenuItem::SwitchGame:
@@ -199,16 +196,6 @@ void onMenuItemPressed(const Menu::Item &item)
 }
 
 // CPU callbacks
-void onCyclesExeceuted(int cycles)
-{
-    // these still work at normal speed
-    if(cpu.getDoubleSpeedMode())
-        cycles >>= 1;
-
-    apu.update(cycles);
-    display.update(cycles);
-}
-
 uint8_t onRead(uint16_t addr, uint8_t val)
 {
     if((addr & 0xFF) == IO_JOYP)
@@ -221,26 +208,12 @@ uint8_t onRead(uint16_t addr, uint8_t val)
         return 0xC0 | (val & 0xF0) | ret;
     }
 
-    if((addr & 0xFF) >= IO_NR10 && (addr & 0xFF) < IO_LCDC)
-        return apu.readReg(addr, val);
-    else if((addr & 0xFF) >= IO_LCDC && (addr & 0xFF) <= IO_WX)
-        return display.readReg(addr, val);
-    else
-        return cpu.readReg(addr, val);
+    return cpu.readReg(addr, val);
 }
 
 bool onWrite(uint16_t addr, uint8_t val)
 {
-    if(apu.writeReg(addr, val))
-        return true;
-
-    if(display.writeReg(addr, val))
-        return true;
-
-    if(cpu.writeReg(addr, val))
-        return true;
-
-    return false;
+    return cpu.writeReg(addr, val);
 }
 
 int loadedBanks = 0;
@@ -271,6 +244,7 @@ void updateCartRAM(uint8_t *cartRam, unsigned int size)
 
 void updateAudio(blit::AudioChannel &channel)
 {
+    auto &apu = cpu.getAPU();
     if(apu.getNumSamples() < 64)
     {
         //underrun
@@ -293,7 +267,6 @@ void openROM(std::string filename)
     mem.setCartROM(romFile.get_ptr());
 
     cpu.reset();
-    apu.reset();
 
     if(blit::file_exists(filename + ".ram"))
     {
@@ -339,7 +312,6 @@ void init()
     menu.set_display_rect(blit::Rect(0, 0, 100, blit::screen.bounds.h));
     menu.set_on_item_activated(onMenuItemPressed);
 
-    cpu.setCycleCallback(onCyclesExeceuted);
     mem.setROMBankCallback(getROMBank);
     mem.setReadCallback(onRead);
     mem.setWriteCallback(onWrite);
@@ -398,7 +370,7 @@ void render(uint32_t time_ms)
         redwawBG = !updateRunning;
     }
 
-    auto gbScreen = display.getData();
+    auto gbScreen = cpu.getDisplay().getData();
 
     auto expandCol = [](uint16_t rgb555, uint8_t &r, uint8_t &g, uint8_t &b)
     {
@@ -537,7 +509,7 @@ void update(uint32_t time_ms)
     loadedBanks = 0;
     bankLoadTime = 0;
 
-    if(apu.getNumSamples() < 1024 - 225) // single update generates ~220 samples
+    if(cpu.getAPU().getNumSamples() < 1024 - 225) // single update generates ~220 samples
         cpu.run(10);
     else
         printf("CPU stalled, no audio room!\n");
@@ -551,6 +523,7 @@ void update(uint32_t time_ms)
     while(turbo && blit::now() - start < 9)
     {
         // discard audio
+        auto &apu = cpu.getAPU();
         while(apu.getNumSamples())
             apu.getSample();
         cpu.run(1);
