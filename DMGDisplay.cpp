@@ -149,7 +149,8 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
 
 bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 {
-    const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0};
+    //const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0};
+    const uint16_t colMap[]{0xFFFF, 0xAD55, 0x528A, 0};
 
     switch(addr & 0xFF)
     {
