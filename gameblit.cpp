@@ -192,17 +192,6 @@ void onMenuItemPressed(const Menu::Item &item)
     menuOpen = false;
 }
 
-// CPU callbacks
-uint8_t onRead(uint16_t addr, uint8_t val)
-{
-    return cpu.readReg(addr, val);
-}
-
-bool onWrite(uint16_t addr, uint8_t val)
-{
-    return cpu.writeReg(addr, val);
-}
-
 int loadedBanks = 0;
 int bankLoadTime = 0;
 
@@ -302,8 +291,6 @@ void init()
     auto &mem = cpu.getMem();
 
     mem.setROMBankCallback(getROMBank);
-    mem.setReadCallback(onRead);
-    mem.setWriteCallback(onWrite);
     mem.setCartRamUpdateCallback(updateCartRAM);
 
     // autostart

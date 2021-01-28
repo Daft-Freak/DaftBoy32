@@ -2,6 +2,7 @@
 #include <cstring>
 
 #include "DMGMemory.h"
+#include "DMGCPU.h"
 #include "DMGRegs.h"
 
 static const int extraROMBankCacheSize = 4;
@@ -172,16 +173,6 @@ void DMGMemory::reset()
     regions[0xF] = nullptr;
 }
 
-void DMGMemory::setReadCallback(ReadCallback readCallback)
-{
-    this->readCallback = readCallback;
-}
-
-void DMGMemory::setWriteCallback(WriteCallback writeCallback)
-{
-    this->writeCallback = writeCallback;
-}
-
 uint8_t DMGMemory::read(uint16_t addr) const
 {
     int region = addr >> 12;
@@ -204,7 +195,7 @@ uint8_t DMGMemory::read(uint16_t addr) const
     if(addr >= 0xFF00)
     {
         auto val = iohram[addr & 0xFF];
-        val = readCallback(addr, val);
+        val = cpu.readReg(addr, val);
 
         return val;
     }
@@ -288,7 +279,7 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
             wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
             regions[0xD] = wram + (wramBank * 0x1000) - 0xD000;
         }
-        else if(writeCallback(addr, data))
+        else if(cpu.writeReg(addr, data))
             return;
 
         iohram[addr & 0xFF] = data;

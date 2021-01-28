@@ -5,7 +5,7 @@
 #include "DMGMemory.h"
 #include "DMGRegs.h"
 
-DMGCPU::DMGCPU() : apu(*this), display(*this)
+DMGCPU::DMGCPU() : mem(*this), apu(*this), display(*this)
 {}
 
 void DMGCPU::reset()

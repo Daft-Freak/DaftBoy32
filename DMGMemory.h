@@ -2,11 +2,11 @@
 #include <cstdint>
 #include <list>
 
+class DMGCPU;
 class DMGMemory
 {
 public:
-    using ReadCallback = uint8_t(*)(uint16_t, uint8_t val);
-    using WriteCallback = bool(*)(uint16_t, uint8_t val);
+    DMGMemory(DMGCPU &cpu) : cpu(cpu) {};
 
     using ROMBankCallback = void(*)(uint8_t, uint8_t *);
 
@@ -17,10 +17,6 @@ public:
     void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
     void reset();
     void setGBC(bool gbc) {isGBC = gbc;}
-
-    // only covers io registers
-    void setReadCallback(ReadCallback readCallback);
-    void setWriteCallback(WriteCallback writeCallback);
 
     uint8_t read(uint16_t addr) const;
     void write(uint16_t addr, uint8_t data);
@@ -89,8 +85,7 @@ private:
     uint8_t cartROMBankCache[0x4000 * romBankCacheSize];
     std::list<ROMCacheEntry> cachedROMBanks;
 
-    ReadCallback readCallback;
-    WriteCallback writeCallback;
+    DMGCPU &cpu;
 
     ROMBankCallback romBankCallback;
 
