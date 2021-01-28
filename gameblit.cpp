@@ -269,17 +269,17 @@ void updateCartRAM(uint8_t *cartRam, unsigned int size)
     blit::rename_file(loadedFilename + ".ram.tmp", loadedFilename + ".ram"); // move new -> current
 }
 
-void updateAudio(void *arg)
+void updateAudio(blit::AudioChannel &channel)
 {
     if(apu.getNumSamples() < 64)
     {
         //underrun
-        memset(blit::channels[0].wave_buffer, 0, 64 * 2);
+        memset(channel.wave_buffer, 0, 64 * 2);
         return;
     }
 
     for(int i = 0; i < 64; i++)
-        blit::channels[0].wave_buffer[i] = apu.getSample();
+        channel.wave_buffer[i] = apu.getSample();
 }
 
 void openROM(std::string filename)
@@ -310,8 +310,7 @@ void init()
     blit::set_screen_mode(blit::ScreenMode::hires);
 
     blit::channels[0].waveforms = blit::Waveform::WAVE;
-    blit::channels[0].volume = 0xFF;
-    blit::channels[0].callback_waveBufferRefresh = &updateAudio;
+    blit::channels[0].wave_buffer_callback = &updateAudio;
 
     if(!turbo)
     {
