@@ -1,5 +1,4 @@
 #include <cstdio>
-#include <cstdlib> //exit
 #include <cstring>
 
 #include "DMGCPU.h"
@@ -1357,7 +1356,7 @@ int DMGCPU::executeInstruction()
 
         default:
             printf("op %x @%x\n", (int)opcode, pc - 1);
-            exit(0);
+            stopped = true;
             break;
     }
     return 0;
