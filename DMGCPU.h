@@ -3,8 +3,8 @@
 
 #include "DMGAPU.h"
 #include "DMGDisplay.h"
+#include "DMGMemory.h"
 
-class DMGMemory;
 
 enum Interrupts
 {
@@ -25,7 +25,7 @@ public:
         CGB
     };
 
-    DMGCPU(DMGMemory &mem);
+    DMGCPU();
 
     using CycleCallback = void(*)(int);
 
@@ -125,7 +125,7 @@ private:
     uint16_t pc, sp;
 
     // RAM
-    DMGMemory &mem;
+    DMGMemory mem;
     
     DMGAPU apu;
     DMGDisplay display;

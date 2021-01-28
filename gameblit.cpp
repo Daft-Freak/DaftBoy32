@@ -71,8 +71,7 @@ void addAppendedFiles()
 const blit::Font tallFont(tall_font);
 FileBrowser fileBrowser(tallFont);
 
-DMGMemory mem;
-DMGCPU cpu(mem);
+DMGCPU cpu;
 
 uint8_t inputs = 0;
 
@@ -180,7 +179,7 @@ void onMenuItemPressed(const Menu::Item &item)
     switch(static_cast<MenuItem>(item.id))
     {
         case MenuItem::SaveRAM:
-            updateCartRAM(mem.getCartridgeRAM(), mem.getCartridgeRAMSize());
+            updateCartRAM(cpu.getMem().getCartridgeRAM(), cpu.getMem().getCartridgeRAMSize());
             break;
 
         case MenuItem::Reset:
@@ -264,7 +263,7 @@ void openROM(std::string filename)
     if(romFile.get_length() > 256 * 1024)
         romFile.open(filename, blit::OpenMode::read | blit::OpenMode::cached);
 
-    mem.setCartROM(romFile.get_ptr());
+    cpu.getMem().setCartROM(romFile.get_ptr());
 
     cpu.reset();
 
@@ -274,9 +273,9 @@ void openROM(std::string filename)
         auto ramLen = file.get_length();
 
         if(file.get_ptr())
-            mem.loadCartridgeRAM(file.get_ptr(), ramLen);
+            cpu.getMem().loadCartridgeRAM(file.get_ptr(), ramLen);
         else
-            file.read(0, mem.getCartridgeRAMSize(), (char *)mem.getCartridgeRAM());
+            file.read(0, cpu.getMem().getCartridgeRAMSize(), (char *)cpu.getMem().getCartridgeRAM());
     }
 
     loaded = true;
@@ -311,6 +310,8 @@ void init()
 
     menu.set_display_rect(blit::Rect(0, 0, 100, blit::screen.bounds.h));
     menu.set_on_item_activated(onMenuItemPressed);
+
+    auto &mem = cpu.getMem();
 
     mem.setROMBankCallback(getROMBank);
     mem.setReadCallback(onRead);
