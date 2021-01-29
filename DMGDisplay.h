@@ -9,6 +9,8 @@ class DMGDisplay
 public:
     DMGDisplay(DMGCPU &cpu);
 
+    void reset();
+
     void update(int cycles);
 
     const uint16_t *getData() {return screenData;}

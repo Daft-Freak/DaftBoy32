@@ -37,8 +37,25 @@ static uint16_t reverseBitsPerByte(uint16_t v)
 
 DMGDisplay::DMGDisplay(DMGCPU &cpu) : cpu(cpu), mem(cpu.getMem())
 {
+
+}
+
+void DMGDisplay::reset()
+{
     memset(bgPalette, 0xFF, sizeof(bgPalette));
     memset(objPalette, 0xFF, sizeof(objPalette)); // not initialised
+
+    enabled = true;
+    y = 0;
+    statMode = 0;
+    compareMatch = false;
+    windowY = 0;
+
+    remainingScanlineCycles = scanlineCycles;
+
+    // make sure the default palette gets set up for !GBC
+    for(int i = IO_BGP; i <= IO_OBP1; i++)
+        mem.write(0xFF00 | i, mem.readIOReg(i));
 }
 
 void DMGDisplay::update(int cycles)

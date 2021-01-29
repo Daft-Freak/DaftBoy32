@@ -21,7 +21,7 @@ void DMGCPU::reset()
     isGBC = false;
     doubleSpeed = speedSwitch = false;
 
-    gdmaTriggered = 0;
+    gdmaTriggered = false;
     oamDMACount = 0;
 
     // values after boot rom
@@ -52,12 +52,8 @@ void DMGCPU::reset()
 
     mem.setGBC(isGBC);
 
-    // make sure display sets up the default palette for !GBC
-    // TODO: display::reset?
-    for(int i = IO_BGP; i <= IO_OBP1; i++)
-        mem.write(0xFF00 | i, mem.readIOReg(i));
-
     apu.reset();
+    display.reset();
 }
 
 void DMGCPU::run(int ms)
