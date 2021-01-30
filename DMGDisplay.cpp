@@ -88,6 +88,8 @@ void DMGDisplay::update(int cycles)
             }
             statMode = 0;
         }
+
+        return;
     }
 
     if(remainingScanlineCycles > 0)
