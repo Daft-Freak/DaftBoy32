@@ -293,27 +293,62 @@ void DMGDisplay::drawScanLine(int y)
     // active scanline
     // this is reduced to a priority flag on GBC
     if(lcdc & LCDC_BGDisp || isColour)
+        drawBackground(scanLine, bgRaw);
+
+    if(lcdc & LCDC_OBJDisp)
+        drawSprites(scanLine, bgRaw);
+}
+
+void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)
+{
+    auto lcdc = mem.readIOReg(IO_LCDC);
+
+    auto vram = mem.getVRAM();
+    auto tileDataPtr = (lcdc & LCDC_TileData8000) ? vram : vram + 0x800;
+    auto bgMapPtr = (lcdc & LCDC_BGTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
+    auto winMapPtr = (lcdc & LCDC_WindowTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
+
+    int windowX = screenWidth;
+    bool isWindow = false;
+
+    int x = 0;
+    auto out = scanLine;
+    auto rawOut = bgRaw;
+
+    auto copyPartialTile = [this, &x, lcdc, &out, &rawOut](int endX, uint16_t d, int tileAttrs)
     {
-        auto vram = mem.getVRAM();
-        auto tileDataPtr = (lcdc & LCDC_TileData8000) ? vram : vram + 0x800;
-        auto bgMapPtr = (lcdc & LCDC_BGTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
-        auto winMapPtr = (lcdc & LCDC_WindowTileMap9C00) ? vram + 0x1C00 : vram + 0x1800;
+        uint8_t tilePriority = (tileAttrs & Tile_BGPriority) ? 0x80 : 0;
 
-        int windowX = screenWidth;
-        bool isWindow = false;
+        // palette
+        const auto bgPal = bgPalette + (tileAttrs & 0x7) * 4;
 
-        int x = 0;
-        auto out = scanLine;
-        auto rawOut = bgRaw;
-
-        auto copyPartialTile = [this, &x, lcdc, &out, &rawOut](int endX, uint16_t d, int tileAttrs)
+        for(; x < endX; x++, d <<= 1)
         {
-            uint8_t tilePriority = (tileAttrs & Tile_BGPriority) ? 0x80 : 0;
+            int palIndex = getPalIndex(d);
+
+            if(lcdc & LCDC_BGDisp)
+                *(rawOut++) = palIndex | tilePriority;
+            *(out++) = bgPal[palIndex];
+        }
+    };
+
+    auto copyTiles = [this, &x, lcdc, tileDataPtr, &out, &rawOut, &copyPartialTile](uint8_t *mapPtr, int xLimit, int offsetX, uint8_t oy)
+    {
+        // full tiles
+        uint8_t ox = x + offsetX; // this is a uint8 so that it wraps
+
+        while(x + 8 < xLimit)
+        {
+            int mapAttrs;
+            auto d = getTileRow(lcdc, mapPtr, tileDataPtr, ox / 8, oy / 8, oy & 7, mapAttrs);
+
+            uint8_t tilePriority = (mapAttrs & Tile_BGPriority) ? 0x80 : 0;
 
             // palette
-            const auto bgPal = bgPalette + (tileAttrs & 0x7) * 4;
+            const auto bgPal = bgPalette + (mapAttrs & 0x7) * 4;
 
-            for(; x < endX; x++, d <<= 1)
+            // copy entire row
+            for(int i = 0; i < 8; i++, d <<= 1)
             {
                 int palIndex = getPalIndex(d);
 
@@ -321,167 +356,143 @@ void DMGDisplay::drawScanLine(int y)
                     *(rawOut++) = palIndex | tilePriority;
                 *(out++) = bgPal[palIndex];
             }
-        };
-
-        auto copyTiles = [this, &x, lcdc, tileDataPtr, &out, &rawOut, &copyPartialTile](uint8_t *mapPtr, int xLimit, int offsetX, uint8_t oy)
-        {
-            // full tiles
-            uint8_t ox = x + offsetX; // this is a uint8 so that it wraps
-
-            while(x + 8 < xLimit)
-            {
-                int mapAttrs;
-                auto d = getTileRow(lcdc, mapPtr, tileDataPtr, ox / 8, oy / 8, oy & 7, mapAttrs);
-
-                uint8_t tilePriority = (mapAttrs & Tile_BGPriority) ? 0x80 : 0;
-
-                // palette
-                const auto bgPal = bgPalette + (mapAttrs & 0x7) * 4;
-
-                // copy entire row
-                for(int i = 0; i < 8; i++, d <<= 1)
-                {
-                    int palIndex = getPalIndex(d);
-
-                    if(lcdc & LCDC_BGDisp)
-                        *(rawOut++) = palIndex | tilePriority;
-                    *(out++) = bgPal[palIndex];
-                }
-                x += 8;
-                ox += 8;
-            }
-
-            if(x < xLimit)
-            {
-                int mapAttrs;
-                auto d = getTileRow(lcdc, mapPtr, tileDataPtr, ox / 8, oy / 8, oy & 7, mapAttrs);
-
-                copyPartialTile(xLimit, d, mapAttrs);
-            }
-        };
-
-        if(lcdc & LCDC_WindowEnable)
-        {
-            int windowY = mem.readIOReg(IO_WY);
-            if(y >= windowY)
-            {
-                windowX = mem.readIOReg(IO_WX) - 7;
-
-                if(windowX < screenWidth)
-                    isWindow = true;
-            }
+            x += 8;
+            ox += 8;
         }
 
-        // background
-        if(windowX > 0)
+        if(x < xLimit)
         {
-            auto scrollX = mem.readIOReg(IO_SCX);
-            auto scrollY = mem.readIOReg(IO_SCY);
+            int mapAttrs;
+            auto d = getTileRow(lcdc, mapPtr, tileDataPtr, ox / 8, oy / 8, oy & 7, mapAttrs);
 
-            // partial tile at the start of the line
-            if(scrollX & 7)
-            {
-                uint8_t oy = y + scrollY;
-                int mapAttrs;
-                auto d = getTileRow(lcdc, bgMapPtr, tileDataPtr, scrollX / 8, oy / 8, oy & 7, mapAttrs);
-
-                // skip bits
-                d <<= scrollX & 7;
-
-                copyPartialTile(8 - (scrollX & 7), d, mapAttrs);
-            }
-
-            copyTiles(bgMapPtr, windowX < screenWidth ? windowX : screenWidth, scrollX, y + scrollY);
+            copyPartialTile(xLimit, d, mapAttrs);
         }
+    };
 
-        // window
-        if(isWindow)
+    if(lcdc & LCDC_WindowEnable)
+    {
+        int windowY = mem.readIOReg(IO_WY);
+        if(y >= windowY)
         {
-            copyTiles(winMapPtr, screenWidth, -windowX, windowY);
-            windowY++;
+            windowX = mem.readIOReg(IO_WX) - 7;
+
+            if(windowX < screenWidth)
+                isWindow = true;
         }
     }
 
-    if(lcdc & LCDC_OBJDisp)
+    // background
+    if(windowX > 0)
     {
-        const int spriteHeight = (lcdc & LCDC_Sprite8x16) ? 16 : 8;
+        auto scrollX = mem.readIOReg(IO_SCX);
+        auto scrollY = mem.readIOReg(IO_SCY);
 
-        // sprites
-        auto oam = mem.getOAM();
-        auto spriteDataPtr = mem.getVRAM();
-
-        // 10 sprites per line limit
-        uint8_t lineSprites[10];
-        int numLineSprites = 0;
-
-        for(int i = 0; i < numSprites && numLineSprites < 10; i++)
+        // partial tile at the start of the line
+        if(scrollX & 7)
         {
-            const int spriteY = oam[i * 4] - 16;
+            uint8_t oy = y + scrollY;
+            int mapAttrs;
+            auto d = getTileRow(lcdc, bgMapPtr, tileDataPtr, scrollX / 8, oy / 8, oy & 7, mapAttrs);
 
-            // not on this line
-            if(y < spriteY || y >= spriteY + spriteHeight)
-                continue;
+            // skip bits
+            d <<= scrollX & 7;
 
-            lineSprites[numLineSprites++] = i;
+            copyPartialTile(8 - (scrollX & 7), d, mapAttrs);
         }
 
-        // priority for lower address (GBC behaviour, TODO? sort by x for DMG)
-        for(int i = numLineSprites - 1; i >= 0; i--)
+        copyTiles(bgMapPtr, windowX < screenWidth ? windowX : screenWidth, scrollX, y + scrollY);
+    }
+
+    // window
+    if(isWindow)
+    {
+        copyTiles(winMapPtr, screenWidth, -windowX, windowY);
+        windowY++;
+    }
+}
+
+void DMGDisplay::drawSprites(uint16_t *scanLine, uint8_t *bgRaw)
+{
+    auto lcdc = mem.readIOReg(IO_LCDC);
+    const bool isColour = cpu.getColourMode();
+
+    const int spriteHeight = (lcdc & LCDC_Sprite8x16) ? 16 : 8;
+
+    // sprites
+    auto oam = mem.getOAM();
+    auto spriteDataPtr = mem.getVRAM();
+
+    // 10 sprites per line limit
+    uint8_t lineSprites[10];
+    int numLineSprites = 0;
+
+    for(int i = 0; i < numSprites && numLineSprites < 10; i++)
+    {
+        const int spriteY = oam[i * 4] - 16;
+
+        // not on this line
+        if(y < spriteY || y >= spriteY + spriteHeight)
+            continue;
+
+        lineSprites[numLineSprites++] = i;
+    }
+
+    // priority for lower address (GBC behaviour, TODO? sort by x for DMG)
+    for(int i = numLineSprites - 1; i >= 0; i--)
+    {
+        const int spriteId = lineSprites[i];
+        const int spriteY = oam[spriteId * 4] - 16;
+        const int spriteX = oam[spriteId * 4 + 1] - 8;
+        int tileId = oam[spriteId * 4 + 2];
+        const int attrs = oam[spriteId * 4 + 3];
+
+        // tall sprites
+        if(spriteHeight != 8)
+            tileId &= 0xFE;
+
+        const uint16_t *spritePal;
+        if(isColour)
+            spritePal = objPalette + (attrs & 0x7) * 4;
+        else // OBP0 or 1
+            spritePal = objPalette + ((attrs & Sprite_Palette) ? 4 : 0);
+
+        // TODO: priority
+
+        int ty = y - spriteY;
+
+        if(attrs & Sprite_YFlip)
+            ty = (spriteHeight - 1) - ty;
+
+        auto tileAddr = tileId * tileDataSize;
+
+        if(attrs & Sprite_Bank)
+            tileAddr += 0x2000;
+
+        // get the two tile data bytes for this line
+        uint16_t d = reinterpret_cast<uint16_t *>(spriteDataPtr + tileAddr)[ty];
+
+        if(attrs & Sprite_XFlip)
+            d = reverseBitsPerByte(d);
+
+        int x = std::max(0, -spriteX);
+        int end = std::min(8, screenWidth - spriteX);
+
+        d <<= x;
+
+        auto out = scanLine + (x + spriteX);
+        auto bgIn = bgRaw + x + spriteX;
+        for(; x < end; x++, out++, bgIn++, d <<= 1)
         {
-            const int spriteId = lineSprites[i];
-            const int spriteY = oam[spriteId * 4] - 16;
-            const int spriteX = oam[spriteId * 4 + 1] - 8;
-            int tileId = oam[spriteId * 4 + 2];
-            const int attrs = oam[spriteId * 4 + 3];
+            // background has priority
+            if(((attrs & Sprite_BGPriority) || (*bgIn & 0x80)/*tile has priority flag*/) && (*bgIn & 0x7F))
+                continue;
 
-            // tall sprites
-            if(spriteHeight != 8)
-                tileId &= 0xFE;
+            int palIndex = ((d & 0x80) >> 7) | ((d & 0x8000) >> 14);
 
-            const uint16_t *spritePal;
-            if(isColour)
-                spritePal = objPalette + (attrs & 0x7) * 4;
-            else // OBP0 or 1
-                spritePal = objPalette + ((attrs & Sprite_Palette) ? 4 : 0);
+            if(!palIndex)
+                continue;
 
-            // TODO: priority
-
-            int ty = y - spriteY;
-
-            if(attrs & Sprite_YFlip)
-                ty = (spriteHeight - 1) - ty;
-
-            auto tileAddr = tileId * tileDataSize;
-
-            if(attrs & Sprite_Bank)
-                tileAddr += 0x2000;
-
-            // get the two tile data bytes for this line
-            uint16_t d = reinterpret_cast<uint16_t *>(spriteDataPtr + tileAddr)[ty];
-
-            if(attrs & Sprite_XFlip)
-                d = reverseBitsPerByte(d);
-
-            int x = std::max(0, -spriteX);
-            int end = std::min(8, screenWidth - spriteX);
-
-            d <<= x;
-
-            auto out = scanLine + (x + spriteX);
-            auto bgIn = bgRaw + x + spriteX;
-            for(; x < end; x++, out++, bgIn++, d <<= 1)
-            {
-                // background has priority
-                if(((attrs & Sprite_BGPriority) || (*bgIn & 0x80)/*tile has priority flag*/) && (*bgIn & 0x7F))
-                    continue;
-
-                int palIndex = ((d & 0x80) >> 7) | ((d & 0x8000) >> 14);
-
-                if(!palIndex)
-                    continue;
-
-                *out = spritePal[palIndex];
-            }
+            *out = spritePal[palIndex];
         }
     }
 }

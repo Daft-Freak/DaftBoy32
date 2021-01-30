@@ -20,6 +20,8 @@ public:
 
 private:
     void drawScanLine(int y);
+    void drawBackground(uint16_t *scanLine, uint8_t *bgRaw);
+    void drawSprites(uint16_t *scanLine, uint8_t *bgRaw);
 
     void updateCompare(bool newVal);
 
