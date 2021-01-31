@@ -2120,6 +2120,13 @@ void DMGCPU::updateTimer(int cycles)
         return;
     }
 
+    // skip ahead if we're not going to cause the bit to change
+    if((divCounter & (timerBit - 1)) + cycles < timerBit)
+    {
+        divCounter += cycles;
+        return;
+    }
+
     // increment the internal timer
     for(;cycles > 0; cycles -= 4)
     {
