@@ -362,7 +362,7 @@ void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)
 
         auto rowMapPtr = mapPtr + (oy / 8) * screenSizeTiles;
 
-        while(x + 8 < xLimit)
+        while(x + 7 < xLimit)
         {
             int mapAttrs;
             auto d = getTileRow(lcdc, rowMapPtr + ox / 8, tileDataPtr, oy & 7, mapAttrs);
