@@ -730,20 +730,26 @@ void DMGAPU::sampleOutput()
 
     int32_t sample = 0;
 
-    if(outputSelect & 1)
+    if(outputSelect & 0x01)
+        sample += ch1Val;
+    if(outputSelect & 0x10)
         sample += ch1Val;
 
-    if(outputSelect & 2)
+    if(outputSelect & 0x02)
+        sample += ch2Val;
+    if(outputSelect & 0x20)
         sample += ch2Val;
 
-    if(outputSelect & 4)
+    if(outputSelect & 0x04)
+        sample += ch3Val;
+    if(outputSelect & 0x40)
         sample += ch3Val;
 
-    if(outputSelect & 8)
+    if(outputSelect & 0x08)
+        sample += ch4Val;
+    if(outputSelect & 0x80)
         sample += ch4Val;
 
-    // TODO SO2?
-
-    sampleData[writeOff] = sample * 0x222;
+    sampleData[writeOff] = sample * 0x111;
     writeOff = (writeOff + 1) % bufferSize;
 }
