@@ -1,7 +1,7 @@
 title: Game Boy Emu
 author: Daft_Freak
 description: Yet another slightly unfinished Game Boy (Color) Emulator!
-version: v1.3.0
+version: v1.4.0
 icon:
   file: icon.png
 splash:
