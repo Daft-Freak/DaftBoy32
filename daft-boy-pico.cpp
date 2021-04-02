@@ -6,6 +6,7 @@
 #include "pico/stdlib.h"
 
 #include "st7789.hpp"
+#define DISPLAY_ST7789
 
 #include "DMGAPU.h"
 #include "DMGDisplay.h"
@@ -13,9 +14,11 @@
 #include "DMGMemory.h"
 #include "DMGRegs.h"
 
+#ifdef DISPLAY_ST7789
 pimoroni::ST7789 screen(240, 240, nullptr);
 uint32_t dma_channel;
 using ST7789Reg = pimoroni::ST7789::reg;
+#endif
 
 enum class Button
 {
@@ -44,6 +47,7 @@ void updateCartRAM(uint8_t *cartRam, unsigned int size)
 
 void onVBlank()
 {
+#ifdef DISPLAY_ST7789
     //
     using reg = pimoroni::ST7789::reg;
     int cs = 17;
@@ -62,8 +66,10 @@ void onVBlank()
     gpio_put(dc, 1); // data mode
 
     dma_channel_set_read_addr(dma_channel, cpu.getDisplay().getData(), true);
+#endif
 }
 
+#ifdef DISPLAY_ST7789
 void clearScreen()
 {
     int cs = 17;
@@ -84,6 +90,7 @@ void clearScreen()
 
     gpio_put(cs, 1);
 }
+#endif
 
 void initButton(Button b)
 {
@@ -111,6 +118,7 @@ int main()
     initButton(Button::X);
     initButton(Button::Y);
 
+#ifdef DISPLAY_ST7789
     screen.init();
     clearScreen();
 
@@ -129,6 +137,8 @@ int main()
     channel_config_set_dreq(&config, spi_get_index(spi0) ? DREQ_SPI1_TX : DREQ_SPI0_TX);
     dma_channel_configure(dma_channel, &config, &spi_get_hw(spi0)->dr, cpu.getDisplay().getData(), 160 * 144, false);
     // end theft
+
+#endif
 
     //setup
     cpu.getMem().setROMBankCallback(getROMBank);
