@@ -3,10 +3,16 @@
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 
+#include "pico/multicore.h"
 #include "pico/stdlib.h"
 
+#ifdef PICO_VGA_BOARD
+#include "pico/scanvideo.h"
+#include "pico/scanvideo/composable_scanline.h"
+#else
 #include "st7789.hpp"
 #define DISPLAY_ST7789
+#endif
 
 #include "DMGAPU.h"
 #include "DMGDisplay.h"
@@ -67,6 +73,10 @@ void onVBlank()
 
     dma_channel_set_read_addr(dma_channel, cpu.getDisplay().getData(), true);
 #endif
+
+#ifdef PICO_VGA_BOARD
+    while(scanvideo_scanline_number(scanvideo_get_next_scanline_id()) < 80) {}
+#endif
 }
 
 #ifdef DISPLAY_ST7789
@@ -92,17 +102,94 @@ void clearScreen()
 }
 #endif
 
+#ifdef PICO_VGA_BOARD
+
+static void fillScanlineBuffer(struct scanvideo_scanline_buffer *buffer)
+{
+    static uint32_t postamble[] = {
+        0x0000u | (COMPOSABLE_EOL_ALIGN << 16)
+    };
+
+    int w = 160;
+    auto scanline = scanvideo_scanline_number(buffer->scanline_id);
+
+    // top / bottom lines
+    if(scanline < 8 || scanline >= 152)
+    {
+        buffer->data[0] = 2;
+        buffer->data[1] = host_safe_hw_ptr(buffer->data + 8);
+
+        buffer->data[2] = 0;
+        buffer->data[3] = 0;
+
+        buffer->data[8] = COMPOSABLE_COLOR_RUN;
+        buffer->data[9] = (COMPOSABLE_EOL_ALIGN << 16) | (213 - 3);
+
+        buffer->data_used = 4;
+        return;
+    }
+
+    buffer->data[0] = 3;
+    buffer->data[1] = host_safe_hw_ptr(buffer->data + 8);
+
+    buffer->data[2] = w / 2;
+    const uint16_t *pixels = cpu.getDisplay().getData() + (scanline - 8) * w;
+    buffer->data[3] = host_safe_hw_ptr(pixels);
+
+    buffer->data[4] = count_of(postamble);
+    buffer->data[5] = host_safe_hw_ptr(postamble);
+
+    buffer->data[6] = 0;
+    buffer->data[7] = 0;
+    buffer->data_used = 8;
+
+    // fill first 27 pixels
+    buffer->data[8] = COMPOSABLE_COLOR_RUN;
+    buffer->data[9] = (COMPOSABLE_RAW_RUN << 16) | (27 - 3 - 1);
+    buffer->data[10] = ((w + 2 - 3) << 16u);
+
+    // hmm, do I need to fill the last few pixels too?
+}
+#endif
+
+void core1Main()
+{
+#ifdef PICO_VGA_BOARD
+    scanvideo_setup(&vga_mode_213x160_60);
+    scanvideo_timing_enable(true);
+#endif
+
+    while(true)
+    {
+#ifdef PICO_VGA_BOARD
+        struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation(true);
+        while (buffer)
+        {
+            fillScanlineBuffer(buffer);
+            scanvideo_end_scanline_generation(buffer);
+            buffer = scanvideo_begin_scanline_generation(false);
+        }
+#endif
+    }
+}
+
 void initButton(Button b)
 {
+#ifndef PICO_VGA_BOARD
     int gpio = static_cast<int>(b);
     gpio_set_function(gpio, GPIO_FUNC_SIO);
     gpio_set_dir(gpio, GPIO_IN);
     gpio_pull_up(gpio);
+#endif
 }
 
 bool getButton(Button b)
 {
+#ifdef PICO_VGA_BOARD
+    return false;
+#else
     return !gpio_get(static_cast<int>(b));
+#endif
 }
 
 int main()
@@ -140,6 +227,11 @@ int main()
 
 #endif
 
+#ifdef PICO_VGA_BOARD
+    // currently only used for vga
+    multicore_launch_core1(core1Main);
+#endif
+
     //setup
     cpu.getMem().setROMBankCallback(getROMBank);
     cpu.getMem().setCartRamUpdateCallback(updateCartRAM);
@@ -157,7 +249,9 @@ int main()
     {
         auto now = get_absolute_time();
 
+#ifndef PICO_VGA_BOARD
         if(absolute_time_diff_us(lastUpdate, now) >= 10000)
+#endif
         {
             uint8_t inputs = (getButton(Button::RIGHT) ? (1 << 0) : 0) // right
                            | (getButton(Button::LEFT) ? (1 << 1) : 0) // left
