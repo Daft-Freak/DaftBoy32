@@ -39,9 +39,12 @@ if(PICO_SDK_PATH)
     pico_enable_stdio_usb(daft-boy-pico 0)
 
     # Add the standard library to the build
-    target_link_libraries(daft-boy-pico pico_stdlib pico_multicore st7789)
+    target_link_libraries(daft-boy-pico pico_stdlib pico_multicore pico_audio_i2s st7789)
 
-    target_compile_definitions(daft-boy-pico PRIVATE -DNO_GBC)
+    target_compile_definitions(daft-boy-pico PRIVATE
+        NO_GBC
+        PICO_AUDIO_I2S_MONO_INPUT=1
+    )
 
     #shouldn't really need this
     target_include_directories(daft-boy-pico PRIVATE ../pimoroni-pico/drivers/st7789/)

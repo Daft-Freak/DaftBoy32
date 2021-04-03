@@ -3,6 +3,7 @@
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 
+#include "pico/audio_i2s.h"
 #include "pico/multicore.h"
 #include "pico/stdlib.h"
 
@@ -152,18 +153,73 @@ static void fillScanlineBuffer(struct scanvideo_scanline_buffer *buffer)
 }
 #endif
 
+static audio_buffer_pool *audio_pool = nullptr;
+
+void initAudio() {
+    static audio_format_t audio_format = {
+      .sample_freq = 32768,
+      .format = AUDIO_BUFFER_FORMAT_PCM_S16,
+      .channel_count = 1
+    };
+
+    static struct audio_buffer_format producer_format = {
+      .format = &audio_format,
+      .sample_stride = 2
+    };
+
+    struct audio_buffer_pool *producer_pool = audio_new_producer_pool(&producer_format, 4, 256);
+    const struct audio_format *output_format;
+
+    struct audio_i2s_config config = {
+      .data_pin = PICO_AUDIO_I2S_DATA_PIN,
+      .clock_pin_base = PICO_AUDIO_I2S_CLOCK_PIN_BASE,
+      .dma_channel = 1,
+      .pio_sm = 1,
+    };
+
+    output_format = audio_i2s_setup(&audio_format, &config);
+    if (!output_format) {
+      panic("PicoAudio: Unable to open audio device.\n");
+    }
+
+    bool ok = audio_i2s_connect(producer_pool);
+    assert(ok);
+    audio_i2s_set_enabled(true);
+    audio_pool = producer_pool;
+}
+
 void core1Main()
 {
 #ifdef PICO_VGA_BOARD
     scanvideo_setup(&vga_mode_213x160_60);
     scanvideo_timing_enable(true);
+
+    initAudio();
 #endif
+
+    auto &apu = cpu.getAPU();
 
     while(true)
     {
 #ifdef PICO_VGA_BOARD
+        // audio
+        if(apu.getNumSamples() >= 256)
+        {
+            struct audio_buffer *buffer = take_audio_buffer(audio_pool, false);
+            if(buffer)
+            {
+                auto samples = (int16_t *) buffer->buffer->bytes;
+                for(uint32_t i = 0; i < buffer->max_sample_count; i++)
+                    *samples++ = apu.getSample();
+
+                buffer->sample_count = buffer->max_sample_count;
+                give_audio_buffer(audio_pool, buffer);
+            }
+        }
+
+        // video
         struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation(true);
-        while (buffer)
+        while(buffer)
         {
             fillScanlineBuffer(buffer);
             scanvideo_end_scanline_generation(buffer);
@@ -264,10 +320,12 @@ int main()
 
             cpu.setInputs(inputs);
 
+#ifndef PICO_VGA_BOARD
             // no audio
             auto &apu = cpu.getAPU();
             while(apu.getNumSamples())
                 apu.getSample();
+#endif
 
             auto start = get_absolute_time();
             cpu.run(10);
