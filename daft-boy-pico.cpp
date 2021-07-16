@@ -3,6 +3,12 @@
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 
+#ifndef PICO_AUDIO_I2S_DATA_PIN
+// fallback to my wierd setup
+#define PICO_AUDIO_I2S_DATA_PIN 6
+#define PICO_AUDIO_I2S_CLOCK_PIN_BASE 20
+#endif
+
 #include "pico/audio_i2s.h"
 #include "pico/multicore.h"
 #include "pico/stdlib.h"
@@ -193,19 +199,18 @@ void core1Main()
 #ifdef PICO_VGA_BOARD
     scanvideo_setup(&vga_mode_213x160_60);
     scanvideo_timing_enable(true);
+#endif
 
     initAudio();
-#endif
 
     auto &apu = cpu.getAPU();
 
     while(true)
     {
-#ifdef PICO_VGA_BOARD
         // audio
         if(apu.getNumSamples() >= 256)
         {
-            struct audio_buffer *buffer = take_audio_buffer(audio_pool, false);
+            struct audio_buffer *buffer = audio_pool ? take_audio_buffer(audio_pool, false) : nullptr;
             if(buffer)
             {
                 auto samples = (int16_t *) buffer->buffer->bytes;
@@ -216,7 +221,7 @@ void core1Main()
                 give_audio_buffer(audio_pool, buffer);
             }
         }
-
+#ifdef PICO_VGA_BOARD
         // video
         struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation(true);
         while(buffer)
@@ -283,10 +288,8 @@ int main()
 
 #endif
 
-#ifdef PICO_VGA_BOARD
-    // currently only used for vga
+    // vga/audio
     multicore_launch_core1(core1Main);
-#endif
 
     //setup
     cpu.getMem().setROMBankCallback(getROMBank);
@@ -320,7 +323,7 @@ int main()
 
             cpu.setInputs(inputs);
 
-#ifndef PICO_VGA_BOARD
+#if 0
             // no audio
             auto &apu = cpu.getAPU();
             while(apu.getNumSamples())
