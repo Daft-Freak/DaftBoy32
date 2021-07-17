@@ -28,20 +28,37 @@
 #include "DMGRegs.h"
 
 #ifdef DISPLAY_ST7789
+#ifdef PIMORONI_PICOSYSTEM
+pimoroni::ST7789 screen(240, 240, nullptr, spi0, 5, 9, 6, 7, 12, 8, 4);
+#else
 pimoroni::ST7789 screen(240, 240, nullptr);
+#endif
 #endif
 
 enum class Button
 {
+#ifdef PIMORONI_PICOSYSTEM
+    UP = 23,
+    DOWN = 20,
+    LEFT = 22,
+    RIGHT = 21,
+
+    A = 18,
+    B = 19,
+    X = 17,
+    Y = 16,
+#else
     UP = 2,
     DOWN = 3,
     LEFT = 4,
     RIGHT = 5,
 
-    A = 12,
-    B = 13,
-    X = 14,
-    Y = 15,
+    // ab/xy are swapped
+    A = 14,
+    B = 15,
+    X = 12,
+    Y = 13
+# endif
 };
 
 DMGCPU cpu;
@@ -131,6 +148,7 @@ void initAudio() {
       .sample_stride = 2
     };
 
+#ifndef PIMORONI_PICOSYSTEM
     struct audio_buffer_pool *producer_pool = audio_new_producer_pool(&producer_format, 4, 256);
     const struct audio_format *output_format;
 
@@ -150,6 +168,7 @@ void initAudio() {
     assert(ok);
     audio_i2s_set_enabled(true);
     audio_pool = producer_pool;
+#endif
 }
 
 void core1Main()
@@ -270,14 +289,14 @@ int main()
                            | (getButton(Button::LEFT) ? (1 << 1) : 0) // left
                            | (getButton(Button::UP) ? (1 << 2) : 0)
                            | (getButton(Button::DOWN) ? (1 << 3) : 0)
-                           | (getButton(Button::X) ? (1 << 4) : 0) // A
-                           | (getButton(Button::Y) ? (1 << 5) : 0) // B
-                           | (getButton(Button::A) ? (1 << 6) : 0) // select
-                           | (getButton(Button::B) ? (1 << 7) : 0); // start
+                           | (getButton(Button::A) ? (1 << 4) : 0) // A
+                           | (getButton(Button::B) ? (1 << 5) : 0) // B
+                           | (getButton(Button::X) ? (1 << 6) : 0) // select
+                           | (getButton(Button::Y) ? (1 << 7) : 0); // start
 
             cpu.setInputs(inputs);
 
-#if 0
+#ifdef PIMORONI_PICOSYSTEM // no sound
             // no audio
             auto &apu = cpu.getAPU();
             while(apu.getNumSamples())
