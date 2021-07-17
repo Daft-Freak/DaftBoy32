@@ -213,6 +213,15 @@ bool getButton(Button b)
 
 int main()
 {
+    set_sys_clock_khz(200000, false);
+
+    // need this to restore SPI speed...
+    clock_configure(clk_peri,
+                    0,
+                    CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLK_SYS,
+                    200 * MHZ,
+                    200 * MHZ);
+
     stdio_init_all();
 
     initButton(Button::UP);
