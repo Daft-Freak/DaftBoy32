@@ -11,7 +11,6 @@ if(PICO_SDK_PATH)
     # Pull in Pico SDK (must be before project)
     include(pico_sdk_import.cmake)
     include(pico_extras_import.cmake)
-    include(../pimoroni-pico/drivers/st7789/st7789.cmake)
 
     project(daft-boy-pico C CXX)
 
@@ -22,6 +21,8 @@ if(PICO_SDK_PATH)
 
     set(SOURCES
         daft-boy-pico.cpp
+
+        pico/st7789.cpp
 
         DMGAPU.cpp
         DMGCPU.cpp
@@ -39,15 +40,12 @@ if(PICO_SDK_PATH)
     pico_enable_stdio_usb(daft-boy-pico 0)
 
     # Add the standard library to the build
-    target_link_libraries(daft-boy-pico pico_stdlib pico_multicore pico_audio_i2s st7789)
+    target_link_libraries(daft-boy-pico pico_stdlib pico_multicore pico_audio_i2s hardware_pwm hardware_spi)
 
     target_compile_definitions(daft-boy-pico PRIVATE
         NO_GBC
         PICO_AUDIO_I2S_MONO_INPUT=1
     )
-
-    #shouldn't really need this
-    target_include_directories(daft-boy-pico PRIVATE ../pimoroni-pico/drivers/st7789/)
 
     if(${PICO_BOARD} STREQUAL "vgaboard")
         target_link_libraries(daft-boy-pico pico_scanvideo_dpi)

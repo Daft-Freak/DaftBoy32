@@ -17,7 +17,7 @@
 #include "pico/scanvideo.h"
 #include "pico/scanvideo/composable_scanline.h"
 #else
-#include "st7789.hpp"
+#include "pico/st7789.hpp"
 #define DISPLAY_ST7789
 #endif
 
@@ -29,8 +29,6 @@
 
 #ifdef DISPLAY_ST7789
 pimoroni::ST7789 screen(240, 240, nullptr);
-uint32_t dma_channel;
-using ST7789Reg = pimoroni::ST7789::reg;
 #endif
 
 enum class Button
@@ -61,53 +59,13 @@ void updateCartRAM(uint8_t *cartRam, unsigned int size)
 void onVBlank()
 {
 #ifdef DISPLAY_ST7789
-    //
-    using reg = pimoroni::ST7789::reg;
-    int cs = 17;
-    int dc = 16;
-
-    // more theft
-    dma_channel_wait_for_finish_blocking(dma_channel);
-
-    uint8_t r = reg::RAMWR;
-
-    gpio_put(cs, 0);
-
-    gpio_put(dc, 0); // command mode
-    spi_write_blocking(spi0, &r, 1);
-
-    gpio_put(dc, 1); // data mode
-
-    dma_channel_set_read_addr(dma_channel, cpu.getDisplay().getData(), true);
+    screen.update();
 #endif
 
 #ifdef PICO_VGA_BOARD
     while(scanvideo_scanline_number(scanvideo_get_next_scanline_id()) < 80) {}
 #endif
 }
-
-#ifdef DISPLAY_ST7789
-void clearScreen()
-{
-    int cs = 17;
-    int dc = 16;
-
-    gpio_put(cs, 0);
-
-    gpio_put(dc, 0); // command mode
-    uint8_t r = ST7789Reg::RAMWR;
-    spi_write_blocking(spi0, &r, 1);
-
-    gpio_put(dc, 1); // data mode
-    for(int i = 0; i < 240 * 240; i++)
-    {
-        uint16_t v = 0;
-        spi_write_blocking(spi0, (const uint8_t *)&v, 2);
-    }
-
-    gpio_put(cs, 1);
-}
-#endif
 
 #ifdef PICO_VGA_BOARD
 
@@ -268,24 +226,11 @@ int main()
 
 #ifdef DISPLAY_ST7789
     screen.init();
-    clearScreen();
+    screen.clear();
 
     // window
-    screen.command(ST7789Reg::CASET, 4, "\x00\x28\x00\xc7"); // 40 - 199
-    screen.command(ST7789Reg::RASET, 4, "\x00\x30\x00\xbf"); // 48 - 191
-
-    // stolen from comments in st7789.cpp
-    // setup spi for 16-bit transfers
-    spi_set_format(spi0, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-
-    // initialise dma channel for transmitting pixel data to screen
-    dma_channel = dma_claim_unused_channel(true);
-    dma_channel_config config = dma_channel_get_default_config(dma_channel);
-    channel_config_set_transfer_data_size(&config, DMA_SIZE_16);
-    channel_config_set_dreq(&config, spi_get_index(spi0) ? DREQ_SPI1_TX : DREQ_SPI0_TX);
-    dma_channel_configure(dma_channel, &config, &spi_get_hw(spi0)->dr, cpu.getDisplay().getData(), 160 * 144, false);
-    // end theft
-
+    screen.set_window(40, 48, 160, 144);
+    screen.frame_buffer = const_cast<uint16_t *>(cpu.getDisplay().getData());
 #endif
 
     // vga/audio
