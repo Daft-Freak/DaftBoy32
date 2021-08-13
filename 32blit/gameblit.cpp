@@ -121,6 +121,7 @@ void packedToRGB(const uint8_t *packed_data, uint8_t *data)
     auto end = packed_data + image.byte_count;
 
     uint8_t *pdest = (uint8_t *)data;
+    auto dest_end = pdest + blit::screen.row_stride * blit::screen.bounds.h;
     int parse_state = 0;
     uint8_t count = 0, col = 0, bit = 0;
 
@@ -163,6 +164,10 @@ void packedToRGB(const uint8_t *packed_data, uint8_t *data)
                         bit = 0; col = 0;
                         parse_state = 0;
                         count = 0;
+
+                        // done, skip any remaining padding
+                        if(pdest == dest_end)
+                            parse_state = 3;
                     }
                     break;
             }
