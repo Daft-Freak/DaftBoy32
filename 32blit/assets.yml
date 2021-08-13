@@ -6,3 +6,4 @@ assets.cpp:
     space_width: 4
 
   assets/bg.png: asset_background
+  assets/bg_square.png: asset_background_square
