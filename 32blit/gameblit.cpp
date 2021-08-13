@@ -170,9 +170,15 @@ void packedToRGB(const uint8_t *packed_data, uint8_t *data)
                     {
                         for (int c = 0; c <= count; c++)
                         {
+#ifdef PICO_BUILD
+                            uint16_t packed = (palette[col].r >> 3) | ((palette[col].g >> 2) << 5) | ((palette[col].b >> 3) << 11);
+                            *pdest++ = packed & 0xFF;
+                            *pdest++ = packed >> 8;
+#else
                             *pdest++ = palette[col].r;
                             *pdest++ = palette[col].g;
                             *pdest++ = palette[col].b;
+#endif
                         }
 
                         bit = 0; col = 0;
