@@ -158,9 +158,15 @@ void packedToRGB(const uint8_t *packed_data, uint8_t *data)
                     {
                         for (int c = 0; c <= count; c++)
                         {
+#ifdef PICO_BUILD
+                            uint16_t packed = (palette[col].b >> 3) | ((palette[col].g >> 2) << 5) | ((palette[col].r >> 3) << 11);
+                            *pdest++ = packed & 0xFF;
+                            *pdest++ = packed >> 8;
+#else
                             *pdest++ = palette[col].r;
                             *pdest++ = palette[col].g;
                             *pdest++ = palette[col].b;
+#endif
                         }
 
                         bit = 0; col = 0;
@@ -342,7 +348,13 @@ void render(uint32_t time_ms)
         return;
     }
 
+#ifdef PICO_BUILD
+    bool updateRunning = true; // don't need to check this, there's no system menu
+    auto bg = asset_background_square;
+#else
     bool updateRunning = time_ms - lastUpdate < 20;
+    auto bg = asset_background;
+#endif
 
     if(redwawBG || !updateRunning)
     {
@@ -352,7 +364,7 @@ void render(uint32_t time_ms)
             blit::screen.clear();
         }
         else
-            packedToRGB(asset_background, blit::screen.data); // unpack directly to the screen
+            packedToRGB(bg, blit::screen.data); // unpack directly to the screen
 
         redwawBG = !updateRunning;
     }
