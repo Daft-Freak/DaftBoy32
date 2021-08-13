@@ -74,11 +74,16 @@ DMGCPU cpu;
 static uint16_t screenData[160 * 144];
 
 // ROM cache
+#ifdef PICO_BUILD
+static const int romBankCacheSize = 0; // could fit 2 with GBC removed
+#else
 static const int romBankCacheSize = 11;
 static const int extraROMBankCacheSize = 4;
 
-static uint8_t romBankCache[0x4000 * romBankCacheSize];
 static uint8_t extraROMBankCache[0x4000 * extraROMBankCacheSize]{1}; // sneakily steal some of DTCMRAM
+#endif
+
+static uint8_t romBankCache[0x4000 * romBankCacheSize];
 
 bool loaded = false;
 std::string loadedFilename;
@@ -276,7 +281,11 @@ void init()
     blit::set_screen_mode(blit::ScreenMode::hires);
 
     cpu.getMem().addROMCache(romBankCache, romBankCacheSize * 0x4000);
+
+#ifndef PICO_BUILD
+    // 32blit extra cache
     cpu.getMem().addROMCache(extraROMBankCache, extraROMBankCacheSize * 0x4000);
+#endif
 
     cpu.getDisplay().setFramebuffer(screenData);
 
