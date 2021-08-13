@@ -5,8 +5,13 @@
 #include "DMGCPU.h"
 #include "DMGRegs.h"
 
+#ifdef PICO_BUILD
+static const int extraROMBankCacheSize = 0;
+static uint8_t extraROMBankCache[0];
+#else
 static const int extraROMBankCacheSize = 4;
 static uint8_t extraROMBankCache[0x4000 * extraROMBankCacheSize]{1}; // sneakily steal some of DTCMRAM
+#endif
 
 void DMGMemory::setROMBankCallback(ROMBankCallback callback)
 {

@@ -92,7 +92,11 @@ private:
     unsigned int cartROMBanks = 0; // read from the header
 
     // cache as much as possible in RAM
+#ifdef PICO_BUILD
+    static const int romBankCacheSize = 2;
+#else
     static const int romBankCacheSize = 11;
+#endif
     uint8_t cartROMBankCache[0x4000 * romBankCacheSize];
     std::list<ROMCacheEntry> cachedROMBanks;
 
