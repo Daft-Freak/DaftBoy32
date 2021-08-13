@@ -1,6 +1,10 @@
 #include <algorithm>
 #include <cstring>
 
+#ifdef PICO_BUILD
+#include "engine/engine.hpp"
+#endif
+
 #include "DMGDisplay.h"
 
 #include "DMGCPU.h"
@@ -146,7 +150,11 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
 
 bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 {
-    const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0};
+#ifdef PICO_BUILD
+    const uint16_t colMap[]{0xFFFF, 0xAD55, 0x528A, 0}; // 565
+#else
+    const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0}; // 555
+#endif
 
     switch(addr & 0xFF)
     {
@@ -295,7 +303,12 @@ void DMGDisplay::drawScanLine(int y)
     // contains palette index + a tile priority flag
     uint8_t bgRaw[screenWidth]{0};
 
+#ifdef PICO_BUILD
+    // we cheat here as 32blit-pico uses an RGB565 surface for the screen
+    uint16_t scanLine[screenWidth];
+#else
     auto scanLine = screenData + y * screenWidth;
+#endif
 
     auto lcdc = mem.readIOReg(IO_LCDC);
 
@@ -308,6 +321,10 @@ void DMGDisplay::drawScanLine(int y)
 
     if(lcdc & LCDC_OBJDisp)
         drawSprites(scanLine, bgRaw);
+
+#ifdef PICO_BUILD
+    memcpy(blit::screen.ptr(40, y + 48), scanLine, screenWidth * 2);
+#endif
 }
 
 void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)

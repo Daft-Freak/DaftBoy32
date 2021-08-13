@@ -352,6 +352,7 @@ void render(uint32_t time_ms)
         redwawBG = !updateRunning;
     }
 
+#ifndef PICO_BUILD
     auto gbScreen = cpu.getDisplay().getData();
 
     auto expandCol = [](uint16_t rgb555, uint8_t &r, uint8_t &g, uint8_t &b)
@@ -426,6 +427,7 @@ void render(uint32_t time_ms)
             }
         }
     }
+#endif
 
     if(menuOpen)
     {

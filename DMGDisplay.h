@@ -13,7 +13,9 @@ public:
 
     void update(int cycles);
 
+#ifndef PICO_BUILD
     const uint16_t *getData() {return screenData;}
+#endif
 
     uint8_t readReg(uint16_t addr, uint8_t val);
     bool writeReg(uint16_t addr, uint8_t data);
@@ -38,7 +40,9 @@ private:
     static const int screenWidth = 160, screenHeight = 144;
 
     int remainingScanlineCycles = scanlineCycles;
+#ifndef PICO_BUILD
     uint16_t screenData[screenWidth * screenHeight]; // rgb555
+#endif
 
     // GBC
     uint16_t bgPalette[8 * 4], objPalette[8 * 4];
