@@ -289,6 +289,7 @@ void init()
 
     cpu.getDisplay().setFramebuffer(screenData);
 
+#ifndef NO_AUDIO
     blit::channels[0].waveforms = blit::Waveform::WAVE;
     blit::channels[0].wave_buffer_callback = &updateAudio;
 
@@ -297,6 +298,7 @@ void init()
         blit::channels[0].adsr = 0xFFFF00;
         blit::channels[0].trigger_sustain();
     }
+#endif
 
 #ifdef NO_GBC
     fileBrowser.set_extensions({".gb"});
@@ -511,6 +513,11 @@ void update(uint32_t time_ms)
 
     loadedBanks = 0;
     bankLoadTime = 0;
+
+#ifdef NO_AUDIO
+    while(cpu.getAPU().getNumSamples())
+        cpu.getAPU().getSample();
+#endif
 
     if(cpu.getAPU().getNumSamples() < 1024 - 225) // single update generates ~220 samples
     {
