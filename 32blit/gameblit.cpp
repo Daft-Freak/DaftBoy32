@@ -45,29 +45,36 @@ extern "C" void *_sbrk(ptrdiff_t incr)
 
 void addAppendedFiles()
 {
-#ifdef TARGET_32BLIT_HW
+#if defined(TARGET_32BLIT_HW)
     extern char _flash_end;
+    auto appFilesPtr = &_flash_end;
+#elif defined(PICO_BUILD)
+    extern char __flash_binary_end;
+    auto appFilesPtr = &__flash_binary_end;
+    appFilesPtr = (char *)(((uintptr_t)appFilesPtr) + 0xFF & ~0xFF); // round up to 256 byte boundary
+#else
+    char *appFilesPtr = nullptr;
+    return;
+#endif
 
-    if(memcmp(&_flash_end, "APPFILES", 8) != 0)
+    if(memcmp(appFilesPtr, "APPFILES", 8) != 0)
         return;
 
-    uint32_t numFiles = *reinterpret_cast<uint32_t *>(&_flash_end + 8);
+    uint32_t numFiles = *reinterpret_cast<uint32_t *>(appFilesPtr + 8);
 
     const int headerSize = 12, fileHeaderSize = 8;
 
-    auto dataPtr = &_flash_end + headerSize + fileHeaderSize * numFiles;
+    auto dataPtr = appFilesPtr + headerSize + fileHeaderSize * numFiles;
 
     for(auto i = 0u; i < numFiles; i++)
     {
-        auto filenameLength = *reinterpret_cast<uint16_t *>(&_flash_end + headerSize + i * fileHeaderSize);
-        auto fileLength = *reinterpret_cast<uint32_t *>(&_flash_end + headerSize + i * fileHeaderSize + 4);
+        auto filenameLength = *reinterpret_cast<uint16_t *>(appFilesPtr + headerSize + i * fileHeaderSize);
+        auto fileLength = *reinterpret_cast<uint32_t *>(appFilesPtr + headerSize + i * fileHeaderSize + 4);
 
         blit::File::add_buffer_file("/" + std::string(dataPtr, filenameLength), reinterpret_cast<uint8_t *>(dataPtr + filenameLength), fileLength);
 
         dataPtr += filenameLength + fileLength;
     }
-
-#endif
 }
 
 const blit::Font tallFont(tall_font);
