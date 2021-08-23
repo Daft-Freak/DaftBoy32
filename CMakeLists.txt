@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.9.0)
+
+include(${32BLIT_DIR}/32blit-pico/sdk_import.cmake OPTIONAL)
+
 project(gameblit)
 
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
@@ -23,7 +26,11 @@ blit_executable(gameblit
 blit_assets_yaml(gameblit assets.yml)
 blit_metadata(gameblit metadata.yml)
 
-set_target_properties(gameblit PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+if(32BLIT_PICO)
+    target_compile_definitions(gameblit PRIVATE -DNO_GBC -DNO_AUDIO)
+else()
+    set_target_properties(gameblit PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
 
 # setup release packages
 set(PROJECT_DISTRIBS LICENSE README.md)
