@@ -8,7 +8,7 @@ ControlIcons controlIcons;
 
 ControlIcons::ControlIcons()
 {
-    sprites = blit::SpriteSheet::load(asset_buttons);
+    sprites = nullptr; //blit::SpriteSheet::load(asset_buttons);
 }
 
 ControlIcons::~ControlIcons()
@@ -18,6 +18,9 @@ ControlIcons::~ControlIcons()
 
 void ControlIcons::render(Icon icon, blit::Point pos, blit::Pen colour, int size)
 {
+    if(!sprites)
+        return;
+
     int spriteIndex = static_cast<int>(icon);
 
     blit::Rect spriteRect;
