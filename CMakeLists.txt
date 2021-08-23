@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.13.0)
+
+include(${32BLIT_DIR}/32blit-pico/sdk_import.cmake OPTIONAL)
+
 project(gameblit)
 
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
