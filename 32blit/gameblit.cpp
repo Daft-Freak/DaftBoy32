@@ -513,7 +513,7 @@ void update(uint32_t time_ms)
         return;
     }
 
-#ifdef TARGET_32BLIT_HW
+#if defined(TARGET_32BLIT_HW) || defined(PICO_BUILD)
     if(blit::now() - time_ms >= 20)
         return;
 #endif
