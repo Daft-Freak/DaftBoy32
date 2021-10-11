@@ -69,7 +69,7 @@ void addAppendedFiles()
 }
 
 const blit::Font tallFont(tall_font);
-FileBrowser fileBrowser(tallFont);
+duh::FileBrowser fileBrowser(tallFont);
 
 DMGCPU cpu;
 

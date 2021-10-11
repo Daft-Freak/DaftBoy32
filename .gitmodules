@@ -1,0 +1,3 @@
+[submodule "32blit/DUH"]
+	path = 32blit/DUH
+	url = https://github.com/Daft-Freak/DUH

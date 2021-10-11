@@ -1,5 +1,4 @@
 assets.cpp:
-  assets/buttons.png: asset_buttons
   assets/12x8font.png:
     name: tall_font
     type: font/image

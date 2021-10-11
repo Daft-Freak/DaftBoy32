@@ -30,7 +30,8 @@ void Menu::render_item(const Item &item, int y, int index) const {
     if(index == current_item) {
         const int iconSize = font.char_h > 8 ? 12 : 8;
         blit::Point iconPos = blit::Point(display_rect.x + display_rect.w - item_padding_x -iconSize, y + 1); // from the top-right
-        controlIcons.render(ControlIcons::Icon::A, iconPos, foreground_colour, iconSize);
+        blit::Pen icon_bg((header_foreground.r + header_background.r) / 2, (header_foreground.g + header_background.g) / 2, (header_foreground.b + header_background.b) / 2);
+        duh::draw_control_icon(&blit::screen, duh::Icon::A, iconPos, iconSize, foreground_colour, icon_bg);
     }
 }
 
