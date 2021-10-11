@@ -4,24 +4,16 @@ project(gameblit)
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall")
 
-find_package (32BLIT CONFIG REQUIRED PATHS ../32blit-sdk)
+option(BUILD_32BLIT ON "Build 32blit UI")
 
 #add_definitions("-DPROFILER")
 
 add_subdirectory(core)
 
-blit_executable(gameblit
-    control-icons.cpp
-    file-browser.cpp
-    menu.cpp
-
-    gameblit.cpp
-)
-blit_assets_yaml(gameblit assets.yml)
-blit_metadata(gameblit metadata.yml)
-
-target_link_libraries(gameblit DaftBoyCore)
-set_target_properties(gameblit PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+if(BUILD_32BLIT)
+    find_package (32BLIT CONFIG REQUIRED PATHS ../32blit-sdk)
+    add_subdirectory(32blit DaftBoy32)
+endif()
 
 # setup release packages
 set(PROJECT_DISTRIBS LICENSE README.md)
