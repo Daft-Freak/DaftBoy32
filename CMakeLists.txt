@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9.0)
+cmake_minimum_required(VERSION 3.13.0)
 project(gameblit)
 
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
@@ -8,21 +8,19 @@ find_package (32BLIT CONFIG REQUIRED PATHS ../32blit-sdk)
 
 #add_definitions("-DPROFILER")
 
+add_subdirectory(core)
+
 blit_executable(gameblit
     control-icons.cpp
     file-browser.cpp
     menu.cpp
 
     gameblit.cpp
-
-    DMGAPU.cpp
-    DMGCPU.cpp
-    DMGDisplay.cpp
-    DMGMemory.cpp
 )
 blit_assets_yaml(gameblit assets.yml)
 blit_metadata(gameblit metadata.yml)
 
+target_link_libraries(gameblit DaftBoyCore)
 set_target_properties(gameblit PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 # setup release packages
