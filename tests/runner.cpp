@@ -202,6 +202,99 @@ static bool runTest(const std::string &rom, DMGCPU::Console console = DMGCPU::Co
     return result;
 }
 
+static void replayLog(const std::string &logFilename, DMGCPU::Console console = DMGCPU::Console::Auto, bool record = false)
+{
+    // find/open ROM
+    std::string rom, logPath;
+
+    auto index = logFilename.find_last_of("\\/");
+    if(index != std::string::npos)
+        logPath = logFilename.substr(0, index + 1);
+
+
+    std::ifstream logFile(logFilename);
+
+    if(!logFile)
+    {
+        std::cerr << "Failed to open log " << logFilename << "!\n";
+        return;
+    }
+
+    // get rom from first line
+    std::getline(logFile, rom);
+
+    romFile.open(logPath + rom);
+
+    if(!romFile)
+    {
+        std::cerr << "Failed to load " << logPath + rom << "\n";
+        return;
+    }
+
+    romFile.seekg(0, std::ios::end);
+    romSize = romFile.tellg();
+    romFile.seekg(0, std::ios::beg);
+
+    // clean instance
+    cpu = new DMGCPU;
+
+    auto &mem = cpu->getMem();
+    mem.setROMBankCallback(getROMBank);
+
+    cpu->setConsole(console);
+
+    cpu->reset();
+
+    uint8_t rgbDisplay[160 * 144 * 3];
+
+    unsigned int tick = 0, imageIndex = 0;
+    unsigned int nextInputTick;
+    int nextInputValue;
+
+    logFile >> nextInputTick;
+    logFile >> nextInputValue;
+
+    auto start = std::chrono::steady_clock::now();
+
+    while(!logFile.eof())
+    {
+        auto &apu = cpu->getAPU();
+        while(apu.getNumSamples())
+            apu.getSample();
+
+        bool didInput = false;
+        if(tick == nextInputTick)
+        {
+            cpu->setInputs(nextInputValue);
+            didInput = true;
+            logFile >> nextInputTick;
+            logFile >> nextInputValue;
+        }
+
+        cpu->run(10);
+
+        if(record && didInput)
+        {
+            screenToRGB(cpu->getDisplay(), rgbDisplay);
+            char name[10];
+            snprintf(name, 10, "f%06i", imageIndex++);
+            dumpImage(name, rgbDisplay);
+        }
+
+        tick++;
+    }
+
+    auto end = std::chrono::steady_clock::now();
+
+    auto realTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    std::cout << "Ran " << rom << " for " << (tick * 10) << "ms in " << realTime << "us\n";
+
+    delete cpu;
+
+    romFile.close();
+}
+
 static void handleSignal(int signal)
 {
     takeScreenshot = true;
@@ -215,10 +308,12 @@ int main(int argc, char *argv[])
     {
         // run a test (wrapper for an external test runner)
         int i = 1;
+        // options
         auto console = DMGCPU::Console::Auto;
-        if(argc > 2)
+        bool recordReplay = false;
+
+        for(; i < argc; i++)
         {
-            // options
             std::string_view arg = argv[i];
             if(arg == "--cgb")
             {
@@ -230,10 +325,25 @@ int main(int argc, char *argv[])
                 i++;
                 console = DMGCPU::Console::DMG;
             }
+            else if(arg == "--record")
+                recordReplay = true;
+            else
+                break;
         }
 
-        signal(SIGUSR1, handleSignal);
-        runTest(argv[i], console);
+        std::string filename = argv[i];
+        std::string ext = filename.substr(filename.find_last_of('.'));
+
+        if(ext == ".gb")
+        {
+            signal(SIGUSR1, handleSignal);
+            runTest(filename, console);
+        }
+        else if(ext == ".log")
+        {
+            // replay from a log file
+            replayLog(filename, console, recordReplay);
+        }
         return 0;
     }
     return 0;
