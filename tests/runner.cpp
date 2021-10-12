@@ -316,15 +316,9 @@ int main(int argc, char *argv[])
         {
             std::string_view arg = argv[i];
             if(arg == "--cgb")
-            {
-                i++;
                 console = DMGCPU::Console::CGB;
-            }
             else if(arg == "--dmg")
-            {
-                i++;
                 console = DMGCPU::Console::DMG;
-            }
             else if(arg == "--record")
                 recordReplay = true;
             else
@@ -334,7 +328,7 @@ int main(int argc, char *argv[])
         std::string filename = argv[i];
         std::string ext = filename.substr(filename.find_last_of('.'));
 
-        if(ext == ".gb")
+        if(ext == ".gb" || ext == ".gbc")
         {
             signal(SIGUSR1, handleSignal);
             runTest(filename, console);
