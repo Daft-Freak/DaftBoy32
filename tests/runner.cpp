@@ -118,6 +118,19 @@ static void dumpImage(const std::string &filename, const uint8_t *data)
     savePNG("./test-results/" + filename + ".png", data);
 }
 
+static void screenToRGB(DMGDisplay &display, uint8_t *outRGB)
+{
+    auto displayData = cpu->getDisplay().getData();
+
+    for(int i = 0; i < 160 * 144; i++)
+    {
+        auto pixel = displayData[i];
+        outRGB[i * 3 + 0] = (pixel & 0x1F) << 3;
+        outRGB[i * 3 + 1] = (pixel & 0x3E0) >> 2;
+        outRGB[i * 3 + 2] = (pixel & 0x7C00) >> 7;
+    }
+}
+
 static bool runTest(const std::string &rom, DMGCPU::Console console = DMGCPU::Console::Auto)
 {
     // find/open ROM
@@ -155,13 +168,10 @@ static bool runTest(const std::string &rom, DMGCPU::Console console = DMGCPU::Co
 
     cpu->reset();
 
-    auto displayData = cpu->getDisplay().getData();
     uint8_t rgbDisplay[160 * 144 * 3];
 
     unsigned int time = 0;
     bool result = false;
-
-    auto start = std::chrono::steady_clock::now();
 
     while(!result)
     {
@@ -175,16 +185,7 @@ static bool runTest(const std::string &rom, DMGCPU::Console console = DMGCPU::Co
         bool convertDisplay = takeScreenshot || cpu->getBreakpointTriggered();
 
         if(convertDisplay)
-        {
-            // get rgb screen
-            for(int i = 0; i < 160 * 144; i++)
-            {
-                auto pixel = displayData[i];
-                rgbDisplay[i * 3 + 0] = (pixel & 0x1F) << 3;
-                rgbDisplay[i * 3 + 1] = (pixel & 0x3E0) >> 2;
-                rgbDisplay[i * 3 + 2] = (pixel & 0x7C00) >> 7;
-            }
-        }
+            screenToRGB(cpu->getDisplay(), rgbDisplay);
 
         if(takeScreenshot)
         {
