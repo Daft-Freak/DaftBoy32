@@ -342,7 +342,9 @@ int main(int argc, char *argv[])
         else if(ext == ".log")
         {
             // replay from a log file
-            replayLog(filename, console, recordReplay);
+            // assume all remaining args are log files
+            for(; i < argc; i++)
+                replayLog(argv[i], console, recordReplay);
         }
         return 0;
     }
