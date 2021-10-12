@@ -27,8 +27,6 @@ public:
 
     DMGCPU();
 
-    using CycleCallback = void(*)(int);
-
     void reset();
 
     void run(int ms);
