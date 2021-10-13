@@ -35,38 +35,53 @@ void DMGAPU::reset()
     }
 }
 
-void DMGAPU::update(int cycles)
+void DMGAPU::update()
 {
-    if(enabled)
+    auto curCycle = cpu.getCycleCount();
+    if(lastUpdateCycle == curCycle)
+        return;
+
+    auto passed = curCycle - lastUpdateCycle;
+
+    auto oldDiv = lastDivValue;
+
+    if(cpu.getDoubleSpeedMode())
     {
-        // this gets called before the timer is incremented
-        auto oldDiv = cpu.getInternalTimer();
-
-        // check bit below (or two bits for double speed)
-        // as the most cycles this will be called with is small, don't bother checking if we're nowhere near
-        if(oldDiv & 0x1000)
-        {
-            if(cpu.getDoubleSpeedMode())
-                oldDiv >>= 1;
-
-            // update frame sequencer clock
-            if((oldDiv & 0x1FFF) + cycles >= 8192)
-                updateFrameSequencer();
-        }
-
-        // freq timers
-        cyclesPassed += cycles;
+        passed >>= 1;
+        oldDiv >>= 1;
     }
 
     // output clock - attempt to get close to 22050Hz
     const int clocksPerSample = (4194304ull * 1024) / 22050;
-    sampleClock += cycles * 1024;
 
-    if(sampleClock >= clocksPerSample)
+    while(passed)
     {
-        sampleClock -= clocksPerSample;
-        sampleOutput();
+        // clamp update step
+        auto step = std::min(128u, passed);
+
+        // update frame sequencer clock
+        if((oldDiv & 0x1FFF) + step >= 8192)
+            updateFrameSequencer();
+
+        cyclesPassed += step;
+
+        // output
+        sampleClock += step * 1024;
+
+        if(sampleClock >= clocksPerSample)
+        {
+            sampleClock -= clocksPerSample;
+            sampleOutput();
+        }
+
+        passed -= step;
+        oldDiv += step;
     }
+
+    lastUpdateCycle = curCycle;
+    lastDivValue = cpu.getInternalTimer();
+
+    updateFreq();
 }
 
 int16_t DMGAPU::getSample()
@@ -92,7 +107,7 @@ uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
     if(addr < (0xFF00 | IO_NR10) || addr > 0xFF3F/* end of wave ram*/)
         return val;
 
-    updateFreq();
+    update();
 
     // unsued bits/lengths/freqs read as 1
     switch(addr & 0xFF)
@@ -170,10 +185,17 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 {
     const uint8_t dutyPatterns[]{0b01000000, 0b11000000, 0b11110000, 0b00111111};
 
+    if(addr == (0xFF00 | IO_DIV))
+    {
+        // force update when DIV is reset
+        update();
+        lastDivValue = 0;
+    }
+
     if(addr < (0xFF00 | IO_NR10) || addr > 0xFF3F/* end of wave ram*/)
         return false;
 
-    updateFreq();
+    update();
 
     addr = addr & 0xFF;
 

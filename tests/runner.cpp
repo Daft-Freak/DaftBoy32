@@ -175,7 +175,9 @@ static bool runTest(const std::string &rom, DMGCPU::Console console = DMGCPU::Co
 
     while(!result)
     {
+        // flush apu
         auto &apu = cpu->getAPU();
+        apu.update();
         while(apu.getNumSamples())
             apu.getSample();
         cpu->run(10);
@@ -258,7 +260,9 @@ static void replayLog(const std::string &logFilename, DMGCPU::Console console = 
 
     while(!logFile.eof())
     {
+        // flush apu
         auto &apu = cpu->getAPU();
+        apu.update();
         while(apu.getNumSamples())
             apu.getSample();
 

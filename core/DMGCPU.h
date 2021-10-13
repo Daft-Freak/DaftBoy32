@@ -45,6 +45,7 @@ public:
 
     bool getBreakpointTriggered() {return breakpoint;}
 
+    uint32_t getCycleCount() const {return cycleCount;}
     uint16_t getInternalTimer() const {return divCounter;}
 
     bool getColourMode() const {return isGBC;} // CGB in CGB mode
@@ -109,6 +110,7 @@ private:
     uint8_t serviceableInterrupts;
 
     int cyclesToRun = 0;
+    uint32_t cycleCount = 0;
 
     uint16_t divCounter = 0;
     bool timerEnabled = false;

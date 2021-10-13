@@ -483,7 +483,10 @@ void update(uint32_t time_ms)
     bankLoadTime = 0;
 
     if(cpu.getAPU().getNumSamples() < 1024 - 225) // single update generates ~220 samples
+    {
         cpu.run(10);
+        cpu.getAPU().update();
+    }
     else
         printf("CPU stalled, no audio room!\n");
 

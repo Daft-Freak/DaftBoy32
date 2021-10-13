@@ -10,7 +10,7 @@ public:
 
     void reset();
 
-    void update(int cycles);
+    void update();
 
     int16_t getSample();
     int getNumSamples() const;
@@ -29,7 +29,9 @@ private:
     bool enabled = true;
 
     // deferred updates
-    int cyclesPassed = 0;
+    int cyclesPassed = 0; // for freq updates
+    uint32_t lastUpdateCycle = 0;
+    uint16_t lastDivValue = 0;
 
     uint8_t frameSeqClock = 0;
 

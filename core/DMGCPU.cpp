@@ -13,6 +13,7 @@ void DMGCPU::reset()
     stopped = halted = breakpoint = false;
     masterInterruptEnable = false; //?
     serviceableInterrupts = 0;
+    cycleCount = 0;
     divCounter = 0xABCC;
 
     timerEnabled = timerOldVal = false;
@@ -630,8 +631,9 @@ void DMGCPU::executeInstruction()
             if(speedSwitch)
             {
                 speedSwitch = false;
+                
+                writeReg(0xFF00 | IO_DIV, 0); // this also syncs the APU
                 doubleSpeed = !doubleSpeed;
-                divCounter = 0;
             }
             else
                 stopped = true;
@@ -2223,6 +2225,7 @@ void DMGCPU::executeExInstruction()
 void DMGCPU::cycleExecuted()
 {
     cyclesToRun -= 4;
+    cycleCount += 4;
 
     int extCycles = 4;
 
@@ -2230,7 +2233,6 @@ void DMGCPU::cycleExecuted()
     if(doubleSpeed)
         extCycles >>= 1;
 
-    apu.update(extCycles);
     display.update(extCycles);
 
     updateTimer();
