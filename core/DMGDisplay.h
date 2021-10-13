@@ -11,7 +11,8 @@ public:
 
     void reset();
 
-    void update(int cycles);
+    void update();
+    void updateForInterrupts();
 
     const uint16_t *getData() {return screenData;}
 
@@ -28,11 +29,16 @@ private:
     DMGCPU &cpu;
     DMGMemory &mem;
 
+    uint32_t lastUpdateCycle = 0;
+
     bool enabled = true;
     uint8_t y = 0;
     uint8_t statMode = 0;
     bool compareMatch = false;
     int windowY = 0;
+    
+    bool interruptsEnabled = false;
+    bool hblankInterruptEnabled = false;
 
     static const int scanlineCycles = 456;
     static const int screenWidth = 160, screenHeight = 144;

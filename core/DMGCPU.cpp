@@ -113,9 +113,13 @@ void DMGCPU::run(int ms)
             }
         }
 
-        do {
+        do
+        {
             if(halted)
                 cycleExecuted(); // single cycle while halted
+
+            // sync display if interrupts enabled
+            display.updateForInterrupts();
 
             if(serviceableInterrupts && serviceInterrupts())
             {
@@ -2226,14 +2230,6 @@ void DMGCPU::cycleExecuted()
 {
     cyclesToRun -= 4;
     cycleCount += 4;
-
-    int extCycles = 4;
-
-    // these still work at normal speed
-    if(doubleSpeed)
-        extCycles >>= 1;
-
-    display.update(extCycles);
 
     updateTimer();
 

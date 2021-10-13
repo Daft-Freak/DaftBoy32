@@ -187,7 +187,10 @@ static bool runTest(const std::string &rom, DMGCPU::Console console = DMGCPU::Co
         bool convertDisplay = takeScreenshot || cpu->getBreakpointTriggered();
 
         if(convertDisplay)
+        {
+            cpu->getDisplay().update();
             screenToRGB(cpu->getDisplay(), rgbDisplay);
+        }
 
         if(takeScreenshot)
         {
@@ -279,6 +282,7 @@ static void replayLog(const std::string &logFilename, DMGCPU::Console console = 
 
         if(record && didInput)
         {
+            cpu->getDisplay().update();
             screenToRGB(cpu->getDisplay(), rgbDisplay);
             char name[10];
             snprintf(name, 10, "f%06i", imageIndex++);

@@ -45,6 +45,8 @@ void DMGDisplay::reset()
     memset(bgPalette, 0xFF, sizeof(bgPalette));
     memset(objPalette, 0xFF, sizeof(objPalette)); // not initialised
 
+    lastUpdateCycle = 0;
+
     enabled = true;
     y = 0;
     statMode = 0;
@@ -58,77 +60,102 @@ void DMGDisplay::reset()
         mem.write(0xFF00 | i, mem.readIOReg(i));
 }
 
-void DMGDisplay::update(int cycles)
+void DMGDisplay::update()
 {
-    if(!enabled)
-        return;
-
-    remainingScanlineCycles -= cycles;
-
-    // avg-ish time
-    static const int readTime = (168 + 291) / 2;
-
-    if(statMode > 1) // update STAT if not hblank/vblank
+    auto curCycle = cpu.getCycleCount();
+    if(enabled)
     {
-        // 80 cycles - mode 2 / oam search
-        if(remainingScanlineCycles >= scanlineCycles - 80)
-        {} // transition handled below
-        // 168-291 cycles - mode 3 / reading oam/vram
-        else if(remainingScanlineCycles >= scanlineCycles - 80 - readTime)
-            statMode = 3;
-        else // hblank
-        {
-            if(statMode)
-            {
-                drawScanLine(y); // draw right before hblank
+        auto passed = curCycle - lastUpdateCycle;
 
-                auto stat = mem.readIOReg(IO_STAT);
-                if(stat & STAT_HBlankInt)
+        if(cpu.getDoubleSpeedMode())
+            passed >>= 1;
+
+        while(passed)
+        {
+            auto step = std::min(static_cast<unsigned>(remainingScanlineCycles), passed);
+            passed -= step;
+
+            remainingScanlineCycles -= step;
+
+            // avg-ish time
+            static const int readTime = (168 + 291) / 2;
+
+            if(statMode > 1) // update STAT if not hblank/vblank
+            {
+                // 80 cycles - mode 2 / oam search
+                if(remainingScanlineCycles >= scanlineCycles - 80)
+                {} // transition handled below
+                // 168-291 cycles - mode 3 / reading oam/vram
+                else if(remainingScanlineCycles >= scanlineCycles - 80 - readTime)
+                    statMode = 3;
+                else // hblank
+                {
+                    if(statMode)
+                    {
+                        drawScanLine(y); // draw right before hblank
+
+                        auto stat = mem.readIOReg(IO_STAT);
+                        if(stat & STAT_HBlankInt)
+                            cpu.flagInterrupt(Int_LCDStat);
+                    }
+                    statMode = 0;
+                }
+
+                continue;
+            }
+
+            if(remainingScanlineCycles > 0)
+                continue;
+
+            // next scanline
+            remainingScanlineCycles += scanlineCycles;
+            y++;
+
+            // coincidince interrupt
+            auto stat = mem.readIOReg(IO_STAT);
+
+            bool old = compareMatch;
+            compareMatch = y == mem.readIOReg(IO_LYC);
+
+            if((stat & STAT_CoincidenceInt) && !old && compareMatch)
+                cpu.flagInterrupt(Int_LCDStat);
+
+            if(y == screenHeight)
+            {
+                cpu.flagInterrupt(Int_VBlank);
+                statMode = 1;
+                if(stat & STAT_VBlankInt)
                     cpu.flagInterrupt(Int_LCDStat);
             }
-            statMode = 0;
-        }
+            else
+            {
+                if(y > 153)
+                    y = windowY = 0; // end vblank
 
-        return;
-    }
+                if(y < screenHeight)
+                {
+                    // new scanline
+                    statMode = 2; // oam search
 
-    if(remainingScanlineCycles > 0)
-        return;
-
-    // next scanline
-    remainingScanlineCycles += scanlineCycles;
-    y++;
-
-    // coincidince interrupt
-    auto stat = mem.readIOReg(IO_STAT);
-
-    bool old = compareMatch;
-    compareMatch = y == mem.readIOReg(IO_LYC);
-
-    if((stat & STAT_CoincidenceInt) && !old && compareMatch)
-        cpu.flagInterrupt(Int_LCDStat);
-
-    if(y == screenHeight)
-    {
-        cpu.flagInterrupt(Int_VBlank);
-        statMode = 1;
-        if(stat & STAT_VBlankInt)
-            cpu.flagInterrupt(Int_LCDStat);
-    }
-    else
-    {
-        if(y > 153)
-            y = windowY = 0; // end vblank
-
-        if(y < screenHeight)
-        {
-            // new scanline
-            statMode = 2; // oam search
-
-            if(stat & STAT_OAMInt)
-                cpu.flagInterrupt(Int_LCDStat);
+                    if(stat & STAT_OAMInt)
+                        cpu.flagInterrupt(Int_LCDStat);
+                }
+            }
         }
     }
+
+    lastUpdateCycle = curCycle;
+}
+
+void DMGDisplay::updateForInterrupts()
+{
+    if(!hblankInterruptEnabled && cpu.getCycleCount() - lastUpdateCycle < remainingScanlineCycles)
+        return;
+
+    if(!interruptsEnabled)
+        return;
+
+    update();
 }
 
 uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
@@ -136,8 +163,10 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
     switch(addr & 0xFF)
     {
         case IO_STAT:
+            update();
             return (val & 0xF8) | (compareMatch ? STAT_Coincidence : 0) | statMode | 0x80;
         case IO_LY:
+            update();
             return y;
     }
 
@@ -150,8 +179,35 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
     switch(addr & 0xFF)
     {
+        // update interrupt status
+        case IO_STAT:
+        case IO_IE:
+        {
+            update();
+            uint8_t ie, stat;
+
+            if((addr & 0xFF) == IO_IE)
+            {
+                ie = data;
+                stat = mem.readIOReg(IO_STAT);
+            }
+            else
+            {
+                ie = mem.readIOReg(IO_IE);
+                stat = data;
+            }
+
+            auto statInts = STAT_HBlankInt | STAT_VBlankInt | STAT_OAMInt | STAT_CoincidenceInt;
+            interruptsEnabled = (ie & Int_VBlank) || ((ie & Int_LCDStat) && (stat & statInts));
+
+            // only interrupt that doesn't happen at the end/start of a line
+            hblankInterruptEnabled = (ie & Int_LCDStat) && (stat & STAT_HBlankInt);
+            break;
+        }
+
         case IO_LCDC:
         {
+            update();
             if(!(data & LCDC_DisplayEnable))
             {
                 // reset
@@ -170,7 +226,10 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
             return true;
         case IO_LYC:
             if(enabled)
+            {
+                update();
                 updateCompare(y == data);
+            }
 
             break;
 
@@ -179,6 +238,8 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
         {
             if(cpu.getColourMode())
                 break;
+
+            update();
 
             for(int i = 0; i < 4; i++)
                 bgPalette[i] = colMap[(data >> (2 * i)) & 0x3];
@@ -189,6 +250,8 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
             if(cpu.getColourMode())
                 break;
 
+            update();
+
             for(int i = 0; i < 4; i++)
                 objPalette[i] = colMap[(data >> (2 * i)) & 0x3];
             break;
@@ -197,6 +260,8 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
         {
             if(cpu.getColourMode())
                 break;
+
+            update();
 
             for(int i = 0; i < 4; i++)
                 objPalette[i + 4] = colMap[(data >> (2 * i)) & 0x3];
@@ -213,6 +278,8 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
             if(!cpu.getColourMode())
                 return true;
 
+            update();
+
             auto bcps = mem.readIOReg(IO_BCPS);
             reinterpret_cast<uint8_t *>(bgPalette)[bcps & 0x3F] = data;
 
@@ -227,6 +294,8 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
         {
             if(!cpu.getColourMode())
                 return true;
+
+            update();
 
             auto ocps = mem.readIOReg(IO_OCPS);
             reinterpret_cast<uint8_t *>(objPalette)[ocps & 0x3F] = data;
