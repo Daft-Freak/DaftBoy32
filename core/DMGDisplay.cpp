@@ -270,7 +270,10 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
         case IO_BCPS:
         case IO_OCPS:
-            return !cpu.getColourMode(); // ignore write on !GBC
+             // ignore write on !GBC, force bit 6 otherwise
+            if(cpu.getColourMode())
+                mem.writeIOReg(addr & 0xFF, data | 0x40);
+            return true;
 
         // colour palettes
         case IO_BCPD:
@@ -285,7 +288,7 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
             // auto inc
             if(bcps & 0x80)
-                mem.writeIOReg(IO_BCPS, ((bcps & 0x3F) + 1) | 0x80);
+                mem.writeIOReg(IO_BCPS, ((bcps & 0x3F) + 1) | 0xC0);
 
             return true;
         }
@@ -302,7 +305,7 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
             // auto inc
             if(ocps & 0x80)
-                mem.writeIOReg(IO_OCPS, ((ocps & 0x3F) + 1) | 0x80);
+                mem.writeIOReg(IO_OCPS, ((ocps & 0x3F) + 1) | 0xC0);
 
             return true;
         }

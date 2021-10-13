@@ -226,7 +226,11 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
         speedSwitch = data & 1;
     }
     else if((addr & 0xFF) == IO_IF)
+    {
         serviceableInterrupts = data & mem.readIOReg(IO_IE);
+        mem.writeIOReg(IO_IF, data | 0xE0);
+        return true;
+    }
     else if((addr & 0xFF) == IO_IE)
         serviceableInterrupts = data & mem.readIOReg(IO_IF);
 
