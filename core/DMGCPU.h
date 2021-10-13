@@ -106,7 +106,7 @@ private:
 
     // internal state
     bool stopped, halted, breakpoint;
-    bool masterInterruptEnable;
+    bool masterInterruptEnable, enableInterruptsNextCycle;
     uint8_t serviceableInterrupts;
 
     int cyclesToRun = 0;

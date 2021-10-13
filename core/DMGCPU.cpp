@@ -12,6 +12,7 @@ void DMGCPU::reset()
 {
     stopped = halted = breakpoint = false;
     masterInterruptEnable = false; //?
+    enableInterruptsNextCycle = false;
     serviceableInterrupts = 0;
     cycleCount = 0;
     divCounter = 0xABCC;
@@ -1467,7 +1468,7 @@ void DMGCPU::executeInstruction()
         }
 
         case 0xFB: // EI
-            masterInterruptEnable = true; // TODO: after next instruction
+            enableInterruptsNextCycle = true;
             break;
 
         case 0xFE: // CP n
@@ -2230,6 +2231,12 @@ void DMGCPU::cycleExecuted()
 {
     cyclesToRun -= 4;
     cycleCount += 4;
+
+    if(enableInterruptsNextCycle)
+    {
+        masterInterruptEnable = true;
+        enableInterruptsNextCycle = false;
+    }
 
     updateTimer();
 
