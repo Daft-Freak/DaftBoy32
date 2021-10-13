@@ -355,6 +355,66 @@ inline int getPalIndex(uint16_t d)
     return ((d & 0x80) >> 7) | ((d >> 15) << 1);
 };
 
+static void copyPartialTile(uint8_t lcdc, int &x, int endX, uint16_t d, int tileAttrs, uint16_t *bgPalette, uint16_t *&out, uint8_t *&rawOut)
+{
+    uint8_t tilePriority = (tileAttrs & Tile_BGPriority) ? 0x80 : 0;
+
+    // palette
+    const auto bgPal = bgPalette + (tileAttrs & 0x7) * 4;
+
+    for(; x < endX; x++, d <<= 1)
+    {
+        int palIndex = getPalIndex(d);
+
+        if(lcdc & LCDC_BGDisp)
+            *(rawOut++) = palIndex | tilePriority;
+        *(out++) = bgPal[palIndex];
+    }
+};
+
+static void copyFullTile(uint8_t lcdc, uint16_t d, int tileAttrs, uint16_t *bgPalette, uint16_t *&out, uint8_t *&rawOut)
+{
+    uint8_t tilePriority = (tileAttrs & Tile_BGPriority) ? 0x80 : 0;
+
+    // palette
+    const auto bgPal = bgPalette + (tileAttrs & 0x7) * 4;
+
+    for(int i = 0; i < 8; i++, d <<= 1)
+    {
+        int palIndex = getPalIndex(d);
+
+        if(lcdc & LCDC_BGDisp)
+            *(rawOut++) = palIndex | tilePriority;
+        *(out++) = bgPal[palIndex];
+    }
+};
+
+static void copyTiles(uint8_t lcdc, uint8_t *tileDataPtr, uint8_t *mapPtr, uint16_t *bgPalette, int &x, int xLimit, int offsetX, uint8_t oy, uint16_t *&out, uint8_t *&rawOut)
+{
+    // full tiles
+    uint8_t ox = x + offsetX; // this is a uint8 so that it wraps
+
+    auto rowMapPtr = mapPtr + (oy / 8) * screenSizeTiles;
+
+    while(x + 7 < xLimit)
+    {
+        int mapAttrs;
+        auto d = getTileRow(lcdc, rowMapPtr + ox / 8, tileDataPtr, oy & 7, mapAttrs);
+
+        copyFullTile(lcdc, d, mapAttrs, bgPalette, out, rawOut);
+        x += 8;
+        ox += 8;
+    }
+
+    if(x < xLimit)
+    {
+        int mapAttrs;
+        auto d = getTileRow(lcdc, rowMapPtr + ox / 8, tileDataPtr, oy & 7, mapAttrs);
+
+        copyPartialTile(lcdc, x, xLimit, d, mapAttrs, bgPalette, out, rawOut);
+    }
+};
+
 void DMGDisplay::drawScanLine(int y)
 {
     // contains palette index + a tile priority flag
@@ -390,66 +450,6 @@ void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)
     auto out = scanLine;
     auto rawOut = bgRaw;
 
-    auto copyPartialTile = [this, &x, lcdc, &out, &rawOut](int endX, uint16_t d, int tileAttrs)
-    {
-        uint8_t tilePriority = (tileAttrs & Tile_BGPriority) ? 0x80 : 0;
-
-        // palette
-        const auto bgPal = bgPalette + (tileAttrs & 0x7) * 4;
-
-        for(; x < endX; x++, d <<= 1)
-        {
-            int palIndex = getPalIndex(d);
-
-            if(lcdc & LCDC_BGDisp)
-                *(rawOut++) = palIndex | tilePriority;
-            *(out++) = bgPal[palIndex];
-        }
-    };
-
-    auto copyFullTile = [this, &x, lcdc, &out, &rawOut](uint16_t d, int tileAttrs)
-    {
-        uint8_t tilePriority = (tileAttrs & Tile_BGPriority) ? 0x80 : 0;
-
-        // palette
-        const auto bgPal = bgPalette + (tileAttrs & 0x7) * 4;
-
-        for(int i = 0; i < 8; i++, d <<= 1)
-        {
-            int palIndex = getPalIndex(d);
-
-            if(lcdc & LCDC_BGDisp)
-                *(rawOut++) = palIndex | tilePriority;
-            *(out++) = bgPal[palIndex];
-        }
-    };
-
-    auto copyTiles = [this, &x, lcdc, tileDataPtr, &out, &rawOut, &copyPartialTile, &copyFullTile](uint8_t *mapPtr, int xLimit, int offsetX, uint8_t oy)
-    {
-        // full tiles
-        uint8_t ox = x + offsetX; // this is a uint8 so that it wraps
-
-        auto rowMapPtr = mapPtr + (oy / 8) * screenSizeTiles;
-
-        while(x + 7 < xLimit)
-        {
-            int mapAttrs;
-            auto d = getTileRow(lcdc, rowMapPtr + ox / 8, tileDataPtr, oy & 7, mapAttrs);
-
-            copyFullTile(d, mapAttrs);
-            x += 8;
-            ox += 8;
-        }
-
-        if(x < xLimit)
-        {
-            int mapAttrs;
-            auto d = getTileRow(lcdc, rowMapPtr + ox / 8, tileDataPtr, oy & 7, mapAttrs);
-
-            copyPartialTile(xLimit, d, mapAttrs);
-        }
-    };
-
     if(lcdc & LCDC_WindowEnable)
     {
         int windowY = mem.readIOReg(IO_WY);
@@ -473,17 +473,17 @@ void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)
             // skip bits
             d <<= scrollX & 7;
 
-            copyPartialTile(8 - (scrollX & 7), d, mapAttrs);
+            copyPartialTile(lcdc, x, 8 - (scrollX & 7), d, mapAttrs, bgPalette, out, rawOut);
         }
 
         int xEnd = windowX < screenWidth ? windowX : screenWidth;
-        copyTiles(bgMapPtr, xEnd, scrollX, y + scrollY);
+        copyTiles(lcdc, tileDataPtr, bgMapPtr, bgPalette, x, xEnd, scrollX, y + scrollY, out, rawOut);
     }
 
     // window
     if(x < screenWidth)
     {
-        copyTiles(winMapPtr, screenWidth, -windowX, windowY);
+        copyTiles(lcdc, tileDataPtr, winMapPtr, bgPalette, x, screenWidth, -windowX, windowY, out, rawOut);
         windowY++;
     }
 }
