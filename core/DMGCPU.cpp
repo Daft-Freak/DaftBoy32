@@ -264,11 +264,6 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
     return mem.read(addr);
 }
 
-uint16_t DMGCPU::readMem16(uint16_t addr) const
-{
-    return readMem(addr) | (readMem(addr + 1) << 8);
-}
-
 void DMGCPU::writeMem(uint16_t addr, uint8_t data)
 {
     // OAM DMA conflict
@@ -277,12 +272,6 @@ void DMGCPU::writeMem(uint16_t addr, uint8_t data)
         return;
 
     mem.write(addr, data);
-}
-
-void DMGCPU::writeMem16(uint16_t addr, uint16_t data)
-{
-    writeMem(addr, data);
-    writeMem(addr + 1, data >> 8);
 }
 
 // returns cycle count

@@ -89,9 +89,7 @@ private:
     uint16_t &reg(WReg r) {return regs[static_cast<int>(r)];}
 
     uint8_t readMem(uint16_t addr) const;
-    uint16_t readMem16(uint16_t addr) const;
     void writeMem(uint16_t addr, uint8_t data);
-    void writeMem16(uint16_t addr, uint16_t data);
 
     void executeInstruction();
     void executeExInstruction();
