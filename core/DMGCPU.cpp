@@ -122,11 +122,8 @@ void DMGCPU::run(int ms)
             // sync display if interrupts enabled
             display.updateForInterrupts();
 
-            if(serviceableInterrupts && serviceInterrupts())
-            {
-                for(int i = 0; i < 5; i++)
-                    cycleExecuted();
-            }
+            if(serviceableInterrupts)
+                serviceInterrupts();
 
         } while(halted && cyclesToRun > 0); // wait until not halted
     }
@@ -2332,14 +2329,33 @@ bool DMGCPU::serviceInterrupts()
     {
         if(servicable & 1)
         {
+            // wait
+            cycleExecuted();
+            cycleExecuted();
+
             masterInterruptEnable = false;
-            mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) & ~(1 << i));
-            serviceableInterrupts &= ~(1 << i);
 
             // call vector
-            sp -= 2;
-            writeMem16(sp, pc);
+            writeMem(--sp, pc >> 8);
+            cycleExecuted();
+
+            bool stillEnabled = (serviceableInterrupts & (1 << i));
+
+            writeMem(--sp, pc & 0xFF);
+            cycleExecuted();
+
+            if(!stillEnabled)
+            {
+                // it got cancelled through magic
+                pc = 0;
+                continue;
+            }
+
             pc = vectors[i];
+            cycleExecuted();
+
+            mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) & ~(1 << i));
+            serviceableInterrupts &= ~(1 << i);
             return true;
         }
     }
