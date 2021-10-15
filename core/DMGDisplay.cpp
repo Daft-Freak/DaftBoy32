@@ -52,8 +52,10 @@ void DMGDisplay::reset()
     statMode = 0;
     compareMatch = false;
     windowY = 0;
+    firstFrame = false;
 
     remainingScanlineCycles = scanlineCycles;
+    remainingModeCycles = 4;
 
     // make sure the default palette gets set up for !GBC
     for(int i = IO_BGP; i <= IO_OBP1; i++)
@@ -72,74 +74,107 @@ void DMGDisplay::update()
 
         while(passed)
         {
-            auto step = std::min(static_cast<unsigned>(remainingScanlineCycles), passed);
+            auto step = std::min(static_cast<unsigned>(remainingModeCycles), passed);
+
             passed -= step;
 
             remainingScanlineCycles -= step;
+            remainingModeCycles -= step;
 
             // avg-ish time
-            static const int readTime = (168 + 291) / 2;
+            // need to make this less inaccurate
+            static const int readTime = (172 + 289) / 2;
 
-            if(statMode > 1) // update STAT if not hblank/vblank
+            // update STAT if not vblank
+            if(remainingModeCycles == 0)
             {
-                // 80 cycles - mode 2 / oam search
-                if(remainingScanlineCycles >= scanlineCycles - 80)
-                {} // transition handled below
-                // 168-291 cycles - mode 3 / reading oam/vram
-                else if(remainingScanlineCycles >= scanlineCycles - 80 - readTime)
-                    statMode = 3;
-                else // hblank
+                // new mode
+                if(statMode <= 1 && remainingScanlineCycles)
                 {
-                    if(statMode)
+                    // start of line - update compare
+                    updateCompare(y == mem.readIOReg(IO_LYC));
+
+                    auto stat = mem.readIOReg(IO_STAT);
+
+                    // in vblank
+                    if(y >= screenHeight)
                     {
-                        drawScanLine(y); // draw right before hblank
+                        // start of vblank
+                        if(y == screenHeight)
+                        {
+                            cpu.flagInterrupt(Int_VBlank);
+                            statMode = 1;
+                            remainingModeCycles = scanlineCycles;
 
-                        auto stat = mem.readIOReg(IO_STAT);
-                        if(stat & STAT_HBlankInt)
-                            cpu.flagInterrupt(Int_LCDStat);
+                            // line 144 still generates the OAM/mode 2 interrupt
+                            // (do other vblank lines do this?)
+                            if(stat & (STAT_VBlankInt | STAT_OAMInt))
+                                cpu.flagInterrupt(Int_LCDStat);
+                        }
+
+                        // line 153 has some additional wierdness... (switches to y = 0 early)
+
+                        remainingModeCycles = remainingScanlineCycles;
+
+                        continue;
                     }
-                    statMode = 0;
-                }
 
-                continue;
-            }
+                    // first line after enabling
+                    if(firstFrame)
+                    {
+                        // skips mode 2
+                        statMode = 3;
+                        remainingModeCycles = 172; // minimal time
+                        firstFrame = false;
+                        continue;
+                    }
 
-            if(remainingScanlineCycles > 0)
-                continue;
-
-            // next scanline
-            remainingScanlineCycles += scanlineCycles;
-            y++;
-
-            // coincidince interrupt
-            auto stat = mem.readIOReg(IO_STAT);
-
-            bool old = compareMatch;
-            compareMatch = y == mem.readIOReg(IO_LYC);
-
-            if((stat & STAT_CoincidenceInt) && !old && compareMatch)
-                cpu.flagInterrupt(Int_LCDStat);
-
-            if(y == screenHeight)
-            {
-                cpu.flagInterrupt(Int_VBlank);
-                statMode = 1;
-                if(stat & STAT_VBlankInt)
-                    cpu.flagInterrupt(Int_LCDStat);
-            }
-            else
-            {
-                if(y > 153)
-                    y = windowY = 0; // end vblank
-
-                if(y < screenHeight)
-                {
-                    // new scanline
+                    // line start -> mode 2
                     statMode = 2; // oam search
+                    remainingModeCycles = 80;
 
                     if(stat & STAT_OAMInt)
                         cpu.flagInterrupt(Int_LCDStat);
+
+                    continue;
                 }
+                else if(statMode == 2)
+                {
+                    // mode 2 -> 3
+                    statMode = 3;
+                    remainingModeCycles = readTime;
+                    continue;
+                }
+                else if(statMode == 3)
+                {
+                    // mode 3 -> 0 (hblank)
+                    statMode = 0;
+                    drawScanLine(y); // draw right before hblank
+
+                    auto stat = mem.readIOReg(IO_STAT);
+                    if(stat & STAT_HBlankInt)
+                        cpu.flagInterrupt(Int_LCDStat);
+
+                    remainingModeCycles = remainingScanlineCycles;
+                    continue;
+                }
+                else if(statMode == 1)
+                    remainingModeCycles = scanlineCycles;
+            }
+            else
+                continue;
+
+            // next scanline
+            remainingScanlineCycles = scanlineCycles;
+            remainingModeCycles = 4;
+            y++;
+
+            compareMatch = false; // cleared for one cycle
+
+            if(y > 153)
+            {
+                y = windowY = 0; // end vblank
+                statMode = 0;
             }
         }
     }
@@ -149,10 +184,11 @@ void DMGDisplay::update()
 
 void DMGDisplay::updateForInterrupts()
 {
-    if(!hblankInterruptEnabled && cpu.getCycleCount() - lastUpdateCycle < remainingScanlineCycles)
+    if(!interruptsEnabled)
         return;
 
-    if(!interruptsEnabled)
+    auto passed = cpu.getCycleCount() - lastUpdateCycle;
+    if(passed < remainingModeCycles)
         return;
 
     update();
@@ -199,9 +235,6 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
             auto statInts = STAT_HBlankInt | STAT_VBlankInt | STAT_OAMInt | STAT_CoincidenceInt;
             interruptsEnabled = (ie & Int_VBlank) || ((ie & Int_LCDStat) && (stat & statInts));
-
-            // only interrupt that doesn't happen at the end/start of a line
-            hblankInterruptEnabled = (ie & Int_LCDStat) && (stat & STAT_HBlankInt);
             break;
         }
 
@@ -211,9 +244,11 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
             if(!(data & LCDC_DisplayEnable))
             {
                 // reset
-                remainingScanlineCycles = scanlineCycles;
+                remainingScanlineCycles = scanlineCycles - 4; // running behind
                 statMode = 0;
+                remainingModeCycles = 80; // no mode 2
                 y = windowY = 0;
+                firstFrame = true;
             }
             else if(!enabled) // enabling
                 updateCompare(y == mem.readIOReg(IO_LYC));

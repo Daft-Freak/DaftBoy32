@@ -36,14 +36,15 @@ private:
     uint8_t statMode = 0;
     bool compareMatch = false;
     int windowY = 0;
+    bool firstFrame = false; // first frame after enabling display
     
     bool interruptsEnabled = false;
-    bool hblankInterruptEnabled = false;
 
     static const int scanlineCycles = 456;
     static const int screenWidth = 160, screenHeight = 144;
 
     int remainingScanlineCycles = scanlineCycles;
+    int remainingModeCycles = 0;
     uint16_t screenData[screenWidth * screenHeight]; // rgb555
 
     // GBC
