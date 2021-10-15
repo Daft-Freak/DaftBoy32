@@ -42,6 +42,8 @@ void DMGCPU::reset()
         reg(WReg::BC) = 0x0000;
         reg(WReg::DE) = 0x0008;
         reg(WReg::HL) = 0x007C;
+
+        divCounter = 0x2678;
     }
     else
     {
