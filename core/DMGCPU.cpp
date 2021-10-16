@@ -196,6 +196,20 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
         timerOldVal = false;
         return true;
     }
+    else if((addr & 0xFF) == IO_TIMA)
+    {
+        timerReload = false; // cancel the reload
+
+        // ignored if just reloaded
+        if(timerReloaded)
+            return true;
+    }
+    else if((addr & 0xFF) == IO_TMA)
+    {
+        // written during reload
+        if(timerReloaded)
+            mem.writeIOReg(IO_TIMA, data);
+    }
     else if((addr & 0xFF) == IO_TAC)
     {
         bool wasEnabled = timerEnabled;
@@ -2240,6 +2254,16 @@ void DMGCPU::cycleExecuted()
 
 void DMGCPU::updateTimer()
 {
+    if(timerReload)
+    {
+        timerReload = false;
+        timerReloaded = true;
+        mem.writeIOReg(IO_TIMA, mem.readIOReg(IO_TMA));
+        flagInterrupt(Int_Timer);
+    }
+    else if(timerReloaded)
+        timerReloaded = false;
+
     if(!timerEnabled)
     {
         divCounter += 4;
@@ -2264,14 +2288,8 @@ void DMGCPU::updateTimer()
         // this is identical to the code in incrementTimer
         // calling that from here is bad for perf
         auto &tima = mem.getIOReg(IO_TIMA);
-        if(tima == 0xFF)
-        {
-            //overflow
-            tima = mem.readIOReg(IO_TMA);
-            flagInterrupt(Int_Timer);
-        }
-        else
-            tima++;
+        if(++tima == 0)
+            timerReload = true;
     }
 
     timerOldVal = val;
@@ -2280,14 +2298,8 @@ void DMGCPU::updateTimer()
 void DMGCPU::incrementTimer()
 {
     auto &tima = mem.getIOReg(IO_TIMA);
-    if(tima == 0xFF)
-    {
-        //overflow
-        tima = mem.readIOReg(IO_TMA);
-        flagInterrupt(Int_Timer);
-    }
-    else
-        tima++;
+    if(++tima == 0)
+        timerReload = true;
 }
 
 bool DMGCPU::serviceInterrupts()

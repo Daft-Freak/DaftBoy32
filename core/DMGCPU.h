@@ -114,6 +114,7 @@ private:
 
     uint16_t divCounter = 0;
     bool timerEnabled = false;
+    bool timerReload = false, timerReloaded = false;
     int timerBit = 1 << 9;
     bool timerOldVal = false;
 
