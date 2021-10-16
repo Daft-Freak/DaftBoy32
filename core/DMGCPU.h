@@ -100,6 +100,8 @@ private:
     void incrementTimer();
     bool serviceInterrupts();
 
+    void updateOAMDMA();
+
     static const uint32_t clockSpeed = 4194304;
 
     // internal state

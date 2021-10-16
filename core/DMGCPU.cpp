@@ -542,6 +542,13 @@ void DMGCPU::executeInstruction()
     auto opcode = readMem(pc++);
     cycleExecuted();
 
+    // might be the next cycle after an EI here
+    if(enableInterruptsNextCycle)
+    {
+        masterInterruptEnable = true;
+        enableInterruptsNextCycle = false;
+    }
+
     switch(opcode)
     {
         case 0x00: // NOP
@@ -2224,33 +2231,11 @@ void DMGCPU::cycleExecuted()
     cyclesToRun -= 4;
     cycleCount += 4;
 
-    if(enableInterruptsNextCycle)
-    {
-        masterInterruptEnable = true;
-        enableInterruptsNextCycle = false;
-    }
-
     updateTimer();
 
     if(halted) return;
 
-    if(oamDMADelay && !--oamDMADelay)
-    {
-        oamDMACount = 0xA0;
-        auto data = mem.readIOReg(IO_DMA);
-
-        // can't access OAM/regs, redirect to echo RAM
-        if(data >= 0xF0)
-            data -= 0x20;
-
-        oamDMASrc = mem.mapAddress(data << 8); // shouldn't hit the invalid region
-        oamDMADest = mem.getOAM();
-    }
-    else if(oamDMACount)
-    {
-        *oamDMADest++ = *oamDMASrc++;
-        oamDMACount--;
-    }
+    updateOAMDMA();
 }
 
 void DMGCPU::updateTimer()
@@ -2352,4 +2337,25 @@ bool DMGCPU::serviceInterrupts()
     }
 
     return false;
+}
+
+void DMGCPU::updateOAMDMA()
+{
+    if(oamDMADelay && !--oamDMADelay)
+    {
+        oamDMACount = 0xA0;
+        auto data = mem.readIOReg(IO_DMA);
+
+        // can't access OAM/regs, redirect to echo RAM
+        if(data >= 0xF0)
+            data -= 0x20;
+
+        oamDMASrc = mem.mapAddress(data << 8); // shouldn't hit the invalid region
+        oamDMADest = mem.getOAM();
+    }
+    else if(oamDMACount)
+    {
+        *oamDMADest++ = *oamDMASrc++;
+        oamDMACount--;
+    }
 }
