@@ -117,6 +117,8 @@ private:
     bool timerReload = false, timerReloaded = false;
     int timerBit = 1 << 9;
     bool timerOldVal = false;
+    uint32_t lastTimerUpdate = 0;
+    uint16_t lastTimerDiv = 0; // div register at time of last update
 
     bool isGBC = false;
     Console console = Console::Auto;

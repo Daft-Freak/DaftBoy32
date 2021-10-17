@@ -19,6 +19,7 @@ void DMGCPU::reset()
 
     timerEnabled = timerOldVal = false;
     timerBit = 1 << 9;
+    lastTimerUpdate = 0;
 
     isGBC = false;
     doubleSpeed = speedSwitch = false;
@@ -54,6 +55,8 @@ void DMGCPU::reset()
 
         isGBC = false;
     }
+
+    lastTimerDiv = divCounter;
 
     mem.setGBC(isGBC);
 
@@ -116,10 +119,16 @@ void DMGCPU::run(int ms)
             }
         }
 
+        bool timerInterrupsEnabled = mem.getIOReg(IO_IE) & Int_Timer;
+
         do
         {
             if(halted)
                 cycleExecuted(); // single cycle while halted
+
+            // sync timer if interrupts enabled
+            if(timerInterrupsEnabled)
+                updateTimer();
 
             // sync display if interrupts enabled
             display.updateForInterrupts();
@@ -160,6 +169,16 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
         return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
     else if((addr & 0xFF) >= IO_HDMA1 && (addr & 0xFF) <= IO_HDMA4)
         return 0xFF;
+    else if((addr & 0xFF) == IO_TIMA)
+    {
+        updateTimer();
+        return mem.readIOReg(IO_TIMA);
+    }
+    else if((addr & 0xFF) == IO_IF)
+    {
+        updateTimer();
+        return mem.readIOReg(IO_IF);
+    }
 
     return val;
 }
@@ -188,16 +207,20 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
     }
     else if((addr & 0xFF) == IO_DIV)
     {
+        updateTimer();
+
         // falling edge gets triggered by reset
         if(timerEnabled && (divCounter & timerBit))
             incrementTimer();
 
-        divCounter = 0;
+        divCounter = lastTimerDiv = 0;
         timerOldVal = false;
         return true;
     }
     else if((addr & 0xFF) == IO_TIMA)
     {
+        updateTimer();
+
         timerReload = false; // cancel the reload
 
         // ignored if just reloaded
@@ -206,12 +229,16 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
     }
     else if((addr & 0xFF) == IO_TMA)
     {
+        updateTimer();
+
         // written during reload
         if(timerReloaded)
             mem.writeIOReg(IO_TIMA, data);
     }
     else if((addr & 0xFF) == IO_TAC)
     {
+        updateTimer();
+
         bool wasEnabled = timerEnabled;
         int oldBit = timerBit;
         const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
@@ -2245,7 +2272,7 @@ void DMGCPU::cycleExecuted()
     cyclesToRun -= 4;
     cycleCount += 4;
 
-    updateTimer();
+    divCounter += 4;
 
     if(halted) return;
 
@@ -2254,45 +2281,61 @@ void DMGCPU::cycleExecuted()
 
 void DMGCPU::updateTimer()
 {
-    if(timerReload)
-    {
-        timerReload = false;
-        timerReloaded = true;
-        mem.writeIOReg(IO_TIMA, mem.readIOReg(IO_TMA));
-        flagInterrupt(Int_Timer);
-    }
-    else if(timerReloaded)
-        timerReloaded = false;
+    timerReloaded = false;
 
-    if(!timerEnabled)
+    if(!timerEnabled && !timerReload)
     {
-        divCounter += 4;
+        lastTimerUpdate = cycleCount;
+        lastTimerDiv = divCounter;
         return;
     }
+
+    auto div = lastTimerDiv;
+
+    auto passed = cycleCount - lastTimerUpdate;
 
     // skip ahead if we're not going to cause the bit to change
-    if((divCounter & (timerBit - 1)) + 4 < timerBit)
+    if((div & (timerBit - 1)) + passed < timerBit && !timerReload)
     {
-        divCounter += 4;
+        lastTimerUpdate = cycleCount;
+        lastTimerDiv = divCounter;
         return;
     }
 
-    // increment the internal timer
-    divCounter += 4;
-
-    bool val = (divCounter & timerBit);
-
-    // timer (incremented on falling edge)
-    if(timerOldVal && !val)
+    do
     {
-        // this is identical to the code in incrementTimer
-        // calling that from here is bad for perf
-        auto &tima = mem.getIOReg(IO_TIMA);
-        if(++tima == 0)
-            timerReload = true;
-    }
+        // reload
+        if(timerReload)
+        {
+            timerReload = false;
+            timerReloaded = true;
+            mem.writeIOReg(IO_TIMA, mem.readIOReg(IO_TMA));
+            flagInterrupt(Int_Timer);
+        }
+        else if(timerReloaded)
+            timerReloaded = false;
 
-    timerOldVal = val;
+        div += 4;
+        passed -= 4;
+
+        bool val = (div & timerBit);
+
+        // timer (incremented on falling edge)
+        if(timerOldVal && !val)
+        {
+            // this is identical to the code in incrementTimer
+            // calling that from here is bad for perf
+            auto &tima = mem.getIOReg(IO_TIMA);
+            if(++tima == 0)
+                timerReload = true;
+        }
+
+        timerOldVal = val;
+    }
+    while(passed > 0);
+
+    lastTimerUpdate = cycleCount;
+    lastTimerDiv = divCounter;
 }
 
 void DMGCPU::incrementTimer()
