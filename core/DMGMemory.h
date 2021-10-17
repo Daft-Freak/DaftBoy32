@@ -43,6 +43,7 @@ private:
     {
         None = 0,
         MBC1,
+        MBC1M, // multicart - wired slightly differently
         MBC2,
         MBC3,
         MBC5

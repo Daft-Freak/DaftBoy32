@@ -144,6 +144,22 @@ void DMGMemory::reset()
             mbcType = MBCType::None;
     }
 
+    if(mbcType == MBCType::MBC1 && cartROMBanks == 64)
+    {
+        // 1M MBC1 may be a multicart
+        for(int i = 1; i < 4; i++)
+        {
+            romBankCallback(i << 4, cartROMBankCache + 0x4000);
+
+            // compare logos
+            if(memcmp(cartROMBank0 + 0x104, cartROMBankCache + 0x4104, 48) == 0)
+            {
+                mbcType = MBCType::MBC1M;
+                break;
+            }
+        }
+    }
+
     // use spare RAM as rom cache
     if(cartRamSize == 0 && mbcType != MBCType::MBC2)
         cachedROMBanks.emplace_back(ROMCacheEntry{cartRam, 0});
@@ -300,7 +316,7 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
     {
         if(!mbcRAMEnabled)
             regions[0xA] = regions[0xB] = nullptr; // RAM disabled
-        else if(mbcType == MBCType::MBC1 && !mbcRAMBankMode) // no banking, use bank 0
+        else if((mbcType == MBCType::MBC1 || mbcType == MBCType::MBC1M) && !mbcRAMBankMode) // no banking, use bank 0
             regions[0xA] = regions[0xB] = cartRam - 0xA000;
         else
         {
@@ -360,6 +376,13 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
             if((mbcROMBank & 0x1F) == 0)
                 mbcROMBank++; // bank 0 is handled as bank 1 (+ some bugs)
         }
+        else if(mbcType == MBCType::MBC1M) // low 4 bits of rom bank (game bank)
+        {
+            mbcROMBank = (mbcROMBank & 0xF0) | (data & 0xF);
+
+            if((data & 0x1F) == 0)
+                mbcROMBank++; // bank 0 is handled as bank 1 (+ some bugs)
+        }
         else if(mbcType == MBCType::MBC3)
         {
             mbcROMBank = data & 0x7F; // 7 bit rom bank
@@ -394,18 +417,24 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
                 updateRAMBank();
 
                 // also affetcts the bank at 0-3FFF
-                updateCurrentROMBank((data & 0x3) << 5, 0);
+                if(mbcType == MBCType::MBC1M)
+                    updateCurrentROMBank((data & 0x3) << 4, 0);
+                else
+                    updateCurrentROMBank((data & 0x3) << 5, 0);
             }
 
             // ROM is always banked
-            mbcROMBank = (mbcROMBank & 0x1F) | ((data & 0x3) << 5);
+            if(mbcType == MBCType::MBC1M)
+                mbcROMBank = (mbcROMBank & 0xF) | ((data & 0x3) << 4);
+            else
+                mbcROMBank = (mbcROMBank & 0x1F) | ((data & 0x3) << 5);
             updateCurrentROMBank(mbcROMBank, 4);
         }
     }
     else // < 0x8000
     {
         // TODO: MBC3 clock latch
-        if(mbcType == MBCType::MBC1)
+        if(mbcType == MBCType::MBC1 || mbcType == MBCType::MBC1M)
         {
             mbcRAMBankMode = data == 1;
             updateRAMBank();
