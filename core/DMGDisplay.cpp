@@ -83,7 +83,7 @@ void DMGDisplay::update()
 
             // avg-ish time
             // need to make this less inaccurate
-            static const int readTime = (172 + 289) / 2;
+            static const int readTime = (172 + 289) / 2 + 2;
 
             // update STAT if not vblank
             if(remainingModeCycles == 0)
