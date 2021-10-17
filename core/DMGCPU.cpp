@@ -177,6 +177,7 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
     else if((addr & 0xFF) == IO_IF)
     {
         updateTimer();
+        display.update();
         return mem.readIOReg(IO_IF);
     }
 
