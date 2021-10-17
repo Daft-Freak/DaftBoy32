@@ -182,16 +182,18 @@ void DMGDisplay::update()
     lastUpdateCycle = curCycle;
 }
 
-void DMGDisplay::updateForInterrupts()
+int DMGDisplay::updateForInterrupts()
 {
     if(!interruptsEnabled)
-        return;
+        return 0x7FFFFFFF; // this is only used when halted and clamped to something reasonable in the CPU
 
     auto passed = cpu.getCycleCount() - lastUpdateCycle;
     if(passed < remainingModeCycles)
-        return;
+        return (remainingModeCycles - passed) * (cpu.getDoubleSpeedMode() ? 2 : 1);
 
     update();
+
+    return remainingModeCycles * (cpu.getDoubleSpeedMode() ? 2 : 1);
 }
 
 uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)

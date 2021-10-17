@@ -12,7 +12,7 @@ public:
     void reset();
 
     void update();
-    void updateForInterrupts();
+    int updateForInterrupts();
 
     const uint16_t *getData() {return screenData;}
 

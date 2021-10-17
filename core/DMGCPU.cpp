@@ -119,19 +119,37 @@ void DMGCPU::run(int ms)
             }
         }
 
+        int skip = 0;
         bool timerInterrupsEnabled = mem.getIOReg(IO_IE) & Int_Timer;
 
         do
         {
             if(halted)
-                cycleExecuted(); // single cycle while halted
+            {
+                // skip to next (display) interrupt
+                if(skip && !timerInterrupsEnabled)
+                {
+                    skip = std::min(skip, cyclesToRun);
+                    do
+                    {
+                        // inlined cycleExecuted without the !halted stuff
+                        cyclesToRun -= 4;
+                        cycleCount += 4;
+                        divCounter += 4;
+                        skip -= 4;
+                    }
+                    while(skip > 0);
+                }
+                else
+                    cycleExecuted(); // single cycle while halted
+            }
 
             // sync timer if interrupts enabled
             if(timerInterrupsEnabled)
                 updateTimer();
 
             // sync display if interrupts enabled
-            display.updateForInterrupts();
+            skip = display.updateForInterrupts();
 
             if(serviceableInterrupts)
                 serviceInterrupts();
