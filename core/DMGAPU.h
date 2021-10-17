@@ -63,6 +63,7 @@ private:
     uint16_t ch3FreqTimerPeriod = 1;
     uint8_t ch3Sample = 0;
     uint8_t ch3SampleIndex = 0;
+    uint32_t ch3LastAccessCycle = 0;
 
     // channel 4
     uint8_t ch4Len = 0;

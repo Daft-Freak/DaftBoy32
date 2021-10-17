@@ -171,6 +171,10 @@ uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
         case 0x3F:
             if(channelEnabled & (1 << 2))
             {
+                // if we didn't just read, it fails entirely on DMG
+                if(!cpu.getColourMode() && cpu.getCycleCount() != ch3LastAccessCycle)
+                    return 0xFF;
+
                 return cpu.getMem().readIOReg(0x30 + ch3SampleIndex / 2);
             }
 
@@ -397,7 +401,7 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
             if(data & NRx4_Trigger)
             {
                 ch3SampleIndex = 0;
-                ch3FreqTimer = ch3FreqTimerPeriod;
+                ch3FreqTimer = ch3FreqTimerPeriod + 6; // there is a small delay
 
                 if(ch3Len == 0)
                 {
@@ -520,6 +524,11 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
         case 0x3F:
             if(channelEnabled & (1 << 2))
             {
+                // ignore write if not reading
+                // assuming DMG only like the read case
+                if(!cpu.getColourMode() && cpu.getCycleCount() != ch3LastAccessCycle)
+                    return true;
+
                 mem.writeIOReg(0x30 + ch3SampleIndex / 2, data);
                 return true;
             }
@@ -704,6 +713,9 @@ void DMGAPU::updateFreq()
             ch3SampleIndex = (ch3SampleIndex + 1) % 32;
 
             auto sampleByte = cpu.getMem().readIOReg(0x30 + (ch3SampleIndex / 2));
+
+            // calculate when this happened for read/write behaviour
+            ch3LastAccessCycle = cpu.getCycleCount() - (ch3FreqTimerPeriod - timer);
 
             if(ch3SampleIndex & 1)
                 ch3Sample = sampleByte & 0xF;
