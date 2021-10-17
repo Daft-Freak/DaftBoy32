@@ -189,6 +189,12 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
     {
         // force update when DIV is reset
         update();
+        
+        // extra update caused by bit changing
+        int bit = cpu.getDoubleSpeedMode() ? (1 << 13) : (1 << 12);
+        if(cpu.getInternalTimer() & bit)
+            updateFrameSequencer();
+
         lastDivValue = 0;
     }
 
@@ -485,6 +491,11 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
             {
                 frameSeqClock = 7; // make the next frame be 0
                 cyclesPassed = 0;
+
+                // might skip an update
+                int bit = cpu.getDoubleSpeedMode() ? (1 << 13) : (1 << 12);
+                if(cpu.getInternalTimer() & bit)
+                    frameSeqClock = 0;
             }
 
             enabled = data & NR52_Enable;
