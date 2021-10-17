@@ -69,6 +69,20 @@ void DMGDisplay::update()
     {
         auto passed = curCycle - lastUpdateCycle;
 
+        // blank out the screen if we're stopped
+        if(cpu.getStopped())
+        {
+            // check if CGB, even in DMG mode
+            bool isCGB = cpu.getConsole() == DMGCPU::Console::CGB || cpu.getColourMode();
+
+            // mode 3 on CGB keeps the old image
+            if(!isCGB || statMode != 3)
+                memset(screenData, isCGB ? 0 : 0xFF, sizeof(screenData));
+
+            lastUpdateCycle = curCycle;
+            return;
+        }
+
         if(cpu.getDoubleSpeedMode())
             passed >>= 1;
 

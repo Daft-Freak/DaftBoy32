@@ -700,7 +700,10 @@ void DMGCPU::executeInstruction()
                 doubleSpeed = !doubleSpeed;
             }
             else
+            {
                 stopped = true;
+                display.update(); // force a screen update
+            }
             break;
 
         case 0x11: // LD DE,nn

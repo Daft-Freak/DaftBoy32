@@ -43,6 +43,7 @@ public:
     DMGAPU &getAPU(){return apu;}
     DMGDisplay &getDisplay(){return display;}
 
+    bool getStopped() const {return stopped;}
     bool getBreakpointTriggered() {return breakpoint;}
 
     uint32_t getCycleCount() const {return cycleCount;}
