@@ -173,6 +173,27 @@ uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
             }
 
             break;
+
+        // these allow reading the current output
+        case IO_PCM12:
+        {
+            auto ch1Val = (channelEnabled & 1) && this->ch1Val ? ch1EnvVolume : 0;
+            auto ch2Val = (channelEnabled & 2) && this->ch2Val ? ch2EnvVolume : 0;
+
+            return ch1Val | (ch2Val << 4);
+        }
+
+        case IO_PCM34:
+        {
+            auto vol = (cpu.getMem().readIOReg(IO_NR32) >> 5) & 0x3;
+            auto ch3Val = (channelEnabled & 4) && vol ? ch3Sample : 0;
+            ch3Val /= (1 << (vol - 1));
+
+            vol = ch4EnvVolume;
+            auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : 0;
+
+            return ch3Val | (ch4Val << 4);
+        }
     }
 
 

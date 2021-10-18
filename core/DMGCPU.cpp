@@ -206,6 +206,11 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
         case IO_HDMA3:
         case IO_HDMA4:
             return 0xFF;
+
+        // undocumented extra regs
+        case IO_PCM12:
+        case IO_PCM34:
+            return isGBC ? apu.readReg(addr, val) : 0xFF;
     }
 
     return val;
