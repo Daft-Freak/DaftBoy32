@@ -644,7 +644,7 @@ void DMGAPU::updateFrameSequencer()
                     ch1FreqTimerPeriod = (2048 - newFreq) * 4;
                 }
 
-                ch1SweepTimer = (ch1Sweep >> 4) & 3;
+                ch1SweepTimer = (ch1Sweep & NR10_Period) >> 4;
 
                 // calculate again for overflow check
                 newFreq = ch1SweepFreq >> shift;
