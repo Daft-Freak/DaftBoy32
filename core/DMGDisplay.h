@@ -39,6 +39,7 @@ private:
     bool firstFrame = false; // first frame after enabling display
     
     bool interruptsEnabled = false;
+    uint8_t statInterruptActive = 0;
 
     static const int scanlineCycles = 456;
     static const int screenWidth = 160, screenHeight = 144;

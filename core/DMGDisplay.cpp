@@ -124,8 +124,14 @@ void DMGDisplay::update()
 
                             // line 144 still generates the OAM/mode 2 interrupt
                             // (do other vblank lines do this?)
-                            if(stat & (STAT_VBlankInt | STAT_OAMInt))
-                                cpu.flagInterrupt(Int_LCDStat);
+                            if((stat & (STAT_VBlankInt | STAT_OAMInt)))
+                            {
+                                if(!statInterruptActive)
+                                    cpu.flagInterrupt(Int_LCDStat);
+
+                                statInterruptActive |= (stat & (STAT_VBlankInt | STAT_OAMInt));
+                            }
+                            statInterruptActive &= ~STAT_HBlankInt;
                         }
 
                         // line 153 has some additional wierdness... (switches to y = 0 early)
@@ -150,7 +156,13 @@ void DMGDisplay::update()
                     remainingModeCycles = 80;
 
                     if(stat & STAT_OAMInt)
-                        cpu.flagInterrupt(Int_LCDStat);
+                    {
+                        if(!statInterruptActive)
+                            cpu.flagInterrupt(Int_LCDStat);
+
+                        statInterruptActive |= STAT_OAMInt;
+                    }
+                    statInterruptActive &= ~(STAT_HBlankInt | STAT_VBlankInt);
 
                     continue;
                 }
@@ -158,6 +170,7 @@ void DMGDisplay::update()
                 {
                     // mode 2 -> 3
                     statMode = 3;
+                    statInterruptActive &= ~(STAT_HBlankInt | STAT_OAMInt);
 
                     // guess something semi-accurate
                     remainingModeCycles = 172 + (mem.getIOReg(IO_SCX) & 7);
@@ -188,8 +201,13 @@ void DMGDisplay::update()
                     drawScanLine(y); // draw right before hblank
 
                     auto stat = mem.readIOReg(IO_STAT);
-                    if(stat & STAT_HBlankInt)
-                        cpu.flagInterrupt(Int_LCDStat);
+                    if((stat & STAT_HBlankInt))
+                    {
+                        if(!statInterruptActive)
+                            cpu.flagInterrupt(Int_LCDStat);
+
+                        statInterruptActive |= STAT_HBlankInt;
+                    }
 
                     remainingModeCycles = remainingScanlineCycles;
                     continue;
@@ -250,28 +268,26 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
 bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 {
     const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0};
+    const auto statInts = STAT_HBlankInt | STAT_VBlankInt | STAT_OAMInt | STAT_CoincidenceInt;
 
     switch(addr & 0xFF)
     {
-        // update interrupt status
         case IO_STAT:
-        case IO_IE:
         {
             update();
-            uint8_t ie, stat;
 
-            if((addr & 0xFF) == IO_IE)
+            auto ie = mem.readIOReg(IO_IE);
+            auto stat = data;
+
+            // trigger vblank stat (and others?)
+            if(statMode == 1 && (stat & STAT_VBlankInt) && !statInterruptActive)
             {
-                ie = data;
-                stat = mem.readIOReg(IO_STAT);
-            }
-            else
-            {
-                ie = mem.readIOReg(IO_IE);
-                stat = data;
+                cpu.flagInterrupt(Int_LCDStat);
+                statInterruptActive |= STAT_VBlankInt;
             }
 
-            auto statInts = STAT_HBlankInt | STAT_VBlankInt | STAT_OAMInt | STAT_CoincidenceInt;
+            statInterruptActive &= stat;
+
             interruptsEnabled = (ie & Int_VBlank) || ((ie & Int_LCDStat) && (stat & statInts));
             break;
         }
@@ -382,6 +398,17 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
             return true;
         }
+
+        // update interrupt status
+        case IO_IE:
+        {
+            update();
+            auto ie = data;
+            auto stat = mem.readIOReg(IO_STAT);
+            interruptsEnabled = (ie & Int_VBlank) || ((ie & Int_LCDStat) && (stat & statInts));
+            break;
+        }
+
     }
     
     return false;
@@ -647,7 +674,14 @@ void DMGDisplay::drawSprites(uint16_t *scanLine, uint8_t *bgRaw)
 void DMGDisplay::updateCompare(bool newVal)
 {
     if((mem.readIOReg(IO_STAT) & STAT_CoincidenceInt) && !compareMatch && newVal)
-        cpu.flagInterrupt(Int_LCDStat);
+    {
+        if(!statInterruptActive)
+            cpu.flagInterrupt(Int_LCDStat);
+
+        statInterruptActive |= STAT_CoincidenceInt;
+    }
+    else if(!newVal)
+        statInterruptActive &= ~STAT_CoincidenceInt;
 
     compareMatch = newVal;
 }
