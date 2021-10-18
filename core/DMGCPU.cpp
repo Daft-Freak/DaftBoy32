@@ -161,7 +161,7 @@ void DMGCPU::run(int ms)
 void DMGCPU::flagInterrupt(int interrupt)
 {
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
-    serviceableInterrupts = mem.readIOReg(IO_IF) & mem.readIOReg(IO_IE);
+    serviceableInterrupts = mem.readIOReg(IO_IF) & mem.readIOReg(IO_IE) & 0x1F;
 }
 
 uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
@@ -286,12 +286,12 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
     }
     else if((addr & 0xFF) == IO_IF)
     {
-        serviceableInterrupts = data & mem.readIOReg(IO_IE);
+        serviceableInterrupts = data & mem.readIOReg(IO_IE) & 0x1F;
         mem.writeIOReg(IO_IF, data | 0xE0);
         return true;
     }
     else if((addr & 0xFF) == IO_IE)
-        serviceableInterrupts = data & mem.readIOReg(IO_IF);
+        serviceableInterrupts = data & mem.readIOReg(IO_IF) & 0x1F;
 
     return false;
 }
