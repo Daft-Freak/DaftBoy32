@@ -171,32 +171,41 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
     else if((addr & 0xFF) >= IO_LCDC && (addr & 0xFF) <= IO_WX)
         return display.readReg(addr, val);
 
-    if((addr & 0xFF) == IO_JOYP)
+    switch(addr & 0xFF)
     {
-        int ret = 0xF;
-        if(!(val & JOYP_SelectDir))
-            ret &= (~inputs) & 0xF;
-        if(!(val & JOYP_SelectButtons))
-            ret &= ((~inputs) >> 4) & 0xF;
-        return 0xC0 | (val & 0xF0) | ret;
-    }
+        case IO_JOYP:
+        {
+            int ret = 0xF;
+            if(!(val & JOYP_SelectDir))
+                ret &= (~inputs) & 0xF;
+            if(!(val & JOYP_SelectButtons))
+                ret &= ((~inputs) >> 4) & 0xF;
+            return 0xC0 | (val & 0xF0) | ret;
+        }
 
-    if((addr & 0xFF) == IO_DIV)
-        return divCounter >> 8;
-    else if((addr & 0xFF) == IO_KEY1 && isGBC)
-        return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
-    else if((addr & 0xFF) >= IO_HDMA1 && (addr & 0xFF) <= IO_HDMA4)
-        return 0xFF;
-    else if((addr & 0xFF) == IO_TIMA)
-    {
-        updateTimer();
-        return mem.readIOReg(IO_TIMA);
-    }
-    else if((addr & 0xFF) == IO_IF)
-    {
-        updateTimer();
-        display.update();
-        return mem.readIOReg(IO_IF);
+        case IO_DIV:
+            return divCounter >> 8;
+
+        case IO_TIMA:
+            updateTimer();
+            return mem.readIOReg(IO_TIMA);
+
+        case IO_IF:
+            updateTimer();
+            display.update();
+            return mem.readIOReg(IO_IF);
+
+        case IO_KEY1:
+            if(isGBC)
+                return (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
+
+            break;
+
+        case IO_HDMA1:
+        case IO_HDMA2:
+        case IO_HDMA3:
+        case IO_HDMA4:
+            return 0xFF;
     }
 
     return val;
@@ -207,91 +216,95 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
     if(display.writeReg(addr, data) || apu.writeReg(addr, data))
         return true;
 
-    if((addr & 0xFF) == 0x46)
+    switch(addr & 0xFF)
     {
-        // need to delay two cycles
-        oamDMADelay = 2;
-    }
-    else if((addr & 0xFF) == IO_HDMA5)
-    {
-        if(!isGBC)
-            return true;
-        else if(data & 0x80) // HDMA
-            printf("HDMA\n");
-        else
-        {
-            // GDMA
-            gdmaTriggered = true;
-        }
-    }
-    else if((addr & 0xFF) == IO_DIV)
-    {
-        updateTimer();
+        case IO_DIV:
+            updateTimer();
 
-        // falling edge gets triggered by reset
-        if(timerEnabled && (divCounter & timerBit))
-            incrementTimer();
-
-        divCounter = lastTimerDiv = 0;
-        timerOldVal = false;
-        return true;
-    }
-    else if((addr & 0xFF) == IO_TIMA)
-    {
-        updateTimer();
-
-        timerReload = false; // cancel the reload
-
-        // ignored if just reloaded
-        if(timerReloaded)
-            return true;
-    }
-    else if((addr & 0xFF) == IO_TMA)
-    {
-        updateTimer();
-
-        // written during reload
-        if(timerReloaded)
-            mem.writeIOReg(IO_TIMA, data);
-    }
-    else if((addr & 0xFF) == IO_TAC)
-    {
-        updateTimer();
-
-        bool wasEnabled = timerEnabled;
-        int oldBit = timerBit;
-        const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
-        timerEnabled = data & TAC_Start;
-        timerBit = timerBits[data & TAC_Clock];
-
-        if(wasEnabled)
-        {
-            // timer glitches
-            if(!timerEnabled) // disable
-            {
-                if(divCounter & oldBit)
-                    incrementTimer();
-
-                timerOldVal = false;
-            }
-            else if((divCounter & oldBit) && !(divCounter & timerBit)) // clock switch
+            // falling edge gets triggered by reset
+            if(timerEnabled && (divCounter & timerBit))
                 incrementTimer();
-        }
-    }
-    else if((addr & 0xFF) == IO_KEY1)
-    {
-        if(!isGBC) return true;
 
-        speedSwitch = data & 1;
+            divCounter = lastTimerDiv = 0;
+            timerOldVal = false;
+            return true;
+
+        case IO_TIMA:
+            updateTimer();
+
+            timerReload = false; // cancel the reload
+
+            // ignored if just reloaded
+            if(timerReloaded)
+                return true;
+            break;
+
+        case IO_TMA:
+            updateTimer();
+
+            // written during reload
+            if(timerReloaded)
+                mem.writeIOReg(IO_TIMA, data);
+            break;
+
+        case IO_TAC:
+        {
+            updateTimer();
+
+            bool wasEnabled = timerEnabled;
+            int oldBit = timerBit;
+            const int timerBits[]{1 << 9, 1 << 3, 1 << 5, 1 << 7};
+            timerEnabled = data & TAC_Start;
+            timerBit = timerBits[data & TAC_Clock];
+
+            if(wasEnabled)
+            {
+                // timer glitches
+                if(!timerEnabled) // disable
+                {
+                    if(divCounter & oldBit)
+                        incrementTimer();
+
+                    timerOldVal = false;
+                }
+                else if((divCounter & oldBit) && !(divCounter & timerBit)) // clock switch
+                    incrementTimer();
+            }
+            break;
+        }
+
+        case IO_IF:
+            serviceableInterrupts = data & mem.readIOReg(IO_IE) & 0x1F;
+            mem.writeIOReg(IO_IF, data | 0xE0);
+            return true;
+
+        case IO_DMA:
+            // need to delay two cycles
+            oamDMADelay = 2; 
+            break;
+        
+        case IO_KEY1:
+            if(!isGBC) return true;
+
+            speedSwitch = data & 1;
+            break; 
+
+        case IO_HDMA5:
+            if(!isGBC)
+                return true;
+            else if(data & 0x80) // HDMA
+                printf("HDMA\n");
+            else
+            {
+                // GDMA
+                gdmaTriggered = true;
+            }
+            break;
+
+        case IO_IE:
+            serviceableInterrupts = data & mem.readIOReg(IO_IF) & 0x1F;
+            break;
     }
-    else if((addr & 0xFF) == IO_IF)
-    {
-        serviceableInterrupts = data & mem.readIOReg(IO_IE) & 0x1F;
-        mem.writeIOReg(IO_IF, data | 0xE0);
-        return true;
-    }
-    else if((addr & 0xFF) == IO_IE)
-        serviceableInterrupts = data & mem.readIOReg(IO_IF) & 0x1F;
 
     return false;
 }
