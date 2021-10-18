@@ -104,9 +104,6 @@ int DMGAPU::getNumSamples() const
 
 uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
 {
-    if(addr < (0xFF00 | IO_NR10) || addr > 0xFF3F/* end of wave ram*/)
-        return val;
-
     update();
 
     // unsued bits/lengths/freqs read as 1
