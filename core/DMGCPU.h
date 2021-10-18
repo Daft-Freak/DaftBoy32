@@ -109,6 +109,7 @@ private:
     bool stopped, halted, breakpoint;
     bool masterInterruptEnable, enableInterruptsNextCycle;
     uint8_t serviceableInterrupts;
+    bool haltBug = false;
 
     int cyclesToRun = 0;
     uint32_t cycleCount = 0;

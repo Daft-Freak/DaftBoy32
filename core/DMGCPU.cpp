@@ -608,6 +608,11 @@ void DMGCPU::executeInstruction()
         masterInterruptEnable = true;
         enableInterruptsNextCycle = false;
     }
+    else if(haltBug)
+    {
+        pc--; // last increment didn't happen
+        haltBug = false;
+    }
 
     switch(opcode)
     {
@@ -1085,6 +1090,8 @@ void DMGCPU::executeInstruction()
 
         case 0x76: // HALT
             halted = true;
+            if(!masterInterruptEnable && serviceableInterrupts)
+                haltBug = true;
             break;
 
         case 0x77: // LD (HL),A
