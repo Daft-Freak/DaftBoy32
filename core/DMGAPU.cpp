@@ -13,7 +13,6 @@ void DMGAPU::reset()
 {
     enabled = true;
 
-    cyclesPassed = 0;
     frameSeqClock = 0;
     channelEnabled = 1;
 
@@ -56,14 +55,14 @@ void DMGAPU::update()
 
     while(passed)
     {
-        // clamp update step
-        auto step = std::min(128u, passed);
+        // clamp update step (min of next sample and next seq update)
+        auto step = std::min((static_cast<unsigned int>(clocksPerSample - sampleClock) + 1023) / 1024, std::min(8192u - (oldDiv & 0x1FFF), passed));
+
+        updateFreq(step);
 
         // update frame sequencer clock
         if((oldDiv & 0x1FFF) + step >= 8192)
             updateFrameSequencer();
-
-        cyclesPassed += step;
 
         // output
         sampleClock += step * 1024;
@@ -80,8 +79,6 @@ void DMGAPU::update()
 
     lastUpdateCycle = curCycle;
     lastDivValue = cpu.getInternalTimer();
-
-    updateFreq();
 }
 
 int16_t DMGAPU::getSample()
@@ -492,7 +489,6 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
             else if(!enabled && (data & NR52_Enable))
             {
                 frameSeqClock = 7; // make the next frame be 0
-                cyclesPassed = 0;
 
                 // might skip an update
                 int bit = cpu.getDoubleSpeedMode() ? (1 << 13) : (1 << 12);
@@ -670,7 +666,7 @@ void DMGAPU::updateFrameSequencer()
     }
 }
 
-void DMGAPU::updateFreq()
+void DMGAPU::updateFreq(int cyclesPassed)
 {
     // channel 1
     if(channelEnabled & (1 << 0) && ch1EnvVolume)
@@ -746,14 +742,11 @@ void DMGAPU::updateFreq()
         }
         ch4FreqTimer = timer;
     }
-
-    cyclesPassed = 0;
 }
 
 void DMGAPU::sampleOutput()
 {
     auto &mem = cpu.getMem();
-    updateFreq();
 
     // wait for the audio thread/interrupt to catch up
     while(writeOff == readOff - 1) {}
