@@ -270,7 +270,11 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 ch1EnvVolume = mem.readIOReg(IO_NR12) >> 4;
                 ch1EnvTimer = mem.readIOReg(IO_NR12) & 0x7;
 
-                ch1FreqTimer = ch1FreqTimerPeriod;
+                ch1FreqTimer = ch1FreqTimerPeriod + 8; // delay
+
+                // slightly smaller delay on restart
+                if(channelEnabled & (1 << 0))
+                    ch1FreqTimer -= 4;
 
                 if(ch1Len == 0)
                 {
@@ -345,7 +349,11 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 ch2EnvVolume = mem.readIOReg(IO_NR22) >> 4;
                 ch2EnvTimer = mem.readIOReg(IO_NR22) & 0x7;
 
-                ch2FreqTimer = ch2FreqTimerPeriod;
+                ch2FreqTimer = ch2FreqTimerPeriod + 8; // delay
+
+                // slightly smaller delay on restart
+                if(channelEnabled & (1 << 1))
+                    ch2FreqTimer -= 4;
 
                 if(ch2Len == 0)
                 {
