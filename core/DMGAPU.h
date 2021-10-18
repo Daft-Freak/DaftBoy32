@@ -44,6 +44,7 @@ private:
     uint16_t ch1SweepFreq = 0;
     uint8_t ch1Len = 0;
     uint8_t ch1EnvVolume, ch1EnvTimer;
+    bool ch1Val = false;
     int ch1FreqTimer = 0;
     uint16_t ch1FreqTimerPeriod = 1;
     uint8_t ch1DutyStep = 0;
@@ -52,6 +53,7 @@ private:
     // channel 2
     uint8_t ch2Len = 0;
     uint8_t ch2EnvVolume, ch2EnvTimer;
+    bool ch2Val = false;
     int ch2FreqTimer = 0;
     uint16_t ch2FreqTimerPeriod = 1;
     uint8_t ch2DutyStep = 0;

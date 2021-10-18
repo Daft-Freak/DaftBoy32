@@ -484,6 +484,7 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 frameSeqClock = 0;
 
                 ch1DutyStep = ch2DutyStep = 0;
+                ch1Val = ch2Val = false;
                 ch3SampleIndex = 0;
                 ch3Sample = 0;
                 ch4Val = 0;
@@ -679,6 +680,7 @@ void DMGAPU::updateFreq()
         while(timer <= 0)
         {
             timer += ch1FreqTimerPeriod;
+            ch1Val = ch1DutyPattern & (1 << ch1DutyStep);
             ch1DutyStep++;
             ch1DutyStep &= 7;
         }
@@ -693,6 +695,7 @@ void DMGAPU::updateFreq()
         while(timer <= 0)
         {
             timer += ch2FreqTimerPeriod;
+            ch2Val = ch2DutyPattern & (1 << ch2DutyStep);
             ch2DutyStep++;
             ch2DutyStep &= 7;
         }
@@ -758,10 +761,10 @@ void DMGAPU::sampleOutput()
     auto outputSelect = mem.readIOReg(IO_NR51);
 
     auto vol = ch1EnvVolume;
-    auto ch1Val = (channelEnabled & 1) && (ch1DutyPattern & (1 << ch1DutyStep)) ? vol : -vol;
+    auto ch1Val = (channelEnabled & 1) && this->ch1Val ? vol : -vol;
 
     vol = ch2EnvVolume;
-    auto ch2Val = (channelEnabled & 2) && (ch2DutyPattern & (1 << ch2DutyStep)) ? vol : -vol;
+    auto ch2Val = (channelEnabled & 2) && this->ch2Val ? vol : -vol;
 
     vol = (mem.readIOReg(IO_NR32) >> 5) & 0x3;
     auto ch3Val = (channelEnabled & 4) && vol ? (ch3Sample * 2) - 0xF : 0;
