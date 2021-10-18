@@ -26,6 +26,12 @@ enum TileFlags
     Tile_BGPriority = (1 << 7)
 };
 
+// constants
+static const int tileDataSize = 16;
+static const int screenSizeTiles = 32; // 32x32 tiles
+
+static const int numSprites = 40;
+
 // reverses the bits in each byte, but not the bytes
 static uint16_t reverseBitsPerByte(uint16_t v)
 {
@@ -95,10 +101,6 @@ void DMGDisplay::update()
             remainingScanlineCycles -= step;
             remainingModeCycles -= step;
 
-            // avg-ish time
-            // need to make this less inaccurate
-            static const int readTime = (172 + 289) / 2 + 2;
-
             // update STAT if not vblank
             if(remainingModeCycles == 0)
             {
@@ -138,7 +140,7 @@ void DMGDisplay::update()
                     {
                         // skips mode 2
                         statMode = 3;
-                        remainingModeCycles = 172; // minimal time
+                        remainingModeCycles = 172; // minimal time (skipped the bit that reads sprites)
                         firstFrame = false;
                         continue;
                     }
@@ -156,7 +158,27 @@ void DMGDisplay::update()
                 {
                     // mode 2 -> 3
                     statMode = 3;
-                    remainingModeCycles = readTime;
+
+                    // guess something semi-accurate
+                    remainingModeCycles = 172 + (mem.getIOReg(IO_SCX) & 7);
+
+                    // more if sprites
+                    const int spriteHeight = (mem.getIOReg(IO_LCDC) & LCDC_Sprite8x16) ? 16 : 8;
+                    int numLineSprites = 0;
+                    auto oam = mem.getOAM();
+
+                    for(int i = 0; i < numSprites && numLineSprites < 10; i++)
+                    {
+                        const int spriteY = oam[i * 4] - 16;
+
+                        // not on this line
+                        if(y < spriteY || y >= spriteY + spriteHeight)
+                            continue;
+
+                        numLineSprites++;
+                        remainingModeCycles += 11; // not really accurate, does result in the right range though
+                    }
+
                     continue;
                 }
                 else if(statMode == 3)
@@ -364,12 +386,6 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
     
     return false;
 }
-
-// helpers/constants
-static const int tileDataSize = 16;
-static const int screenSizeTiles = 32; // 32x32 tiles
-
-static const int numSprites = 40;
 
 // get the two data bytes for a tile row
 // handles x/y flips
