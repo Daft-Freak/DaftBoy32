@@ -99,6 +99,7 @@ private:
 
     void updateTimer();
     void incrementTimer();
+    void caclulateNextTimerInterrupt(uint32_t cycleCount, uint16_t div);
     bool serviceInterrupts();
 
     void updateOAMDMA();
@@ -121,6 +122,7 @@ private:
     bool timerOldVal = false;
     uint32_t lastTimerUpdate = 0;
     uint16_t lastTimerDiv = 0; // div register at time of last update
+    uint32_t nextTimerInterrupt = 0;
 
     bool isGBC = false;
     Console console = Console::Auto;

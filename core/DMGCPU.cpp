@@ -20,6 +20,7 @@ void DMGCPU::reset()
     timerEnabled = timerOldVal = false;
     timerBit = 1 << 9;
     lastTimerUpdate = 0;
+    nextTimerInterrupt = 0;
 
     isGBC = false;
     doubleSpeed = speedSwitch = false;
@@ -119,17 +120,18 @@ void DMGCPU::run(int ms)
             }
         }
 
-        bool timerInterrupsEnabled = mem.getIOReg(IO_IE) & Int_Timer;
-
         do
         {
             if(halted)
             {
-                // skip to next (display) interrupt
+                // skip to next (display/timer) interrupt
                 int skip = display.getCyclesToNextUpdate();
-                if(skip && !timerInterrupsEnabled)
+                if(skip)
                 {
                     skip = std::min(skip, cyclesToRun);
+                    if(nextTimerInterrupt)
+                        skip = std::min(skip, static_cast<int>(nextTimerInterrupt - cycleCount));
+
                     do
                     {
                         // inlined cycleExecuted without the !halted stuff
@@ -145,7 +147,7 @@ void DMGCPU::run(int ms)
             }
 
             // sync timer if interrupts enabled
-            if(timerInterrupsEnabled)
+            if(nextTimerInterrupt)
                 updateTimer();
 
             // sync display if interrupts enabled
@@ -232,6 +234,8 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
 
             divCounter = lastTimerDiv = 0;
             timerOldVal = false;
+
+            caclulateNextTimerInterrupt(cycleCount, divCounter);
             return true;
 
         case IO_TIMA:
@@ -240,9 +244,12 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
             timerReload = false; // cancel the reload
 
             // ignored if just reloaded
-            if(timerReloaded)
-                return true;
-            break;
+            if(!timerReloaded)
+                mem.writeIOReg(IO_TIMA, data);
+
+            caclulateNextTimerInterrupt(cycleCount, divCounter);
+
+            return true;
 
         case IO_TMA:
             updateTimer();
@@ -250,6 +257,8 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
             // written during reload
             if(timerReloaded)
                 mem.writeIOReg(IO_TIMA, data);
+
+            caclulateNextTimerInterrupt(cycleCount, divCounter);
             break;
 
         case IO_TAC:
@@ -275,6 +284,8 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
                 else if((divCounter & oldBit) && !(divCounter & timerBit)) // clock switch
                     incrementTimer();
             }
+
+            caclulateNextTimerInterrupt(cycleCount, divCounter);
             break;
         }
 
@@ -308,7 +319,11 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
 
         case IO_IE:
             serviceableInterrupts = data & mem.readIOReg(IO_IF) & 0x1F;
-            break;
+            updateTimer();
+
+            mem.writeIOReg(IO_IE, data);
+            caclulateNextTimerInterrupt(cycleCount, divCounter);
+            return true;
     }
 
     return false;
@@ -2351,6 +2366,9 @@ void DMGCPU::updateTimer()
 
     do
     {
+        div += 4;
+        passed -= 4;
+
         // reload
         if(timerReload)
         {
@@ -2358,12 +2376,11 @@ void DMGCPU::updateTimer()
             timerReloaded = true;
             mem.writeIOReg(IO_TIMA, mem.readIOReg(IO_TMA));
             flagInterrupt(Int_Timer);
+
+            caclulateNextTimerInterrupt(cycleCount - passed, div);
         }
         else if(timerReloaded)
             timerReloaded = false;
-
-        div += 4;
-        passed -= 4;
 
         bool val = (div & timerBit);
 
@@ -2390,6 +2407,24 @@ void DMGCPU::incrementTimer()
     auto &tima = mem.getIOReg(IO_TIMA);
     if(++tima == 0)
         timerReload = true;
+}
+
+void DMGCPU::caclulateNextTimerInterrupt(uint32_t cycleCount, uint16_t div)
+{
+    if((!timerEnabled && !timerReload) || !(mem.getIOReg(IO_IE) & Int_Timer))
+    {
+        nextTimerInterrupt = 0;
+        return;
+    }
+
+    int incs = 0xFF - mem.getIOReg(IO_TIMA);
+
+    int clockDiv = timerBit * 2;
+
+    nextTimerInterrupt = cycleCount
+                       + incs * clockDiv                   // tima increments to overflow
+                       + (clockDiv - (div & clockDiv - 1)) // cycles to next tima increment
+                       + 4;                                // reload/interrupt is a cycle late
 }
 
 bool DMGCPU::serviceInterrupts()
