@@ -13,6 +13,9 @@ void DMGAPU::reset()
 {
     enabled = true;
 
+    lastUpdateCycle = 0;
+    lastDivValue = 0;
+
     frameSeqClock = 0;
     channelEnabled = 1;
 
