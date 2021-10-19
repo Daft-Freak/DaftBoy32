@@ -56,7 +56,9 @@ void DMGAPU::update()
     while(passed)
     {
         // clamp update step (min of next sample and next seq update)
-        auto step = std::min((static_cast<unsigned int>(clocksPerSample - sampleClock) + 1023) / 1024, std::min(8192u - (oldDiv & 0x1FFF), passed));
+        uint32_t nextSample = ((clocksPerSample - sampleClock) + 1023) / 1024;
+        uint32_t nextFrameSeqUpdate = 8192u - (oldDiv & 0x1FFF);
+        auto step = std::min(nextSample, std::min(nextFrameSeqUpdate, passed));
 
         updateFreq(step);
 

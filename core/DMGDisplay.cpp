@@ -94,7 +94,7 @@ void DMGDisplay::update()
 
         while(passed)
         {
-            auto step = std::min(static_cast<unsigned>(remainingModeCycles), passed);
+            auto step = std::min(remainingModeCycles, passed);
 
             passed -= step;
 
