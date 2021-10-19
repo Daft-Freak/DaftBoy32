@@ -126,24 +126,20 @@ void DMGCPU::run(int ms)
             {
                 // skip to next (display/timer) interrupt
                 int skip = display.getCyclesToNextUpdate();
-                if(skip)
-                {
-                    skip = std::min(skip, cyclesToRun);
-                    if(nextTimerInterrupt)
-                        skip = std::min(skip, static_cast<int>(nextTimerInterrupt - cycleCount));
 
-                    do
-                    {
-                        // inlined cycleExecuted without the !halted stuff
-                        cyclesToRun -= 4;
-                        cycleCount += 4;
-                        divCounter += 4;
-                        skip -= 4;
-                    }
-                    while(skip > 0);
+                skip = std::min(skip, cyclesToRun);
+                if(nextTimerInterrupt)
+                    skip = std::min(skip, static_cast<int>(nextTimerInterrupt - cycleCount));
+
+                do
+                {
+                    // inlined cycleExecuted without the !halted stuff
+                    cyclesToRun -= 4;
+                    cycleCount += 4;
+                    divCounter += 4;
+                    skip -= 4;
                 }
-                else
-                    cycleExecuted(); // single cycle while halted
+                while(skip > 0);
             }
 
             // sync timer if interrupts enabled
