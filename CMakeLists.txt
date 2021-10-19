@@ -4,8 +4,8 @@ project(gameblit)
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall")
 
-option(BUILD_32BLIT ON "Build 32blit UI")
-option(BUILD_TESTS OFF "Build test runner")
+option(BUILD_32BLIT "Build 32blit UI" ON)
+option(BUILD_TESTS "Build test runner" OFF)
 
 #add_definitions("-DPROFILER")
 
