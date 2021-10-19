@@ -242,12 +242,17 @@ int DMGDisplay::updateForInterrupts()
         return 0x7FFFFFFF; // this is only used when halted and clamped to something reasonable in the CPU
 
     auto passed = cpu.getCycleCount() - lastUpdateCycle;
+    bool doubleSpeed = cpu.getDoubleSpeedMode();
+
+    if(doubleSpeed)
+        passed >>= 1;
+
     if(passed < remainingModeCycles)
-        return (remainingModeCycles - passed) * (cpu.getDoubleSpeedMode() ? 2 : 1);
+        return (remainingModeCycles - passed) * (doubleSpeed ? 2 : 1);
 
     update();
 
-    return remainingModeCycles * (cpu.getDoubleSpeedMode() ? 2 : 1);
+    return remainingModeCycles * (doubleSpeed ? 2 : 1);
 }
 
 uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
