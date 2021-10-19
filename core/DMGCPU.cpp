@@ -119,7 +119,6 @@ void DMGCPU::run(int ms)
             }
         }
 
-        int skip = 0;
         bool timerInterrupsEnabled = mem.getIOReg(IO_IE) & Int_Timer;
 
         do
@@ -127,6 +126,7 @@ void DMGCPU::run(int ms)
             if(halted)
             {
                 // skip to next (display) interrupt
+                int skip = display.getCyclesToNextUpdate();
                 if(skip && !timerInterrupsEnabled)
                 {
                     skip = std::min(skip, cyclesToRun);
@@ -149,7 +149,7 @@ void DMGCPU::run(int ms)
                 updateTimer();
 
             // sync display if interrupts enabled
-            skip = display.updateForInterrupts();
+            display.updateForInterrupts();
 
             if(serviceableInterrupts)
                 serviceInterrupts();

@@ -12,7 +12,8 @@ public:
     void reset();
 
     void update();
-    int updateForInterrupts();
+    void updateForInterrupts();
+    int getCyclesToNextUpdate() const;
 
     const uint16_t *getData() {return screenData;}
 
