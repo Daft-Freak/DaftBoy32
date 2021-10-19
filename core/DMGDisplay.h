@@ -45,7 +45,7 @@ private:
     static const int screenWidth = 160, screenHeight = 144;
 
     int remainingScanlineCycles = scanlineCycles;
-    int remainingModeCycles = 0;
+    unsigned int remainingModeCycles = 0;
     uint16_t screenData[screenWidth * screenHeight]; // rgb555
 
     // GBC
