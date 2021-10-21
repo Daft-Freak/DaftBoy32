@@ -548,7 +548,12 @@ void DMGDisplay::drawScanLine(int y)
     // contains palette index + a tile priority flag
     uint8_t bgRaw[screenWidth]{0};
 
+#ifdef PICO_BUILD
+    // need to avoid writing unfinished lines directly to the framebuffer as we're not synced
+    uint16_t scanLine[screenWidth];
+#else
     auto scanLine = screenData + y * screenWidth;
+#endif
 
     auto lcdc = mem.readIOReg(IO_LCDC);
 
@@ -561,6 +566,10 @@ void DMGDisplay::drawScanLine(int y)
 
     if(lcdc & LCDC_OBJDisp)
         drawSprites(scanLine, bgRaw);
+
+#ifdef PICO_BUILD
+    memcpy(screenData + y * screenWidth, scanLine, screenWidth * 2);
+#endif
 }
 
 void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)
