@@ -289,7 +289,12 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
 
 bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 {
-    const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0};
+#ifdef PICO_BUILD
+    const uint16_t colMap[]{0xFFFF, 0xAD55, 0x528A, 0}; // 565
+#else
+    const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0}; // 555
+#endif
+
     const auto statInts = STAT_HBlankInt | STAT_VBlankInt | STAT_OAMInt | STAT_CoincidenceInt;
 
     switch(addr & 0xFF)
