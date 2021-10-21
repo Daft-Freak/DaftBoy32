@@ -11,8 +11,6 @@
 #include "file-browser.hpp"
 #include "menu.hpp"
 
-#include "engine/api_private.hpp" // err...
-
 #ifdef PROFILER
 #include "engine/profiler.hpp"
 
@@ -199,9 +197,9 @@ void getROMBank(uint8_t bank, uint8_t *ptr)
 {
     //blit::debugf("loading bank %i\n", bank);
     loadedBanks++;
-    auto start = blit::api.get_us_timer();
+    auto start = blit::now_us();
     romFile.read(bank * 0x4000, 0x4000, (char *)ptr);
-    bankLoadTime += blit::api.get_us_timer() - start;
+    bankLoadTime += blit::us_diff(start, blit::now_us());
 }
 
 void updateCartRAM(uint8_t *cartRam, unsigned int size)
