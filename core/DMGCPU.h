@@ -118,7 +118,7 @@ private:
     uint16_t divCounter = 0;
     bool timerEnabled = false;
     bool timerReload = false, timerReloaded = false;
-    int timerBit = 1 << 9;
+    unsigned int timerBit = 1 << 9;
     bool timerOldVal = false;
     uint32_t lastTimerUpdate = 0;
     uint16_t lastTimerDiv = 0; // div register at time of last update

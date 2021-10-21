@@ -2418,9 +2418,9 @@ void DMGCPU::caclulateNextTimerInterrupt(uint32_t cycleCount, uint16_t div)
     int clockDiv = timerBit * 2;
 
     nextTimerInterrupt = cycleCount
-                       + incs * clockDiv                   // tima increments to overflow
-                       + (clockDiv - (div & clockDiv - 1)) // cycles to next tima increment
-                       + 4;                                // reload/interrupt is a cycle late
+                       + incs * clockDiv                     // tima increments to overflow
+                       + (clockDiv - (div & (clockDiv - 1))) // cycles to next tima increment
+                       + 4;                                  // reload/interrupt is a cycle late
 }
 
 bool DMGCPU::serviceInterrupts()
