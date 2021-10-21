@@ -71,6 +71,13 @@ duh::FileBrowser fileBrowser(tallFont);
 
 DMGCPU cpu;
 
+// ROM cache
+static const int romBankCacheSize = 10;
+static const int extraROMBankCacheSize = 4;
+
+static uint8_t romBankCache[0x4000 * romBankCacheSize];
+static uint8_t extraROMBankCache[0x4000 * extraROMBankCacheSize]{1}; // sneakily steal some of DTCMRAM
+
 bool loaded = false;
 std::string loadedFilename;
 blit::File romFile;
@@ -265,6 +272,9 @@ void openROM(std::string filename)
 void init()
 {
     blit::set_screen_mode(blit::ScreenMode::hires);
+
+    cpu.getMem().addROMCache(romBankCache, romBankCacheSize * 0x4000);
+    cpu.getMem().addROMCache(extraROMBankCache, extraROMBankCacheSize * 0x4000);
 
     blit::channels[0].waveforms = blit::Waveform::WAVE;
     blit::channels[0].wave_buffer_callback = &updateAudio;

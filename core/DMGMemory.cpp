@@ -5,16 +5,9 @@
 #include "DMGCPU.h"
 #include "DMGRegs.h"
 
-static const int extraROMBankCacheSize = 4;
-static uint8_t extraROMBankCache[0x4000 * extraROMBankCacheSize]{1}; // sneakily steal some of DTCMRAM
-
 DMGMemory::DMGMemory(DMGCPU &cpu) : cpu(cpu)
 {
-    for(int i = 0; i < romBankCacheSize; i++)
-        cachedROMBanks.emplace_back(ROMCacheEntry{cartROMBankCache + i * 0x4000, 0});
-
-    for(int i = 0; i < extraROMBankCacheSize; i++)
-        cachedROMBanks.emplace_back(ROMCacheEntry{extraROMBankCache + i * 0x4000, 0});
+    cachedROMBanks.emplace_back(ROMCacheEntry{cartROMBank1, 0});
 }
 
 void DMGMemory::setROMBankCallback(ROMBankCallback callback)
@@ -175,10 +168,10 @@ void DMGMemory::reset()
         // 1M MBC1 may be a multicart
         for(int i = 1; i < 4; i++)
         {
-            romBankCallback(i << 4, cartROMBankCache);
+            romBankCallback(i << 4, cartROMBank1);
 
             // compare logos
-            if(memcmp(cartROMBank0 + 0x104, cartROMBankCache + 0x104, 48) == 0)
+            if(memcmp(cartROMBank0 + 0x104, cartROMBank1 + 0x104, 48) == 0)
             {
                 mbcType = MBCType::MBC1M;
                 break;
@@ -187,7 +180,7 @@ void DMGMemory::reset()
     }
 
     // load the second bank too
-    romBankCallback(1, cartROMBankCache);
+    romBankCallback(1, cartROMBank1);
 
     // use spare RAM as rom cache
     if(cartRamSize == 0 && mbcType != MBCType::MBC2)
@@ -207,7 +200,7 @@ void DMGMemory::reset()
     regions[0x4] =
     regions[0x5] =
     regions[0x6] =
-    regions[0x7] = cartROMBankCache - 0x4000;
+    regions[0x7] = cartROMBank1 - 0x4000;
     regions[0x8] = vram - 0x8000; // banked
     regions[0x9] = vram - 0x8000; // banked
     regions[0xA] = nullptr; // cart RAM - banked
