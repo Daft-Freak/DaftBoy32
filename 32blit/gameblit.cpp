@@ -300,9 +300,14 @@ void init()
     st7789::update();
 
     // reduce the framebuffer to the size of the emulated screen
+    auto origSize = blit::screen.row_stride * blit::screen.bounds.h;
     blit::screen.bounds = {160, 144};
     blit::screen.row_stride = blit::screen.bounds.w * blit::screen.pixel_stride;
     st7789::set_window(40, 48, 160, 144);
+
+    // ... and steal that extra RAM
+    auto newSize = blit::screen.row_stride * blit::screen.bounds.h;
+    cpu.getMem().addROMCache(blit::screen.data + newSize, origSize - newSize);
 
     cpu.getDisplay().setFramebuffer(reinterpret_cast<uint16_t *>(blit::screen.data));
 #else
