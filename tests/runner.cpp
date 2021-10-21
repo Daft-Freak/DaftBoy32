@@ -18,6 +18,7 @@ static std::ifstream romFile;
 static size_t romSize;
 
 static DMGCPU *cpu;
+static uint16_t screenData[160 * 144];
 
 static bool takeScreenshot = false;
 
@@ -120,11 +121,9 @@ static void dumpImage(const std::string &filename, const uint8_t *data)
 
 static void screenToRGB(DMGDisplay &display, uint8_t *outRGB)
 {
-    auto displayData = cpu->getDisplay().getData();
-
     for(int i = 0; i < 160 * 144; i++)
     {
-        auto pixel = displayData[i];
+        auto pixel = screenData[i];
         outRGB[i * 3 + 0] = (pixel & 0x1F) << 3;
         outRGB[i * 3 + 1] = (pixel & 0x3E0) >> 2;
         outRGB[i * 3 + 2] = (pixel & 0x7C00) >> 7;
@@ -160,6 +159,7 @@ static bool runTest(const std::string &rom, DMGCPU::Console console = DMGCPU::Co
 
     // clean instance
     cpu = new DMGCPU;
+    cpu->getDisplay().setFramebuffer(screenData);
 
     auto &mem = cpu->getMem();
     mem.setROMBankCallback(getROMBank);

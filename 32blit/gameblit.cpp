@@ -71,6 +71,8 @@ duh::FileBrowser fileBrowser(tallFont);
 
 DMGCPU cpu;
 
+static uint16_t screenData[160 * 144];
+
 // ROM cache
 static const int romBankCacheSize = 10;
 static const int extraROMBankCacheSize = 4;
@@ -276,6 +278,8 @@ void init()
     cpu.getMem().addROMCache(romBankCache, romBankCacheSize * 0x4000);
     cpu.getMem().addROMCache(extraROMBankCache, extraROMBankCacheSize * 0x4000);
 
+    cpu.getDisplay().setFramebuffer(screenData);
+
     blit::channels[0].waveforms = blit::Waveform::WAVE;
     blit::channels[0].wave_buffer_callback = &updateAudio;
 
@@ -359,7 +363,7 @@ void render(uint32_t time_ms)
         redwawBG = !updateRunning;
     }
 
-    auto gbScreen = cpu.getDisplay().getData();
+    auto gbScreen = screenData;
 
     auto expandCol = [](uint16_t rgb555, uint8_t &r, uint8_t &g, uint8_t &b)
     {

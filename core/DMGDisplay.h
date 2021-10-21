@@ -15,7 +15,7 @@ public:
     void updateForInterrupts();
     int getCyclesToNextUpdate() const;
 
-    const uint16_t *getData() {return screenData;}
+    void setFramebuffer(uint16_t *data);
 
     uint8_t readReg(uint16_t addr, uint8_t val);
     bool writeReg(uint16_t addr, uint8_t data);
@@ -47,7 +47,7 @@ private:
 
     int remainingScanlineCycles = scanlineCycles;
     uint32_t remainingModeCycles = 0;
-    uint16_t screenData[screenWidth * screenHeight]; // rgb555
+    uint16_t *screenData = nullptr; // rgb555
 
     // GBC
     uint16_t bgPalette[8 * 4], objPalette[8 * 4];

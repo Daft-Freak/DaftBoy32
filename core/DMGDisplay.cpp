@@ -83,7 +83,7 @@ void DMGDisplay::update()
 
             // mode 3 on CGB keeps the old image
             if(!isCGB || statMode != 3)
-                memset(screenData, isCGB ? 0 : 0xFF, sizeof(screenData));
+                memset(screenData, isCGB ? 0 : 0xFF, screenWidth * screenHeight * 2);
 
             lastUpdateCycle = curCycle;
             return;
@@ -265,6 +265,11 @@ int DMGDisplay::getCyclesToNextUpdate() const
         passed >>= 1;
 
     return (remainingModeCycles - passed) * (doubleSpeed ? 2 : 1);
+}
+
+void DMGDisplay::setFramebuffer(uint16_t *data)
+{
+    screenData = data;
 }
 
 uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
