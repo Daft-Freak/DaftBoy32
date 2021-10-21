@@ -3,6 +3,10 @@
 #include "gameblit.hpp"
 #include "assets.hpp"
 
+#ifdef PICO_BUILD
+#include "st7789.hpp"
+#endif
+
 #include "DMGAPU.h"
 #include "DMGDisplay.h"
 #include "DMGCPU.h"
@@ -71,7 +75,9 @@ duh::FileBrowser fileBrowser(tallFont);
 
 DMGCPU cpu;
 
+#ifndef PICO_BUILD
 static uint16_t screenData[160 * 144];
+#endif
 
 // ROM cache
 #ifdef PICO_BUILD
@@ -288,12 +294,22 @@ void init()
 
     cpu.getMem().addROMCache(romBankCache, romBankCacheSize * 0x4000);
 
-#ifndef PICO_BUILD
+#ifdef PICO_BUILD
+    // force the background onto the screen
+    packedToRGB(asset_background_square, blit::screen.data);
+    st7789::update();
+
+    // reduce the framebuffer to the size of the emulated screen
+    blit::screen.bounds = {160, 144};
+    blit::screen.row_stride = blit::screen.bounds.w * blit::screen.pixel_stride;
+    st7789::set_window(40, 48, 160, 144);
+
+    cpu.getDisplay().setFramebuffer(reinterpret_cast<uint16_t *>(blit::screen.data));
+#else
     // 32blit extra cache
     cpu.getMem().addROMCache(extraROMBankCache, extraROMBankCacheSize * 0x4000);
-#endif
-
     cpu.getDisplay().setFramebuffer(screenData);
+#endif
 
     blit::channels[0].waveforms = blit::Waveform::WAVE;
     blit::channels[0].wave_buffer_callback = &updateAudio;
@@ -363,6 +379,7 @@ void render(uint32_t time_ms)
         return;
     }
 
+#ifndef PICO_BUILD
     bool updateRunning = time_ms - lastUpdate < 20;
 
     if(redwawBG || !updateRunning)
@@ -452,6 +469,7 @@ void render(uint32_t time_ms)
             }
         }
     }
+#endif
 
     if(menuOpen)
     {
