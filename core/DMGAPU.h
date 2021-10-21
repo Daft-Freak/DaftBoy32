@@ -27,14 +27,12 @@ private:
     DMGCPU &cpu;
 
     bool enabled = true;
+    uint8_t channelEnabled = 0;
 
+    uint8_t frameSeqClock = 0;
     // deferred updates
     uint32_t lastUpdateCycle = 0;
     uint16_t lastDivValue = 0;
-
-    uint8_t frameSeqClock = 0;
-
-    uint8_t channelEnabled = 0;
 
     // channel 1
     bool ch1SweepEnable = false;

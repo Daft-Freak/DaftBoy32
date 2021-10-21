@@ -39,7 +39,7 @@ private:
     void writeMBC(uint16_t addr, uint8_t data);
     void updateCurrentROMBank(unsigned int bank, int region);
 
-    enum class MBCType
+    enum class MBCType : uint8_t
     {
         None = 0,
         MBC1,
@@ -71,10 +71,12 @@ private:
     // cartridge
     MBCType mbcType = MBCType::None;
     bool mbcRAMEnabled = false;
-    int mbcROMBank = 1, mbcRAMBank = 0;
     bool mbcRAMBankMode = false;
-    uint8_t cartRam[0x8000];
     bool cartRamWritten = false;
+
+    int mbcROMBank = 1, mbcRAMBank = 0;
+    uint8_t cartRam[0x8000];
+    
     unsigned int cartRamSize = 0;
 
     uint8_t cartROMBank0[0x4000];
