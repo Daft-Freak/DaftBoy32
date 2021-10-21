@@ -6,7 +6,7 @@ class DMGCPU;
 class DMGMemory
 {
 public:
-    DMGMemory(DMGCPU &cpu) : cpu(cpu) {};
+    DMGMemory(DMGCPU &cpu);
 
     using ROMBankCallback = void(*)(uint8_t, uint8_t *);
 
@@ -15,6 +15,9 @@ public:
     void setROMBankCallback(ROMBankCallback callback);
     void setCartROM(const uint8_t *rom);
     void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
+
+    void addROMCache(uint8_t *ptr, uint32_t size);
+
     void reset();
     void setGBC(bool gbc) {isGBC = gbc;}
 

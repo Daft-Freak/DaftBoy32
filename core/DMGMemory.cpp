@@ -8,6 +8,15 @@
 static const int extraROMBankCacheSize = 4;
 static uint8_t extraROMBankCache[0x4000 * extraROMBankCacheSize]{1}; // sneakily steal some of DTCMRAM
 
+DMGMemory::DMGMemory(DMGCPU &cpu) : cpu(cpu)
+{
+    for(int i = 0; i < romBankCacheSize; i++)
+        cachedROMBanks.emplace_back(ROMCacheEntry{cartROMBankCache + i * 0x4000, 0});
+
+    for(int i = 0; i < extraROMBankCacheSize; i++)
+        cachedROMBanks.emplace_back(ROMCacheEntry{extraROMBankCache + i * 0x4000, 0});
+}
+
 void DMGMemory::setROMBankCallback(ROMBankCallback callback)
 {
     this->romBankCallback = callback;
@@ -21,6 +30,17 @@ void DMGMemory::setCartROM(const uint8_t *rom)
 void DMGMemory::loadCartridgeRAM(const uint8_t *ram, uint32_t len)
 {
     memcpy(cartRam, ram, len);
+}
+
+void DMGMemory::addROMCache(uint8_t *ptr, uint32_t size)
+{
+    auto end = ptr + size;
+
+    while(ptr + 0x4000 < end)
+    {
+        cachedROMBanks.emplace_back(ROMCacheEntry{ptr, 0});
+        ptr += 0x4000;
+    }
 }
 
 void DMGMemory::reset()
@@ -72,16 +92,22 @@ void DMGMemory::reset()
     // clear vram
     memset(vram, 0, sizeof(vram));
 
-    // load some ROM
+    // load first ROM bank for reading headers
     romBankCallback(0, cartROMBank0);
-    romBankCallback(1, cartROMBankCache);
 
-    cachedROMBanks.clear();
-    for(int i = 0; i < romBankCacheSize; i++)
-        cachedROMBanks.emplace_back(ROMCacheEntry{cartROMBankCache + i * 0x4000, 0});
+    // reset cache
+    for(auto it = cachedROMBanks.begin(); it != cachedROMBanks.end();)
+    {
+        // remove cart ram, will re-add later if possible
+        if(it->ptr == cartRam || it->ptr == cartRam + 0x4000)
+        {
+            it = cachedROMBanks.erase(it);
+            continue;
+        }
 
-    for(int i = 0; i < extraROMBankCacheSize; i++)
-        cachedROMBanks.emplace_back(ROMCacheEntry{extraROMBankCache + i * 0x4000, 0});
+        it->bank = 0;
+        ++it;
+    }
 
     // get ROM size
     int size = cartROMBank0[0x148];
@@ -149,16 +175,19 @@ void DMGMemory::reset()
         // 1M MBC1 may be a multicart
         for(int i = 1; i < 4; i++)
         {
-            romBankCallback(i << 4, cartROMBankCache + 0x4000);
+            romBankCallback(i << 4, cartROMBankCache);
 
             // compare logos
-            if(memcmp(cartROMBank0 + 0x104, cartROMBankCache + 0x4104, 48) == 0)
+            if(memcmp(cartROMBank0 + 0x104, cartROMBankCache + 0x104, 48) == 0)
             {
                 mbcType = MBCType::MBC1M;
                 break;
             }
         }
     }
+
+    // load the second bank too
+    romBankCallback(1, cartROMBankCache);
 
     // use spare RAM as rom cache
     if(cartRamSize == 0 && mbcType != MBCType::MBC2)
