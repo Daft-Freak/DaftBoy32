@@ -88,9 +88,9 @@ static uint16_t screenData[160 * 144];
 
 // ROM cache
 #ifdef PICO_BUILD
-static const int romBankCacheSize = 1;
+static const int romBankCacheSize = 2;
 #else
-static const int romBankCacheSize = 10;
+static const int romBankCacheSize = 11;
 static const int extraROMBankCacheSize = 4;
 
 static uint8_t extraROMBankCache[0x4000 * extraROMBankCacheSize]{1}; // sneakily steal some of DTCMRAM

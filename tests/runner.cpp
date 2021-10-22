@@ -19,6 +19,7 @@ static size_t romSize;
 
 static DMGCPU *cpu;
 static uint16_t screenData[160 * 144];
+static uint8_t romBankCache[0x4000]; // need at least one bank
 
 static bool takeScreenshot = false;
 
@@ -163,6 +164,7 @@ static bool runTest(const std::string &rom, DMGCPU::Console console = DMGCPU::Co
 
     auto &mem = cpu->getMem();
     mem.setROMBankCallback(getROMBank);
+    mem.addROMCache(romBankCache, sizeof(romBankCache));
 
     cpu->setConsole(console);
 
@@ -246,6 +248,7 @@ static void replayLog(const std::string &logFilename, DMGCPU::Console console = 
 
     auto &mem = cpu->getMem();
     mem.setROMBankCallback(getROMBank);
+    mem.addROMCache(romBankCache, sizeof(romBankCache));
 
     cpu->setConsole(console);
 

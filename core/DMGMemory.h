@@ -94,7 +94,6 @@ private:
     unsigned int cartRamSize = 0;
 
     uint8_t cartROMBank0[0x4000];
-    uint8_t cartROMBank1[0x4000];
     const uint8_t *cartROM = nullptr; // used if entire rom is loaded somewhere
     unsigned int cartROMBanks = 0; // read from the header
 
