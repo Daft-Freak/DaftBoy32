@@ -38,6 +38,10 @@ uint16_t AGBMemory::read16(uint32_t addr) const
     auto ptr = mapAddress(addr);
     uint16_t ret = *reinterpret_cast<const uint16_t *>(ptr);
 
+    // EEPROM (or could just be a big cart...)
+    if((addr >> 24) == 0xD)
+        return eepromOutBits[(addr & 0xFF) >> 1];
+
     // io
     if((addr >> 24) == 0x4 && readCallback)
         ret = readCallback(addr & 0xFFFFFF, ret);
@@ -76,6 +80,38 @@ void AGBMemory::write16(uint32_t addr, uint16_t data)
     // io
     if((addr >> 24) == 0x4 && writeCallback && writeCallback(addr & 0xFFFFFF, data))
         return;
+
+    // EEPROM
+    if((addr >> 24) == 0xD)
+    {
+        eepromInBits[(addr & 0xFF) >> 1] = data;
+
+        if((addr & 0xFF) == 0x10 && eepromInBits[0] && eepromInBits[1]) // end of read request for 512b
+        {
+            uint16_t eepromAddr = (eepromInBits[2] << 5) | (eepromInBits[3] << 4) | (eepromInBits[4] << 3)
+                                | (eepromInBits[5] << 2) | (eepromInBits[6] << 1) | eepromInBits[7];
+
+            uint64_t data = reinterpret_cast<uint64_t *>(eepromData)[eepromAddr];
+
+            for(int i = 0; i < 64; i++)
+                eepromOutBits[i + 4] = (data & (1ull << (63 - i))) ? 1 : 0;
+        }
+        else if((addr & 0xFF) == 0x90 && eepromInBits[0] && !eepromInBits[1])
+        {
+            uint16_t eepromAddr = (eepromInBits[2] << 5) | (eepromInBits[3] << 4) | (eepromInBits[4] << 3)
+                                | (eepromInBits[5] << 2) | (eepromInBits[6] << 1) | eepromInBits[7];
+
+            uint64_t data = 0;
+
+            for(int i = 0; i < 64; i++)
+                data |= static_cast<uint64_t>(eepromInBits[i + 8]) << (63 - i);
+
+            reinterpret_cast<uint64_t *>(eepromData)[eepromAddr] = data;
+
+            eepromOutBits[0] = 1;
+        }
+        return;
+    }
 
     auto ptr = mapAddress(addr);
     if(ptr)

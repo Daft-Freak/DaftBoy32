@@ -76,6 +76,10 @@ private:
     const uint8_t *cartROM = nullptr;
     uint32_t cartROMSize = 0;
 
+    uint8_t eepromInBits[81]; // could be smaller if bits packed
+    uint8_t eepromOutBits[68];
+    uint8_t eepromData[512]; // TODO: combined storage for all save types?
+
     uint32_t dummy = 0xBADADD55;
 
     ReadCallback readCallback;
