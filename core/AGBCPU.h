@@ -2,8 +2,7 @@
 #include <cstdint>
 
 #include "AGBDisplay.h"
-
-class AGBMemory;
+#include "AGBMemory.h"
 
 class AGBCPU final
 {
@@ -33,7 +32,7 @@ public:
         // sound...
     };
 
-    AGBCPU(AGBMemory &mem);
+    AGBCPU();
 
     void reset();
 
@@ -257,6 +256,7 @@ private:
     int regBankOffset = 0;
 
     uint16_t inputs = 0;
-    AGBMemory &mem;
+    
     AGBDisplay display;
+    AGBMemory mem;
 };

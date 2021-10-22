@@ -8,7 +8,7 @@
 #include "AGBMemory.h"
 #include "AGBRegs.h"
 
-AGBCPU::AGBCPU(AGBMemory &mem) : display(*this), mem(mem)
+AGBCPU::AGBCPU() : display(*this), mem(*this)
 {}
 
 void AGBCPU::reset()

@@ -3,6 +3,10 @@
 
 #include "AGBMemory.h"
 
+#include "AGBCPU.h"
+
+AGBMemory::AGBMemory(AGBCPU &cpu) : cpu(cpu){}
+
 void AGBMemory::setBIOSROM(const uint8_t *rom)
 {
     biosROM = rom;
@@ -16,16 +20,6 @@ void AGBMemory::setCartROM(const uint8_t *rom, uint32_t size)
 
 void AGBMemory::reset()
 {
-}
-
-void AGBMemory::setIOReadCallback(ReadCallback readCallback)
-{
-    this->readCallback = readCallback;
-}
-
-void AGBMemory::setIOWriteCallback(WriteCallback writeCallback)
-{
-    this->writeCallback = writeCallback;
 }
 
 uint8_t AGBMemory::read8(uint32_t addr) const
@@ -43,8 +37,8 @@ uint16_t AGBMemory::read16(uint32_t addr) const
         return eepromOutBits[(addr & 0xFF) >> 1];
 
     // io
-    if((addr >> 24) == 0x4 && readCallback)
-        ret = readCallback(addr & 0xFFFFFF, ret);
+    if((addr >> 24) == 0x4)
+        ret = cpu.readReg(addr & 0xFFFFFF, ret);
 
     return ret;
 }
@@ -78,7 +72,7 @@ void AGBMemory::write8(uint32_t addr, uint8_t data)
 void AGBMemory::write16(uint32_t addr, uint16_t data)
 {
     // io
-    if((addr >> 24) == 0x4 && writeCallback && writeCallback(addr & 0xFFFFFF, data))
+    if((addr >> 24) == 0x4 && cpu.writeReg(addr & 0xFFFFFF, data))
         return;
 
     // EEPROM
