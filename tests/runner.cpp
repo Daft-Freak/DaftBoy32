@@ -242,6 +242,7 @@ static void replayLog(const std::string &logFilename, DMGCPU::Console console = 
 
     // clean instance
     cpu = new DMGCPU;
+    cpu->getDisplay().setFramebuffer(screenData);
 
     auto &mem = cpu->getMem();
     mem.setROMBankCallback(getROMBank);
