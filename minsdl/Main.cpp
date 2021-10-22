@@ -4,14 +4,18 @@
 
 #include <SDL.h>
 
+#include "AGBCPU.h"
 #include "DMGCPU.h"
 
 static bool quit = false;
 
-static DMGCPU dmgCPU;
+static bool isAGB = false;
 
-static uint8_t inputs = 0;
-static uint16_t screenData[160 * 144];
+static DMGCPU dmgCPU;
+static AGBCPU agbCPU;
+
+static uint16_t inputs = 0;
+static uint16_t screenData[240 * 160];
 static uint8_t romBankCache[0x4000];
 
 static std::ifstream romFile;
@@ -26,6 +30,19 @@ static const std::unordered_map<SDL_Keycode, int> dmgKeyMap {
 	{SDLK_x,      1 << 5},
 	{SDLK_c,      1 << 6},
     {SDLK_v,      1 << 7},
+};
+
+// maybe swap dpad/buttons on DMG to share mappings?
+static const std::unordered_map<SDL_Keycode, int> agbKeyMap {
+    {SDLK_RIGHT,  1 << 4},
+    {SDLK_LEFT,   1 << 5},
+    {SDLK_UP,     1 << 6},
+    {SDLK_DOWN,   1 << 7},
+
+    {SDLK_z,      1 << 0},
+    {SDLK_x,      1 << 1},
+    {SDLK_c,      1 << 2},
+    {SDLK_v,      1 << 3},
 };
 
 static void getROMBank(uint8_t bank, uint8_t *ptr)
@@ -47,6 +64,8 @@ static void audioCallback(void *userdata, Uint8 *stream, int len)
 
 static void pollEvents()
 {
+    auto &keyMap = isAGB ? agbKeyMap : dmgKeyMap;
+
     SDL_Event event;
     while(SDL_PollEvent(&event))
     {
@@ -54,15 +73,15 @@ static void pollEvents()
         {
             case SDL_KEYDOWN:
             {
-                auto it = dmgKeyMap.find(event.key.keysym.sym);
-                if(it != dmgKeyMap.end())
+                auto it = keyMap.find(event.key.keysym.sym);
+                if(it != keyMap.end())
                     inputs |= it->second;
                 break;
             }
             case SDL_KEYUP:
             {
-                auto it = dmgKeyMap.find(event.key.keysym.sym);
-                if(it != dmgKeyMap.end())
+                auto it = keyMap.find(event.key.keysym.sym);
+                if(it != keyMap.end())
                     inputs &= ~it->second;
                 break;
             }
@@ -100,7 +119,19 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // get base path
+    std::string basePath;
+    auto tmp = SDL_GetBasePath();
+    if(tmp)
+    {
+        basePath = tmp;
+        SDL_free(tmp);
+    }
+
     romFilename = argv[i];
+
+    std::string ext = romFilename.substr(romFilename.find_last_of('.'));
+    isAGB = ext == ".gba";
 
     romFile.open(romFilename);
 
@@ -111,13 +142,45 @@ int main(int argc, char *argv[])
     }
 
     // emu init
-    dmgCPU.getDisplay().setFramebuffer(screenData);
+    if(isAGB)
+    {
+        screenWidth = 240;
+        screenHeight = 160;
 
-    auto &mem = dmgCPU.getMem();
-    mem.setROMBankCallback(getROMBank);
-    mem.addROMCache(romBankCache, sizeof(romBankCache));
+        auto &mem = agbCPU.getMem();
 
-    dmgCPU.reset();
+        // need the bios for now
+        uint8_t biosROM[0x4000];
+
+        std::ifstream biosFile(basePath + "bios.gba");
+        biosFile.read(reinterpret_cast<char *>(biosROM), sizeof(biosROM));
+
+        mem.setBIOSROM(biosROM);
+        
+        // read the entire ROM, this one doesn't have the load callback/caching setup
+        romFile.seekg(0, std::ios::end);
+        auto romSize = romFile.tellg();
+        romFile.seekg(0);
+
+        auto romData = new uint8_t[romSize]; // FIXME: leaky
+        romFile.read(reinterpret_cast<char *>(romData), romSize);
+
+        agbCPU.getDisplay().setFramebuffer(screenData);
+
+        mem.setCartROM(romData, romSize);
+
+        agbCPU.reset();
+    }
+    else
+    {
+        dmgCPU.getDisplay().setFramebuffer(screenData);
+
+        auto &mem = dmgCPU.getMem();
+        mem.setROMBankCallback(getROMBank);
+        mem.addROMCache(romBankCache, sizeof(romBankCache));
+
+        dmgCPU.reset();
+    }
 
     // SDL init
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0)
@@ -153,7 +216,8 @@ int main(int argc, char *argv[])
         quit = true;
     }
 
-    SDL_PauseAudioDevice(dev, 0);
+    if(!isAGB) // no audio yet
+        SDL_PauseAudioDevice(dev, 0);
 
     auto lastTick = SDL_GetTicks();
 
@@ -163,9 +227,26 @@ int main(int argc, char *argv[])
 
         auto now = SDL_GetTicks();
 
-        dmgCPU.setInputs(inputs);
-        dmgCPU.run(now - lastTick);
-        dmgCPU.getAPU().update();
+        if(isAGB)
+        {
+            // clamp updates as this can still be really slow
+            auto time = now - lastTick;
+            if(time > 30)
+            {
+                std::cout << "slow " << time << "\n";
+                time = 30;
+            }
+
+            agbCPU.setInputs(inputs);
+            agbCPU.run(time);
+        }
+        else
+        {
+            dmgCPU.setInputs(inputs);
+            dmgCPU.run(now - lastTick);
+            dmgCPU.getAPU().update();
+        }
+
         lastTick = now;
     
         // TODO: sync
