@@ -11,7 +11,7 @@ add_subdirectory(DUH)
 target_link_libraries(DaftBoy32 DaftBoyCore DUH)
 
 if(32BLIT_PICO)
-    target_compile_definitions(DaftBoy32 PRIVATE -DNO_GBC -DNO_AUDIO)
+    target_compile_definitions(DaftBoy32 PRIVATE -DNO_GBC -DNO_AUDIO -DDISPLAY_RGB565)
 else()
     set_target_properties(DaftBoy32 PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()

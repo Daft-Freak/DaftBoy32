@@ -289,11 +289,7 @@ uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
 
 bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 {
-#ifdef PICO_BUILD
-    const uint16_t colMap[]{0xFFFF, 0xAD55, 0x528A, 0}; // 565
-#else
     const uint16_t colMap[]{0xFFFF, 0x56B5, 0x294A, 0}; // 555
-#endif
 
     const auto statInts = STAT_HBlankInt | STAT_VBlankInt | STAT_OAMInt | STAT_CoincidenceInt;
 
@@ -496,7 +492,11 @@ static void copyPartialTile(uint8_t lcdc, int &x, int endX, uint16_t d, int tile
 
         if(lcdc & LCDC_BGDisp)
             *(rawOut++) = palIndex | tilePriority;
+#ifdef DISPLAY_RGB565
+        *(out++) = (bgPal[palIndex] & 0x1F) | (bgPal[palIndex] & 0x7FE0) << 1;
+#else
         *(out++) = bgPal[palIndex];
+#endif
     }
 };
 
@@ -513,7 +513,12 @@ static void copyFullTile(uint8_t lcdc, uint16_t d, int tileAttrs, uint16_t *bgPa
 
         if(lcdc & LCDC_BGDisp)
             *(rawOut++) = palIndex | tilePriority;
+
+#ifdef DISPLAY_RGB565
+        *(out++) = (bgPal[palIndex] & 0x1F) | (bgPal[palIndex] & 0x7FE0) << 1;
+#else
         *(out++) = bgPal[palIndex];
+#endif
     }
 };
 
@@ -707,6 +712,12 @@ void DMGDisplay::drawSprites(uint16_t *scanLine, uint8_t *bgRaw)
                 continue;
 
             *out = spritePal[palIndex];
+
+#ifdef DISPLAY_RGB565
+            *out = (spritePal[palIndex] & 0x1F) | (spritePal[palIndex] & 0xFFC0) << 1;
+#else
+            *out = spritePal[palIndex];
+#endif
         }
     }
 }
