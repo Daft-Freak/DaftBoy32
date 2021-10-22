@@ -11,6 +11,7 @@ public:
     //using CartRamUpdateCallback = void(*)(uint8_t *, unsigned int);
 
     void setBIOSROM(const uint8_t *rom);
+    void setCartROM(const uint8_t *rom, uint32_t size);
     //void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
     void reset();
 
@@ -72,7 +73,8 @@ private:
     uint8_t vram[0x18000]; // 16bit bus
     uint8_t oam[0x400];
 
-    uint8_t cartROM[0x80000]{}; // 16bit bus, much bigger than this (32MB)...
+    const uint8_t *cartROM = nullptr;
+    uint32_t cartROMSize = 0;
 
     uint32_t dummy = 0xBADADD55;
 

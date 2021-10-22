@@ -8,6 +8,12 @@ void AGBMemory::setBIOSROM(const uint8_t *rom)
     biosROM = rom;
 }
 
+void AGBMemory::setCartROM(const uint8_t *rom, uint32_t size)
+{
+    cartROM = rom;
+    cartROMSize = size;
+}
+
 void AGBMemory::reset()
 {
 }
@@ -122,7 +128,7 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
         case 0xC: // wait state 2
         case 0xD:
             addr &= 0x1FFFFFF;
-            if(addr >= sizeof(cartROM))
+            if(addr >= cartROMSize)
                 return reinterpret_cast<const uint8_t *>(&dummy);
             return cartROM + addr;
     }
