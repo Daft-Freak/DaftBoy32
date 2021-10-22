@@ -8,7 +8,7 @@
 #include "AGBMemory.h"
 #include "AGBRegs.h"
 
-AGBCPU::AGBCPU(AGBMemory &mem) : mem(mem)
+AGBCPU::AGBCPU(AGBMemory &mem) : display(*this), mem(mem)
 {}
 
 void AGBCPU::reset()
@@ -69,14 +69,16 @@ void AGBCPU::run(int ms)
 
         cycles -= exec;
 
-        if(cycleCallback)
-            cycleCallback(exec);
+        // this is dumb
+        // will go away when display gets updated
+        static int counter = 0;
+        counter += exec;
+        while(counter >= 4)
+        {
+            display.update(1);
+            counter -= 4;
+        }
     }
-}
-
-void AGBCPU::setCycleCallback(CycleCallback cycleCallback)
-{
-    this->cycleCallback = cycleCallback;
 }
 
 void AGBCPU::flagInterrupt(int interrupt)
@@ -104,6 +106,9 @@ void AGBCPU::triggerDMA(int trigger)
 
 uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
 {
+    if((addr & 0xFFFFFF) < 0x60/*SOUND1CNT_L*/)
+        return display.readReg(addr, val);
+
     switch(addr & 0xFFFFFF)
     {
         case IO_KEYINPUT:
@@ -114,6 +119,9 @@ uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
 
 bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
 {
+    if((addr & 0xFFFFFF) < 0x60/*SOUND1CNT_L*/)
+        return display.writeReg(addr, data);
+
     return false;
 }
 

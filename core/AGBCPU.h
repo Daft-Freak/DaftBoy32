@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 
+#include "AGBDisplay.h"
+
 class AGBMemory;
 
 class AGBCPU final
@@ -33,13 +35,9 @@ public:
 
     AGBCPU(AGBMemory &mem);
 
-    using CycleCallback = void(*)(int);
-
     void reset();
 
     void run(int ms);
-
-    void setCycleCallback(CycleCallback cycleCallback);
 
     void flagInterrupt(int interrupt);
     void triggerDMA(int trigger);
@@ -47,6 +45,7 @@ public:
     uint16_t readReg(uint32_t addr, uint16_t val);
     bool writeReg(uint32_t addr, uint16_t data);
 
+    AGBDisplay &getDisplay() {return display;}
     AGBMemory &getMem() {return mem;}
 
     void setInputs(uint16_t newInputs);
@@ -259,7 +258,5 @@ private:
 
     uint16_t inputs = 0;
     AGBMemory &mem;
-
-    // callbacks
-    CycleCallback cycleCallback;
+    AGBDisplay display;
 };
