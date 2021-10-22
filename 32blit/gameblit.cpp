@@ -88,7 +88,11 @@ static uint16_t screenData[160 * 144];
 
 // ROM cache
 #ifdef PICO_BUILD
+#ifdef NO_GBC
 static const int romBankCacheSize = 2;
+#else
+static const int romBankCacheSize = 0;
+#endif
 #else
 static const int romBankCacheSize = 11;
 static const int extraROMBankCacheSize = 4;
