@@ -28,7 +28,7 @@ void DMGMemory::addROMCache(uint8_t *ptr, uint32_t size)
 {
     auto end = ptr + size;
 
-    while(ptr + 0x4000 < end)
+    while(ptr + 0x4000 <= end)
     {
         cachedROMBanks.emplace_back(ROMCacheEntry{ptr, 0});
         ptr += 0x4000;
