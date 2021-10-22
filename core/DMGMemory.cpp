@@ -7,7 +7,6 @@
 
 DMGMemory::DMGMemory(DMGCPU &cpu) : cpu(cpu)
 {
-    cachedROMBanks.emplace_back(ROMCacheEntry{cartROMBank1, 0});
 }
 
 void DMGMemory::setROMBankCallback(ROMBankCallback callback)
@@ -101,6 +100,9 @@ void DMGMemory::reset()
         it->bank = 0;
         ++it;
     }
+
+    // grab the first bank to use for bank 1
+    auto cartROMBank1 = cachedROMBanks.front().ptr;
 
     // get ROM size
     int size = cartROMBank0[0x148];

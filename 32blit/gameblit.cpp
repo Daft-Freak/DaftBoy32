@@ -74,7 +74,7 @@ DMGCPU cpu;
 static uint16_t screenData[160 * 144];
 
 // ROM cache
-static const int romBankCacheSize = 10;
+static const int romBankCacheSize = 11;
 static const int extraROMBankCacheSize = 4;
 
 static uint8_t romBankCache[0x4000 * romBankCacheSize];
