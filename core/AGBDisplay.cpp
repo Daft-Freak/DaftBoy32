@@ -390,6 +390,11 @@ void AGBDisplay::update(int cycles)
         y = 0; // end vblank
 }
 
+void AGBDisplay::setFramebuffer(uint16_t *data)
+{
+    screenData = data;
+}
+
 uint16_t AGBDisplay::readReg(uint32_t addr, uint16_t val)
 {
     switch(addr)

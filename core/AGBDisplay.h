@@ -11,7 +11,7 @@ public:
 
     void update(int cycles);
 
-    const uint16_t *getData() {return screenData;}
+    void setFramebuffer(uint16_t *data);
 
     uint16_t readReg(uint32_t addr, uint16_t val);
     bool writeReg(uint32_t addr, uint16_t data);
@@ -28,5 +28,5 @@ private:
     static const int screenWidth = 240, screenHeight = 160;
 
     int remainingScanlineDots = scanlineDots;
-    uint16_t screenData[screenWidth * screenHeight]; // rgb555
+    uint16_t *screenData; // rgb555
 };
