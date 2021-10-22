@@ -90,8 +90,8 @@ void DMGMemory::reset()
     // reset cache
     for(auto it = cachedROMBanks.begin(); it != cachedROMBanks.end();)
     {
-        // remove cart ram, will re-add later if possible
-        if(it->ptr == cartRam || it->ptr == cartRam + 0x4000)
+        // remove cart ram/wram, will re-add later if possible
+        if(it->ptr == cartRam || it->ptr == cartRam + 0x4000 || it->ptr == wram + 0x4000)
         {
             it = cachedROMBanks.erase(it);
             continue;
@@ -189,6 +189,9 @@ void DMGMemory::reset()
         cachedROMBanks.emplace_back(ROMCacheEntry{cartRam, 0});
     if(cartRamSize <= 0x4000)
         cachedROMBanks.emplace_back(ROMCacheEntry{cartRam + 0x4000, 0});
+
+    if(!(cartROMBank0[0x143] & 0x80))// CGB flag
+        cachedROMBanks.emplace_back(ROMCacheEntry{wram + 0x4000, 0}); // spare WRAM (really 0x6000)
 
     mbcRAMEnabled = false;
     mbcROMBank = 1;
