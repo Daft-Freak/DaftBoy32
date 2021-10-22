@@ -8,7 +8,7 @@
 
 static bool quit = false;
 
-static DMGCPU cpu;
+static DMGCPU dmgCPU;
 
 static uint8_t inputs = 0;
 static uint16_t screenData[160 * 144];
@@ -16,7 +16,7 @@ static uint8_t romBankCache[0x4000];
 
 static std::ifstream romFile;
 
-static const std::unordered_map<SDL_Keycode, int> keyMap {
+static const std::unordered_map<SDL_Keycode, int> dmgKeyMap {
     {SDLK_RIGHT,  1 << 0},
 	{SDLK_LEFT,   1 << 1},
 	{SDLK_UP,     1 << 2},
@@ -38,11 +38,11 @@ static void getROMBank(uint8_t bank, uint8_t *ptr)
 
 static void audioCallback(void *userdata, Uint8 *stream, int len)
 {
-    while(!quit && cpu.getAPU().getNumSamples() < 512); // ohno
+    while(!quit && dmgCPU.getAPU().getNumSamples() < 512); // ohno
 
     auto ptr = reinterpret_cast<int16_t *>(stream);
     for(int i = 0; i < len / 2; i++)
-        *ptr++ = cpu.getAPU().getSample();
+        *ptr++ = dmgCPU.getAPU().getSample();
 }
 
 static void pollEvents()
@@ -54,15 +54,15 @@ static void pollEvents()
         {
             case SDL_KEYDOWN:
             {
-                auto it = keyMap.find(event.key.keysym.sym);
-                if(it != keyMap.end())
+                auto it = dmgKeyMap.find(event.key.keysym.sym);
+                if(it != dmgKeyMap.end())
                     inputs |= it->second;
                 break;
             }
             case SDL_KEYUP:
             {
-                auto it = keyMap.find(event.key.keysym.sym);
-                if(it != keyMap.end())
+                auto it = dmgKeyMap.find(event.key.keysym.sym);
+                if(it != dmgKeyMap.end())
                     inputs &= ~it->second;
                 break;
             }
@@ -99,13 +99,13 @@ int main(int argc, char *argv[])
     }
 
     // emu init
-    cpu.getDisplay().setFramebuffer(screenData);
+    dmgCPU.getDisplay().setFramebuffer(screenData);
 
-    auto &mem = cpu.getMem();
+    auto &mem = dmgCPU.getMem();
     mem.setROMBankCallback(getROMBank);
     mem.addROMCache(romBankCache, sizeof(romBankCache));
 
-    cpu.reset();
+    dmgCPU.reset();
 
     // SDL init
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0)
@@ -151,9 +151,9 @@ int main(int argc, char *argv[])
 
         auto now = SDL_GetTicks();
 
-        cpu.setInputs(inputs);
-        cpu.run(now - lastTick);
-        cpu.getAPU().update();
+        dmgCPU.setInputs(inputs);
+        dmgCPU.run(now - lastTick);
+        dmgCPU.getAPU().update();
         lastTick = now;
     
         // TODO: sync
