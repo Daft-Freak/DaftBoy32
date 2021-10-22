@@ -13,6 +13,7 @@ else()
 endif()
 
 option(BUILD_32BLIT "Build 32blit UI" ON)
+option(BUILD_SDL "Build minimal SDL UI" OFF)
 option(BUILD_TESTS "Build test runner" OFF)
 
 #add_definitions("-DPROFILER")
@@ -22,6 +23,10 @@ add_subdirectory(core)
 if(BUILD_32BLIT)
     find_package (32BLIT CONFIG REQUIRED PATHS ../32blit-sdk)
     add_subdirectory(32blit DaftBoy32)
+endif()
+
+if(BUILD_SDL)
+    add_subdirectory(minsdl)
 endif()
 
 if(BUILD_TESTS)
