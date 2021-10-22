@@ -102,6 +102,29 @@ void AGBCPU::triggerDMA(int trigger)
     }
 }
 
+uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
+{
+    switch(addr & 0xFFFFFF)
+    {
+        case IO_KEYINPUT:
+            return ~inputs;
+    }
+    return val;
+}
+
+bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
+{
+    return false;
+}
+
+void AGBCPU::setInputs(uint16_t newInputs)
+{
+    if(inputs == 0 && newInputs != 0)
+        flagInterrupt(Int_Keypad);
+
+    inputs = newInputs;
+}
+
 uint8_t AGBCPU::readMem8(uint32_t addr) const
 {
     // handle IO reads as 16-bit

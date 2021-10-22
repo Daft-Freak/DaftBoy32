@@ -44,7 +44,12 @@ public:
     void flagInterrupt(int interrupt);
     void triggerDMA(int trigger);
 
+    uint16_t readReg(uint32_t addr, uint16_t val);
+    bool writeReg(uint32_t addr, uint16_t data);
+
     AGBMemory &getMem() {return mem;}
+
+    void setInputs(uint16_t newInputs);
 
 private:
     enum class Reg
@@ -252,6 +257,7 @@ private:
     Reg curSP = Reg::SP, curLR = Reg::LR;
     int regBankOffset = 0;
 
+    uint16_t inputs = 0;
     AGBMemory &mem;
 
     // callbacks
