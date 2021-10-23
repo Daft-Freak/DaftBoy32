@@ -289,13 +289,17 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         int sx = std::max(0, -spriteX);
         int sy = y - spriteY;
 
+        // TODO: affine transforms
+        bool hFlip = mode == 0 && (attr1 & Attr1_HFlip);
+
+        // v flip
+        if(mode == 0 && (attr1 & Attr1_VFlip))
+            sy = (spriteH - 1) - sy;
+
         if(dispControl & DISPCNT_OBJChar1D)
             startTile += (sy >> 3) * (spriteW >> 3);
         else
             startTile += (sy >> 3) * 32;
-
-        // TODO: y flip, transforms
-        bool hFlip = mode == 0 && (attr1 & Attr1_HFlip);
 
         int xOff = sx & 7;
         auto out = scanLine + (spriteX + sx);
