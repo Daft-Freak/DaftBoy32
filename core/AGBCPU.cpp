@@ -612,17 +612,23 @@ int AGBCPU::executeARMInstruction()
             assert(!isLoad || !(regList & (1 << 15))); // TODO: load with r15 (mode change)
         }
 
-        auto addr = loReg(baseReg) & ~3;
+        auto addr = loReg(baseReg);
 
-        // flip decrement addressing around so that regs are stored in the right order
-        uint32_t lowAddr;
+        // count regs
+        int numRegs = 0;
+        for(uint16_t t = regList; t; t >>= 1)
+        {
+            if(t & 1)
+                numRegs++;
+        }
+
+        uint32_t lowAddr = 0;
+        auto highAddr = addr + numRegs * 4;
+
+        // flip decrement addressing around so that regs are stored in the right order    
         if(!isUp)
         {
-            for(uint16_t t = regList; t; t >>= 1)
-            {
-                if(t & 1)
-                    addr -= 4;
-            }
+            addr -= numRegs * 4;
             lowAddr = addr;
 
             if(!preIndex)
@@ -634,12 +640,31 @@ int AGBCPU::executeARMInstruction()
         if(isLoad && regList & (1 << static_cast<int>(baseReg)))
             writeBack = false; // don't override
 
+        // empty list loads/stores R15/PC
+        if(regList == 0)
+        {
+            regList = 1 << 15;
+
+            // ...ans inc/decrements all the way
+            if(isUp)
+                highAddr += 0x40;
+            else
+            {
+                addr -= 0x40;
+                lowAddr = addr - (preIndex ? 0 : 4);
+            }
+        }
+
+        bool pcWritten = isLoad && (regList & (1 << 15));
+
         int i = 0;
         if(baseReg == curSP)
         {
             // stack push/pull, we can assume RAM
-            auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(addr));
+            // this is some annoying duplication...
+            auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(addr & ~3));
 
+            bool first = true;
             for(; regList && i < 16; regList >>= 1, i++)
             {
                 if(!(regList & 1))
@@ -651,13 +676,25 @@ int AGBCPU::executeARMInstruction()
                 if(isLoad)
                     loReg(reg) = *ptr++;
                 else
-                    *ptr++ = loReg(reg);
+                {
+                    if(reg == Reg::PC)
+                        *ptr++ = loReg(reg) + 8;
+                    else
+                        *ptr++ = loReg(reg);
+                }
 
                 addr += 4;
+                if(first && writeBack)
+                {
+                    // write back after first store
+                    loReg(baseReg) = isUp ? highAddr : lowAddr;
+                }
+                first = false;
             }
         }
         else
         {
+            bool first = true;
             for(; regList; regList >>= 1, i++)
             {
                 if(!(regList & 1))
@@ -667,21 +704,26 @@ int AGBCPU::executeARMInstruction()
                 auto reg = isLoadForce ? static_cast<Reg>(i) : mapReg(static_cast<Reg>(i));
 
                 if(isLoad)
-                    loReg(reg) = readMem32Aligned(addr);
+                    loReg(reg) = readMem32Aligned(addr & ~3);
                 else
-                    writeMem32(addr, loReg(reg));
+                {
+                    if(reg == Reg::PC)
+                        writeMem32(addr & ~3, loReg(reg) + 8);
+                    else
+                        writeMem32(addr & ~3, loReg(reg));
+                }
 
                 addr += 4;
+                if(first && writeBack)
+                {
+                    // write back after first store
+                    loReg(baseReg) = isUp ? highAddr : lowAddr;
+                }
+                first = false;
             }
         }
 
-        if(preIndex && writeBack)
-            addr -= 4;
-
-        if(writeBack)
-            loReg(baseReg) = isUp ? addr : lowAddr;
-
-        if(isLoad && (opcode & (1 << 15))) // load PC
+        if(pcWritten) // load PC
             updateARMPC();
     };
 
