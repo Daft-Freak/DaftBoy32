@@ -1569,7 +1569,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
         case 0x6: // SBC
         {
             int c = (cpsr & Flag_C) ? 1 : 0;
-            res = op1 - op2 + c - 1;
+            reg(dstReg) = res = op1 - op2 + c - 1;
             carry = !(op2 > op1 || (op2 == op1 && !c)) ? Flag_C : 0;
             overflow = ((op1 ^ op2) & signBit) & ((op1 ^ res) & signBit);
             cpsr = (cpsr & 0x0FFFFFFF) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry | (overflow >> 3);
