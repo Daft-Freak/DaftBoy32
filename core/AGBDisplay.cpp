@@ -346,48 +346,68 @@ AGBDisplay::AGBDisplay(AGBCPU &cpu) : cpu(cpu), mem(cpu.getMem())
 {
 }
 
-void AGBDisplay::update(int cycles)
+void AGBDisplay::reset()
+{
+    lastUpdateCycle = 0;
+    y = 0;
+}
+
+void AGBDisplay::update()
 {
     auto stat = mem.readIOReg(IO_DISPSTAT);
 
-    remainingScanlineDots -= cycles;
+    auto passed = cpu.getCycleCount() - lastUpdateCycle;
+    passed >>= 2; // 4MHz
+    lastUpdateCycle += passed << 2;
 
-    if(y < screenHeight)
+    while(passed)
     {
-        if(remainingScanlineDots == 68)
+        auto step = std::min(remainingModeDots, passed);
+        passed -= step;
+
+        remainingScanlineDots -= step;
+        remainingModeDots -= step;
+
+        if(remainingModeDots == 0)
         {
-            // hblank
-            // TODO? could miss this if incrementing by > 1...
-            if(stat & DISPSTAT_HBlankInt)
-                cpu.flagInterrupt(AGBCPU::Int_LCDHBlank);
-            cpu.triggerDMA(AGBCPU::Trig_HBlank);
+            if(remainingScanlineDots != 0)
+            {
+                // hblank
+                remainingModeDots = remainingScanlineDots;
+
+                if(stat & DISPSTAT_HBlankInt)
+                    cpu.flagInterrupt(AGBCPU::Int_LCDHBlank);
+                cpu.triggerDMA(AGBCPU::Trig_HBlank);
+
+                if(y < screenHeight)
+                    drawScanLine(y);
+
+                continue;
+            }
         }
+        else
+            continue;
+    
+        // next scanline
+        remainingScanlineDots = scanlineDots;
+        remainingModeDots = screenWidth; // this is slightly off (hblank is a bit shorter than expected)
+
+        y++;
+
+        auto vCount = stat >> 8;
+
+        if((stat & DISPSTAT_VCountInt) && y == vCount)
+            cpu.flagInterrupt(AGBCPU::Int_LCDVCount);
+
+        if(y == screenHeight)
+        {
+            if(stat & DISPSTAT_VBlankInt)
+                cpu.flagInterrupt(AGBCPU::Int_LCDVBlank);
+            cpu.triggerDMA(AGBCPU::Trig_VBlank);
+        }
+        else if(y >= 228)
+            y = 0; // end vblank
     }
-
-    if(remainingScanlineDots > 0)
-        return;
-
-    // next scanline
-    remainingScanlineDots += scanlineDots;
-
-    if(y < screenHeight)
-        drawScanLine(y);
-
-    y++;
-
-    auto vCount = stat >> 8;
-
-    if((stat & DISPSTAT_VCountInt) && y == vCount)
-        cpu.flagInterrupt(AGBCPU::Int_LCDVCount);
-
-    if(y == screenHeight)
-    {
-        if(stat & DISPSTAT_VBlankInt)
-            cpu.flagInterrupt(AGBCPU::Int_LCDVBlank);
-        cpu.triggerDMA(AGBCPU::Trig_VBlank);
-    }
-    else if(y >= 228)
-        y = 0; // end vblank
 }
 
 void AGBDisplay::setFramebuffer(uint16_t *data)
@@ -400,8 +420,10 @@ uint16_t AGBDisplay::readReg(uint32_t addr, uint16_t val)
     switch(addr)
     {
         case IO_DISPSTAT:
+            update();
             return (y >= 160 ? DISPSTAT_VBlank : 0) | (remainingScanlineDots <= 68 ? DISPSTAT_HBlank : 0) | (mem.readIOReg(IO_DISPSTAT) & 0xFFF8); // TODO: vcount
         case IO_VCOUNT:
+            update();
             return y;
     }
 
@@ -410,6 +432,9 @@ uint16_t AGBDisplay::readReg(uint32_t addr, uint16_t val)
 
 bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
 {
+    if((addr & 0xFFFFFF) < 0x60/*SOUND1CNT_L*/)
+        update();
+
     switch(addr)
     {
 

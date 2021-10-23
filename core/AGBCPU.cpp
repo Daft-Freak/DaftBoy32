@@ -28,6 +28,7 @@ void AGBCPU::reset()
         p = 0;
 
     mem.reset();
+    display.reset();
 }
 
 void AGBCPU::run(int ms)
@@ -67,15 +68,8 @@ void AGBCPU::run(int ms)
         cycles -= exec;
         cycleCount += exec;
 
-        // this is dumb
-        // will go away when display gets updated
-        static int counter = 0;
-        counter += exec;
-        while(counter >= 4)
-        {
-            display.update(1);
-            counter -= 4;
-        }
+        // TODO: only if interrupts
+        display.update();
     }
 }
 
@@ -125,8 +119,8 @@ uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
 
 bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
 {
-    if((addr & 0xFFFFFF) < 0x60/*SOUND1CNT_L*/)
-        return display.writeReg(addr, data);
+    if(display.writeReg(addr, data))
+        return true;
 
     switch(addr & 0xFFFFFF)
     {

@@ -9,7 +9,9 @@ class AGBDisplay
 public:
     AGBDisplay(AGBCPU &cpu);
 
-    void update(int cycles);
+    void reset();
+
+    void update();
 
     void setFramebuffer(uint16_t *data);
 
@@ -22,11 +24,14 @@ private:
     AGBCPU &cpu;
     AGBMemory &mem;
 
+    uint32_t lastUpdateCycle = 0;
+
     uint8_t y = 0;
 
     static const int scanlineDots = 308; // * 4 cpu cycles
     static const int screenWidth = 240, screenHeight = 160;
 
-    int remainingScanlineDots = scanlineDots;
+    unsigned int remainingScanlineDots = scanlineDots;
+    unsigned int remainingModeDots = screenWidth;
     uint16_t *screenData; // rgb555
 };
