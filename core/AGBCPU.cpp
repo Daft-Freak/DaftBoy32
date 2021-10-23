@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib> //exit
@@ -67,14 +68,22 @@ void AGBCPU::run(int ms)
             if(timerInterruptEnabled)
                 updateTimers();
 
-            // TODO: only if interrupts
-            display.update();
+            if(enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount))
+                display.update();
             
             if(currentInterrupts)
                 serviceInterrupts(); // cycles?
 
             if(halted)
-                exec = 4; // FIXME: this is wrong but higher = less overhead
+            {
+                // skip to next display update
+                // TODO: handle timers
+                // TODO: other interrupts
+                if(!(enabledInterrutps & (Int_Timer0 | Int_Timer1 | Int_Timer2 | Int_Timer3)))
+                    exec = std::min(cycles, display.getCyclesToNextUpdate());
+                else
+                    exec = 4; // FIXME: this is wrong but higher = less overhead
+            }
         }
         while(halted && cycles > 0);
     }
@@ -84,7 +93,7 @@ void AGBCPU::flagInterrupt(int interrupt)
 {
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
 
-    currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? mem.readIOReg(IO_IE) & mem.readIOReg(IO_IF) : 0;
+    currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
 }
 
 void AGBCPU::triggerDMA(int trigger)
@@ -196,7 +205,8 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
         }
 
         case IO_IE:
-            currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? data & mem.readIOReg(IO_IF) : 0;
+            enabledInterrutps = (mem.readIOReg(IO_IME) & 1) ? data : 0;
+            currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
             break;
 
         case IO_IF: // writing IF bits clears them internally
@@ -207,7 +217,8 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
             return true;
 
         case IO_IME:
-            currentInterrupts = (data & 1) ? mem.readIOReg(IO_IE) & mem.readIOReg(IO_IF) : 0;
+            enabledInterrutps = (data & 1) ? mem.readIOReg(IO_IE) : 0;
+            currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
             break;
     }
 

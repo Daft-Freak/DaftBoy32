@@ -410,6 +410,12 @@ void AGBDisplay::update()
     }
 }
 
+int AGBDisplay::getCyclesToNextUpdate() const
+{
+    auto passed = cpu.getCycleCount() - lastUpdateCycle;
+    return (remainingModeDots * 4 - passed);
+}
+
 void AGBDisplay::setFramebuffer(uint16_t *data)
 {
     screenData = data;
