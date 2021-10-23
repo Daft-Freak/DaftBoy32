@@ -18,6 +18,8 @@ static uint16_t inputs = 0;
 static uint16_t screenData[240 * 160];
 static uint8_t romBankCache[0x4000];
 
+static uint8_t agbBIOSROM[0x4000];
+
 static std::ifstream romFile;
 
 static const std::unordered_map<SDL_Keycode, int> dmgKeyMap {
@@ -150,12 +152,10 @@ int main(int argc, char *argv[])
         auto &mem = agbCPU.getMem();
 
         // need the bios for now
-        uint8_t biosROM[0x4000];
-
         std::ifstream biosFile(basePath + "bios.gba");
-        biosFile.read(reinterpret_cast<char *>(biosROM), sizeof(biosROM));
+        biosFile.read(reinterpret_cast<char *>(agbBIOSROM), sizeof(agbBIOSROM));
 
-        mem.setBIOSROM(biosROM);
+        mem.setBIOSROM(agbBIOSROM);
         
         // read the entire ROM, this one doesn't have the load callback/caching setup
         romFile.seekg(0, std::ios::end);
