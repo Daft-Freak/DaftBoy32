@@ -130,6 +130,23 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
 
     switch(addr & 0xFFFFFF)
     {
+        case IO_DMA0CNT_H:
+        case IO_DMA1CNT_H:
+        case IO_DMA2CNT_H:
+        case IO_DMA3CNT_H:
+        {
+            int index = ((addr & 0xFFFFFF) - IO_DMA0CNT_H) / 12;
+            if(data & DMACNTH_Enable)
+            {
+                if((data & DMACNTH_Start) == 0)
+                    dmaTriggered |= (1 << index);
+            }
+            else
+                dmaTriggered &= ~(1 << index);
+
+            break;
+        }
+
         case IO_TM0CNT_L:
         case IO_TM1CNT_L:
         case IO_TM2CNT_L:
@@ -176,6 +193,21 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
 
             break;
         }
+
+        case IO_IE:
+            currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? data & mem.readIOReg(IO_IF) : 0;
+            break;
+
+        case IO_IF: // writing IF bits clears them internally
+            data = mem.readIOReg(IO_IF) & ~data;
+            mem.writeIOReg(IO_IF, data);
+
+            currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? mem.readIOReg(IO_IE) & data : 0;
+            return true;
+
+        case IO_IME:
+            currentInterrupts = (data & 1) ? mem.readIOReg(IO_IE) & mem.readIOReg(IO_IF) : 0;
+            break;
     }
 
     return false;
@@ -265,44 +297,6 @@ void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
 void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
 {
     addr &= ~1;
-
-    if((addr >> 24) == 0x4)
-    {
-        switch(addr & 0xFFFFFF)
-        {
-            case IO_DMA0CNT_H:
-            case IO_DMA1CNT_H:
-            case IO_DMA2CNT_H:
-            case IO_DMA3CNT_H:
-            {
-                int index = ((addr & 0xFFFFFF) - IO_DMA0CNT_H) / 12;
-                if(data & DMACNTH_Enable)
-                {
-                    if((data & DMACNTH_Start) == 0)
-                        dmaTriggered |= (1 << index);
-                }
-                else
-                    dmaTriggered &= ~(1 << index);
-
-                break;
-            }
-
-
-            case IO_IE:
-                currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? data & mem.readIOReg(IO_IF) : 0;
-                break;
-
-            case IO_IF: // writing IF bits clears them internally
-                data = mem.getIOReg(IO_IF) & ~data;
-
-                currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? mem.readIOReg(IO_IE) & data : 0;
-                break;
-
-            case IO_IME:
-                currentInterrupts = (data & 1) ? mem.readIOReg(IO_IE) & mem.readIOReg(IO_IF) : 0;
-                break;
-        }
-    }
 
     mem.write16(addr, data);
 }
