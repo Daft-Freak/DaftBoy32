@@ -19,7 +19,9 @@ void AGBCPU::reset()
     updateARMPC();
     halted = false;
 
-    timer = 0;
+    cycleCount = 0;
+    lastTimerUpdate = 0;
+
     for(auto &c : timerCounters)
         c = 0;
     for(auto &p : timerPrescalers)
@@ -60,14 +62,10 @@ void AGBCPU::run(int ms)
             serviceInterrupts(); // cycles?
 
         if(timerInterruptEnabled)
-        {
-            updateTimers(timerDelayed + exec);
-            timerDelayed = 0;
-        }
-        else
-            timerDelayed += exec;
+            updateTimers();
 
         cycles -= exec;
+        cycleCount += exec;
 
         // this is dumb
         // will go away when display gets updated
@@ -111,6 +109,14 @@ uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
 
     switch(addr & 0xFFFFFF)
     {
+        case IO_TM0CNT_L:
+        case IO_TM1CNT_L:
+        case IO_TM2CNT_L:
+        case IO_TM3CNT_L:
+            // sync
+            updateTimers();
+            return timerCounters[((addr & 0xFFFFFF) - IO_TM0CNT_L) / 12];
+
         case IO_KEYINPUT:
             return ~inputs;
     }
@@ -121,6 +127,56 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
 {
     if((addr & 0xFFFFFF) < 0x60/*SOUND1CNT_L*/)
         return display.writeReg(addr, data);
+
+    switch(addr & 0xFFFFFF)
+    {
+        case IO_TM0CNT_L:
+        case IO_TM1CNT_L:
+        case IO_TM2CNT_L:
+        case IO_TM3CNT_L:
+        {
+            // sync
+            updateTimers();
+            break;
+        }
+
+        case IO_TM0CNT_H:
+        case IO_TM1CNT_H:
+        case IO_TM2CNT_H:
+        case IO_TM3CNT_H:
+        {
+            int index = ((addr & 0xFFFFFF) - IO_TM0CNT_H) >> 2;
+            static const int prescalers[]{1, 64, 256, 1024};
+
+            // sync
+            updateTimers();
+
+            if(data & TMCNTH_Enable)
+            {
+                if(!(mem.readIOReg(IO_TM0CNT_H + index * 4) & TMCNTH_Enable))
+                    timerCounters[index] = mem.readIOReg(IO_TM0CNT_L + index * 4); // reload counter
+
+                if(data & TMCNTH_CountUp)
+                    timerPrescalers[index] = -1; // magic value for count-up mode
+                else
+                    timerPrescalers[index] = prescalers[data & TMCNTH_Prescaler];
+
+                timerEnabled |= (1 << index);
+
+                if(data & TMCNTH_IRQEnable)
+                    timerInterruptEnabled |= (1 << index);
+                else
+                    timerInterruptEnabled &= ~(1 << index);
+            }
+            else
+            {
+                timerEnabled &= ~(1 << index);
+                timerInterruptEnabled &= ~(1 << index);
+            }
+
+            break;
+        }
+    }
 
     return false;
 }
@@ -159,21 +215,6 @@ uint32_t AGBCPU::readMem16(uint32_t addr)
 uint16_t AGBCPU::readMem16Aligned(uint32_t addr)
 {
     assert((addr & 1) == 0);
-
-    if((addr >> 24) == 0x4)
-    {
-        switch(addr & 0xFFFFFF)
-        {
-            case IO_TM0CNT_L:
-            case IO_TM1CNT_L:
-            case IO_TM2CNT_L:
-            case IO_TM3CNT_L:
-                // sync
-                updateTimers(timerDelayed);
-                timerDelayed = 0;
-                return timerCounters[((addr & 0xFFFFFF) - IO_TM0CNT_L) / 12];
-        }
-    }
 
     return mem.read16(addr);
 }
@@ -246,54 +287,6 @@ void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
                 break;
             }
 
-            case IO_TM0CNT_L:
-            case IO_TM1CNT_L:
-            case IO_TM2CNT_L:
-            case IO_TM3CNT_L:
-            {
-                // sync
-                updateTimers(timerDelayed);
-                timerDelayed = 0;
-                break;
-            }
-
-            case IO_TM0CNT_H:
-            case IO_TM1CNT_H:
-            case IO_TM2CNT_H:
-            case IO_TM3CNT_H:
-            {
-                int index = ((addr & 0xFFFFFF) - IO_TM0CNT_H) >> 2;
-                static const int prescalers[]{1, 64, 256, 1024};
-
-                // sync
-                updateTimers(timerDelayed);
-                timerDelayed = 0;
-
-                if(data & TMCNTH_Enable)
-                {
-                    if(!(mem.readIOReg(IO_TM0CNT_H + index * 4) & TMCNTH_Enable))
-                        timerCounters[index] = mem.readIOReg(IO_TM0CNT_L + index * 4); // reload counter
-
-                    if(data & TMCNTH_CountUp)
-                        timerPrescalers[index] = -1; // magic value for count-up mode
-                    else
-                        timerPrescalers[index] = prescalers[data & TMCNTH_Prescaler];
-
-                    timerEnabled |= (1 << index);
-
-                    if(data & TMCNTH_IRQEnable)
-                        timerInterruptEnabled |= (1 << index);
-                    else
-                        timerInterruptEnabled &= ~(1 << index);
-                }
-                else
-                {
-                    timerEnabled &= ~(1 << index);
-                    timerInterruptEnabled &= ~(1 << index);
-                }
-
-                break;
-            }
 
             case IO_IE:
                 currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? data & mem.readIOReg(IO_IF) : 0;
@@ -2138,8 +2131,11 @@ int AGBCPU::dmaTransfer(int channel)
     return cycles;
 }
 
-void AGBCPU::updateTimers(int cycles)
+void AGBCPU::updateTimers()
 {
+    auto timer = lastTimerUpdate;
+    auto passed = cycleCount - lastTimerUpdate;
+
     uint8_t overflow = 0;
     auto enabled = timerEnabled;
     for(int i = 0; enabled; i++, enabled >>= 1)
@@ -2149,6 +2145,8 @@ void AGBCPU::updateTimers(int cycles)
 
         auto oldCount = timerCounters[i];
 
+        // should probably be some clamping here
+
         // count-up
         if(timerPrescalers[i] == -1)
         {
@@ -2156,14 +2154,15 @@ void AGBCPU::updateTimers(int cycles)
                 timerCounters[i]++;
         }
         else if(timerPrescalers[i] == 1)
-            timerCounters[i] += cycles;
+            timerCounters[i] += passed;
         else
         {
-            int count = (timer & (timerPrescalers[i] - 1)) + cycles;
+            int count = (timer & (timerPrescalers[i] - 1)) + passed;
             if(count >= timerPrescalers[i])
                 timerCounters[i] += count / timerPrescalers[i];
         }
 
+        // overflow
         if(timerCounters[i] < oldCount)
         {
             overflow |= (1 << i);
@@ -2172,5 +2171,6 @@ void AGBCPU::updateTimers(int cycles)
                 flagInterrupt(Int_Timer0 << i);
         }
     }
-    timer += cycles;
+
+    lastTimerUpdate = cycleCount;
 }

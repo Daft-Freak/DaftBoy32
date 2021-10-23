@@ -47,6 +47,8 @@ public:
     AGBDisplay &getDisplay() {return display;}
     AGBMemory &getMem() {return mem;}
 
+    uint32_t getCycleCount() const {return cycleCount;}
+
     void setInputs(uint16_t newInputs);
 
 private:
@@ -221,7 +223,7 @@ private:
 
     int dmaTransfer(int channel);
 
-    void updateTimers(int cycles);
+    void updateTimers();
 
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
@@ -234,14 +236,15 @@ private:
     //bool stopped, halted;
     bool halted;
 
-    uint16_t currentInterrupts = 0; // IME ? (IE | IF) : 0
+    uint16_t currentInterrupts = 0; // IME ? (IE & IF) : 0
 
     // dma
     uint8_t dmaTriggered = 0;
 
+    uint32_t cycleCount = 0;
+
     // timers
-    uint32_t timer = 0; // just counts cycles
-    uint32_t timerDelayed = 0; // cycles since last update
+    uint32_t lastTimerUpdate = 0;
     uint8_t timerEnabled = 0, timerInterruptEnabled = 0;
 
     uint16_t timerCounters[4]{};
