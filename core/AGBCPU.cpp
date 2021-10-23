@@ -467,6 +467,9 @@ int AGBCPU::executeARMInstruction()
         if(baseReg == Reg::PC)
             addr += 4;
 
+        // get value for store before write back
+        auto val = loReg(srcDestReg);
+
         if(isPre)
         {
             addr += offset;
@@ -499,9 +502,10 @@ int AGBCPU::executeARMInstruction()
             assert(opcode & (1 << 5)); // half
             assert(!(opcode & (1 << 6))); // sign
 
-            // FIXME: PC is + 12
-            assert(srcDestReg != Reg::PC);
-            writeMem16(addr, loReg(srcDestReg)); // STRH
+            if(srcDestReg == Reg::PC)
+                val += 8;
+
+            writeMem16(addr, val); // STRH
 
             return pcNCycles + mem.getAccessCycles(addr, 2, false);
         }
