@@ -1232,6 +1232,11 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
             dest = op2 - op1 + (cpsr & Flag_C ? 1 : 0) - 1;
             break;
         // TST-CMN should not get here
+        case 0x8:
+        case 0x9:
+        case 0xA:
+        case 0xB:
+            break;
         case 0xC: // ORR
             dest = op1 | op2;
             break;
