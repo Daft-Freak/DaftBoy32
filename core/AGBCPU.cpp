@@ -37,7 +37,7 @@ void AGBCPU::run(int ms)
 
     while(cycles > 0)
     {
-        unsigned int exec;
+        unsigned int exec = 1;
 
         // DMA
         if(dmaTriggered)
@@ -56,20 +56,27 @@ void AGBCPU::run(int ms)
             // CPU
             exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
         }
-        else
-            exec = 4; // higher = less overhead
 
-        if(currentInterrupts)
-            serviceInterrupts(); // cycles?
+        // loop until not halted
+        // may need to handle some dma triggers...
+        do
+        {
+            cycles -= exec;
+            cycleCount += exec;
 
-        if(timerInterruptEnabled)
-            updateTimers();
+            if(timerInterruptEnabled)
+                updateTimers();
 
-        cycles -= exec;
-        cycleCount += exec;
+            // TODO: only if interrupts
+            display.update();
+            
+            if(currentInterrupts)
+                serviceInterrupts(); // cycles?
 
-        // TODO: only if interrupts
-        display.update();
+            if(halted)
+                exec = 4; // FIXME: this is wrong but higher = less overhead
+        }
+        while(halted && cycles > 0);
     }
 }
 
