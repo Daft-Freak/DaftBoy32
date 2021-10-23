@@ -250,7 +250,9 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         if((attr2 & Attr2_Priority) >> 10 != priority)
             continue;
 
-        if((attr0 & Attr0_Mode) >> 8 == 2/*disable*/)
+        auto mode = (attr0 & Attr0_Mode) >> 8;
+
+        if(mode == 2/*disable*/)
             continue;
 
         // check y
@@ -292,26 +294,42 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         else
             startTile += (sy >> 3) * 32;
 
-        // TODO: x/y flip, transforms
+        // TODO: y flip, transforms
+        bool hFlip = mode == 0 && (attr1 & Attr1_HFlip);
 
         int xOff = sx & 7;
         auto out = scanLine + (spriteX + sx);
         auto outEnd = scanLine + 240;
+
+        int tilesX = spriteW >> 3;
 
         if(attr0 & Attr0_SinglePal)
         {
             // 8bit tiles
             auto spritePal = palRam + 256;
 
-            for(int stx = sx >> 3; stx < spriteW >> 3 && out != outEnd; stx++)
+            // tiles
+            for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
             {
-                auto tilePtr = charPtr + startTile * 32 + stx * 64 + (sy & 7) * 8 + xOff;
+                int tileX = hFlip ? (tilesX - 1) - stx : stx;
+                auto tilePtr = charPtr + startTile * 32 + tileX * 64 + (sy & 7) * 8;
 
+                if(hFlip)
+                    tilePtr += 7 - xOff;
+                else
+                    tilePtr += xOff;
+            
+                // pixels in tile
                 for(int x = xOff; x < 8 && out != outEnd; x++, out++)
                 {
-                    auto palIndex = *tilePtr++;
+                    auto palIndex = *tilePtr;
                     if(palIndex)
                         *out = spritePal[palIndex];
+
+                    if(hFlip)
+                        --tilePtr;
+                    else
+                        ++tilePtr;
                 }
 
                 xOff = 0;
@@ -322,9 +340,16 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
             // 4bit tiles
             auto spritePal = palRam + 256 + ((attr2 & Attr2_Pal) >> 8);
 
-            for(int stx = sx >> 3; stx < spriteW >> 3 && out != outEnd; stx++)
+            for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
             {
-                uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (startTile + stx) * 32)[sy & 7];
+                int tileX = hFlip ? (tilesX - 1) - stx : stx;
+                uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (startTile + tileX) * 32)[sy & 7];
+
+                if(hFlip)
+                {
+                    tileRow = __builtin_bswap32(tileRow);
+                    tileRow = (tileRow & 0xF0F0F0F0) >> 4 | (tileRow & 0x0F0F0F0F) << 4;
+                }
 
                 // first tile
                 if(xOff)
