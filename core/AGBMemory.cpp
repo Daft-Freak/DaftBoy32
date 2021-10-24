@@ -20,6 +20,9 @@ void AGBMemory::setCartROM(const uint8_t *rom, uint32_t size)
 
 void AGBMemory::reset()
 {
+    saveType = SaveType::Unknown;
+    flashState = FlashState::Read;
+    flashBank = 0;
 }
 
 uint8_t AGBMemory::read8(uint32_t addr) const
@@ -32,8 +35,8 @@ uint16_t AGBMemory::read16(uint32_t addr) const
     auto ptr = mapAddress(addr);
     uint16_t ret = *reinterpret_cast<const uint16_t *>(ptr);
 
-    // EEPROM (or could just be a big cart...)
-    if((addr >> 24) == 0xD)
+    // EEPROM
+    if(saveType == SaveType::EEPROM && (addr >> 24) == 0xD)
         return eepromOutBits[(addr & 0xFF) >> 1];
 
     // io
@@ -59,6 +62,24 @@ void AGBMemory::write8(uint32_t addr, uint8_t data)
         return;
     }
 
+    // flash/ram detection and flash handling
+    if((addr >> 24) == 0xE && (saveType == SaveType::Flash || saveType == SaveType::Unknown))
+    {
+        // TODO: size
+
+        // auto-detect
+        if(saveType == SaveType::Unknown && addr == 0xE005555 && data == 0xAA)
+            saveType = SaveType::Flash;
+        else if(saveType == SaveType::Unknown)
+            saveType = SaveType::RAM;
+
+        if(saveType == SaveType::Flash)
+        {
+            writeFlash(addr, data);
+            return;
+        }
+    }
+
     auto ptr = mapAddress(addr);
     if(ptr)
     {
@@ -76,8 +97,11 @@ void AGBMemory::write16(uint32_t addr, uint16_t data)
         return;
 
     // EEPROM
-    if((addr >> 24) == 0xD)
+    if((addr >> 24) == 0xD && (saveType == SaveType::EEPROM || saveType == SaveType::Unknown))
     {
+        if(saveType == SaveType::Unknown)
+            saveType = SaveType::EEPROM;
+
         eepromInBits[(addr & 0xFF) >> 1] = data;
 
         if((addr & 0xFF) == 0x10 && eepromInBits[0] && eepromInBits[1]) // end of read request for 512b
@@ -161,6 +185,18 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
             if(addr >= cartROMSize)
                 return reinterpret_cast<const uint8_t *>(&dummy);
             return cartROM + addr;
+
+        case 0xE:
+        {
+            if(saveType != SaveType::EEPROM)
+            {
+                if(flashState == FlashState::ID)
+                    return flashID + (addr & 1);
+
+                addr &= (saveType == SaveType::RAM ? 0x7FFF : 0xFFFF); // RAM is always 32K, flash has 1-2 64k banks
+                return cartSaveData + addr + (flashBank << 16);
+            }
+        }
     }
 
     return reinterpret_cast<const uint8_t *>(&dummy);
@@ -190,6 +226,16 @@ uint8_t *AGBMemory::mapAddress(uint32_t addr)
             return vram + addr;
         case 0x7:
             return oam + (addr & 0x3FF);
+
+        case 0xE:
+        {
+            if(saveType != SaveType::EEPROM)
+            {
+                // flash never makes it here
+                addr &= 0x7FFF;
+                return cartSaveData + addr;
+            }
+        }
     }
 
     return nullptr;
@@ -225,4 +271,64 @@ int AGBMemory::getAccessCycles(uint32_t addr, int width, bool sequential) const
     }
 
     return 1;
+}
+
+void AGBMemory::writeFlash(uint32_t addr, uint8_t data)
+{
+    // bank switch
+    if(flashState == FlashState::Bank && addr == 0xE000000)
+    {
+        flashBank = data;
+        flashState = FlashState::Read;
+        return;
+    }
+    // write a byte
+    else if(flashState == FlashState::Write)
+    {
+        cartSaveData[(addr & 0xFFFF) + (flashBank << 16)] = data;
+        flashState = FlashState::Read;
+        return;
+    }
+
+    // parse commands
+    if(flashCmdState == 0 && addr == 0xE005555 && data == 0xAA)
+        flashCmdState = 1;
+    else if(flashCmdState == 1 && addr == 0xE002AAA && data == 0x55)
+        flashCmdState = 2;
+    else if(flashCmdState == 2)
+    {
+        if(data == 0x10 && addr == 0xE005555 && flashState == FlashState::Erase)
+        {
+            // erase all
+            memset(cartSaveData, 0xFF, sizeof(cartSaveData));
+            flashState = FlashState::Read;
+        }
+        else if(data == 0x30 && flashState == FlashState::Erase)
+        {
+            // erase 4k sector
+            memset(cartSaveData + (addr & 0xF000) + (flashBank << 16), 0xFF, 0xFFF);
+            flashState = FlashState::Read;
+        }
+        else if(data == 0x80 && addr == 0xE005555)
+            flashState = FlashState::Erase; // actual erase happens later
+        else if(data == 0x90 && addr == 0xE005555)
+        {
+            // TODO: ids - this is the 128k sanyo one
+            flashID[0] = 0x62;
+            flashID[1] = 0x13;
+            flashState = FlashState::ID;
+        }
+        else if(data == 0xA0 && addr == 0xE005555)
+            flashState = FlashState::Write;
+        else if(data == 0xB0 && addr == 0xE005555)
+            flashState = FlashState::Bank;
+        else if(data == 0xF0 && addr == 0xE005555)
+            flashState = FlashState::Read;
+        else
+            printf("Flash CMD %02X\n", data);
+
+        flashCmdState = 0;
+    }
+    else
+        flashCmdState = 0;
 }

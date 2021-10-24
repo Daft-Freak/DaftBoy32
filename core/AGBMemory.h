@@ -61,6 +61,25 @@ public:
     int getAccessCycles(uint32_t addr, int width, bool sequential) const;
 
 private:
+    enum class SaveType : uint8_t
+    {
+        Unknown,
+        EEPROM,
+        RAM,
+        Flash
+    };
+
+    enum class FlashState : uint8_t
+    {
+        Read,
+        ID,
+        Erase,
+        Write,
+        Bank,
+    };
+
+    void writeFlash(uint32_t addr, uint8_t data);
+
     AGBCPU &cpu;
 
     const uint8_t *biosROM = nullptr;
@@ -76,9 +95,17 @@ private:
     const uint8_t *cartROM = nullptr;
     uint32_t cartROMSize = 0;
 
+    SaveType saveType = SaveType::Unknown;
+
     uint8_t eepromInBits[81]; // could be smaller if bits packed
     uint8_t eepromOutBits[68];
     uint8_t eepromData[512]; // TODO: combined storage for all save types?
+    uint8_t cartSaveData[128 * 1024]; // RAM/flash
+
+    FlashState flashState = FlashState::Read;
+    uint8_t flashCmdState = 0;
+    uint8_t flashBank = 0;
+    uint8_t flashID[2];
 
     uint32_t dummy = 0xBADADD55;
 
