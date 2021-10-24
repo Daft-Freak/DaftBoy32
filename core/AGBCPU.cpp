@@ -1659,10 +1659,16 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
     {
         case 0: // ADD
             reg(dstReg) += reg(srcReg);
+
+            if(dstReg == Reg::PC)
+                reg(dstReg) += 2;
             break;
         case 1: // CMP
         {
             auto dst = reg(dstReg);
+            if(dstReg == Reg::PC)
+                dst += 2;
+
             auto res = dst - src;
             bool carry = !(src > dst);
 
