@@ -1869,7 +1869,7 @@ int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
 
     if(isLoad)
     {
-        loReg(dstReg) = mem.read32Fast(addr);
+        loReg(dstReg) = addr & 3 ? readMem32(addr) : mem.read32Fast(addr);
         return pcSCycles + mem.getAccessCycles(addr, 4, false) + 1;
     }
     else
