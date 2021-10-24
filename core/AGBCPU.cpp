@@ -1978,11 +1978,35 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
     auto baseReg = static_cast<Reg>((opcode >> 8) & 7);
     uint8_t regList = opcode & 0xFF;
 
-    auto addr = loReg(baseReg) & ~3;
+    auto addr = loReg(baseReg);
 
-    bool baseInList = regList & (1 << static_cast<int>(baseReg));
+    if(!regList)
+    {
+        // empty list loads/stores PC... even though it isn't usually possible here
+        if(isLoad)
+        {
+            pc = readMem32(addr & ~3);
+            updateTHUMBPC(pc);
+        }
+        else
+            writeMem32(addr & ~3, pc + 4);
+
+        reg(baseReg) = addr + 0x40;
+
+        return pcSCycles;
+    }
+
+    auto endAddr = addr;
+    for(uint8_t t = regList; t; t >>=1)
+    {
+        if(t & 1)
+            endAddr += 4;
+    }
+
+    addr &= ~3;
 
     int i = 0;
+    bool first = true;
     for(; regList; regList >>= 1, i++)
     {
         if(!(regList & 1))
@@ -1993,11 +2017,13 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
         else
             writeMem32(addr, regs[i]);
 
+        if(first)
+            reg(baseReg) = endAddr;
+
+        first = false;
+
         addr += 4;
     }
-
-    if(!isLoad || !baseInList)
-        reg(baseReg) = addr;
 
     return pcSCycles;
 }
