@@ -297,7 +297,7 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
             sy = (spriteH - 1) - sy;
 
         if(dispControl & DISPCNT_OBJChar1D)
-            startTile += (sy >> 3) * (spriteW >> 3);
+            startTile += (sy >> 3) * (spriteW >> 3) * (attr0 & Attr0_SinglePal ? 2 : 1);
         else
             startTile += (sy >> 3) * 32;
 
