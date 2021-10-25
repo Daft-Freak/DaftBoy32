@@ -2234,42 +2234,40 @@ void AGBCPU::updateTimers()
 {
     auto timer = lastTimerUpdate;
     auto passed = cycleCount - lastTimerUpdate;
-
-    uint8_t overflow = 0;
-    auto enabled = timerEnabled;
-    for(int i = 0; enabled; i++, enabled >>= 1)
-    {
-        if(!(enabled & 1))
-            continue;
-
-        auto oldCount = timerCounters[i];
-
-        // should probably be some clamping here
-
-        // count-up
-        if(timerPrescalers[i] == -1)
-        {
-            if(overflow & (1 << (i - 1)))
-                timerCounters[i]++;
-        }
-        else if(timerPrescalers[i] == 1)
-            timerCounters[i] += passed;
-        else
-        {
-            int count = (timer & (timerPrescalers[i] - 1)) + passed;
-            if(count >= timerPrescalers[i])
-                timerCounters[i] += count / timerPrescalers[i];
-        }
-
-        // overflow
-        if(timerCounters[i] < oldCount)
-        {
-            overflow |= (1 << i);
-            timerCounters[i] = mem.readIOReg(IO_TM0CNT_L + i * 4);
-            if(timerInterruptEnabled & (1 << i))
-                flagInterrupt(Int_Timer0 << i);
-        }
-    }
-
     lastTimerUpdate = cycleCount;
+
+    while(passed--)
+    {
+        uint8_t overflow = 0;
+        auto enabled = timerEnabled;
+        for(int i = 0; enabled; i++, enabled >>= 1)
+        {
+            if(!(enabled & 1))
+                continue;
+
+            // count-up
+            if(timerPrescalers[i] == -1)
+            {
+                if(overflow & (1 << (i - 1)))
+                    timerCounters[i]++;
+            }
+            else if(timerPrescalers[i] == 1)
+                timerCounters[i]++;
+            else
+            {
+                if((timer & timerPrescalers[i]) ^ ((timer + 1) & timerPrescalers[i]))
+                    timerCounters[i]++;
+            }
+
+            // overflow
+            if(timerCounters[i] == 0)
+            {
+                overflow |= (1 << i);
+                timerCounters[i] = mem.readIOReg(IO_TM0CNT_L + i * 4);
+                if(timerInterruptEnabled & (1 << i))
+                    flagInterrupt(Int_Timer0 << i);
+            }
+        }
+        timer++;
+    }
 }
