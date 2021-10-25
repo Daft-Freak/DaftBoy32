@@ -23,6 +23,8 @@ void AGBMemory::reset()
     saveType = SaveType::Unknown;
     flashState = FlashState::Read;
     flashBank = 0;
+
+    memset(cartSaveData, 0xFF, sizeof(cartSaveData));
 }
 
 uint8_t AGBMemory::read8(uint32_t addr) const
@@ -187,6 +189,7 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
             return cartROM + addr;
 
         case 0xE:
+        case 0xF:
         {
             if(saveType != SaveType::EEPROM)
             {
@@ -228,6 +231,7 @@ uint8_t *AGBMemory::mapAddress(uint32_t addr)
             return oam + (addr & 0x3FF);
 
         case 0xE:
+        case 0xF:
         {
             if(saveType != SaveType::EEPROM)
             {
