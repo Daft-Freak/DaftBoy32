@@ -72,7 +72,7 @@ void AGBCPU::run(int ms)
             if(enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount))
                 display.update();
             
-            if(currentInterrupts)
+            if(currentInterrupts && interruptDelay && !(--interruptDelay))
                 serviceInterrupts(); // cycles?
 
             if(halted)
@@ -95,6 +95,9 @@ void AGBCPU::flagInterrupt(int interrupt)
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
 
     currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
+
+    if(!interruptDelay)
+        interruptDelay = 7; // unsure of this, but 7 seems to pass more tests than 6
 }
 
 void AGBCPU::triggerDMA(int trigger)
