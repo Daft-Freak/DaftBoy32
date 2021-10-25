@@ -274,9 +274,8 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
             if(!(data & 0x80))
                 channelEnabled &= ~(1 << 2);
 
-            // TODO: new banking stuff
-            if(data & 0x60)
-                printf("CH3 %02X\n", data);
+            if(!(channelEnabled & (1 << 2)))
+                ch3BankIndex = (data >> 6) & 1;
             break;
 
         case IO_SOUND3CNT_H: // length
@@ -298,6 +297,7 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
             if(data & SOUNDxCNT_Trigger)
             {
                 ch3SampleIndex = 0;
+                ch3BankIndex = (mem.readIOReg(IO_SOUND3CNT_L) >> 6) & 1;
                 ch3FreqTimer = ch3FreqTimerPeriod + 6; // there is a small delay
 
                 if(ch3Len == 0)
@@ -393,7 +393,27 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
             enabled = data & SOUNDCNT_X_Enable;
             break;
 
-        // TODO: wave RAM
+        // wave RAM
+        case 0x90:
+        case 0x92:
+        case 0x94:
+        case 0x96:
+        case 0x98:
+        case 0x9A:
+        case 0x9C:
+        case 0x9E:
+        {
+            // the bank that isn't currently in use
+            int bank = 1 - ch3BankIndex;
+            int off64 = bank * 2 + ((addr & 0xF) / 8);
+            int byte = addr & 7;
+
+            // swap everything around
+            uint16_t swapped = data << 8 | data >> 8;
+
+            ch3WaveBuf[off64] = (ch3WaveBuf[off64] & ~(0xFFFF00000000ull >> (byte * 8))) | (swapped << ((7 - byte) * 8));
+            break;
+        }
     }
 
     return false;
@@ -571,18 +591,25 @@ void AGBAPU::updateFreq(int cyclesPassed)
         while(timer <= 0)
         {
             timer += ch3FreqTimerPeriod;
-            ch3SampleIndex = (ch3SampleIndex + 1) % 32;
 
-            // TODO: banking
-            uint8_t sampleByte = cpu.getMem().readIOReg(0x90 + (ch3SampleIndex / 2));
+            ch3SampleIndex++;
 
-            // calculate when this happened for read/write behaviour
-            ch3LastAccessCycle = cpu.getCycleCount() - (ch3FreqTimerPeriod - timer);
+            if(ch3SampleIndex == 32)
+            {
+                // two bank mode - switch bank
+                if(cpu.getMem().readIOReg(IO_SOUND3CNT_L) & (1 << 5))
+                    ch3BankIndex ^= 1;
+                ch3SampleIndex = 0;
+            }
 
-            if(ch3SampleIndex & 1)
-                ch3Sample = sampleByte & 0xF;
-            else
-                ch3Sample = sampleByte >> 4;
+            int bank = ch3BankIndex;
+
+            // rotate the sample
+            auto tmp = ch3WaveBuf[bank * 2] >> 60;
+            ch3WaveBuf[bank * 2 + 0] = ch3WaveBuf[bank * 2 + 0] << 4 | ch3WaveBuf[bank * 2 + 1] >> 60;
+            ch3WaveBuf[bank * 2 + 1] = ch3WaveBuf[bank * 2 + 1] << 4 | tmp;
+
+            ch3Sample = ch3WaveBuf[bank * 2] >> 60;
         }
 
         ch3FreqTimer = timer;

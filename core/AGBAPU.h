@@ -61,7 +61,8 @@ private:
     uint16_t ch3FreqTimerPeriod = 1;
     uint8_t ch3Sample = 0;
     uint8_t ch3SampleIndex = 0;
-    uint32_t ch3LastAccessCycle = 0;
+    uint8_t ch3BankIndex = 0;
+    uint64_t ch3WaveBuf[4]{0}; // 2x 128-bit buffers
 
     // channel 4
     uint8_t ch4Len = 0;
