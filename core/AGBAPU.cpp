@@ -47,13 +47,13 @@ void AGBAPU::update()
     passed >>= 2;
     lastUpdateCycle += passed << 2;
 
-    // output clock - attempt to get close to 22050Hz
-    const int clocksPerSample = (4194304ull * 1024) / 22050;
+    // output clock
+    const int clocksPerSample = 4194304 / 32768;
 
     while(passed)
     {
         // clamp update step (min of next sample and next seq update)
-        uint32_t nextSample = ((clocksPerSample - sampleClock) + 1023) / 1024;
+        uint32_t nextSample = clocksPerSample - sampleClock;
         uint32_t nextFrameSeqUpdate = 8192u - (oldCycle & 0x1FFF);
         auto step = std::min(nextSample, std::min(nextFrameSeqUpdate, passed));
 
@@ -64,7 +64,7 @@ void AGBAPU::update()
             updateFrameSequencer();
 
         // output
-        sampleClock += step * 1024;
+        sampleClock += step;
 
         if(sampleClock >= clocksPerSample)
         {
@@ -660,28 +660,35 @@ void AGBAPU::sampleOutput()
     vol = ch4EnvVolume;
     auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : -vol;
 
-    int32_t sample = 0;
+    int32_t left = 0, right = 0;
 
     if(outputSelect & 0x01)
-        sample += ch1Val;
+        right += ch1Val * 8;
     if(outputSelect & 0x10)
-        sample += ch1Val;
+        left += ch1Val * 8;
 
     if(outputSelect & 0x02)
-        sample += ch2Val;
+        right += ch2Val * 8;
     if(outputSelect & 0x20)
-        sample += ch2Val;
+        left += ch2Val * 8;
 
     if(outputSelect & 0x04)
-        sample += ch3Val;
+        right += ch3Val * 8;
     if(outputSelect & 0x40)
-        sample += ch3Val;
+        left += ch3Val * 8;
 
     if(outputSelect & 0x08)
-        sample += ch4Val;
+        right += ch4Val * 8;
     if(outputSelect & 0x80)
-        sample += ch4Val;
+        left += ch4Val * 8;
 
-    sampleData[writeOff] = sample * 0x111;
+    auto bias = mem.readIOReg(IO_SOUNDBIAS) & 0x3FE;
+
+    // bias to unsigned and clamp to 10-bit
+    left = std::min(0x3FF, std::max(0, left + bias));
+    right = std::min(0x3FF, std::max(0, right + bias));
+
+    // ... and go back to mono signed 16-bit for output...
+    sampleData[writeOff] = ((left - 0x200) + (right - 0x200)) * 64;
     writeOff = (writeOff + 1) % bufferSize;
 }

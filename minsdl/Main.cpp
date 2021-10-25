@@ -213,7 +213,7 @@ int main(int argc, char *argv[])
     // audio
     SDL_AudioSpec spec{};
 
-    spec.freq = 22050;
+    spec.freq = isAGB ? 32768 : 22050;
     spec.format = AUDIO_S16;
     spec.channels = 1;
     spec.samples = 512;
