@@ -19,6 +19,29 @@ enum AGBIOReg
     IO_BG3HOFS = 0x1C,
     IO_BG3VOFS = 0x1E,
 
+    // Audio
+    IO_SOUND1CNT_L = 0x60,
+    IO_SOUND1CNT_H = 0x62,
+    IO_SOUND1CNT_X = 0x64,
+    IO_SOUND2CNT_L = 0x68,
+    IO_SOUND2CNT_H = 0x6C,
+    IO_SOUND3CNT_L = 0x70,
+    IO_SOUND3CNT_H = 0x72,
+    IO_SOUND3CNT_X = 0x74,
+    IO_SOUND4CNT_L = 0x78,
+    IO_SOUND4CNT_H = 0x7C,
+
+    IO_SOUNDCNT_L = 0x80,
+    IO_SOUNDCNT_H = 0x82,
+    IO_SOUNDCNT_X = 0x84,
+    IO_SOUNDBIAS = 0x88,
+
+    // 90-9F wave ram
+
+    // these are 32-bit
+    IO_FIFO_A = 0xA0,
+    IO_FIFO_B = 0xA4,
+
     // DMA (mostly 32-bit)
     IO_DMA0SAD = 0xB0,
     IO_DMA0DAD = 0xB4,
@@ -96,6 +119,31 @@ enum BGCNTBits
     BGCNT_Wrap       = 1 << 13,
     BGCNT_ScreenSize = 0x3 << 14
 };
+
+enum SOUND1CNTBits
+{
+    SOUND1CNT_L_Shift = 0x7,
+    SOUND1CNT_L_Negate = 1 << 3,
+    SOUND1CNT_L_Period = 0x70
+};
+
+// common bits for all channels
+enum SOUNDxCNTBits // sometimes H, sometimes X...
+{
+    SOUNDxCNT_Length = 1 << 14,
+    SOUNDxCNT_Trigger = 1 << 15
+};
+
+enum SOUNDCNTBits
+{
+    SOUNDCNT_X_Ch1On  = 1 << 0,
+    SOUNDCNT_X_Ch2On  = 1 << 1,
+    SOUNDCNT_X_Ch3On  = 1 << 2,
+    SOUNDCNT_X_Ch4On  = 1 << 3,
+
+    SOUNDCNT_X_Enable = 1 << 7
+};
+
 
 enum DMACNTHBits
 {
