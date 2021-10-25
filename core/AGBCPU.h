@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 
+#include "AGBAPU.h"
 #include "AGBDisplay.h"
 #include "AGBMemory.h"
 
@@ -44,6 +45,7 @@ public:
     uint16_t readReg(uint32_t addr, uint16_t val);
     bool writeReg(uint32_t addr, uint16_t data);
 
+    AGBAPU &getAPU() {return apu;}
     AGBDisplay &getDisplay() {return display;}
     AGBMemory &getMem() {return mem;}
 
@@ -261,6 +263,7 @@ private:
 
     uint16_t inputs = 0;
     
+    AGBAPU apu;
     AGBDisplay display;
     AGBMemory mem;
 };

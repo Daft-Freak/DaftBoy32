@@ -9,7 +9,7 @@
 #include "AGBMemory.h"
 #include "AGBRegs.h"
 
-AGBCPU::AGBCPU() : display(*this), mem(*this)
+AGBCPU::AGBCPU() : apu(*this), display(*this), mem(*this)
 {}
 
 void AGBCPU::reset()
@@ -29,6 +29,7 @@ void AGBCPU::reset()
         p = 0;
 
     mem.reset();
+    apu.reset();
     display.reset();
 }
 
@@ -114,8 +115,10 @@ void AGBCPU::triggerDMA(int trigger)
 
 uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
 {
-    if((addr & 0xFFFFFF) < 0x60/*SOUND1CNT_L*/)
+    if((addr & 0xFFFFFF) < IO_SOUND1CNT_L)
         return display.readReg(addr, val);
+    else if((addr & 0xFFFFFF) <= IO_FIFO_B)
+        return apu.readReg(addr, val);
 
     switch(addr & 0xFFFFFF)
     {
@@ -135,7 +138,7 @@ uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
 
 bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
 {
-    if(display.writeReg(addr, data))
+    if(display.writeReg(addr, data) || apu.writeReg(addr, data))
         return true;
 
     switch(addr & 0xFFFFFF)

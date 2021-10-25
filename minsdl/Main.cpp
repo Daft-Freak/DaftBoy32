@@ -57,11 +57,22 @@ static void getROMBank(uint8_t bank, uint8_t *ptr)
 
 static void audioCallback(void *userdata, Uint8 *stream, int len)
 {
-    while(!quit && dmgCPU.getAPU().getNumSamples() < 512); // ohno
+    if(isAGB)
+    {
+        while(!quit && agbCPU.getAPU().getNumSamples() < 512); // ohno
 
-    auto ptr = reinterpret_cast<int16_t *>(stream);
-    for(int i = 0; i < len / 2; i++)
-        *ptr++ = dmgCPU.getAPU().getSample();
+        auto ptr = reinterpret_cast<int16_t *>(stream);
+        for(int i = 0; i < len / 2; i++)
+            *ptr++ = agbCPU.getAPU().getSample();
+    }
+    else
+    {
+        while(!quit && dmgCPU.getAPU().getNumSamples() < 512); // ohno
+
+        auto ptr = reinterpret_cast<int16_t *>(stream);
+        for(int i = 0; i < len / 2; i++)
+            *ptr++ = dmgCPU.getAPU().getSample();
+    }
 }
 
 static void pollEvents()
@@ -216,8 +227,7 @@ int main(int argc, char *argv[])
         quit = true;
     }
 
-    if(!isAGB) // no audio yet
-        SDL_PauseAudioDevice(dev, 0);
+    SDL_PauseAudioDevice(dev, 0);
 
     auto lastTick = SDL_GetTicks();
 
@@ -239,6 +249,7 @@ int main(int argc, char *argv[])
 
             agbCPU.setInputs(inputs);
             agbCPU.run(time);
+            agbCPU.getAPU().update();
         }
         else
         {
