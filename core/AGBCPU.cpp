@@ -128,7 +128,7 @@ uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
         case IO_TM3CNT_L:
             // sync
             updateTimers();
-            return timerCounters[((addr & 0xFFFFFF) - IO_TM0CNT_L) / 12];
+            return timerCounters[((addr & 0xFFFFFF) - IO_TM0CNT_L) >> 2];
 
         case IO_KEYINPUT:
             return ~inputs;
