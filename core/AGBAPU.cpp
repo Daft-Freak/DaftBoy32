@@ -1,0 +1,660 @@
+#include <algorithm>
+#include <cstdio>
+
+#include "AGBAPU.h"
+
+#include "AGBCPU.h"
+#include "AGBMemory.h"
+#include "AGBRegs.h"
+
+AGBAPU::AGBAPU(AGBCPU &cpu) : cpu(cpu)
+{}
+
+void AGBAPU::reset()
+{
+    enabled = true;
+
+    lastUpdateCycle = 0;
+
+    frameSeqClock = 0;
+    channelEnabled = 1;
+
+    ch4FreqTimerPeriod = 8;
+
+    //... incomplete
+
+    sampleClock = 0;
+    readOff = 0, writeOff = 64;
+
+    // init wave RAM
+    /*for(int i = 0x30; i < 0x40;)
+    {
+        cpu.getMem().writeIOReg(i++, 0x00);
+        cpu.getMem().writeIOReg(i++, 0xFF);
+    }*/
+}
+
+void AGBAPU::update()
+{
+    auto curCycle = cpu.getCycleCount();
+    if(lastUpdateCycle == curCycle)
+        return;
+
+    auto passed = curCycle - lastUpdateCycle;
+
+    auto oldCycle = lastUpdateCycle >> 2;
+
+    passed >>= 2;
+    lastUpdateCycle += passed << 2;
+
+    // output clock - attempt to get close to 22050Hz
+    const int clocksPerSample = (4194304ull * 1024) / 22050;
+
+    while(passed)
+    {
+        // clamp update step (min of next sample and next seq update)
+        uint32_t nextSample = ((clocksPerSample - sampleClock) + 1023) / 1024;
+        uint32_t nextFrameSeqUpdate = 8192u - (oldCycle & 0x1FFF);
+        auto step = std::min(nextSample, std::min(nextFrameSeqUpdate, passed));
+
+        updateFreq(step);
+
+        // update frame sequencer clock
+        if((oldCycle & 0x1FFF) + step >= 8192)
+            updateFrameSequencer();
+
+        // output
+        sampleClock += step * 1024;
+
+        if(sampleClock >= clocksPerSample)
+        {
+            sampleClock -= clocksPerSample;
+            sampleOutput();
+        }
+
+        passed -= step;
+    }
+}
+
+int16_t AGBAPU::getSample()
+{
+    auto ret = sampleData[readOff];
+
+    readOff = (readOff + 1) % bufferSize;
+
+    return ret;
+}
+
+int AGBAPU::getNumSamples() const
+{
+    int avail = writeOff - readOff;
+    if(avail < 0)
+        avail += bufferSize;
+
+    return avail;
+}
+
+uint16_t AGBAPU::readReg(uint32_t addr, uint16_t val)
+{
+    update();
+
+    switch(addr & 0xFFFFFF)
+    {
+        case IO_SOUNDCNT_X:
+            return (val & 0xFFF0) | 0x70 | channelEnabled; // enabled channels is read only
+
+        // TODO: wave RAM
+    }
+
+
+    return val;
+}
+
+bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
+{
+    const uint8_t dutyPatterns[]{0b01000000, 0b11000000, 0b11110000, 0b00111111};
+
+    if((addr & 0xFFFFFF) < IO_SOUND1CNT_L || (addr & 0xFFFFFF) > IO_FIFO_B)
+        return false;
+
+    update();
+
+    addr = addr & 0xFFFFFF;
+
+    auto &mem = cpu.getMem();
+
+    // ignore the write (?)
+    if(!enabled && addr >= IO_SOUND1CNT_L && addr < IO_SOUNDCNT_X)
+        return true;
+
+    switch(addr)
+    {
+        case IO_SOUND1CNT_L: // sweep
+
+            // switching negate off after an update with it on kills the channel
+            if(!(data & SOUND1CNT_L_Negate) && (mem.readIOReg(IO_SOUND1CNT_L) & SOUND1CNT_L_Negate) && ch1SweepCalcWithNeg)
+                channelEnabled &= ~1;
+            break;
+
+        case IO_SOUND1CNT_H: // length/duty/env
+            ch1DutyPattern = dutyPatterns[(data >> 6) & 3];
+            ch1Len = 64 - (data & 0x3F);
+
+            // disable if DAC off
+            if((data & 0xF800) == 0)
+                channelEnabled &= ~(1 << 0);
+
+            if(!enabled)
+                return true; // don't store it if disabled
+            break;
+
+        case IO_SOUND1CNT_X: // freq/trigger/counter
+        {
+            auto freq = data & 0x7FF;
+            ch1FreqTimerPeriod = (2048 - freq) * 4;
+
+            // enabling counter can cause an extra clock
+            if((data & SOUNDxCNT_Length) && !(mem.readIOReg(IO_SOUND1CNT_X) & SOUNDxCNT_Length) && !(frameSeqClock & 1))
+            {
+                if(ch1Len && --ch1Len == 0)
+                    channelEnabled &= ~(1 << 0); // done, disable
+            }
+
+            if(data & SOUNDxCNT_Trigger)
+            {
+                // init sweep
+                auto sweepReg = mem.readIOReg(IO_SOUND1CNT_L);
+                auto sweepShift = sweepReg & SOUND1CNT_L_Shift;
+                ch1SweepTimer = (sweepReg & SOUND1CNT_L_Period) >> 4;
+                ch1SweepFreq = freq;
+                ch1SweepEnable = ch1SweepTimer || sweepShift;
+
+                if(ch1SweepTimer == 0)
+                    ch1SweepTimer = 8;
+
+                // reload envelope
+                ch1EnvVolume = mem.readIOReg(IO_SOUND1CNT_H) >> 12;
+                ch1EnvTimer = (mem.readIOReg(IO_SOUND1CNT_H) >> 8) & 0x7;
+
+                ch1FreqTimer = ch1FreqTimerPeriod + 8; // delay
+
+                // slightly smaller delay on restart
+                if(channelEnabled & (1 << 0))
+                    ch1FreqTimer -= 4;
+
+                if(ch1Len == 0)
+                {
+                    // triggering resets length to max
+                    // but also clocks if the counter is enabled
+                    if((data & SOUNDxCNT_Length) && !(frameSeqClock & 1))
+                        ch1Len = 63;
+                    else
+                        ch1Len = 64;
+                }
+
+                if(mem.readIOReg(IO_SOUND1CNT_H) & 0xF800)
+                    channelEnabled |= (1 << 0);
+
+                ch1SweepCalcWithNeg = false;
+
+                // update sweep now if shift is set
+                if(sweepShift)
+                {
+                    int newFreq = ch1SweepFreq >> sweepShift;
+
+                    if(sweepReg & SOUND1CNT_L_Negate) // negate
+                    {
+                        newFreq = ch1SweepFreq - newFreq;
+                        ch1SweepCalcWithNeg = true;
+                    }
+                    else
+                        newFreq = ch1SweepFreq + newFreq;
+
+                    if(newFreq >= 2048)
+                        channelEnabled &= ~(1 << 0);
+                }
+            }
+            break;
+        }
+
+        case IO_SOUND2CNT_L: // length/duty/env
+            ch2DutyPattern = dutyPatterns[(data >> 6) & 3];
+            ch2Len = 64 - (data & 0x3F);
+
+            // disable if DAC off
+            if((data & 0xF800) == 0)
+                channelEnabled &= ~(1 << 1);
+
+            if(!enabled)
+                return true; // don't store it if disabled
+            break;
+
+        case IO_SOUND2CNT_H: // freq lo
+        {
+            auto freq = data & 0x7FF;
+            ch2FreqTimerPeriod = (2048 - freq) * 4;
+
+            // enabling counter can cause an extra clock
+            if((data & SOUNDxCNT_Length) && !(mem.readIOReg(IO_SOUND2CNT_H) & SOUNDxCNT_Length) && !(frameSeqClock & 1))
+            {
+                if(ch2Len && --ch2Len == 0)
+                    channelEnabled &= ~(1 << 1); // done, disable
+            }
+
+            if(data & SOUNDxCNT_Trigger)
+            {
+                // reload envelope
+                ch2EnvVolume = mem.readIOReg(IO_SOUND2CNT_L) >> 12;
+                ch2EnvTimer = (mem.readIOReg(IO_SOUND2CNT_L) >> 8) & 0x7;
+
+                ch2FreqTimer = ch2FreqTimerPeriod + 8; // delay
+
+                // slightly smaller delay on restart
+                if(channelEnabled & (1 << 1))
+                    ch2FreqTimer -= 4;
+
+                if(ch2Len == 0)
+                {
+                    // triggering resets length to max
+                    // but also clocks if the counter is enabled
+                    if((data & SOUNDxCNT_Length) && !(frameSeqClock & 1))
+                        ch2Len = 63;
+                    else
+                        ch2Len = 64;
+                }
+
+                if(mem.readIOReg(IO_SOUND2CNT_L) & 0xF800)
+                    channelEnabled |= (1 << 1);
+            }
+            break;
+        }
+
+        case IO_SOUND3CNT_L: // enable
+            // disable if DAC off
+            if(!(data & 0x80))
+                channelEnabled &= ~(1 << 2);
+
+            // TODO: new banking stuff
+            if(data & 0x60)
+                printf("CH3 %02X\n", data);
+            break;
+
+        case IO_SOUND3CNT_H: // length
+            ch3Len = 256 - data;
+            break;
+
+        case IO_SOUND3CNT_X: // freq/trigger/counter
+        {
+            auto freq = data & 0x7FF;
+            ch3FreqTimerPeriod = (2048 - freq) * 2;
+
+            // enabling counter can cause an extra clock
+            if((data & SOUNDxCNT_Length) && !(mem.readIOReg(IO_SOUND3CNT_X) & SOUNDxCNT_Length) && !(frameSeqClock & 1))
+            {
+                if(ch3Len && --ch3Len == 0)
+                    channelEnabled &= ~(1 << 2); // done, disable
+            }
+
+            if(data & SOUNDxCNT_Trigger)
+            {
+                ch3SampleIndex = 0;
+                ch3FreqTimer = ch3FreqTimerPeriod + 6; // there is a small delay
+
+                if(ch3Len == 0)
+                {
+                    // triggering resets length to max
+                    // but also clocks if the counter is enabled
+                    if((data & SOUNDxCNT_Length) && !(frameSeqClock & 1))
+                        ch3Len = 255;
+                    else
+                        ch3Len = 256;
+                }
+
+                if(mem.readIOReg(IO_SOUND3CNT_L) & 0x80)
+                    channelEnabled |= (1 << 2);
+            }
+            break;
+        }
+
+        case IO_SOUND4CNT_L: // length/envelope/volume
+            ch4Len = 64 - (data & 0x3F);
+
+            // disable if DAC off
+            if((data & 0xF800) == 0)
+                channelEnabled &= ~(1 << 3);
+            break;
+
+        case IO_SOUND4CNT_H: // clock/width/trigger/counter
+        {
+            const int divisors[]{8, 16, 32, 48, 64, 80, 96, 112};
+            auto shift = (data >> 4) & 0xF;
+            auto divCode = data & 0x7;
+            ch4FreqTimerPeriod = divisors[divCode] << shift;
+            ch4Narrow = data & (1 << 3);
+
+            // enabling counter can cause an extra clock
+            if((data & SOUNDxCNT_Length) && !(mem.readIOReg(IO_SOUND4CNT_H) & SOUNDxCNT_Length) && !(frameSeqClock & 1))
+            {
+                if(ch4Len && --ch4Len == 0)
+                    channelEnabled &= ~(1 << 3); // done, disable
+            }
+
+            if(data & SOUNDxCNT_Trigger)
+            {
+                // reload envelope
+                ch4EnvVolume = mem.readIOReg(IO_SOUND4CNT_L) >> 12;
+                ch4EnvTimer = (mem.readIOReg(IO_SOUND4CNT_L) >> 8) & 0x7;
+
+                ch4FreqTimer = ch4FreqTimerPeriod;
+
+                ch4LFSRBits = 0x7FFF;
+
+                if(ch4Len == 0)
+                {
+                    // triggering resets length to max
+                    // but also clocks if the counter is enabled
+                    if((data & SOUNDxCNT_Length) && !(frameSeqClock & 1))
+                        ch4Len = 63;
+                    else
+                        ch4Len = 64;
+                }
+
+                if(mem.readIOReg(IO_SOUND4CNT_L) & 0xF800)
+                    channelEnabled |= (1 << 3);
+            }
+            break;
+        }
+
+        case IO_SOUNDCNT_X:
+            // disabling
+            if(enabled && !(data & SOUNDCNT_X_Enable))
+            {
+                // disabled
+                for(int i = IO_SOUND1CNT_L; i < IO_SOUNDCNT_X; i++)
+                {
+                    writeReg(i, 0);
+                    mem.writeIOReg(i, 0);
+                }
+
+                channelEnabled = 0;
+                frameSeqClock = 0;
+
+                ch1DutyStep = ch2DutyStep = 0;
+                ch1Val = ch2Val = false;
+                ch3SampleIndex = 0;
+                ch3Sample = 0;
+                ch4Val = 0;
+            }
+            else if(!enabled && (data & SOUNDCNT_X_Enable))
+            {
+                frameSeqClock = 7; // make the next frame be 0
+            }
+
+            enabled = data & SOUNDCNT_X_Enable;
+            break;
+
+        // TODO: wave RAM
+    }
+
+    return false;
+}
+
+void AGBAPU::updateFrameSequencer()
+{
+    auto &mem = cpu.getMem();
+
+    frameSeqClock = (frameSeqClock + 1) & 7;
+
+    if((frameSeqClock & 1) == 0)
+    {
+        // length
+
+        const auto ch1FreqHi = mem.readIOReg(IO_SOUND1CNT_X);
+        const auto ch2FreqHi = mem.readIOReg(IO_SOUND2CNT_H);
+        const auto ch3FreqHi = mem.readIOReg(IO_SOUND3CNT_X);
+        const auto ch4FreqHi = mem.readIOReg(IO_SOUND4CNT_H);
+
+        if((ch1FreqHi & SOUNDxCNT_Length) && ch1Len)
+        {
+            if(--ch1Len == 0)
+                channelEnabled &= ~(1 << 0); // done, disable
+        }
+
+        if((ch2FreqHi & SOUNDxCNT_Length) && ch2Len)
+        {
+            if(--ch2Len == 0)
+                channelEnabled &= ~(1 << 1); // done, disable
+        }
+
+        if((ch3FreqHi & SOUNDxCNT_Length) && ch3Len)
+        {
+            if(--ch3Len == 0)
+                channelEnabled &= ~(1 << 2); // done, disable
+        }
+
+        if((ch4FreqHi & SOUNDxCNT_Length) && ch4Len)
+        {
+            if(--ch4Len == 0)
+                channelEnabled &= ~(1 << 3); // done, disable
+        }
+    } 
+
+    if(frameSeqClock == 7)
+    {
+        // envelope
+        const auto ch1EnvVol = mem.readIOReg(IO_SOUND1CNT_H);
+        const auto ch2EnvVol = mem.readIOReg(IO_SOUND2CNT_L);
+        const auto ch4EnvVol = mem.readIOReg(IO_SOUND4CNT_L);
+
+        ch1EnvTimer--;
+
+        if(ch1EnvTimer == 0 && (ch1EnvVol & 0x700))
+        {
+            if(ch1EnvVol & (1 << 11) && ch1EnvVolume < 15)
+                ch1EnvVolume++;
+            else if(ch1EnvVolume > 0)
+                ch1EnvVolume--;
+
+            ch1EnvTimer = (ch1EnvVol >> 8) & 0x7;
+        }
+
+        ch2EnvTimer--;
+
+        if(ch2EnvTimer == 0 && (ch2EnvVol & 0x700))
+        {
+            if(ch2EnvVol & (1 << 11) && ch2EnvVolume < 15)
+                ch2EnvVolume++;
+            else if(ch2EnvVolume > 0)
+                ch2EnvVolume--;
+
+            ch2EnvTimer = (ch2EnvVol >> 8) & 0x7;
+        }
+
+        ch4EnvTimer--;
+
+        if(ch4EnvTimer == 0 && (ch4EnvVol & 0x700))
+        {
+            if(ch4EnvVol & (1 << 11) && ch4EnvVolume < 15)
+                ch4EnvVolume++;
+            else if(ch4EnvVolume > 0)
+                ch4EnvVolume--;
+
+            ch4EnvTimer = (ch4EnvVol >> 8) & 0x7;
+        }
+    }
+
+    if((frameSeqClock & 0x3) == 2)
+    {
+        // sweep
+        ch1SweepTimer--;
+
+        if(ch1SweepEnable && ch1SweepTimer == 0)
+        {
+            const auto ch1Sweep = mem.readIOReg(IO_SOUND1CNT_L);
+            auto sweepPeriod = (ch1Sweep & SOUND1CNT_L_Period) >> 4;
+            if(sweepPeriod)
+            {
+                auto shift = ch1Sweep & SOUND1CNT_L_Shift;
+                int newFreq = ch1SweepFreq >> shift;
+
+                if(ch1Sweep & SOUND1CNT_L_Negate) // negate
+                    newFreq = ch1SweepFreq - newFreq;
+                else
+                    newFreq = ch1SweepFreq + newFreq;
+
+                if(shift && newFreq < 2048)
+                {
+                    ch1SweepFreq = newFreq;
+                    mem.writeIOReg(IO_SOUND1CNT_L, (mem.readIOReg(IO_SOUND1CNT_L) & 0xF100) | newFreq);
+                    ch1FreqTimerPeriod = (2048 - newFreq) * 4;
+                }
+
+                ch1SweepTimer = (ch1Sweep & SOUND1CNT_L_Period) >> 4;
+
+                // calculate again for overflow check
+                newFreq = ch1SweepFreq >> shift;
+
+                if(ch1Sweep & SOUND1CNT_L_Negate) // negate
+                {
+                    newFreq = ch1SweepFreq - newFreq;
+                    ch1SweepCalcWithNeg = true;
+                }
+                else
+                    newFreq = ch1SweepFreq + newFreq;
+
+                if(newFreq >= 2048)
+                    channelEnabled &= ~(1 << 0);
+            }
+            else // period is 0, reset to 8
+                ch1SweepTimer = 8;
+        }
+    }
+}
+
+void AGBAPU::updateFreq(int cyclesPassed)
+{
+    // channel 1
+    if(channelEnabled & (1 << 0) && ch1EnvVolume)
+    {
+        int timer = ch1FreqTimer;
+        timer -= cyclesPassed;
+        while(timer <= 0)
+        {
+            timer += ch1FreqTimerPeriod;
+            ch1Val = ch1DutyPattern & (1 << ch1DutyStep);
+            ch1DutyStep++;
+            ch1DutyStep &= 7;
+        }
+        ch1FreqTimer = timer;
+    }
+
+    // channel 2
+    if(channelEnabled & (1 << 1) && ch2EnvVolume)
+    {
+        int timer = ch2FreqTimer;
+        timer -= cyclesPassed;
+        while(timer <= 0)
+        {
+            timer += ch2FreqTimerPeriod;
+            ch2Val = ch2DutyPattern & (1 << ch2DutyStep);
+            ch2DutyStep++;
+            ch2DutyStep &= 7;
+        }
+        ch2FreqTimer = timer;
+    }
+
+    // channel 3
+    if(channelEnabled & (1 << 2))
+    {
+        int timer = ch3FreqTimer;
+        timer -= cyclesPassed;
+        while(timer <= 0)
+        {
+            timer += ch3FreqTimerPeriod;
+            ch3SampleIndex = (ch3SampleIndex + 1) % 32;
+
+            // TODO: banking
+            uint8_t sampleByte = cpu.getMem().readIOReg(0x90 + (ch3SampleIndex / 2));
+
+            // calculate when this happened for read/write behaviour
+            ch3LastAccessCycle = cpu.getCycleCount() - (ch3FreqTimerPeriod - timer);
+
+            if(ch3SampleIndex & 1)
+                ch3Sample = sampleByte & 0xF;
+            else
+                ch3Sample = sampleByte >> 4;
+        }
+
+        ch3FreqTimer = timer;
+    }
+
+    // channel 4
+    if(channelEnabled & (1 << 3) && ch4EnvVolume)
+    {
+        int timer = ch4FreqTimer;
+        timer -= cyclesPassed;
+        while(timer <= 0)
+        {
+            timer += ch4FreqTimerPeriod;
+            // make noise
+            int bit = ((ch4LFSRBits >> 1) ^ ch4LFSRBits) & 1;
+            ch4LFSRBits >>= 1;
+            ch4LFSRBits |= bit << 14; // bit 15
+
+            if(ch4Narrow)
+                ch4LFSRBits = (ch4LFSRBits & ~(1 << 6)) | (bit << 6); // also set bit 7
+
+            ch4Val = !(ch4LFSRBits & 1);
+        }
+        ch4FreqTimer = timer;
+    }
+}
+
+void AGBAPU::sampleOutput()
+{
+    auto &mem = cpu.getMem();
+
+    // wait for the audio thread/interrupt to catch up
+    while(writeOff == readOff - 1) {}
+
+    auto outputSelect = mem.readIOReg(IO_SOUNDCNT_L) >> 8;
+
+    auto vol = ch1EnvVolume;
+    auto ch1Val = (channelEnabled & 1) && this->ch1Val ? vol : -vol;
+
+    vol = ch2EnvVolume;
+    auto ch2Val = (channelEnabled & 2) && this->ch2Val ? vol : -vol;
+
+    vol = (mem.readIOReg(IO_SOUND3CNT_H) >> 13) & 0x3;
+    // TODO: bit 15 = 75% vol
+    auto ch3Val = (channelEnabled & 4) && vol ? (ch3Sample * 2) - 0xF : 0;
+    ch3Val /= (1 << (vol - 1));
+
+    vol = ch4EnvVolume;
+    auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : -vol;
+
+    int32_t sample = 0;
+
+    if(outputSelect & 0x01)
+        sample += ch1Val;
+    if(outputSelect & 0x10)
+        sample += ch1Val;
+
+    if(outputSelect & 0x02)
+        sample += ch2Val;
+    if(outputSelect & 0x20)
+        sample += ch2Val;
+
+    if(outputSelect & 0x04)
+        sample += ch3Val;
+    if(outputSelect & 0x40)
+        sample += ch3Val;
+
+    if(outputSelect & 0x08)
+        sample += ch4Val;
+    if(outputSelect & 0x80)
+        sample += ch4Val;
+
+    sampleData[writeOff] = sample * 0x111;
+    writeOff = (writeOff + 1) % bufferSize;
+}

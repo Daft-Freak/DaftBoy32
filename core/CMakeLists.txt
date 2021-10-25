@@ -13,6 +13,7 @@ target_include_directories(DaftBoyCore INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 add_library(DaftBoyAdvanceCore INTERFACE)
 
 target_sources(DaftBoyAdvanceCore INTERFACE
+    AGBAPU.cpp
     AGBCPU.cpp
     AGBDisplay.cpp
     AGBMemory.cpp
