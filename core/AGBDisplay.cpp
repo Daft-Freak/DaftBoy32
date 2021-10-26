@@ -262,14 +262,17 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         int sizeShape = (shape ? shape ^ 0xC : 0) | ((attr1 & Attr1_Size) >> 14);
         int spriteH = sizes[sizeShape];
 
+        // possibly doubled size
+        int doubledH = mode == 3 ? spriteH * 2 : spriteH;
+
         // wrap
-        if(((spriteY + spriteH) & 0xFF) < spriteY)
+        if(((spriteY + doubledH) & 0xFF) < spriteY)
             spriteY -= 256;
 
         if(spriteY > y)
             continue;
 
-        if(spriteY + spriteH <= y)
+        if(spriteY + doubledH <= y)
             continue;
 
         // get X/W
@@ -289,83 +292,147 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         int sx = std::max(0, -spriteX);
         int sy = y - spriteY;
 
-        // TODO: affine transforms
-        bool hFlip = mode == 0 && (attr1 & Attr1_HFlip);
+        // palette
+        auto spritePal = palRam + 256;
 
-        // v flip
-        if(mode == 0 && (attr1 & Attr1_VFlip))
-            sy = (spriteH - 1) - sy;
-
-        if(dispControl & DISPCNT_OBJChar1D)
-            startTile += (sy >> 3) * (spriteW >> 3) * (attr0 & Attr0_SinglePal ? 2 : 1);
-        else
-            startTile += (sy >> 3) * 32;
-
-        int xOff = sx & 7;
-        auto out = scanLine + (spriteX + sx);
-        auto outEnd = scanLine + 240;
-
-        int tilesX = spriteW >> 3;
-
-        if(attr0 & Attr0_SinglePal)
+        if(mode != 0)
         {
-            // 8bit tiles
-            auto spritePal = palRam + 256;
+            // affine sprite
+            int affineIndex = (attr1 & Attr1_AffineIndex) >> 9;
 
-            // tiles
-            for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
+            int16_t a, b, c, d;
+
+            a = oam[(affineIndex * 4 + 0) * entrySize + 3];
+            b = oam[(affineIndex * 4 + 1) * entrySize + 3];
+            c = oam[(affineIndex * 4 + 2) * entrySize + 3];
+            d = oam[(affineIndex * 4 + 3) * entrySize + 3];
+
+            // offsets
+            int halfW = spriteW;
+            int halfH = spriteH;
+
+            if(mode != 3)
             {
-                int tileX = hFlip ? (tilesX - 1) - stx : stx;
-                auto tilePtr = charPtr + startTile * 32 + tileX * 64 + (sy & 7) * 8;
+                halfW >>= 1;
+                halfH >>= 1;
+            }
 
-                if(hFlip)
-                    tilePtr += 7 - xOff;
+            // transformed coords
+            int tx = ((spriteW / 2) << 8) + (sx - halfW) * a + (sy - halfH) * b;
+            int ty = ((spriteH / 2) << 8) + (sx - halfW) * c + (sy - halfH) * d;
+
+            auto out = scanLine + (spriteX + sx);
+            auto outEnd = scanLine + 240;
+
+            if(!(attr0 & Attr0_SinglePal))
+                spritePal += ((attr2 & Attr2_Pal) >> 8);
+
+            for(int x = sx; x < halfW * 2 && out != outEnd; x++, out++, tx += a, ty += c)
+            {
+                if(tx < 0 || ty < 0 || tx >= (spriteW << 8) || ty >= (spriteH << 8))
+                    continue;
+
+                auto tile = startTile;
+
+                if(dispControl & DISPCNT_OBJChar1D)
+                    tile += (ty >> 11) * (spriteW >> 3) * (attr0 & Attr0_SinglePal ? 2 : 1);
                 else
-                    tilePtr += xOff;
-            
-                // pixels in tile
-                for(int x = xOff; x < 8 && out != outEnd; x++, out++)
+                    tile += (ty >> 11) * 32;
+
+                if(attr0 & Attr0_SinglePal)
                 {
-                    auto palIndex = *tilePtr;
-                    if(palIndex)
-                        *out = spritePal[palIndex];
+                    auto tilePtr = charPtr + tile * 32 + (tx >> 11) * 64 + ((ty >> 8) & 7) * 8 + ((tx >> 8) & 7);
 
-                    if(hFlip)
-                        --tilePtr;
-                    else
-                        ++tilePtr;
+                    if(*tilePtr)
+                        *out = spritePal[*tilePtr];
                 }
+                else
+                {
+                    uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (tile + (tx >> 11)) * 32)[(ty >> 8) & 7];
+                    tileRow >>= ((tx >> 8) & 7) * 4;
 
-                xOff = 0;
+                    if(tileRow & 0xF)
+                        *out = spritePal[tileRow & 0xF];
+                }
             }
         }
         else
         {
-            // 4bit tiles
-            auto spritePal = palRam + 256 + ((attr2 & Attr2_Pal) >> 8);
+            // regular sprite
+            bool hFlip = mode == 0 && (attr1 & Attr1_HFlip);
 
-            for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
+            // v flip
+            if(mode == 0 && (attr1 & Attr1_VFlip))
+                sy = (spriteH - 1) - sy;
+
+            if(dispControl & DISPCNT_OBJChar1D)
+                startTile += (sy >> 3) * (spriteW >> 3) * (attr0 & Attr0_SinglePal ? 2 : 1);
+            else
+                startTile += (sy >> 3) * 32;
+
+            int xOff = sx & 7;
+            auto out = scanLine + (spriteX + sx);
+            auto outEnd = scanLine + 240;
+
+            int tilesX = spriteW >> 3;
+
+            if(attr0 & Attr0_SinglePal)
             {
-                int tileX = hFlip ? (tilesX - 1) - stx : stx;
-                uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (startTile + tileX) * 32)[sy & 7];
-
-                if(hFlip)
+                // 8bit tiles
+                for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
                 {
-                    tileRow = __builtin_bswap32(tileRow);
-                    tileRow = (tileRow & 0xF0F0F0F0) >> 4 | (tileRow & 0x0F0F0F0F) << 4;
+                    int tileX = hFlip ? (tilesX - 1) - stx : stx;
+                    auto tilePtr = charPtr + startTile * 32 + tileX * 64 + (sy & 7) * 8;
+
+                    if(hFlip)
+                        tilePtr += 7 - xOff;
+                    else
+                        tilePtr += xOff;
+
+                    // pixels in tile
+                    for(int x = xOff; x < 8 && out != outEnd; x++, out++)
+                    {
+                        auto palIndex = *tilePtr;
+                        if(palIndex)
+                            *out = spritePal[palIndex];
+
+                        if(hFlip)
+                            --tilePtr;
+                        else
+                            ++tilePtr;
+                    }
+
+                    xOff = 0;
                 }
+            }
+            else
+            {
+                // 4bit tiles
+                spritePal += ((attr2 & Attr2_Pal) >> 8);
 
-                // first tile
-                if(xOff)
-                    tileRow >>= (xOff * 4);
-
-                for(int x = xOff; x < 8 && out != outEnd; x++, tileRow >>= 4, out++)
+                for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
                 {
-                    if(tileRow & 0xF)
-                        *out = spritePal[tileRow & 0xF];
-                }
+                    int tileX = hFlip ? (tilesX - 1) - stx : stx;
+                    uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (startTile + tileX) * 32)[sy & 7];
 
-                xOff = 0;
+                    if(hFlip)
+                    {
+                        tileRow = __builtin_bswap32(tileRow);
+                        tileRow = (tileRow & 0xF0F0F0F0) >> 4 | (tileRow & 0x0F0F0F0F) << 4;
+                    }
+
+                    // first tile
+                    if(xOff)
+                        tileRow >>= (xOff * 4);
+
+                    for(int x = xOff; x < 8 && out != outEnd; x++, tileRow >>= 4, out++)
+                    {
+                        if(tileRow & 0xF)
+                            *out = spritePal[tileRow & 0xF];
+                    }
+
+                    xOff = 0;
+                }
             }
         }
     }
