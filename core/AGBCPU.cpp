@@ -113,6 +113,15 @@ void AGBCPU::triggerDMA(int trigger)
         {
             dmaTriggered |= 1 << chan;
         }
+
+        // special triggers
+        else if((control & DMACNTH_Start) == 3 << 12)
+        {
+            if(chan == 1 && trigger == Trig_SoundA)
+                dmaTriggered |= 1 << chan;
+            else if(chan == 2 && trigger == Trig_SoundB)
+                dmaTriggered |= 1 << chan;
+        }
     }
 }
 
@@ -2202,7 +2211,12 @@ int AGBCPU::dmaTransfer(int channel)
     int dstMode = (dmaControl & DMACNTH_DestMode) >> 5;
     int srcMode = (dmaControl & DMACNTH_SrcMode) >> 7;
 
-    //printf("DMA%i %xx%i %x -> %x\n", channel, count, is32Bit ? 4 : 2, srcAddr, dstAddr);
+    // sound DMA copies 4 to fixed dest
+    if((channel == 1 || channel == 2) && (dmaControl & DMACNTH_Start) == 3 << 12)
+    {
+        count = 4;
+        dstMode = 2;
+    }
 
     int width = is32Bit ? 4 : 2;
     int cycles = mem.getAccessCycles(srcAddr, width, false) + mem.getAccessCycles(srcAddr, width, true) * (count - 1) // 1N + (n-1)S read

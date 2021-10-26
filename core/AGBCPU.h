@@ -29,8 +29,9 @@ public:
     enum DMATrigger
     {
         Trig_VBlank = 1,
-        Trig_HBlank
-        // sound...
+        Trig_HBlank,
+        Trig_SoundA,
+        Trig_SoundB
     };
 
     AGBCPU();
