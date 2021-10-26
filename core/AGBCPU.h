@@ -244,6 +244,7 @@ private:
 
     // dma
     uint8_t dmaTriggered = 0;
+    uint32_t dmaSrc[4], dmaDst[4]; // internal values, reloaded on enable
 
     uint32_t cycleCount = 0;
 
