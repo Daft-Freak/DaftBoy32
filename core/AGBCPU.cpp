@@ -165,10 +165,14 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
                 if((data & DMACNTH_Start) == 0)
                     dmaTriggered |= (1 << index);
 
-                // reload
-                int regOffset = (addr & 0xFFFFFF) - IO_DMA0CNT_H;
-                dmaSrc[index] = (mem.readIOReg(IO_DMA0SAD + regOffset) | (mem.readIOReg(IO_DMA0SAD + regOffset + 2) << 16)) & (index ? 0xFFFFFFF : 0x7FFFFFF); // 1 bit less for DMA0
-                dmaDst[index] = (mem.readIOReg(IO_DMA0DAD + regOffset) | (mem.readIOReg(IO_DMA0DAD + regOffset + 2) << 16)) & (index == 3 ? 0xFFFFFFF : 0x7FFFFFF); // 1 bit less for !DMA3
+                // reload on enable
+                if(!(mem.readIOReg(addr) & DMACNTH_Enable))
+                {
+                    int regOffset = (addr & 0xFFFFFF) - IO_DMA0CNT_H;
+                    dmaSrc[index] = (mem.readIOReg(IO_DMA0SAD + regOffset) | (mem.readIOReg(IO_DMA0SAD + regOffset + 2) << 16)) & (index ? 0xFFFFFFF : 0x7FFFFFF); // 1 bit less for DMA0
+                    dmaDst[index] = (mem.readIOReg(IO_DMA0DAD + regOffset) | (mem.readIOReg(IO_DMA0DAD + regOffset + 2) << 16)) & (index == 3 ? 0xFFFFFFF : 0x7FFFFFF); // 1 bit less for !DMA3
+                    dmaCount[index] = mem.readIOReg(IO_DMA0CNT_L + regOffset);
+                }
             }
             else
                 dmaTriggered &= ~(1 << index);
@@ -2204,7 +2208,7 @@ int AGBCPU::dmaTransfer(int channel)
     auto &dmaControl = mem.getIOReg(IO_DMA0CNT_H + regOffset);
     auto srcAddr = dmaSrc[channel];
     auto dstAddr = dmaDst[channel];
-    auto count = mem.readIOReg(IO_DMA0CNT_L  + regOffset);
+    auto count = dmaCount[channel];
 
     bool is32Bit = dmaControl & DMACNTH_32Bit;
     int dstMode = (dmaControl & DMACNTH_DestMode) >> 5;
@@ -2243,7 +2247,10 @@ int AGBCPU::dmaTransfer(int channel)
     }
 
     if(!(dmaControl & DAMCNTH_Repeat))
+    {
         dmaControl &= ~DMACNTH_Enable;
+        dmaCount[channel] = 0;
+    }
 
     dmaSrc[channel] = srcAddr;
 
