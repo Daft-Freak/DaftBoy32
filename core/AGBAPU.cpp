@@ -73,6 +73,7 @@ void AGBAPU::update()
         }
 
         passed -= step;
+        oldCycle += step;
     }
 }
 
