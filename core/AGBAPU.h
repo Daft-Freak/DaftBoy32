@@ -12,6 +12,8 @@ public:
 
     void update();
 
+    void timerOverflow(int timer, uint32_t cycle);
+
     int16_t getSample();
     int getNumSamples() const;
 
@@ -72,6 +74,13 @@ private:
     uint16_t ch4LFSRBits = 0; // really 15 bit
     bool ch4Narrow = false;
     bool ch4Val = false;
+
+    // "DMA" channels
+    uint8_t dmaAFIFO[32], dmaBFIFO[32];
+    uint8_t fifoARead = 0, fifoAWrite = 0, fifoBRead = 0, fifoBWrite = 0;
+    uint8_t fifoAFilled = 0, fifoBFilled = 0;
+
+    int8_t dmaAVal = 0, dmaBVal = 0;
 
     // output
     int sampleClock = 0;

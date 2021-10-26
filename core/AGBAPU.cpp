@@ -77,6 +77,45 @@ void AGBAPU::update()
     }
 }
 
+// timer 0 or 1 overflow, may need to update DMA channels
+void AGBAPU::timerOverflow(int timer, uint32_t cycle)
+{
+    auto control = cpu.getMem().readIOReg(IO_SOUNDCNT_H);
+
+    if(!(control & 0x3300))
+        return; // no DMA channels enabled
+
+    if(timer == 0 && ((control & 0x4400) == 0x4400))
+        return; // both channels using timer 1
+
+    if(timer == 1 && !(control & 0x4400))
+        return; // both channels using timer 0
+
+    update(); //FIXME: to passed in cycle?
+
+    // enabled and using this timer
+    if(control & 0x300 && ((control & (1 << 10)) != 0) == (timer == 1))
+    {
+        dmaAVal = dmaAFIFO[fifoARead];
+        fifoARead = (fifoARead + 1) & 0x1F;
+        fifoAFilled--;
+
+        // trigger DMA for more data
+        if(fifoAFilled <= 16)
+            cpu.triggerDMA(AGBCPU::Trig_SoundA);
+    }
+
+    if(control & 0x3000 && ((control & (1 << 14)) != 0) == (timer == 1))
+    {
+        dmaBVal = dmaBFIFO[fifoBRead];
+        fifoBRead = (fifoBRead + 1) & 0x1F;
+        fifoBFilled--;
+
+        if(fifoBFilled <= 16)
+            cpu.triggerDMA(AGBCPU::Trig_SoundB);
+    }
+}
+
 int16_t AGBAPU::getSample()
 {
     auto ret = sampleData[readOff];
@@ -115,7 +154,7 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
 {
     const uint8_t dutyPatterns[]{0b01000000, 0b11000000, 0b11110000, 0b00111111};
 
-    if((addr & 0xFFFFFF) < IO_SOUND1CNT_L || (addr & 0xFFFFFF) > IO_FIFO_B)
+    if((addr & 0xFFFFFF) < IO_SOUND1CNT_L || (addr & 0xFFFFFF) > IO_FIFO_B + 2)
         return false;
 
     update();
@@ -365,6 +404,34 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
             }
             break;
         }
+
+        // ordering should work out for these...
+        case IO_FIFO_A:
+        case IO_FIFO_A + 2:
+            dmaAFIFO[fifoAWrite++] = data & 0xFF;
+            fifoAWrite &= 0x1F;
+            dmaAFIFO[fifoAWrite++] = data >> 8;
+            fifoAWrite &= 0x1F;
+            fifoAFilled += 2;
+            break;
+
+        case IO_FIFO_B:
+        case IO_FIFO_B + 2:
+            dmaBFIFO[fifoBWrite++] = data & 0xFF;
+            fifoBWrite &= 0x1F;
+            dmaBFIFO[fifoBWrite++] = data >> 8;
+            fifoBWrite &= 0x1F;
+            fifoBFilled += 2;
+            break;
+
+        case IO_SOUNDCNT_H:
+
+            // FIFO reset
+            if(data & (1 << 11))
+                fifoAFilled = fifoARead = fifoAWrite = 0;
+            if(data & (1 << 15))
+                fifoBFilled = fifoBRead = fifoBWrite = 0;
+            break;
 
         case IO_SOUNDCNT_X:
             // disabling
@@ -645,7 +712,10 @@ void AGBAPU::sampleOutput()
     // wait for the audio thread/interrupt to catch up
     while(writeOff == readOff - 1) {}
 
+    // TODO: master left/right volume in low byte
     auto outputSelect = mem.readIOReg(IO_SOUNDCNT_L) >> 8;
+    // TODO sound 1-4 volume in bit 0-1
+    auto dmaControl = mem.readIOReg(IO_SOUNDCNT_H);
 
     auto vol = ch1EnvVolume;
     auto ch1Val = (channelEnabled & 1) && this->ch1Val ? vol : -vol;
@@ -683,6 +753,26 @@ void AGBAPU::sampleOutput()
     if(outputSelect & 0x80)
         left += ch4Val * 8;
 
+    // shiny new DMA channels
+    int dmaAVal = this->dmaAVal * 4;
+    int dmaBVal = this->dmaBVal * 4;
+
+    // 50% vol
+    if(!(dmaControl & (1 << 2)))
+        dmaAVal /= 2;
+    if(!(dmaControl & (1 << 3)))
+        dmaBVal /= 2;
+
+    if(dmaControl & (1 << 8))
+        right += dmaAVal;
+    if(dmaControl & (1 << 9))
+        left += dmaAVal;
+
+    if(dmaControl & (1 << 12))
+        right += dmaBVal;
+    if(dmaControl & (1 << 13))
+        left += dmaBVal;
+
     auto bias = mem.readIOReg(IO_SOUNDBIAS) & 0x3FE;
 
     // bias to unsigned and clamp to 10-bit
@@ -690,6 +780,6 @@ void AGBAPU::sampleOutput()
     right = std::min(0x3FF, std::max(0, right + bias));
 
     // ... and go back to mono signed 16-bit for output...
-    sampleData[writeOff] = ((left - 0x200) + (right - 0x200)) * 64;
+    sampleData[writeOff] = ((left - 0x200) + (right - 0x200)) * 16;
     writeOff = (writeOff + 1) % bufferSize;
 }
