@@ -59,8 +59,7 @@ void AGBCPU::run(int ms)
             exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
         }
 
-        // loop until not halted
-        // may need to handle some dma triggers...
+        // loop until not halted or DMA was triggered
         do
         {
             cycles -= exec;
@@ -86,7 +85,7 @@ void AGBCPU::run(int ms)
                     exec = 4; // FIXME: this is wrong but higher = less overhead
             }
         }
-        while(halted && cycles > 0);
+        while(halted && !(dmaTriggered) && cycles > 0);
     }
 }
 
