@@ -408,20 +408,26 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
         // ordering should work out for these...
         case IO_FIFO_A:
         case IO_FIFO_A + 2:
-            dmaAFIFO[fifoAWrite++] = data & 0xFF;
-            fifoAWrite &= 0x1F;
-            dmaAFIFO[fifoAWrite++] = data >> 8;
-            fifoAWrite &= 0x1F;
-            fifoAFilled += 2;
+            if(fifoAFilled < 31)
+            {
+                dmaAFIFO[fifoAWrite++] = data & 0xFF;
+                fifoAWrite &= 0x1F;
+                dmaAFIFO[fifoAWrite++] = data >> 8;
+                fifoAWrite &= 0x1F;
+                fifoAFilled += 2;
+            }
             break;
 
         case IO_FIFO_B:
         case IO_FIFO_B + 2:
-            dmaBFIFO[fifoBWrite++] = data & 0xFF;
-            fifoBWrite &= 0x1F;
-            dmaBFIFO[fifoBWrite++] = data >> 8;
-            fifoBWrite &= 0x1F;
-            fifoBFilled += 2;
+            if(fifoBFilled < 31)
+            {
+                dmaBFIFO[fifoBWrite++] = data & 0xFF;
+                fifoBWrite &= 0x1F;
+                dmaBFIFO[fifoBWrite++] = data >> 8;
+                fifoBWrite &= 0x1F;
+                fifoBFilled += 2;
+            }
             break;
 
         case IO_SOUNDCNT_H:
