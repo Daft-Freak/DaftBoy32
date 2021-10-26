@@ -655,7 +655,7 @@ void AGBAPU::sampleOutput()
 
     vol = (mem.readIOReg(IO_SOUND3CNT_H) >> 13) & 0x3;
     // TODO: bit 15 = 75% vol
-    auto ch3Val = (channelEnabled & 4) && vol ? (ch3Sample * 2) - 0xF : 0;
+    auto ch3Val = (channelEnabled & 4) && vol ? ((ch3Sample ^ 0xF) * 2) - 0xF : 0;
     ch3Val /= (1 << (vol - 1));
 
     vol = ch4EnvVolume;
