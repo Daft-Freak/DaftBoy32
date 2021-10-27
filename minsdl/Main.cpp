@@ -82,13 +82,25 @@ int main(int argc, char *argv[])
 
     std::string romFilename;
 
-    if(argc < 2)
+    int i = 1;
+
+    for(; i < argc; i++)
+    {
+        std::string arg(argv[i]);
+
+        if(arg == "--scale" && i + 1 < argc)
+            screenScale = std::stoi(argv[++i]);
+        else
+            break;
+    }
+
+    if(argc < i)
     {
         std::cerr << "No ROM specified!\n";
         return 1;
     }
 
-    romFilename = argv[1];
+    romFilename = argv[i];
 
     romFile.open(romFilename);
 
