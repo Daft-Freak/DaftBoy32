@@ -2297,6 +2297,9 @@ void AGBCPU::updateTimers()
                 timerCounters[i] = mem.readIOReg(IO_TM0CNT_L + i * 4);
                 if(timerInterruptEnabled & (1 << i))
                     flagInterrupt(Int_Timer0 << i);
+
+                if(i < 2)
+                    apu.timerOverflow(i, timer);
             }
         }
         timer++;
