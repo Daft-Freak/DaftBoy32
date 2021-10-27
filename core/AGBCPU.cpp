@@ -65,7 +65,8 @@ void AGBCPU::run(int ms)
             cycles -= exec;
             cycleCount += exec;
 
-            if(timerInterruptEnabled)
+            // TODO: this would need to be || dmaSoundEnabled... which is most of the time anyway
+            //if(timerInterruptEnabled)
                 updateTimers();
 
             if(enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount))
@@ -79,9 +80,9 @@ void AGBCPU::run(int ms)
                 // skip to next display update
                 // TODO: handle timers
                 // TODO: other interrupts
-                if(!(enabledInterrutps & (Int_Timer0 | Int_Timer1 | Int_Timer2 | Int_Timer3)))
-                    exec = std::min(cycles, display.getCyclesToNextUpdate());
-                else
+                //if(!(enabledInterrutps & (Int_Timer0 | Int_Timer1 | Int_Timer2 | Int_Timer3)))
+                //    exec = std::min(cycles, display.getCyclesToNextUpdate());
+                //else
                     exec = 4; // FIXME: this is wrong but higher = less overhead
             }
         }
