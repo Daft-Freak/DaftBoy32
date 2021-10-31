@@ -19,6 +19,23 @@ enum AGBIOReg
     IO_BG3HOFS = 0x1C,
     IO_BG3VOFS = 0x1E,
 
+    IO_BG2PA = 0x20,
+    IO_BG2PB = 0x22,
+    IO_BG2PC = 0x24,
+    IO_BG2PD = 0x26,
+    IO_BG2X_L = 0x28,
+    IO_BG2X_H = 0x2A,
+    IO_BG2Y_L = 0x2C,
+    IO_BG2Y_H = 0x2E,
+    IO_BG3PA = 0x30,
+    IO_BG3PB = 0x32,
+    IO_BG3PC = 0x34,
+    IO_BG3PD = 0x36,
+    IO_BG3X_L = 0x38,
+    IO_BG3X_H = 0x3A,
+    IO_BG3Y_L = 0x3C,
+    IO_BG3Y_H = 0x3E,
+
     // Audio
     IO_SOUND1CNT_L = 0x60,
     IO_SOUND1CNT_H = 0x62,
