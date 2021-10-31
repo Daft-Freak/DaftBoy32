@@ -29,6 +29,9 @@ private:
 
     uint8_t y = 0;
 
+    // internal reference points for affine bg
+    int32_t refPointX[2]{0}, refPointY[2]{0};
+
     static const int scanlineDots = 308; // * 4 cpu cycles
     static const int screenWidth = 240, screenHeight = 160;
 

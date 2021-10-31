@@ -151,6 +151,63 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
     }
 }
 
+static void drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t xOffset, int32_t yOffset, int16_t a, int16_t c)
+{
+    int screenSize = (control & BGCNT_ScreenSize) >> 14;
+
+    int curX = xOffset;
+    int curY = yOffset;
+
+    int numTiles = 16 << screenSize; // 16-128
+
+    auto blockBase = (control & BGCNT_ScreenBase) << 3; // >> 8 * 0x800
+    auto screenPtr = reinterpret_cast<uint8_t *>(vram + blockBase);
+
+    auto charBase = ((control & BGCNT_CharBase) >> 2) * 0x4000;
+    auto charPtr = vram + charBase;
+
+    bool wrap = control & BGCNT_Wrap;
+
+    for(int x = 0; x < 240; x++, scanLine++, curX += a, curY += c)
+    {
+        int tx = (curX >> 8) & 7;
+        int bx = curX >> 11;
+
+        int ty = (curY >> 8) & 7;
+        int by = curY >> 11;
+
+        // wrap/clamp
+        if(bx < 0 || bx >= numTiles)
+        {
+            if(wrap)
+                bx &= numTiles - 1;
+            else
+                continue;
+        }
+
+        if(by < 0 || by >= numTiles)
+        {
+            if(wrap)
+                by &= numTiles - 1;
+            else
+                continue;
+        }
+
+        auto tilePtr = screenPtr + by * numTiles;
+
+        uint8_t tileIndex = tilePtr[bx];
+
+        // 8bit tiles
+        uint64_t tileRow = reinterpret_cast<uint64_t *>(charPtr + tileIndex * 64)[ty];
+
+        auto tileDataPtr = reinterpret_cast<uint8_t *>(&tileRow) + tx;
+
+        auto palIndex = *tileDataPtr++;
+        if(palIndex)
+            *scanLine = palRam[palIndex];
+    }
+}
+
 // these two are always "text" mode
 static void drawBG0(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
 {
@@ -168,14 +225,17 @@ static void drawBG1(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
     drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG1HOFS), mem.readIOReg(IO_BG1VOFS));
 }
 
-static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t refPointX, int32_t refPointY)
 {
     switch(dispControl & DISPCNT_Mode)
     {
         case 0: // "text" mode
             drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG2HOFS), mem.readIOReg(IO_BG2VOFS));
             break;
-        // 1-2...
+        case 1: // affine mode
+        case 2:
+            drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG2PA), mem.readIOReg(IO_BG2PC));
+            break;
         case 3: // 16-bit fullscreen bitmap
         {
             auto inPtr = reinterpret_cast<uint16_t *>(vram + y * 240 * 2);
@@ -211,16 +271,16 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
 
             break;
         }
-        default:
-            memset(scanLine, 0, 240 * 2);
+        // else invalid
     }
 }
 
-static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t refPointX, int32_t refPointY)
 {
     if((dispControl & DISPCNT_Mode) == 0)
         drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG3HOFS), mem.readIOReg(IO_BG3VOFS));
-    // else 2
+    else if((dispControl & DISPCNT_Mode) == 2)
+        drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG3PA), mem.readIOReg(IO_BG3PC));
 }
 
 static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, int priority)
@@ -474,7 +534,15 @@ void AGBDisplay::update()
                 cpu.triggerDMA(AGBCPU::Trig_HBlank);
 
                 if(y < screenHeight)
+                {
                     drawScanLine(y);
+
+                    // update affine
+                    refPointX[0] += static_cast<int16_t>(mem.readIOReg(IO_BG2PB));
+                    refPointY[0] += static_cast<int16_t>(mem.readIOReg(IO_BG2PD));
+                    refPointX[1] += static_cast<int16_t>(mem.readIOReg(IO_BG3PB));
+                    refPointY[1] += static_cast<int16_t>(mem.readIOReg(IO_BG3PD));
+                }
 
                 continue;
             }
@@ -498,6 +566,25 @@ void AGBDisplay::update()
             if(stat & DISPSTAT_VBlankInt)
                 cpu.flagInterrupt(AGBCPU::Int_LCDVBlank);
             cpu.triggerDMA(AGBCPU::Trig_VBlank);
+
+            // reload affine ref
+            refPointX[0] = mem.readIOReg(IO_BG2X_L) | (mem.readIOReg(IO_BG2X_H) & 0xFFF) << 16;
+            refPointY[0] = mem.readIOReg(IO_BG2Y_L) | (mem.readIOReg(IO_BG2Y_H) & 0xFFF) << 16;
+            refPointX[1] = mem.readIOReg(IO_BG3X_L) | (mem.readIOReg(IO_BG3X_H) & 0xFFF) << 16;
+            refPointY[1] = mem.readIOReg(IO_BG3Y_L) | (mem.readIOReg(IO_BG3Y_H) & 0xFFF) << 16;
+
+            // sign extend
+            if(refPointX[0] & 0x8000000)
+                refPointX[0] |= 0xF0000000;
+
+            if(refPointY[0] & 0x8000000)
+                refPointY[0] |= 0xF0000000;
+
+            if(refPointX[1] & 0x8000000)
+                refPointX[1] |= 0xF0000000;
+
+            if(refPointY[1] & 0x8000000)
+                refPointY[1] |= 0xF0000000;
         }
         else if(y >= 228)
             y = 0; // end vblank
@@ -538,8 +625,45 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
     switch(addr)
     {
 
+        // affine reference points
+        case IO_BG2X_L:
+            refPointX[0] = data | (refPointX[0] & 0xFFFF0000);
+            break;
+        case IO_BG2X_H:
+        {
+            auto tmp = (data & 0x800) ? (data | 0xF000) : (data & 0xFFF); // sign extend
+            refPointX[0] = tmp << 16 | (refPointX[0] & 0xFFFF);
+            break;
+        }
+        case IO_BG2Y_L:
+            refPointY[0] = data | (refPointY[0] & 0xFFFF0000);
+            break;
+        case IO_BG2Y_H:
+        {
+            auto tmp = (data & 0x800) ? (data | 0xF000) : (data & 0xFFF); // sign extend
+            refPointY[0] = tmp << 16 | (refPointY[0] & 0xFFFF);
+            break;
+        }
+        case IO_BG3X_L:
+            refPointX[1] = data | (refPointX[1] & 0xFFFF0000);
+            break;
+        case IO_BG3X_H:
+        {
+            auto tmp = (data & 0x800) ? (data | 0xF000) : (data & 0xFFF); // sign extend
+            refPointX[1] = tmp << 16 | (refPointX[1] & 0xFFFF);
+            break;
+        }
+        case IO_BG3Y_L:
+            refPointY[1] = data | (refPointY[1] & 0xFFFF0000);
+            break;
+        case IO_BG3Y_H:
+        {
+            auto tmp = (data & 0x800) ? (data | 0xF000) : (data & 0xFFF); // sign extend
+            refPointY[1] = tmp << 16 | (refPointY[1] & 0xFFFF);
+            break;
+        }
     }
-    
+
     return false;
 }
 
@@ -563,9 +687,9 @@ void AGBDisplay::drawScanLine(int y)
     for(int priority = 3; priority >= 0; priority--)
     {
         if((dispControl & DISPCNT_BG3On) && (bg3Control & BGCNT_Priority) == priority)
-            drawBG3(mem, y, scanLine, palRAM, vram, dispControl, bg3Control);
+            drawBG3(mem, y, scanLine, palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]);
         if((dispControl & DISPCNT_BG2On) && (bg2Control & BGCNT_Priority) == priority)
-            drawBG2(mem, y, scanLine, palRAM, vram, dispControl, bg2Control);
+            drawBG2(mem, y, scanLine, palRAM, vram, dispControl, bg2Control, refPointX[0], refPointY[0]);
         if((dispControl & DISPCNT_BG1On) && (bg1Control & BGCNT_Priority) == priority)
             drawBG1(mem, y, scanLine, palRAM, vram, dispControl, bg1Control);
         if((dispControl & DISPCNT_BG0On) && (bg0Control & BGCNT_Priority) == priority)
