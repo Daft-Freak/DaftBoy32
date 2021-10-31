@@ -178,7 +178,6 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
         // 1-2...
         case 3: // 16-bit fullscreen bitmap
         {
-            // TODO: rot/scale
             auto inPtr = reinterpret_cast<uint16_t *>(vram + y * 240 * 2);
             auto outPtr = scanLine;
             for(int x = 0; x < 240; x++)
@@ -198,7 +197,6 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
         }
         case 5: // 16-bit 160*128 bitmap
         {
-            // TODO: rot/scale
             auto outPtr = scanLine;
             if(y < 128)
             {
