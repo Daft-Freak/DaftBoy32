@@ -38,6 +38,11 @@ void AGBCPU::run(int ms)
     runCycles((clockSpeed * ms) / 1000);
 }
 
+void AGBCPU::runFrame()
+{
+    lastExtraCycles = runCycles(308 * 228 * 4 + lastExtraCycles);
+}
+
 void AGBCPU::flagInterrupt(int interrupt)
 {
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
@@ -298,7 +303,7 @@ void AGBCPU::writeMem32(uint32_t addr, uint32_t data)
         mem.write32(addr, data);
 }
 
-void AGBCPU::runCycles(int cycles)
+int AGBCPU::runCycles(int cycles)
 {
     while(cycles > 0)
     {
@@ -351,6 +356,8 @@ void AGBCPU::runCycles(int cycles)
         }
         while(halted && !(dmaTriggered) && cycles > 0);
     }
+
+    return cycles;
 }
 
 // returns cycle count

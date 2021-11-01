@@ -39,6 +39,7 @@ public:
     void reset();
 
     void run(int ms);
+    void runFrame();
 
     void flagInterrupt(int interrupt);
     void triggerDMA(int trigger);
@@ -192,7 +193,7 @@ private:
     void writeMem16(uint32_t addr, uint16_t data);
     void writeMem32(uint32_t addr, uint32_t data);
 
-    void runCycles(int cycles);
+    int runCycles(int cycles);
 
     int executeARMInstruction();
     int executeTHUMBInstruction();
@@ -250,6 +251,7 @@ private:
     uint32_t dmaCount[4], dmaSrc[4], dmaDst[4]; // internal values, reloaded on enable
 
     uint32_t cycleCount = 0;
+    int lastExtraCycles = 0; // used to keep runFrame in sync
 
     // timers
     uint32_t lastTimerUpdate = 0;
