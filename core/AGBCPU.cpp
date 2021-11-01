@@ -35,59 +35,7 @@ void AGBCPU::reset()
 
 void AGBCPU::run(int ms)
 {
-    int cycles = (clockSpeed * ms) / 1000;
-
-    while(cycles > 0)
-    {
-        unsigned int exec = 1;
-
-        // DMA
-        if(dmaTriggered)
-        {
-            exec = 0;
-            auto trig = dmaTriggered;
-            for(int chan = 0; chan < 4 && dmaTriggered; chan++, trig >>= 1)
-            {
-                if(trig & 1)
-                    exec += dmaTransfer(chan);
-            }
-            dmaTriggered = trig;
-        }
-        else if(!halted)
-        {
-            // CPU
-            exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
-        }
-
-        // loop until not halted or DMA was triggered
-        do
-        {
-            cycles -= exec;
-            cycleCount += exec;
-
-            // TODO: this would need to be || dmaSoundEnabled... which is most of the time anyway
-            //if(timerInterruptEnabled)
-                updateTimers();
-
-            if(enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount))
-                display.update();
-            
-            if(currentInterrupts && interruptDelay && !(--interruptDelay))
-                serviceInterrupts(); // cycles?
-
-            if(halted)
-            {
-                // skip to next display update
-                // TODO: handle timers
-                // TODO: other interrupts
-                //if(!(enabledInterrutps & (Int_Timer0 | Int_Timer1 | Int_Timer2 | Int_Timer3)))
-                //    exec = std::min(cycles, display.getCyclesToNextUpdate());
-                //else
-                    exec = 4; // FIXME: this is wrong but higher = less overhead
-            }
-        }
-        while(halted && !(dmaTriggered) && cycles > 0);
-    }
+    runCycles((clockSpeed * ms) / 1000);
 }
 
 void AGBCPU::flagInterrupt(int interrupt)
@@ -348,6 +296,61 @@ void AGBCPU::writeMem32(uint32_t addr, uint32_t data)
     }
     else
         mem.write32(addr, data);
+}
+
+void AGBCPU::runCycles(int cycles)
+{
+    while(cycles > 0)
+    {
+        unsigned int exec = 1;
+
+        // DMA
+        if(dmaTriggered)
+        {
+            exec = 0;
+            auto trig = dmaTriggered;
+            for(int chan = 0; chan < 4 && dmaTriggered; chan++, trig >>= 1)
+            {
+                if(trig & 1)
+                    exec += dmaTransfer(chan);
+            }
+            dmaTriggered = trig;
+        }
+        else if(!halted)
+        {
+            // CPU
+            exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
+        }
+
+        // loop until not halted or DMA was triggered
+        do
+        {
+            cycles -= exec;
+            cycleCount += exec;
+
+            // TODO: this would need to be || dmaSoundEnabled... which is most of the time anyway
+            //if(timerInterruptEnabled)
+                updateTimers();
+
+            if(enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount))
+                display.update();
+
+            if(currentInterrupts && interruptDelay && !(--interruptDelay))
+                serviceInterrupts(); // cycles?
+
+            if(halted)
+            {
+                // skip to next display update
+                // TODO: handle timers
+                // TODO: other interrupts
+                //if(!(enabledInterrutps & (Int_Timer0 | Int_Timer1 | Int_Timer2 | Int_Timer3)))
+                //    exec = std::min(cycles, display.getCyclesToNextUpdate());
+                //else
+                    exec = 4; // FIXME: this is wrong but higher = less overhead
+            }
+        }
+        while(halted && !(dmaTriggered) && cycles > 0);
+    }
 }
 
 // returns cycle count

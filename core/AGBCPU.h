@@ -192,6 +192,8 @@ private:
     void writeMem16(uint32_t addr, uint16_t data);
     void writeMem32(uint32_t addr, uint32_t data);
 
+    void runCycles(int cycles);
+
     int executeARMInstruction();
     int executeTHUMBInstruction();
 
