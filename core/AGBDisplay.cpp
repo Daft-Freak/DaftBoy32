@@ -529,12 +529,13 @@ void AGBDisplay::update()
                 // hblank
                 remainingModeDots = remainingScanlineDots;
 
-                if(stat & DISPSTAT_HBlankInt)
-                    cpu.flagInterrupt(AGBCPU::Int_LCDHBlank);
-                cpu.triggerDMA(AGBCPU::Trig_HBlank);
-
                 if(y < screenHeight)
                 {
+                    if(stat & DISPSTAT_HBlankInt)
+                        cpu.flagInterrupt(AGBCPU::Int_LCDHBlank);
+
+                    cpu.triggerDMA(AGBCPU::Trig_HBlank);
+
                     drawScanLine(y);
 
                     // update affine
