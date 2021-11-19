@@ -681,7 +681,15 @@ void AGBDisplay::drawScanLine(int y)
 
     auto scanLine = screenData + y * screenWidth;
 
-    // fill with "transparent" (seems to work?)
+    // forced blank, display white
+    if(dispControl & DISPCNT_ForceBlank)
+    {
+        for(int i = 0; i < screenWidth; i++)
+            scanLine[i] = 0x7FFF;
+        return;
+    }
+
+    // fill with backdrop/colour 0
     for(int i = 0; i < screenWidth; i++)
         scanLine[i] = palRAM[0];
 
