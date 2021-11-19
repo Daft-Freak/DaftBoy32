@@ -98,8 +98,8 @@ enum AGBIOReg
 
 enum DISPCNTBits
 {
-    DISPCNT_Mode       = 0x7,
-
+    DISPCNT_Mode        = 0x7,
+    DISPCNT_CGBMode     = (1 << 3),
     DISPCNT_Frame       = (1 << 4),
     DISPCNT_HBlankFree  = (1 << 5),
     DISPCNT_OBJChar1D   = (1 << 6),
