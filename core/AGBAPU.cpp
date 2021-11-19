@@ -319,7 +319,7 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
             break;
 
         case IO_SOUND3CNT_H: // length
-            ch3Len = 256 - data;
+            ch3Len = 256 - (data & 0xFF);
             break;
 
         case IO_SOUND3CNT_X: // freq/trigger/counter
