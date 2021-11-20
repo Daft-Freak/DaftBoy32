@@ -87,6 +87,22 @@ uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
 
     switch(addr & 0xFFFFFF)
     {
+        // not readable
+        // TODO: src/dest regs are open bus
+        case IO_DMA0CNT_L:
+        case IO_DMA1CNT_L:
+        case IO_DMA2CNT_L:
+        case IO_DMA3CNT_L:
+            return 0;
+
+        case IO_DMA0CNT_H:
+        case IO_DMA1CNT_H:
+        case IO_DMA2CNT_H:
+            return val & ~(DMACNTH_GamePak | 0x1F); // game pak bit is DMA3 only, low 5 bits are unused
+
+        case IO_DMA3CNT_H:
+            return val & ~0x1F; // game pak bit is DMA3 only, low 5 bits are unused
+
         case IO_TM0CNT_L:
         case IO_TM1CNT_L:
         case IO_TM2CNT_L:
