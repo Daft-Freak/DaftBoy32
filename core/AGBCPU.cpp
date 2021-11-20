@@ -1692,7 +1692,7 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
     switch(op)
     {
         case 0: // ADD
-            reg(dstReg) += reg(srcReg);
+            reg(dstReg) += src;
 
             if(dstReg == Reg::PC)
                 reg(dstReg) += 2;
