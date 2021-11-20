@@ -2277,6 +2277,10 @@ int AGBCPU::dmaTransfer(int channel)
     if(dstMode != 3)
         dmaDst[channel] = dstAddr;
 
+    // flag interrupt
+    if(dmaControl & DMACNTH_IRQEnable)
+        flagInterrupt(Int_DMA0 << channel);
+
     return cycles;
 }
 
