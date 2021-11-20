@@ -2041,6 +2041,12 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
 
     int i = 0;
     bool first = true;
+
+    // prevent overriding base for loads
+    // "A LDM will always overwrite the updated base if the base is in the list."
+    if(isLoad && (regList & (1 << static_cast<int>(baseReg))))
+        first = false;
+
     for(; regList; regList >>= 1, i++)
     {
         if(!(regList & 1))
@@ -2051,6 +2057,8 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
         else
             writeMem32(addr, regs[i]);
 
+        // base write-back is on the second cycle of the instruction
+        // which is when the first reg is written
         if(first)
             reg(baseReg) = endAddr;
 
