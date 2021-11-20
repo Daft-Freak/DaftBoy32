@@ -140,8 +140,48 @@ uint16_t AGBAPU::readReg(uint32_t addr, uint16_t val)
 
     switch(addr & 0xFFFFFF)
     {
+        case IO_SOUND1CNT_L:
+            return val & 0x7F; // other bits are unused
+
+        case IO_SOUND1CNT_H:
+        case IO_SOUND2CNT_L:
+            return val & ~0x3F; // mask out length
+
+        case IO_SOUND1CNT_X:
+        case IO_SOUND2CNT_H:
+        case IO_SOUND3CNT_X:
+            return val & SOUNDxCNT_Length; // only length is readable
+
+        case IO_SOUND3CNT_L:
+            return val & 0xE0; // other bits unused
+
+        case IO_SOUND3CNT_H:
+            return val & 0xE000; // mask out length and unused
+
+        case IO_SOUND4CNT_L:
+            return val & 0xFF00; // mask out length
+
+        case IO_SOUND4CNT_H:
+            return val & (SOUNDxCNT_Length | 0xFF); // freq bits are readable here too
+
+        case IO_SOUNDCNT_L:
+            return val & ~0x88; // usused bits above each volume
+
+        case IO_SOUNDCNT_H:
+            return val & 0x770F; // reset bits are write only, 4 unused bits
+
         case IO_SOUNDCNT_X:
-            return (val & 0xFFF0) | 0x70 | channelEnabled; // enabled channels is read only
+            return (val & SOUNDCNT_X_Enable) | channelEnabled; // enabled channels is read only, enable is only writable bit
+
+        // invalid, unwritable
+        case 0x66:
+        case 0x6E:
+        case 0x76:
+        case 0x7A:
+        case 0x7E:
+        case 0x86:
+        case 0x8A:
+            return 0;
 
         // TODO: wave RAM
     }
@@ -269,7 +309,7 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
                 return true; // don't store it if disabled
             break;
 
-        case IO_SOUND2CNT_H: // freq lo
+        case IO_SOUND2CNT_H: // freq/trigger/counter
         {
             auto freq = data & 0x7FF;
             ch2FreqTimerPeriod = (2048 - freq) * 4;
