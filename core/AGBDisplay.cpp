@@ -611,7 +611,7 @@ uint16_t AGBDisplay::readReg(uint32_t addr, uint16_t val)
             return val &~DISPCNT_CGBMode; // really only writable from BIOS
         case IO_DISPSTAT:
             update();
-            return (y >= 160 ? DISPSTAT_VBlank : 0) | (remainingScanlineDots <= 68 ? DISPSTAT_HBlank : 0) | (mem.readIOReg(IO_DISPSTAT) & 0xFFF8); // TODO: vcount
+            return (y >= 160 && y != 227 ? DISPSTAT_VBlank : 0) | (remainingScanlineDots <= 68 ? DISPSTAT_HBlank : 0) | (mem.readIOReg(IO_DISPSTAT) & 0xFFF8); // TODO: vcount
         case IO_VCOUNT:
             update();
             return y;
