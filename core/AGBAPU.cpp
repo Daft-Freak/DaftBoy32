@@ -599,7 +599,7 @@ void AGBAPU::updateFrameSequencer()
                 if(shift && newFreq < 2048)
                 {
                     ch1SweepFreq = newFreq;
-                    mem.writeIOReg(IO_SOUND1CNT_L, (mem.readIOReg(IO_SOUND1CNT_L) & 0xF100) | newFreq);
+                    mem.writeIOReg(IO_SOUND1CNT_X, (mem.readIOReg(IO_SOUND1CNT_X) & 0xF100) | newFreq);
                     ch1FreqTimerPeriod = (2048 - newFreq) * 4;
                 }
 
