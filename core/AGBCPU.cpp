@@ -1596,7 +1596,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
             }
             else if(op2)
             {
-                carry = op1 & (1 << (op2 - 1));
+                carry = op1 & (1 << (op2 - 1)) ? Flag_C : 0;
                 res = static_cast<int32_t>(op1) >> op2;
 
                 reg(dstReg) = res;
