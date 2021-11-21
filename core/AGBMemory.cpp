@@ -18,6 +18,19 @@ void AGBMemory::setCartROM(const uint8_t *rom, uint32_t size)
     cartROMSize = size;
 }
 
+void AGBMemory::loadCartridgeSave(const uint8_t *data, uint32_t len)
+{
+    memcpy(cartSaveData, data, len);
+
+    // determine the type of save from the size
+    if(len == 512 || len == 4 * 1024)
+        saveType = SaveType::EEPROM; // TODO: 4k
+    else if(len == 32 * 1024)
+        saveType = SaveType::RAM;
+    else if(len == 64 * 1024 || len == 128 * 1024)
+        saveType = SaveType::Flash;
+}
+
 void AGBMemory::reset()
 {
     saveType = SaveType::Unknown;

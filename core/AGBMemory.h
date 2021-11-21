@@ -7,15 +7,22 @@ class AGBCPU;
 class AGBMemory
 {
 public:
+    enum class SaveType : uint8_t
+    {
+        Unknown,
+        EEPROM,
+        RAM,
+        Flash
+    };
+
     AGBMemory(AGBCPU &cpu);
 
     //using CartRamUpdateCallback = void(*)(uint8_t *, unsigned int);
 
     void setBIOSROM(const uint8_t *rom);
     void setCartROM(const uint8_t *rom, uint32_t size);
-    //void loadCartridgeRAM(const uint8_t *ram, uint32_t len);
+    void loadCartridgeSave(const uint8_t *data, uint32_t len);
     void reset();
-
 
     uint8_t read8(uint32_t addr) const;
     uint16_t read16(uint32_t addr) const;
@@ -51,9 +58,9 @@ public:
     uint8_t *getVRAM() {return vram;}
     uint8_t *getOAM() {return oam;}
   
-    /*uint8_t *getCartridgeRAM() {return cartRam;}
-    int getCartridgeRAMSize() {return cartRamSize;}
-    void setCartRamUpdateCallback(CartRamUpdateCallback callback);*/
+    uint8_t *getCartridgeSave() {return cartSaveData;}
+    SaveType getCartridgeSaveType() {return saveType;}
+    /*void setCartRamUpdateCallback(CartRamUpdateCallback callback);*/
 
     const uint8_t *mapAddress(uint32_t addr) const;
     uint8_t *mapAddress(uint32_t addr);
@@ -61,13 +68,6 @@ public:
     int getAccessCycles(uint32_t addr, int width, bool sequential) const;
 
 private:
-    enum class SaveType : uint8_t
-    {
-        Unknown,
-        EEPROM,
-        RAM,
-        Flash
-    };
 
     enum class FlashState : uint8_t
     {
