@@ -99,7 +99,6 @@ private:
 
     uint8_t eepromInBits[81]; // could be smaller if bits packed
     uint8_t eepromOutBits[68];
-    uint8_t eepromData[512]; // TODO: combined storage for all save types?
     uint8_t cartSaveData[128 * 1024]; // RAM/flash
 
     FlashState flashState = FlashState::Read;
