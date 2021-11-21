@@ -4,6 +4,7 @@
 #include "AGBMemory.h"
 
 #include "AGBCPU.h"
+#include "AGBRegs.h"
 
 AGBMemory::AGBMemory(AGBCPU &cpu) : cpu(cpu){}
 
@@ -38,6 +39,15 @@ void AGBMemory::reset()
     flashBank = 0;
 
     memset(cartSaveData, 0xFF, sizeof(cartSaveData));
+
+    cartAccessN[0] = 5;
+    cartAccessS[0] = 3;
+    cartAccessN[1] = 5;
+    cartAccessS[1] = 5;
+    cartAccessN[2] = 5;
+    cartAccessS[2] = 9;
+
+    cartAccessN[3] = cartAccessS[3] = 5;
 }
 
 uint8_t AGBMemory::read8(uint32_t addr) const
@@ -108,8 +118,27 @@ void AGBMemory::write8(uint32_t addr, uint8_t data)
 void AGBMemory::write16(uint32_t addr, uint16_t data)
 {
     // io
-    if((addr >> 24) == 0x4 && cpu.writeReg(addr & 0xFFFFFF, data))
-        return;
+    if((addr >> 24) == 0x4)
+    {
+        if(cpu.writeReg(addr & 0xFFFFFF, data))
+            return;
+
+        if((addr & 0xFFFFFF) == IO_WAITCNT)
+        {
+            // update ROM access times
+            static const int nTimings[]{4, 3, 2, 8};
+            cartAccessN[0] = nTimings[(data & WAITCNT_ROMWS0N) >> 2] + 1;
+            cartAccessN[1] = nTimings[(data & WAITCNT_ROMWS1N) >> 5] + 1;
+            cartAccessN[2] = nTimings[(data & WAITCNT_ROMWS1N) >> 8] + 1;
+
+            cartAccessS[0] = (data & WAITCNT_ROMWS0S) ? 2 : 3;
+            cartAccessS[1] = (data & WAITCNT_ROMWS1S) ? 2 : 5;
+            cartAccessS[2] = (data & WAITCNT_ROMWS2S) ? 2 : 9;
+
+            // ... and SRAM/flash
+            cartAccessN[3] = cartAccessS[3] = nTimings[data & WAITCNT_SRAM] + 1;
+        }
+    }
 
     // EEPROM
     if((addr >> 24) == 0xD && (saveType == SaveType::EEPROM || saveType == SaveType::Unknown))
@@ -275,21 +304,16 @@ int AGBMemory::getAccessCycles(uint32_t addr, int width, bool sequential) const
         case 0x6: // VRAM
             return width == 4 ? 2 : 1;
 
-        // defaults TODO: WAITCNT
         case 0x8: // wait state 0
         case 0x9:
-            return (sequential ? 3 : 5) * (width == 4 ? 2 : 1);
         case 0xA: // wait state 1
         case 0xB:
-            return (sequential ? 5 : 5) * (width == 4 ? 2 : 1);
         case 0xC: // wait state 2
         case 0xD:
-            return (sequential ? 9 : 5) * (width == 4 ? 2 : 1);
-
-        // SRAM/flash
-        case 0xE:
+        case 0xE: // SRAM/flash
         case 0xF:
-            return 5; // default, only 8-bit is valid
+            return (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4]) * (width == 4 ? 2 : 1);
+
     }
 
     return 1;

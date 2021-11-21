@@ -90,9 +90,10 @@ enum AGBIOReg
     // input
     IO_KEYINPUT = 0x130,
 
-    // interrupts
+    // system/interrupts
     IO_IE = 0x200,
     IO_IF = 0x202,
+    IO_WAITCNT = 0x204,
     IO_IME = 0x208,
 };
 
@@ -180,4 +181,18 @@ enum TMCNTHBits
     TMCNTH_CountUp   = 1 << 2,
     TMCNTH_IRQEnable = 1 << 6,
     TMCNTH_Enable    = 1 << 7
+};
+
+enum WAITCNTBits
+{
+    WAITCNT_SRAM     = 3,
+    WAITCNT_ROMWS0N  = 3 << 2,
+    WAITCNT_ROMWS0S  = 1 << 4,
+    WAITCNT_ROMWS1N  = 3 << 5,
+    WAITCNT_ROMWS1S  = 1 << 7,
+    WAITCNT_ROMWS2N  = 3 << 8,
+    WAITCNT_ROMWS2S  = 1 << 10,
+    WAITCNT_PHI      = 3 << 11,
+    WAITCNT_Prefetch = 1 << 14,
+    WAITCNT_GameType = 1 << 15
 };

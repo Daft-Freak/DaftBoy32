@@ -108,5 +108,7 @@ private:
 
     uint32_t dummy = 0xBADADD55;
 
+    int8_t cartAccessN[4], cartAccessS[4]; // ROM and RAM
+
     //CartRamUpdateCallback cartRamUpdateCallback;
 };
