@@ -312,7 +312,8 @@ int AGBMemory::getAccessCycles(uint32_t addr, int width, bool sequential) const
         case 0xD:
         case 0xE: // SRAM/flash
         case 0xF:
-            return (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4]) * (width == 4 ? 2 : 1);
+            return (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4])
+                   + (width == 4 ? cartAccessS[(addr >> 25) - 4] : 0); // extra time for reading 32bit value is always sequential
 
     }
 
