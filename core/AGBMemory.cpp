@@ -285,6 +285,11 @@ int AGBMemory::getAccessCycles(uint32_t addr, int width, bool sequential) const
         case 0xC: // wait state 2
         case 0xD:
             return (sequential ? 9 : 5) * (width == 4 ? 2 : 1);
+
+        // SRAM/flash
+        case 0xE:
+        case 0xF:
+            return 5; // default, only 8-bit is valid
     }
 
     return 1;
