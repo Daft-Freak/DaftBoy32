@@ -152,6 +152,7 @@ private:
                 return spsr[4];
         }
 
+        assert(!"Bad CPSR mode!");
         return spsr[5]; // invalid mode!
     }
 
@@ -178,6 +179,8 @@ private:
             case 0x1B: // UND
                 regBankOffset = static_cast<int>(Reg::R13_und) - static_cast<int>(Reg::R13);
                 break;
+            default:
+                assert(!"Bad CPSR mode");
         }
 
         curSP = mapReg(Reg::SP);

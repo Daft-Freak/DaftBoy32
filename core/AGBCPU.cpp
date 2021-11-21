@@ -2205,6 +2205,9 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
 
 void AGBCPU::updateARMPC()
 {
+    //assert(!(loReg(Reg::PC) & 3)); // this might fail right before a switch to thumb
+    assert(loReg(Reg::PC) < 0xE000000); // trying to execute save data would be bad
+
     armPCPtr = reinterpret_cast<const uint32_t *>(std::as_const(mem).mapAddress(loReg(Reg::PC)));
     pcSCycles = mem.getAccessCycles(loReg(Reg::PC), 4, true);
     pcNCycles = mem.getAccessCycles(loReg(Reg::PC), 4, false);
@@ -2212,6 +2215,9 @@ void AGBCPU::updateARMPC()
 
 void AGBCPU::updateTHUMBPC(uint32_t pc)
 {
+    assert(!(loReg(Reg::PC) & 1));
+    assert(loReg(Reg::PC) < 0xE000000);
+
     // called when PC is updated in THUMB mode (except for incrementing)
     thumbPCPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc)); // force const mapAddress
     pcSCycles = mem.getAccessCycles(pc, 2, true);
