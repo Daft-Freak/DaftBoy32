@@ -324,7 +324,7 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         int doubledH = mode == 3 ? spriteH * 2 : spriteH;
 
         // wrap
-        if(((spriteY + doubledH) & 0xFF) < spriteY)
+        if(((spriteY + doubledH - 1) & 0xFF) < spriteY)
             spriteY -= 256;
 
         if(spriteY > y)
