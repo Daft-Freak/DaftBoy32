@@ -525,7 +525,8 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
             // swap everything around
             uint16_t swapped = data << 8 | data >> 8;
 
-            ch3WaveBuf[off64] = (ch3WaveBuf[off64] & ~(0xFFFF00000000ull >> (byte * 8))) | (swapped << ((7 - byte) * 8));
+            int shift = (6 - byte) * 8;
+            ch3WaveBuf[off64] = (ch3WaveBuf[off64] & ~(0xFFFFull << shift)) | (uint64_t(swapped) << shift);
             break;
         }
     }
