@@ -1151,9 +1151,13 @@ int AGBCPU::executeARMInstruction()
 int AGBCPU::executeTHUMBInstruction()
 {
     auto &pc = loReg(Reg::PC); // not a low reg, but not banked
+    uint16_t opcode = decodeOp;
+
+    decodeOp = fetchOp;
+
     assert(!(pc & 1));
     assert(*thumbPCPtr == mem.read16Fast(pc));
-    auto opcode = *thumbPCPtr++;
+    fetchOp = *++thumbPCPtr;
 
     pc += 2;
 
@@ -1709,22 +1713,15 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
 
     auto src = reg(srcReg);
 
-    if(srcReg == Reg::PC)
-        src += 2;
-
     switch(op)
     {
         case 0: // ADD
             reg(dstReg) += src;
 
-            if(dstReg == Reg::PC)
-                reg(dstReg) += 2;
             break;
         case 1: // CMP
         {
             auto dst = reg(dstReg);
-            if(dstReg == Reg::PC)
-                dst += 2;
 
             auto res = dst - src;
             bool carry = !(src > dst);
@@ -1774,7 +1771,7 @@ int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
     uint8_t word = opcode & 0xFF;
 
     // pc + 4, bit 1 forced to 0
-    auto base = (pc + 2) & ~2;
+    auto base = pc  & ~2;
     loReg(dstReg) = mem.read32Fast(base + (word << 2));
 
     return pcSCycles + pcNCycles + 1;
@@ -1945,7 +1942,7 @@ int AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t &pc)
     if(isSP)
         loReg(dstReg) = loReg(curSP) + word;
     else
-        loReg(dstReg) = ((pc + 2) & ~2) + word; // + 4, bit 1 forced to 0
+        loReg(dstReg) = (pc & ~2) + word; // + 4, bit 1 forced to 0
 
     return pcSCycles;
 }
@@ -2046,7 +2043,7 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
             updateTHUMBPC(pc);
         }
         else
-            writeMem32(addr & ~3, pc + 4);
+            writeMem32(addr & ~3, pc + 2);
 
         reg(baseReg) = addr + 0x40;
 
@@ -2098,7 +2095,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
     auto cond = (opcode >> 8) & 0xF;
     if(cond == 0xF) // format 17, SWI
     {
-        auto ret = pc & ~1;
+        auto ret = (pc - 2) & ~1;
         spsr[1/*svc*/] = cpsr;
 
         pc = 8;
@@ -2164,7 +2161,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
 
         if(condVal)
         {
-            pc += offset * 2 + 2 /*prefetch*/;
+            pc += offset * 2;
             updateTHUMBPC(pc);
         }
     }
@@ -2176,7 +2173,7 @@ int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
 {
     uint32_t offset = static_cast<int16_t>(opcode << 5) >> 4; // sign extend and * 2
 
-    pc += offset + 2 /*prefetch*/;
+    pc += offset;
     updateTHUMBPC(pc);
 
     return pcSCycles * 2 + pcNCycles; // 2S + 1N
@@ -2192,13 +2189,13 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
         offset <<= 12;
         if(offset & (1 << 22))
             offset |= 0xFF800000; //sign extend
-        loReg(curLR) = pc + 2 + offset;
+        loReg(curLR) = pc + offset;
 
         return pcSCycles;
     }
     else // second half
     {
-        auto temp = pc;
+        auto temp = pc - 2;
         pc = loReg(curLR) + (offset << 1);
         loReg(curLR) = temp | 1; // magic switch to thumb bit...
 
@@ -2235,6 +2232,12 @@ void AGBCPU::updateTHUMBPC(uint32_t pc)
     thumbPCPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc)); // force const mapAddress
     pcSCycles = mem.getAccessCycles(pc, 2, true);
     pcNCycles = mem.getAccessCycles(pc, 2, false);
+
+    // refill the pipeline
+    decodeOp = *thumbPCPtr++;
+    fetchOp = *thumbPCPtr;
+
+    loReg(Reg::PC) += 2; // pointing at last fetch
 }
 
 bool AGBCPU::serviceInterrupts()
@@ -2246,7 +2249,7 @@ bool AGBCPU::serviceInterrupts()
 
     auto ret = loReg(Reg::PC);
     if(cpsr & Flag_T)
-        ret += 4;
+        ret += 2;
 
     spsr[3/*irq*/] = cpsr;
 
