@@ -380,8 +380,16 @@ int AGBCPU::runCycles(int cycles)
 int AGBCPU::executeARMInstruction()
 {
     auto &pc = loReg(Reg::PC); // not a low reg, but not banked
+    uint32_t opcode = decodeOp;
+
+    // decode stage - loads to do here... not
+    decodeOp = fetchOp;
+
+    // fetch next
     assert(*armPCPtr == mem.read32Fast(pc));
-    auto opcode = *armPCPtr++;
+    fetchOp = *++armPCPtr;
+
+    // ... and execute
 
     auto timing = pcSCycles;
 
@@ -393,8 +401,8 @@ int AGBCPU::executeARMInstruction()
         auto ret = reg(r);
 
         // prefetch
-        if(r == Reg::PC)
-            ret += (shift & 1) ? 8 : 4;
+        if(r == Reg::PC && (shift & 1))
+            ret += 4;
 
         if(!shift) // left shift by immediate 0, do nothing and preserve carry
         {
@@ -513,10 +521,6 @@ int AGBCPU::executeARMInstruction()
 
         auto addr = loReg(baseReg);
 
-        // pc offset
-        if(baseReg == Reg::PC)
-            addr += 4;
-
         // get value for store before write back
         auto val = loReg(srcDestReg);
 
@@ -553,7 +557,7 @@ int AGBCPU::executeARMInstruction()
             assert(!(opcode & (1 << 6))); // sign
 
             if(srcDestReg == Reg::PC)
-                val += 8;
+                val += 4;
 
             writeMem16(addr, val); // STRH
 
@@ -562,7 +566,7 @@ int AGBCPU::executeARMInstruction()
     };
 
     // 0-3
-    const auto doDataProcessing = [this](uint32_t opcode, uint32_t op2, bool carry, int pcInc = 4)
+    const auto doDataProcessing = [this](uint32_t opcode, uint32_t op2, bool carry, int pcInc = 0)
     {
         auto op1Reg = static_cast<Reg>((opcode >> 16) & 0xF);
         auto op1 = reg(op1Reg);
@@ -599,10 +603,6 @@ int AGBCPU::executeARMInstruction()
 
         auto addr = loReg(baseReg);
 
-        // pc offset
-        if(baseReg == Reg::PC)
-            addr += 4;
-
         // get value for store before write back
         auto val = loReg(srcDestReg);
 
@@ -635,7 +635,7 @@ int AGBCPU::executeARMInstruction()
         else
         {
             if(srcDestReg == Reg::PC)
-                val += 8;
+                val += 4;
 
             if(isByte)
                 writeMem8(addr, val);
@@ -728,7 +728,7 @@ int AGBCPU::executeARMInstruction()
                 else
                 {
                     if(reg == Reg::PC)
-                        *ptr++ = loReg(reg) + 8;
+                        *ptr++ = loReg(reg) + 4;
                     else
                         *ptr++ = loReg(reg);
                 }
@@ -758,7 +758,7 @@ int AGBCPU::executeARMInstruction()
                 else
                 {
                     if(reg == Reg::PC)
-                        writeMem32(addr & ~3, loReg(reg) + 8);
+                        writeMem32(addr & ~3, loReg(reg) + 4);
                     else
                         writeMem32(addr & ~3, loReg(reg));
                 }
@@ -940,7 +940,7 @@ int AGBCPU::executeARMInstruction()
             bool carry;
             auto op2 = getShiftedReg(op2Reg, op2Shift, carry);
 
-            return doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 8 : 4) + (op2Shift & 1); // +1I if shift by reg
+            return doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 4 : 0) + (op2Shift & 1); // +1I if shift by reg
         }
         case 0x1: // data processing with register (and branch exchange/swap)
         {
@@ -1040,7 +1040,7 @@ int AGBCPU::executeARMInstruction()
             bool carry;
             auto op2 = getShiftedReg(op2Reg, op2Shift, carry);
 
-            return doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 8 : 4) + (op2Shift & 1); // +1I if shift by reg
+            return doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 4 : 0) + (op2Shift & 1); // +1I if shift by reg
         }
         case 0x2: // data processing with immediate
         {
@@ -1113,22 +1113,22 @@ int AGBCPU::executeARMInstruction()
         case 0xA: // Branch (B)
         {
             auto offset = (static_cast<int32_t>(opcode & 0xFFFFFF) << 8) >> 6;
-            pc += offset + 4/*prefetch*/;
+            pc += offset;
             updateARMPC();
             break;
         }
         case 0xB: // Branch with Link (BL)
         {
             auto offset = (static_cast<int32_t>(opcode & 0xFFFFFF) << 8) >> 6;
-            reg(Reg::LR) = pc;
-            pc += offset + 4/*prefetch*/;
+            reg(Reg::LR) = pc - 4;
+            pc += offset;
             updateARMPC();
             break;
         }
 
         case 0xF: // SWI
         {
-            auto ret = pc;
+            auto ret = pc - 4;
             spsr[1/*svc*/] = cpsr;
 
             pc = 8;
@@ -1199,17 +1199,13 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
 {
     if(destReg == Reg::PC)
     {
-        int ret = doALUOpNoCond(op, destReg, op1, op2);
-
         // don't attempt to restore in user/system mode as SPSR doesn't exist (a test ends up doing this...)
         if(regBankOffset)
-        {
             cpsr = getSPSR(); // restore
-            modeChanged();
-        }
 
-        if(cpsr & Flag_T)
-            updateTHUMBPC(reg(Reg::PC));
+        int ret = doALUOpNoCond(op, destReg, op1, op2);
+
+        modeChanged();
 
         return ret;
     }
@@ -1341,7 +1337,7 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
         case 0x9:
         case 0xA:
         case 0xB:
-            break;
+            return pcSCycles;
         case 0xC: // ORR
             dest = op1 | op2;
             break;
@@ -1359,7 +1355,13 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
     }
 
     if(destReg == Reg::PC)
-        updateARMPC();
+    {
+        // yes, this can happen
+        if(cpsr & Flag_T)
+            updateTHUMBPC(reg(Reg::PC));
+        else
+            updateARMPC();
+    }
 
     return pcSCycles;
 }
@@ -2216,6 +2218,12 @@ void AGBCPU::updateARMPC()
     armPCPtr = reinterpret_cast<const uint32_t *>(std::as_const(mem).mapAddress(loReg(Reg::PC)));
     pcSCycles = mem.getAccessCycles(loReg(Reg::PC), 4, true);
     pcNCycles = mem.getAccessCycles(loReg(Reg::PC), 4, false);
+
+    // refill the pipeline
+    decodeOp = *armPCPtr++;
+    fetchOp = *armPCPtr;
+
+    loReg(Reg::PC) += 4; // pointing at last fetch
 }
 
 void AGBCPU::updateTHUMBPC(uint32_t pc)
@@ -2236,7 +2244,10 @@ bool AGBCPU::serviceInterrupts()
 
     halted = false;
 
-    auto ret = loReg(Reg::PC) + 4;
+    auto ret = loReg(Reg::PC);
+    if(cpsr & Flag_T)
+        ret += 4;
+
     spsr[3/*irq*/] = cpsr;
 
     loReg(Reg::PC) = 0x18;
