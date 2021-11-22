@@ -889,7 +889,8 @@ int AGBCPU::executeARMInstruction()
                     }
 
                     // leading 0s or 1s
-                    int prefix = (isSigned && (op2 & (1 << 31))) ? __builtin_clz(~op2) : __builtin_clz(op2);
+                    auto tmp = (isSigned && (op2 & (1 << 31))) ? ~op2 : op2;
+                    int prefix = tmp ? __builtin_clz(tmp) : 32;
 
                     // more cycles the more bytes are non 0/ff (or just non 0 for unsigned)
                     int iCycles = prefix == 32 ? 1 : (4 - prefix / 8) + (accumulate ? 1 : 0);
