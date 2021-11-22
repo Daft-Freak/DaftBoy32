@@ -2255,6 +2255,8 @@ int AGBCPU::dmaTransfer(int channel)
     int dstMode = (dmaControl & DMACNTH_DestMode) >> 5;
     int srcMode = (dmaControl & DMACNTH_SrcMode) >> 7;
 
+    bool isValidSrc = srcAddr >= 0x2000000;
+
     // sound DMA copies 4 to fixed dest
     if((channel == 1 || channel == 2) && (dmaControl & DMACNTH_Start) == 3 << 12)
     {
@@ -2269,12 +2271,22 @@ int AGBCPU::dmaTransfer(int channel)
 
     srcAddr &= ~(width - 1);
 
+    uint32_t lastVal = dmaLastVal;
+
     while(count--)
     {
         if(is32Bit)
-            writeMem32(dstAddr, readMem32Aligned(srcAddr));
+        {
+            if(isValidSrc) // no read if source address is invalid
+                lastVal = readMem32Aligned(srcAddr);
+            writeMem32(dstAddr, lastVal);
+        }
         else
-            writeMem16(dstAddr, readMem16Aligned(srcAddr));
+        {
+            if(isValidSrc)
+                lastVal = readMem16Aligned(srcAddr);
+            writeMem16(dstAddr, lastVal);
+        }
 
         if(dstMode == 0 || dstMode == 3)
             dstAddr += width;
@@ -2286,6 +2298,8 @@ int AGBCPU::dmaTransfer(int channel)
         else if(srcMode == 1)
             srcAddr -= width;
     }
+
+    dmaLastVal = lastVal;
 
     if(!(dmaControl & DAMCNTH_Repeat))
     {

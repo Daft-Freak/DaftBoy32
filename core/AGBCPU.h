@@ -252,6 +252,7 @@ private:
     // dma
     uint8_t dmaTriggered = 0;
     uint32_t dmaCount[4], dmaSrc[4], dmaDst[4]; // internal values, reloaded on enable
+    uint32_t dmaLastVal = 0; // last value copied by any DMA
 
     uint32_t cycleCount = 0;
     int lastExtraCycles = 0; // used to keep runFrame in sync
