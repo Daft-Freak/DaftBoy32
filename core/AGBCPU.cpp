@@ -1200,8 +1200,12 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
     {
         int ret = doALUOpNoCond(op, destReg, op1, op2);
 
-        cpsr = getSPSR(); // restore
-        modeChanged();
+        // don't attempt to restore in user/system mode as SPSR doesn't exist (a test ends up doing this...)
+        if(regBankOffset)
+        {
+            cpsr = getSPSR(); // restore
+            modeChanged();
+        }
 
         if(cpsr & Flag_T)
             updateTHUMBPC(reg(Reg::PC));

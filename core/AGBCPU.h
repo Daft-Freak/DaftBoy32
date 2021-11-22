@@ -140,6 +140,8 @@ private:
     {
         switch(cpsr & 0x1F)
         {
+            case 0x1F: // System
+                return spsr[5]; // system/user modes don't have a SPSR reg, but seems this needs to do something
             case 0x11: // FIQ
                 return spsr[0];
             case 0x12: // IRQ
