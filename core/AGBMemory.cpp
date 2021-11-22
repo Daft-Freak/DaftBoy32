@@ -52,12 +52,22 @@ void AGBMemory::reset()
 
 uint8_t AGBMemory::read8(uint32_t addr) const
 {
-    return *mapAddress(addr);
+    auto ptr = mapAddress(addr);
+    // out of bounds rom access returns low bits of address
+    if(!ptr && (addr & 0x8000000))
+        return addr >> (1 + (addr & 1) * 8);
+
+    return *ptr;
 }
 
 uint16_t AGBMemory::read16(uint32_t addr) const
 {
     auto ptr = mapAddress(addr);
+
+    // out of bounds rom access returns low bits of address
+    if(!ptr && (addr & 0x8000000))
+        return addr >> 1;
+
     uint16_t ret = *reinterpret_cast<const uint16_t *>(ptr);
 
     // EEPROM
@@ -73,7 +83,16 @@ uint16_t AGBMemory::read16(uint32_t addr) const
 
 uint32_t AGBMemory::read32(uint32_t addr) const
 {
-    return *reinterpret_cast<const uint32_t *>(mapAddress(addr));
+    auto ptr = mapAddress(addr);
+
+    // out of bounds rom access returns low bits of address
+    if(!ptr && (addr & 0x8000000))
+    {
+        auto addrLow = (addr >> 1) & 0xFFFF;
+        return addrLow | (addrLow + 1) << 16;
+    }
+
+    return *reinterpret_cast<const uint32_t *>(ptr);
 }
 
 void AGBMemory::write8(uint32_t addr, uint8_t data)
@@ -227,7 +246,7 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
         case 0xD:
             addr &= 0x1FFFFFF;
             if(addr >= cartROMSize)
-                return reinterpret_cast<const uint8_t *>(&dummy);
+                return nullptr;
             return cartROM + addr;
 
         case 0xE:
