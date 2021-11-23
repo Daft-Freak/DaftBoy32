@@ -893,8 +893,8 @@ int AGBCPU::executeARMInstruction()
                     int prefix = tmp ? __builtin_clz(tmp) : 32;
 
                     // more cycles the more bytes are non 0/ff (or just non 0 for unsigned)
-                    int iCycles = prefix == 32 ? 1 : (4 - prefix / 8) + (accumulate ? 1 : 0);
-                    return pcSCycles + iCycles + 1;
+                    int iCycles = (prefix == 32 ? 1 : (4 - prefix / 8)) + (accumulate ? 1 : 0);
+                    return pcNCycles + iCycles + 1; // TODO: N here is prefetch bug
                 }
                 else // MUL/MLA
                 {
@@ -925,11 +925,12 @@ int AGBCPU::executeARMInstruction()
                     }
 
                     // leading 0s or 1s
-                    int prefix = op2 & (1 << 31) ? __builtin_clz(~op2) : __builtin_clz(op2);
+                    auto tmp = (op2 & (1 << 31)) ? ~op2 : op2;
+                    int prefix = tmp ? __builtin_clz(tmp) : 32;
 
                     // more cycles the more bytes are non 0/ff
-                    int iCycles = prefix == 32 ? 1 : (4 - prefix / 8) + (accumulate ? 1 : 0);
-                    return pcSCycles + iCycles;
+                    int iCycles = (prefix == 32 ? 1 : (4 - prefix / 8)) + (accumulate ? 1 : 0);
+                    return pcNCycles + iCycles; // TODO: N here is prefetch disable bug
                 }
             }
 
@@ -1683,11 +1684,12 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
             cpsr = (cpsr & ~(Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0);
 
             // leading 0s or 1s
-            int prefix = op1 & (1 << 31) ? __builtin_clz(~op1) : __builtin_clz(op1);
+            int tmp = op1 & (1 << 31) ? ~op1 : op1;
+            int prefix = tmp ? __builtin_clz(tmp) : 32;
 
             // more cycles the more bytes are non 0/ff
             int iCycles = prefix == 32 ? 1 : (4 - prefix / 8);
-            return pcSCycles + iCycles;
+            return pcNCycles + iCycles; // prefetch disable bug
         }
         case 0xE: // BIC
             reg(dstReg) = res = op1 & ~op2;
