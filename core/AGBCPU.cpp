@@ -968,7 +968,7 @@ int AGBCPU::executeARMInstruction()
                 else
                     updateARMPC();
 
-                return timing; // TODO: timing
+                return pcSCycles * 2 + pcNCycles;
             }
 
             if(((opcode >> 4) & 9) == 9)
@@ -1122,7 +1122,7 @@ int AGBCPU::executeARMInstruction()
             auto offset = (static_cast<int32_t>(opcode & 0xFFFFFF) << 8) >> 6;
             pc += offset;
             updateARMPC();
-            break;
+            return pcSCycles * 2 + pcNCycles;
         }
         case 0xB: // Branch with Link (BL)
         {
@@ -1130,7 +1130,7 @@ int AGBCPU::executeARMInstruction()
             reg(Reg::LR) = pc - 4;
             pc += offset;
             updateARMPC();
-            break;
+            return pcSCycles * 2 + pcNCycles;
         }
 
         case 0xF: // SWI
@@ -1143,7 +1143,7 @@ int AGBCPU::executeARMInstruction()
             modeChanged();
             updateARMPC();
             loReg(curLR) = ret;
-            break;
+            return pcSCycles * 2 + pcNCycles;
         }
 
         default:
@@ -1372,6 +1372,8 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
             updateTHUMBPC(reg(Reg::PC));
         else
             updateARMPC();
+
+        return pcNCycles + pcSCycles * 2;
     }
 
     return pcSCycles;
@@ -1757,7 +1759,7 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
             else
                 updateTHUMBPC(pc);
 
-            break;
+            return pcSCycles * 2 + pcNCycles;
         }
 
         default:
@@ -1768,6 +1770,7 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
     {
         pc &= ~1;
         updateTHUMBPC(pc);
+        return pcSCycles * 2 + pcNCycles;
     }
 
     return pcSCycles;
@@ -2172,6 +2175,8 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
             pc += offset * 2;
             updateTHUMBPC(pc);
         }
+        else
+            return pcSCycles; // no extra cycles if branch not taken
     }
 
     return pcSCycles * 2 + pcNCycles; // 2S + 1N, probably a bit wrong for SWI
@@ -2207,11 +2212,9 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
         pc = loReg(curLR) + (offset << 1);
         loReg(curLR) = temp | 1; // magic switch to thumb bit...
 
-        auto ret = pcNCycles;
-
         updateTHUMBPC(pc);
 
-        return ret + pcSCycles * 2; //?
+        return pcNCycles + pcSCycles * 2;
     }
 }
 
