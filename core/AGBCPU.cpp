@@ -656,6 +656,8 @@ int AGBCPU::executeARMInstruction()
         auto baseReg = mapReg(static_cast<Reg>((opcode >> 16) & 0xF));
         uint16_t regList = opcode;
 
+        int cycles = pcNCycles + (isLoad ? 1 : 0); // extra cycle for loads
+
         if(isLoadForce)
         {
             //assert(!writeBack); // "should not be used"
@@ -741,6 +743,8 @@ int AGBCPU::executeARMInstruction()
                 }
                 first = false;
             }
+
+            cycles += numRegs * mem.getAccessCycles(addr, 4, true); // it's RAM so N == S
         }
         else
         {
@@ -763,6 +767,8 @@ int AGBCPU::executeARMInstruction()
                         writeMem32(addr & ~3, loReg(reg));
                 }
 
+                cycles += mem.getAccessCycles(addr, 4, !first);
+
                 addr += 4;
                 if(first && writeBack)
                 {
@@ -775,6 +781,8 @@ int AGBCPU::executeARMInstruction()
 
         if(pcWritten) // load PC
             updateARMPC();
+
+        return cycles;
     };
 
     // condition
@@ -1106,11 +1114,9 @@ int AGBCPU::executeARMInstruction()
         case 0x7: // Single Data Transfer (I = 1, P = 1)
             return doSingleDataTransfer(opcode, true, true);
         case 0x8: // Block Data Transfer (P = 0)
-            doBlockDataTransfer(opcode, false);
-            break;
+            return doBlockDataTransfer(opcode, false);
         case 0x9: // Block Data Transfer (P = 1)
-            doBlockDataTransfer(opcode, true);
-            break;
+            return doBlockDataTransfer(opcode, true);
         case 0xA: // Branch (B)
         {
             auto offset = (static_cast<int32_t>(opcode & 0xFFFFFF) << 8) >> 6;
