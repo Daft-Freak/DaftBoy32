@@ -139,9 +139,13 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
                 if(!(mem.readIOReg(addr) & DMACNTH_Enable))
                 {
                     int regOffset = (addr & 0xFFFFFF) - IO_DMA0CNT_H;
-                    dmaSrc[index] = (mem.readIOReg(IO_DMA0SAD + regOffset) | (mem.readIOReg(IO_DMA0SAD + regOffset + 2) << 16)) & (index ? 0xFFFFFFF : 0x7FFFFFF); // 1 bit less for DMA0
+                    dmaSrc[index] = (mem.readIOReg(IO_DMA0SAD + regOffset) | (mem.readIOReg(IO_DMA0SAD + regOffset + 2) << 16)) & 0xFFFFFFF;
                     dmaDst[index] = (mem.readIOReg(IO_DMA0DAD + regOffset) | (mem.readIOReg(IO_DMA0DAD + regOffset + 2) << 16)) & (index == 3 ? 0xFFFFFFF : 0x7FFFFFF); // 1 bit less for !DMA3
                     dmaCount[index] = mem.readIOReg(IO_DMA0CNT_L + regOffset);
+
+                    // reading from ROM with DMA0 is invalid, remap it to something low so that the check later stops it
+                    if(index == 0 && dmaSrc[index] >= 0x8000000)
+                        dmaSrc[0] = 0;
                 }
             }
             else
@@ -2297,11 +2301,20 @@ int AGBCPU::dmaTransfer(int channel)
         count = 4;
         dstMode = 2;
     }
+    // reading from ROM always increments src
+    else if(srcAddr > 0x8000000 && srcAddr < 0xE000000)
+        srcMode = 0;
 
     int width = is32Bit ? 4 : 2;
     int cycles = mem.getAccessCycles(srcAddr, width, false) + mem.getAccessCycles(srcAddr, width, true) * (count - 1) // 1N + (n-1)S read
                + mem.getAccessCycles(dstAddr, width, false) + mem.getAccessCycles(dstAddr, width, true) * (count - 1) // 1N + (n-1)S write
-               + 2; // TODO: 2I (or 4I if both addrs in gamepak)
+               + 2;
+
+    // less cycles if both addresses are in the gamepak areas
+    // gbatek says the opposite, but this makes more tests pass...
+    // TODO: that probably doesn't include SRAM?
+    if(srcAddr >= 0x8000000 && dstAddr >= 0x8000000)
+        cycles -= 2;
 
     srcAddr &= ~(width - 1);
 
@@ -2327,13 +2340,20 @@ int AGBCPU::dmaTransfer(int channel)
         else if(dstMode == 1)
             dstAddr -= width;
 
+        // bad src, don't inc/dec
+        if(!isValidSrc)
+            continue;
+
         if(srcMode == 0)
             srcAddr += width;
         else if(srcMode == 1)
             srcAddr -= width;
     }
 
+    // save last transferred value
     dmaLastVal = lastVal;
+    if(isValidSrc && width == 2)
+        dmaLastVal |= lastVal << 16;
 
     if(!(dmaControl & DAMCNTH_Repeat))
     {
