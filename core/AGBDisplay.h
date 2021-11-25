@@ -28,6 +28,7 @@ private:
     uint32_t lastUpdateCycle = 0;
 
     uint8_t y = 0;
+    bool yInWin0 = false, yInWin1 = false;
 
     // internal reference points for affine bg
     int32_t refPointX[2]{0}, refPointY[2]{0};

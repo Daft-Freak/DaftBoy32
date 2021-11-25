@@ -632,6 +632,26 @@ void AGBDisplay::update()
                 if(stat & DISPSTAT_HBlankInt)
                     cpu.flagInterrupt(AGBCPU::Int_LCDHBlank);
 
+                // window update
+                auto control = mem.readIOReg(IO_DISPCNT);
+                if(control & DISPCNT_Window0On)
+                {
+                    auto winV = mem.readIOReg(IO_WIN0V);
+                    if(y == (winV & 0xFF))
+                        yInWin0 = false;
+                    else if(y == winV >> 8)
+                        yInWin0 = true;
+                }
+
+                if(control & DISPCNT_Window1On)
+                {
+                    auto winV = mem.readIOReg(IO_WIN1V);
+                    if(y == (winV & 0xFF))
+                        yInWin1 = false;
+                    else if(y == winV >> 8)
+                        yInWin1 = true;
+                }
+
                 if(y < screenHeight)
                 {
                     cpu.triggerDMA(AGBCPU::Trig_HBlank);
@@ -802,6 +822,35 @@ void AGBDisplay::drawScanLine(int y)
     uint16_t objData[4][screenWidth]{0}; // four priority levels for objs
 
     int layerEnables = dispControl >> 8;
+    bool windowEnabled = false;
+
+    // get enabled layers for window
+    // (avoid some work for lines outside the window)
+    const int anyWindowEnabled = DISPCNT_Window0On | DISPCNT_Window1On | DISPCNT_OBJWindowOn;
+    uint16_t winIn, winOut;
+    uint16_t win0h = 0, win1h = 0;
+    if(dispControl & anyWindowEnabled)
+    {
+        windowEnabled = true;
+        winIn = mem.readIOReg(IO_WININ);
+        winOut = mem.readIOReg(IO_WINOUT);
+
+        win0h = mem.readIOReg(IO_WIN0H);
+        win1h = mem.readIOReg(IO_WIN1H);
+
+        int winLayers = winOut; // outside
+
+        if((dispControl & DISPCNT_Window0On) && yInWin0)
+            winLayers |= winIn;
+
+        if((dispControl & DISPCNT_Window1On) && yInWin1)
+            winLayers |= winIn >> 8;
+
+        if((dispControl & DISPCNT_OBJWindowOn)) // assume inside for now
+            winLayers |= winOut >> 8;
+
+        layerEnables &= winLayers;
+    }
 
     int layerPriority[] {
         bg0Control & BGCNT_Priority,
@@ -830,14 +879,41 @@ void AGBDisplay::drawScanLine(int y)
         drawOBJs(mem, y, objData[3], palRAM, vram, dispControl, 3);
     }
 
+    // start with window enabled if start/end are flipped
+    bool xInWin0 = (win0h & 0xFF) < (win0h >> 8), xInWin1 = (win1h & 0xFF) < (win1h >> 8);
+
     // merge layers
     for(int x = 0; x < screenWidth; x++)
     {
+        // TODO: maybe don't do this every pixel
+        int curLayerEnables = layerEnables;
+
+        if(windowEnabled)
+        {
+            if(x == (win0h & 0xFF))
+                xInWin0 = false;
+            else if(x == win0h >> 8)
+                xInWin0 = true;
+
+            if(x == (win1h & 0xFF))
+                xInWin1 = false;
+            else if(x == win1h >> 8)
+                xInWin1 = true;    
+
+            if((dispControl & DISPCNT_Window0On) && yInWin0 && xInWin0)
+                curLayerEnables &= winIn;
+            else if((dispControl & DISPCNT_Window1On) && yInWin1 && xInWin1)
+                curLayerEnables &= (winIn >> 8);
+            // else obj winOut >> 8
+            else //outside
+                curLayerEnables &= winOut;
+        }
+
         bool haveCol = false;
         for(int priority = 0; priority < 4 && !haveCol; priority++)
         {
             // objects
-            if((layerEnables & Layer_OBJ) && objData[priority][x])
+            if((curLayerEnables & Layer_OBJ) && objData[priority][x])
             {
                 scanLine[x] = objData[priority][x];
                 haveCol = true;
@@ -847,7 +923,7 @@ void AGBDisplay::drawScanLine(int y)
             // background layers
             for(int l = 0; l < 4; l++)
             {
-                if((layerEnables & (1 << l)) && layerPriority[l] == priority && bgData[l][x])
+                if((curLayerEnables & (1 << l)) && layerPriority[l] == priority && bgData[l][x])
                 {
                     scanLine[x] = bgData[l][x];
                     haveCol = true;
