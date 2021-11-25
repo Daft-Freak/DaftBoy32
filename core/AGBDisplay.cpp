@@ -264,37 +264,69 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
             break;
         case 3: // 16-bit fullscreen bitmap
         {
-            auto inPtr = reinterpret_cast<uint16_t *>(vram + y * 240 * 2);
+            auto inPtr = reinterpret_cast<uint16_t *>(vram);
             auto outPtr = scanLine;
-            for(int x = 0; x < 240; x++)
-                *outPtr++ = *inPtr++;
+
+            int curX = refPointX;
+            int curY = refPointY;
+            int16_t a = mem.readIOReg(IO_BG2PA), c = mem.readIOReg(IO_BG2PC);
+
+            for(int x = 0; x < 240; x++, outPtr++, curX += a, curY += c)
+            {
+                int px = curX >> 8;
+                int py = curY >> 8;
+                if(px < 0 || px >= 240 || py < 0 || py >= 160)
+                    continue;
+
+                *outPtr = inPtr[px + py * 240];
+            }
+
             break;
         }
         case 4: // paletted fullscreen bitmap
         {
-            auto inPtr = vram + y * 240;
+            auto inPtr = vram;
+            auto outPtr = scanLine;
+
             if(dispControl & DISPCNT_Frame)
                 inPtr += 0xA000;
 
-            auto outPtr = scanLine;
-            for(int x = 0; x < 240; x++)
-                *outPtr++ = palRam[*inPtr++];
+            int curX = refPointX;
+            int curY = refPointY;
+            int16_t a = mem.readIOReg(IO_BG2PA), c = mem.readIOReg(IO_BG2PC);
+
+            for(int x = 0; x < 240; x++, outPtr++, curX += a, curY += c)
+            {
+                int px = curX >> 8;
+                int py = curY >> 8;
+                if(px < 0 || px >= 240 || py < 0 || py >= 160)
+                    continue;
+
+                *outPtr = palRam[inPtr[px + py * 240]];
+            }
             break;
         }
         case 5: // 16-bit 160*128 bitmap
         {
+            auto inPtr = reinterpret_cast<uint16_t *>(vram);
             auto outPtr = scanLine;
-            if(y < 128)
+
+            if(dispControl & DISPCNT_Frame)
+                inPtr += (0xA000 / 2);
+
+            int curX = refPointX;
+            int curY = refPointY;
+            int16_t a = mem.readIOReg(IO_BG2PA), c = mem.readIOReg(IO_BG2PC);
+
+            for(int x = 0; x < 240; x++, outPtr++, curX += a, curY += c)
             {
-                auto inPtr = reinterpret_cast<uint16_t *>(vram + y * 160 * 2);
-                if(dispControl & DISPCNT_Frame)
-                    inPtr += (0xA000 / 2);
+                int px = curX >> 8;
+                int py = curY >> 8;
+                if(px < 0 || px >= 160 || py < 0 || py >= 128)
+                    continue;
 
-                int x;
-                for(x = 0; x < 160; x++)
-                    *outPtr++ = *inPtr++;
+                *outPtr = inPtr[px + py * 160];
             }
-
             break;
         }
         // else invalid
