@@ -7,6 +7,15 @@
 #include "AGBMemory.h"
 #include "AGBRegs.h"
 
+enum LayerEnabled
+{
+    Layer_BG0       = (1 << 0),
+    Layer_BG1       = (1 << 1),
+    Layer_BG2       = (1 << 2),
+    Layer_BG3       = (1 << 3),
+    Layer_OBJ       = (1 << 4),
+};
+
 enum OAMAttr0Bits
 {
     Attr0_Y         = 0xFF,
@@ -109,7 +118,9 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
                 {
                     auto palIndex = *tilePtr++;
                     if(palIndex)
-                        *scanLine = palRam[palIndex];
+                        *scanLine = palRam[palIndex] | 0x8000;
+                    else
+                        *scanLine = 0;
                 }
             }
             else
@@ -119,7 +130,9 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
                 {
                     auto palIndex = *tilePtr++;
                     if(palIndex)
-                        *scanLine = palRam[palIndex];
+                        *scanLine = palRam[palIndex] | 0x8000;
+                    else
+                        *scanLine = 0;
                 }
             }
         }
@@ -151,7 +164,9 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
                 for(; tx < 8; tx++, tileRow >>= 4, scanLine++)
                 {
                     if(tileRow & 0xF)
-                        *scanLine = tilePal[tileRow & 0xF];
+                        *scanLine = tilePal[tileRow & 0xF] | 0x8000;
+                    else
+                        *scanLine = 0;
                 }
             }
             else
@@ -162,7 +177,9 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
                 for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
                 {
                     if(tileRow & 0xF)
-                        *scanLine = tilePal[tileRow & 0xF];
+                        *scanLine = tilePal[tileRow & 0xF] | 0x8000;
+                    else
+                        *scanLine = 0;
                 }
             }
         }
@@ -201,7 +218,10 @@ static void drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
             if(wrap)
                 bx &= numTiles - 1;
             else
+            {
+                *scanLine = 0;
                 continue;
+            }
         }
 
         if(by < 0 || by >= numTiles)
@@ -209,7 +229,10 @@ static void drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
             if(wrap)
                 by &= numTiles - 1;
             else
+            {
+                *scanLine = 0;
                 continue;
+            }
         }
 
         auto tilePtr = screenPtr + by * numTiles;
@@ -230,7 +253,9 @@ static void drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
 
         auto palIndex = *tileDataPtr++;
         if(palIndex)
-            *scanLine = palRam[palIndex];
+            *scanLine = palRam[palIndex] | 0x8000;
+        else
+            *scanLine = 0;
     }
 }
 
@@ -238,7 +263,10 @@ static void drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
 static void drawBG0(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
 {
     if((dispControl & DISPCNT_Mode) > 1)
+    {
+        memset(scanLine, 0, 240 * 2);
         return;
+    }
 
     drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG0HOFS), mem.readIOReg(IO_BG0VOFS));
 }
@@ -246,7 +274,10 @@ static void drawBG0(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
 static void drawBG1(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
 {
     if((dispControl & DISPCNT_Mode) > 1)
+    {
+        memset(scanLine, 0, 240 * 2);
         return;
+    }
 
     drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG1HOFS), mem.readIOReg(IO_BG1VOFS));
 }
@@ -276,9 +307,9 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
                 int px = curX >> 8;
                 int py = curY >> 8;
                 if(px < 0 || px >= 240 || py < 0 || py >= 160)
-                    continue;
-
-                *outPtr = inPtr[px + py * 240];
+                    *outPtr = 0;
+                else
+                    *outPtr = inPtr[px + py * 240] | 0x8000;
             }
 
             break;
@@ -300,9 +331,9 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
                 int px = curX >> 8;
                 int py = curY >> 8;
                 if(px < 0 || px >= 240 || py < 0 || py >= 160)
-                    continue;
-
-                *outPtr = palRam[inPtr[px + py * 240]];
+                    *outPtr = 0;
+                else
+                    *outPtr = palRam[inPtr[px + py * 240]] | 0x8000;
             }
             break;
         }
@@ -323,13 +354,15 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
                 int px = curX >> 8;
                 int py = curY >> 8;
                 if(px < 0 || px >= 160 || py < 0 || py >= 128)
-                    continue;
-
-                *outPtr = inPtr[px + py * 160];
+                    *outPtr = 0;
+                else
+                    *outPtr = inPtr[px + py * 160] | 0x8000;
             }
             break;
         }
-        // else invalid
+        default:
+            memset(scanLine, 0, 240 * 2);
+            return;
     }
 }
 
@@ -339,6 +372,8 @@ static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
         drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG3HOFS), mem.readIOReg(IO_BG3VOFS));
     else if((dispControl & DISPCNT_Mode) == 2)
         drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG3PA), mem.readIOReg(IO_BG3PC));
+    else
+        memset(scanLine, 0, 240 * 2);
 }
 
 static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, int priority)
@@ -467,7 +502,7 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
                     auto tilePtr = charPtr + tile * 32 + (tx >> 11) * 64 + ((ty >> 8) & 7) * 8 + ((tx >> 8) & 7);
 
                     if(*tilePtr)
-                        *out = spritePal[*tilePtr];
+                        *out = spritePal[*tilePtr] | 0x8000;
                 }
                 else
                 {
@@ -475,7 +510,7 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
                     tileRow >>= ((tx >> 8) & 7) * 4;
 
                     if(tileRow & 0xF)
-                        *out = spritePal[tileRow & 0xF];
+                        *out = spritePal[tileRow & 0xF] | 0x8000;
                 }
             }
         }
@@ -517,7 +552,7 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
                     {
                         auto palIndex = *tilePtr;
                         if(palIndex)
-                            *out = spritePal[palIndex];
+                            *out = spritePal[palIndex] | 0x8000;
 
                         if(hFlip)
                             --tilePtr;
@@ -551,7 +586,7 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
                     for(int x = xOff; x < 8 && out != outEnd; x++, tileRow >>= 4, out++)
                     {
                         if(tileRow & 0xF)
-                            *out = spritePal[tileRow & 0xF];
+                            *out = spritePal[tileRow & 0xF] | 0x8000;
                     }
 
                     xOff = 0;
@@ -763,22 +798,67 @@ void AGBDisplay::drawScanLine(int y)
         return;
     }
 
-    // fill with backdrop/colour 0
-    for(int i = 0; i < screenWidth; i++)
-        scanLine[i] = palRAM[0];
+    uint16_t bgData[4][screenWidth];
+    uint16_t objData[4][screenWidth]{0}; // four priority levels for objs
 
-    for(int priority = 3; priority >= 0; priority--)
+    int layerEnables = dispControl >> 8;
+
+    int layerPriority[] {
+        bg0Control & BGCNT_Priority,
+        bg1Control & BGCNT_Priority,
+        bg2Control & BGCNT_Priority,
+        bg3Control & BGCNT_Priority
+    };
+
+    if(layerEnables & Layer_BG0)
+        drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control);
+
+    if(layerEnables & Layer_BG1)
+        drawBG1(mem, y, bgData[1], palRAM, vram, dispControl, bg1Control);
+
+    if(layerEnables & Layer_BG2)
+        drawBG2(mem, y, bgData[2], palRAM, vram, dispControl, bg2Control, refPointX[0], refPointY[0]);
+
+    if(layerEnables & Layer_BG3)
+        drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]);
+
+    if(layerEnables & Layer_OBJ)
     {
-        if((dispControl & DISPCNT_BG3On) && (bg3Control & BGCNT_Priority) == priority)
-            drawBG3(mem, y, scanLine, palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]);
-        if((dispControl & DISPCNT_BG2On) && (bg2Control & BGCNT_Priority) == priority)
-            drawBG2(mem, y, scanLine, palRAM, vram, dispControl, bg2Control, refPointX[0], refPointY[0]);
-        if((dispControl & DISPCNT_BG1On) && (bg1Control & BGCNT_Priority) == priority)
-            drawBG1(mem, y, scanLine, palRAM, vram, dispControl, bg1Control);
-        if((dispControl & DISPCNT_BG0On) && (bg0Control & BGCNT_Priority) == priority)
-            drawBG0(mem, y, scanLine, palRAM, vram, dispControl, bg0Control);
+        drawOBJs(mem, y, objData[0], palRAM, vram, dispControl, 0);
+        drawOBJs(mem, y, objData[1], palRAM, vram, dispControl, 1);
+        drawOBJs(mem, y, objData[2], palRAM, vram, dispControl, 2);
+        drawOBJs(mem, y, objData[3], palRAM, vram, dispControl, 3);
+    }
 
-        if((dispControl & DISPCNT_OBJOn))
-            drawOBJs(mem, y, scanLine, palRAM, vram, dispControl, priority);
+    // merge layers
+    for(int x = 0; x < screenWidth; x++)
+    {
+        bool haveCol = false;
+        for(int priority = 0; priority < 4 && !haveCol; priority++)
+        {
+            // objects
+            if((layerEnables & Layer_OBJ) && objData[priority][x])
+            {
+                scanLine[x] = objData[priority][x];
+                haveCol = true;
+                break;
+            }
+
+            // background layers
+            for(int l = 0; l < 4; l++)
+            {
+                if((layerEnables & (1 << l)) && layerPriority[l] == priority && bgData[l][x])
+                {
+                    scanLine[x] = bgData[l][x];
+                    haveCol = true;
+                    break;
+                }
+            }
+            
+        }
+
+        // backdrop
+        if(!haveCol)
+            scanLine[x] = palRAM[0];
     }
 }
