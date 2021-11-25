@@ -36,6 +36,13 @@ enum AGBIOReg
     IO_BG3Y_L = 0x3C,
     IO_BG3Y_H = 0x3E,
 
+    IO_WIN0H = 0x40,
+    IO_WIN1H = 0x42,
+    IO_WIN0V = 0x44,
+    IO_WIN1V = 0x46,
+    IO_WININ = 0x48,
+    IO_WINOUT = 0x4A,
+
     // Audio
     IO_SOUND1CNT_L = 0x60,
     IO_SOUND1CNT_H = 0x62,
@@ -136,6 +143,40 @@ enum BGCNTBits
     BGCNT_ScreenBase = 0x1F << 8,
     BGCNT_Wrap       = 1 << 13,
     BGCNT_ScreenSize = 0x3 << 14
+};
+
+enum WININBits
+{
+    WININ_Win0BG0    = 1 << 0,
+    WININ_Win0BG1    = 1 << 1,
+    WININ_Win0BG2    = 1 << 2,
+    WININ_Win0BG3    = 1 << 3,
+    WININ_Win0Object = 1 << 4,
+    WININ_Win0Effect = 1 << 5,
+    
+    WININ_Win1BG0    = 1 << 8,
+    WININ_Win1BG1    = 1 << 9,
+    WININ_Win1BG2    = 1 << 10,
+    WININ_Win1BG3    = 1 << 11,
+    WININ_Win1Object = 1 << 12,
+    WININ_Win1Effect = 1 << 13,
+};
+
+enum WINOUTBits
+{
+    WINOUT_OutsideBG0    = 1 << 0,
+    WINOUT_OutsideBG1    = 1 << 1,
+    WINOUT_OutsideBG2    = 1 << 2,
+    WINOUT_OutsideBG3    = 1 << 3,
+    WINOUT_OutsideObject = 1 << 4,
+    WINOUT_OutsideEffect = 1 << 5,
+    
+    WINOUT_ObjWinBG0     = 1 << 8,
+    WINOUT_ObjWinBG1     = 1 << 9,
+    WINOUT_ObjWinBG2     = 1 << 10,
+    WINOUT_ObjWinBG3     = 1 << 11,
+    WINOUT_ObjWinObject  = 1 << 12,
+    WINOUT_ObjWinEffect  = 1 << 13,
 };
 
 enum SOUND1CNTBits
