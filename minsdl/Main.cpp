@@ -8,6 +8,7 @@
 #include "DMGCPU.h"
 
 static bool quit = false;
+static bool turbo = false;
 
 static bool isAGB = false;
 
@@ -122,6 +123,8 @@ int main(int argc, char *argv[])
 
         if(arg == "--scale" && i + 1 < argc)
             screenScale = std::stoi(argv[++i]);
+        else if(arg == "--turbo")
+            turbo = true;
         else
             break;
     }
@@ -204,7 +207,7 @@ int main(int argc, char *argv[])
                                    screenWidth * screenScale, screenHeight * screenScale,
                                    SDL_WINDOW_RESIZABLE);
 
-    auto renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
+    auto renderer = SDL_CreateRenderer(window, -1, turbo ? 0 : SDL_RENDERER_PRESENTVSYNC);
     SDL_RenderSetLogicalSize(renderer, screenWidth, screenHeight);
     SDL_RenderSetIntegerScale(renderer, SDL_TRUE);
 
@@ -227,7 +230,8 @@ int main(int argc, char *argv[])
         quit = true;
     }
 
-    SDL_PauseAudioDevice(dev, 0);
+    if(!turbo)
+        SDL_PauseAudioDevice(dev, 0);
 
     auto lastTick = SDL_GetTicks();
 
@@ -248,14 +252,25 @@ int main(int argc, char *argv[])
             }
 
             agbCPU.setInputs(inputs);
-            agbCPU.run(time);
+            agbCPU.run(turbo ? 10 : time);
             agbCPU.getAPU().update();
+
+            if(turbo)
+            {
+                while(dmgCPU.getAPU().getNumSamples())
+                    dmgCPU.getAPU().getSample();
+            }
         }
         else
         {
             dmgCPU.setInputs(inputs);
-            dmgCPU.run(now - lastTick);
+            dmgCPU.run(turbo ? 10 : now - lastTick);
             dmgCPU.getAPU().update();
+            if(turbo)
+            {
+                while(dmgCPU.getAPU().getNumSamples())
+                    dmgCPU.getAPU().getSample();
+            }
         }
 
         lastTick = now;

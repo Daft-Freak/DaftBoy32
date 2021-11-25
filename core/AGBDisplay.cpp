@@ -58,6 +58,7 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
 
     auto charBase = ((control & BGCNT_CharBase) >> 2) * 0x4000;
     auto charPtr = vram + charBase;
+    auto validDataEnd = vram + 0x10000;
 
     for(int x = 0; x < 240;)
     {
@@ -73,7 +74,12 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
         // wrap
         bx &= (screenBlockTiles - 1);
 
-        uint16_t tileMeta = tilePtr[bx];
+        uint16_t tileMeta = 0;
+    
+        // screen base pointing past first 64k is invalid
+        // reading as zero matches what the DS does
+        if(reinterpret_cast<uint8_t *>(tilePtr) < validDataEnd)
+            tileMeta = tilePtr[bx];
 
         // v flip
         int tty = ty;
@@ -83,7 +89,11 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
         if(control & BGCNT_SinglePal)
         {
             // 8bit tiles
-            uint64_t tileRow = reinterpret_cast<uint64_t *>(charPtr + (tileMeta & 0x3FF) * 64)[tty];
+            uint64_t tileRow = 0;
+            auto thisTilePtr = charPtr + (tileMeta & 0x3FF) * 64;
+
+            if(thisTilePtr < validDataEnd)
+                tileRow = reinterpret_cast<uint64_t *>(thisTilePtr)[tty];
 
             // h flip
             if(tileMeta & (1 << 10))
@@ -116,7 +126,15 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
         else
         {
             // 4bit tiles
-            uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (tileMeta & 0x3FF) * 32)[tty];
+            uint32_t tileRow = 0;
+            auto thisTilePtr = charPtr + (tileMeta & 0x3FF) * 32;
+            // char base pointing past first 64k is invalid
+            if(thisTilePtr < validDataEnd)
+                tileRow = reinterpret_cast<uint32_t *>(thisTilePtr)[tty];
+            // this is what the GBA would do, but the DS just reads 0 so let's avoid some code here
+            //else
+            //    tileRow = (tileMeta & 0x3FF) | (tileMeta & 0x3FF) << 16;
+
             auto tilePal = palRam + ((tileMeta & 0xF000) >> 8);
 
             // h flip
@@ -165,6 +183,7 @@ static void drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
 
     auto charBase = ((control & BGCNT_CharBase) >> 2) * 0x4000;
     auto charPtr = vram + charBase;
+    auto validDataEnd = vram + 0x10000;
 
     bool wrap = control & BGCNT_Wrap;
 
@@ -195,10 +214,17 @@ static void drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
 
         auto tilePtr = screenPtr + by * numTiles;
 
-        uint8_t tileIndex = tilePtr[bx];
+        uint8_t tileIndex = 0;
+        
+        if(tilePtr < validDataEnd)
+            tileIndex = tilePtr[bx];
 
         // 8bit tiles
-        uint64_t tileRow = reinterpret_cast<uint64_t *>(charPtr + tileIndex * 64)[ty];
+        uint64_t tileRow = 0;
+        auto thisTilePtr = charPtr + tileIndex * 64;
+
+        if(thisTilePtr < validDataEnd)
+            tileRow = reinterpret_cast<uint64_t *>(thisTilePtr)[ty];
 
         auto tileDataPtr = reinterpret_cast<uint8_t *>(&tileRow) + tx;
 
@@ -298,6 +324,8 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
 
     auto charPtr = vram + 0x10000;
 
+    bool isBitmapMode = (dispControl & DISPCNT_Mode) > 2;
+
     for(int i = 127; i >= 0; i--)
     {
         const uint16_t attr0 = oam[i * entrySize + 0];
@@ -349,6 +377,11 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         auto startTile = attr2 & Attr2_Index;
         int sx = std::max(0, -spriteX);
         int sy = y - spriteY;
+
+        // first half of "object" VRAM is not usable for objects in bitmap modes
+        // TODO: what if part of the sprite is in valid RAM?
+        if(isBitmapMode && startTile < 512)
+            continue;
 
         // palette
         auto spritePal = palRam + 256;
