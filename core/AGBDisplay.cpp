@@ -376,7 +376,7 @@ static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
         memset(scanLine, 0, 240 * 2);
 }
 
-static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, int priority)
+static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl)
 {
     auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
     const int entrySize = 4; // * 16 bit
@@ -398,10 +398,6 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         const uint16_t attr0 = oam[i * entrySize + 0];
         const uint16_t attr1 = oam[i * entrySize + 1];
         const uint16_t attr2 = oam[i * entrySize + 2];
-
-        // not this priority
-        if((attr2 & Attr2_Priority) >> 10 != priority)
-            continue;
 
         auto mode = (attr0 & Attr0_Mode) >> 8;
 
@@ -450,6 +446,8 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
         if(isBitmapMode && startTile < 512)
             continue;
 
+        int priority = (attr2 & Attr2_Priority) >> 10;
+
         // palette
         auto spritePal = palRam + 256;
 
@@ -479,8 +477,8 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
             int tx = ((spriteW / 2) << 8) + (sx - halfW) * a + (sy - halfH) * b;
             int ty = ((spriteH / 2) << 8) + (sx - halfW) * c + (sy - halfH) * d;
 
-            auto out = scanLine + (spriteX + sx);
-            auto outEnd = scanLine + 240;
+            auto out = scanLine[priority] + (spriteX + sx);
+            auto outEnd = scanLine[priority] + 240;
 
             if(!(attr0 & Attr0_SinglePal))
                 spritePal += ((attr2 & Attr2_Pal) >> 8);
@@ -529,8 +527,8 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam
                 startTile += (sy >> 3) * 32;
 
             int xOff = sx & 7;
-            auto out = scanLine + (spriteX + sx);
-            auto outEnd = scanLine + 240;
+            auto out = scanLine[priority] + (spriteX + sx);
+            auto outEnd = scanLine[priority] + 240;
 
             int tilesX = spriteW >> 3;
 
@@ -872,12 +870,7 @@ void AGBDisplay::drawScanLine(int y)
         drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]);
 
     if(layerEnables & Layer_OBJ)
-    {
-        drawOBJs(mem, y, objData[0], palRAM, vram, dispControl, 0);
-        drawOBJs(mem, y, objData[1], palRAM, vram, dispControl, 1);
-        drawOBJs(mem, y, objData[2], palRAM, vram, dispControl, 2);
-        drawOBJs(mem, y, objData[3], palRAM, vram, dispControl, 3);
-    }
+        drawOBJs(mem, y, objData, palRAM, vram, dispControl);
 
     // start with window enabled if start/end are flipped
     bool xInWin0 = (win0h & 0xFF) < (win0h >> 8), xInWin1 = (win1h & 0xFF) < (win1h >> 8);
