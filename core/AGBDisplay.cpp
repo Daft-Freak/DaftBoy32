@@ -376,7 +376,7 @@ static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
         memset(scanLine, 0, 240 * 2);
 }
 
-static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl)
+static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl)
 {
     auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
     const int entrySize = 4; // * 16 bit
@@ -393,7 +393,14 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
 
     bool isBitmapMode = (dispControl & DISPCNT_Mode) > 2;
 
-    for(int i = 127; i >= 0; i--)
+    // entire scanline, or just visible if "h-blank free"
+    int cyclesRemaining = ((dispControl & DISPCNT_HBlankFree) ? 240 : 308) * 4 - 6;
+
+    // seems to be the bit missing from the gbatek description to make the DUST tests pass
+    // TODO: the offscreen test is still slightly off
+    const int inactiveCycles = 2;
+
+    for(int i = 0; i < 128 && cyclesRemaining > 0; i++)
     {
         const uint16_t attr0 = oam[i * entrySize + 0];
         const uint16_t attr1 = oam[i * entrySize + 1];
@@ -402,7 +409,10 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
         auto mode = (attr0 & Attr0_Mode) >> 8;
 
         if(mode == 2/*disable*/)
+        {
+            cyclesRemaining -= inactiveCycles;
             continue;
+        }
 
         // check y
         int spriteY = attr0 & Attr0_Y;
@@ -419,10 +429,16 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
             spriteY -= 256;
 
         if(spriteY > y)
+        {
+            cyclesRemaining -= inactiveCycles;
             continue;
+        }
 
         if(spriteY + doubledH <= y)
+        {
+            cyclesRemaining -= inactiveCycles;
             continue;
+        }
 
         // get X/W
         int spriteX = attr1 & Attr1_X;
@@ -434,7 +450,10 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
             spriteX -= 512;
 
         if(spriteX >= 240)
+        {
+            cyclesRemaining -= inactiveCycles;
             continue;
+        }
 
         // calc offsets
         auto startTile = attr2 & Attr2_Index;
@@ -444,15 +463,28 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
         // first half of "object" VRAM is not usable for objects in bitmap modes
         // TODO: what if part of the sprite is in valid RAM?
         if(isBitmapMode && startTile < 512)
+        {
+            cyclesRemaining -= inactiveCycles;
+            // TODO: still takes time to draw?
             continue;
+        }
 
         int priority = (attr2 & Attr2_Priority) >> 10;
+        int effect = (attr0 & Attr0_Effect) >> 10;
+
+        if(effect == 2 /*window*/)
+            priority = 4; // fake extra priority level
 
         // palette
         auto spritePal = palRam + 256;
 
         if(mode != 0)
         {
+            // overhead for affine + offscreen pixels
+            cyclesRemaining -= 10;// + sx * 2;
+            if(cyclesRemaining <= 0)
+                break;
+
             // affine sprite
             int affineIndex = (attr1 & Attr1_AffineIndex) >> 9;
 
@@ -483,9 +515,14 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
             if(!(attr0 & Attr0_SinglePal))
                 spritePal += ((attr2 & Attr2_Pal) >> 8);
 
-            for(int x = sx; x < halfW * 2 && out != outEnd; x++, out++, tx += a, ty += c)
+            for(int x = sx; x < halfW * 2 && out != outEnd && cyclesRemaining > 1; x++, out++, tx += a, ty += c)
             {
+                cyclesRemaining -= 2;
+
                 if(tx < 0 || ty < 0 || tx >= (spriteW << 8) || ty >= (spriteH << 8))
+                    continue;
+
+                if(*out)
                     continue;
 
                 auto tile = startTile;
@@ -535,7 +572,7 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
             if(attr0 & Attr0_SinglePal)
             {
                 // 8bit tiles
-                for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
+                for(int stx = sx >> 3; stx < tilesX && out != outEnd && cyclesRemaining; stx++)
                 {
                     int tileX = hFlip ? (tilesX - 1) - stx : stx;
                     auto tilePtr = charPtr + startTile * 32 + tileX * 64 + (sy & 7) * 8;
@@ -546,10 +583,12 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
                         tilePtr += xOff;
 
                     // pixels in tile
-                    for(int x = xOff; x < 8 && out != outEnd; x++, out++)
+                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, out++)
                     {
+                        cyclesRemaining--;
+
                         auto palIndex = *tilePtr;
-                        if(palIndex)
+                        if(!*out && palIndex)
                             *out = spritePal[palIndex] | 0x8000;
 
                         if(hFlip)
@@ -566,7 +605,7 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
                 // 4bit tiles
                 spritePal += ((attr2 & Attr2_Pal) >> 8);
 
-                for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
+                for(int stx = sx >> 3; stx < tilesX && out != outEnd && cyclesRemaining; stx++)
                 {
                     int tileX = hFlip ? (tilesX - 1) - stx : stx;
                     uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (startTile + tileX) * 32)[sy & 7];
@@ -581,9 +620,10 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[4][240], uint16_t 
                     if(xOff)
                         tileRow >>= (xOff * 4);
 
-                    for(int x = xOff; x < 8 && out != outEnd; x++, tileRow >>= 4, out++)
+                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, tileRow >>= 4, out++)
                     {
-                        if(tileRow & 0xF)
+                        cyclesRemaining--;
+                        if(!*out && (tileRow & 0xF))
                             *out = spritePal[tileRow & 0xF] | 0x8000;
                     }
 
@@ -817,7 +857,7 @@ void AGBDisplay::drawScanLine(int y)
     }
 
     uint16_t bgData[4][screenWidth];
-    uint16_t objData[4][screenWidth]{0}; // four priority levels for objs
+    uint16_t objData[5][screenWidth]{0}; // four priority levels for objs +1 for obj window
 
     int layerEnables = dispControl >> 8;
     bool windowEnabled = false;
@@ -845,7 +885,7 @@ void AGBDisplay::drawScanLine(int y)
             winLayers |= winIn >> 8;
 
         if((dispControl & DISPCNT_OBJWindowOn)) // assume inside for now
-            winLayers |= winOut >> 8;
+            winLayers |= winOut >> 8 | Layer_OBJ; // need to draw objects for the window even if they're not displayed anywhere
 
         layerEnables &= winLayers;
     }
@@ -897,7 +937,8 @@ void AGBDisplay::drawScanLine(int y)
                 curLayerEnables &= winIn;
             else if((dispControl & DISPCNT_Window1On) && yInWin1 && xInWin1)
                 curLayerEnables &= (winIn >> 8);
-            // else obj winOut >> 8
+            else if((dispControl & DISPCNT_OBJWindowOn) && objData[4][x])
+                curLayerEnables &= (winOut >> 8);
             else //outside
                 curLayerEnables &= winOut;
         }
