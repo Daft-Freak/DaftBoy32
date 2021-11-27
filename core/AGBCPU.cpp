@@ -140,12 +140,16 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
                 {
                     int regOffset = (addr & 0xFFFFFF) - IO_DMA0CNT_H;
                     dmaSrc[index] = (mem.readIOReg(IO_DMA0SAD + regOffset) | (mem.readIOReg(IO_DMA0SAD + regOffset + 2) << 16)) & 0xFFFFFFF;
-                    dmaDst[index] = (mem.readIOReg(IO_DMA0DAD + regOffset) | (mem.readIOReg(IO_DMA0DAD + regOffset + 2) << 16)) & (index == 3 ? 0xFFFFFFF : 0x7FFFFFF); // 1 bit less for !DMA3
+                    dmaDst[index] = (mem.readIOReg(IO_DMA0DAD + regOffset) | (mem.readIOReg(IO_DMA0DAD + regOffset + 2) << 16)) & 0xFFFFFFF;
                     dmaCount[index] = mem.readIOReg(IO_DMA0CNT_L + regOffset);
 
                     // reading from ROM with DMA0 is invalid, remap it to something low so that the check later stops it
                     if(index == 0 && dmaSrc[index] >= 0x8000000)
                         dmaSrc[0] = 0;
+
+                    // only DMA3 can write to the ROM area
+                    if(index != 3 && dmaDst[index] >= 0x8000000)
+                        dmaDst[index] = 0;
                 }
             }
             else
@@ -2305,6 +2309,7 @@ int AGBCPU::dmaTransfer(int channel)
         cycles -= 2;
 
     srcAddr &= ~(width - 1);
+    dstAddr &= ~(width - 1);
 
     uint32_t lastVal = dmaLastVal;
 
