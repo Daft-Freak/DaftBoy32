@@ -77,6 +77,14 @@ uint16_t AGBMemory::read16(uint32_t addr) const
     // io
     if((addr >> 24) == 0x4)
         ret = cpu.readReg(addr & 0xFFFFFF, ret);
+    else if((addr >> 24) >= 0xE) // SRAM area does not handle > 8bit reads
+    {
+        // "misaligned" read still gets the right byte
+        if(addr & 1)
+            ret = ret >> 8 | (ret & 0xFF00);
+        else
+            ret = (ret & 0xFF) | (ret & 0xFF) << 8;
+    }
 
     return ret;
 }
@@ -96,7 +104,16 @@ uint32_t AGBMemory::read32(uint32_t addr) const
         return addrLow | (addrLow + 1) << 16;
     }
 
-    return *reinterpret_cast<const uint32_t *>(ptr);
+    auto ret = *reinterpret_cast<const uint32_t *>(ptr);
+
+    if((addr >> 24) >= 0xE) // SRAM area does not handle > 8bit reads
+    {
+        // "misaligned" read still gets the right byte
+        uint8_t byte = ret >> ((addr & 3) * 8);
+        ret = byte | byte << 8 | byte << 16 | byte << 24;
+    }
+
+    return ret;
 }
 
 void AGBMemory::write8(uint32_t addr, uint8_t data)
@@ -195,6 +212,12 @@ void AGBMemory::write16(uint32_t addr, uint16_t data)
 
             eepromOutBits[0] = 1;
         }
+
+        return;
+    }
+    else if((addr >> 24) >= 0xE) // SRAM area does not handle > 8bit writes
+    {
+        write8(addr, data);
         return;
     }
 
@@ -214,6 +237,11 @@ void AGBMemory::write32(uint32_t addr, uint32_t data)
     {
         write16(addr, data);
         write16(addr + 2, data >> 16);
+        return;
+    }
+    else if((addr >> 24) >= 0xE) // SRAM area does not handle > 8bit writes
+    {
+        write8(addr, data);
         return;
     }
 
