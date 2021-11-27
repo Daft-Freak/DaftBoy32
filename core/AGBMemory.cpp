@@ -217,7 +217,7 @@ void AGBMemory::write16(uint32_t addr, uint16_t data)
     }
     else if((addr >> 24) >= 0xE) // SRAM area does not handle > 8bit writes
     {
-        write8(addr, data);
+        write8(addr, (addr & 1) ? (data >> 8) : data);
         return;
     }
 
@@ -241,7 +241,7 @@ void AGBMemory::write32(uint32_t addr, uint32_t data)
     }
     else if((addr >> 24) >= 0xE) // SRAM area does not handle > 8bit writes
     {
-        write8(addr, data);
+        write8(addr, data >> (addr & 3) * 8);
         return;
     }
 
