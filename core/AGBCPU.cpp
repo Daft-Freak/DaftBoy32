@@ -748,6 +748,10 @@ int AGBCPU::executeARMInstruction()
         }
         else
         {
+            // force alingment for everything but SRAM...
+            if(addr < 0xE000000)
+                addr &= ~3;
+
             bool first = true;
             for(; regList; regList >>= 1, i++)
             {
@@ -758,13 +762,13 @@ int AGBCPU::executeARMInstruction()
                 auto reg = isLoadForce ? static_cast<Reg>(i) : mapReg(static_cast<Reg>(i));
 
                 if(isLoad)
-                    loReg(reg) = readMem32Aligned(addr & ~3);
+                    loReg(reg) = readMem32(addr);
                 else
                 {
                     if(reg == Reg::PC)
-                        writeMem32(addr & ~3, loReg(reg) + 4);
+                        writeMem32(addr, loReg(reg) + 4);
                     else
-                        writeMem32(addr & ~3, loReg(reg));
+                        writeMem32(addr, loReg(reg));
                 }
 
                 cycles += mem.getAccessCycles(addr, 4, !first);
@@ -2068,7 +2072,9 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
             endAddr += 4;
     }
 
-    addr &= ~3;
+    // force alingment for everything but SRAM...
+    if(addr < 0xE000000)
+        addr &= ~3;
 
     int i = 0;
     bool first = true;
