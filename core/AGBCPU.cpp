@@ -248,7 +248,7 @@ uint32_t AGBCPU::readMem16(uint32_t addr)
         return readMem16Aligned(addr);
 
     // this returns the 32-bit result of an unaligned 16-bit read
-    uint32_t val = readMem16Aligned(addr & ~1);
+    uint32_t val = mem.read16(addr);
 
     return (val >> 8) | (val << 24);
 }
@@ -265,7 +265,7 @@ uint32_t AGBCPU::readMem32(uint32_t addr)
     if(!(addr & 3))
         return readMem32Aligned(addr);
 
-    uint32_t val = readMem32Aligned(addr & ~3);
+    uint32_t val = mem.read32(addr);
 
     int shift = (addr & 3) << 3;
     return (val >> shift) | (val << (32 - shift));
@@ -274,8 +274,6 @@ uint32_t AGBCPU::readMem32(uint32_t addr)
 uint32_t AGBCPU::readMem32Aligned(uint32_t addr)
 {
     assert((addr & 3) == 0);
-    if((addr >> 24) == 0x4) // IO
-        return readMem16Aligned(addr) | (readMem16Aligned(addr + 2) << 16);
 
     return mem.read32(addr);
 }
@@ -305,22 +303,12 @@ void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
 
 void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
 {
-    addr &= ~1;
-
     mem.write16(addr, data);
 }
 
 void AGBCPU::writeMem32(uint32_t addr, uint32_t data)
 {
-    addr &= ~3;
-
-    if((addr >> 24) == 0x4)
-    {
-        writeMem16(addr, data);
-        writeMem16(addr + 2, data >> 16);
-    }
-    else
-        mem.write32(addr, data);
+    mem.write32(addr, data);
 }
 
 int AGBCPU::runCycles(int cycles)

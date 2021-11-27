@@ -62,7 +62,7 @@ uint8_t AGBMemory::read8(uint32_t addr) const
 
 uint16_t AGBMemory::read16(uint32_t addr) const
 {
-    auto ptr = mapAddress(addr);
+    auto ptr = mapAddress(addr & ~1);
 
     // out of bounds rom access returns low bits of address
     if(!ptr && (addr & 0x8000000))
@@ -83,12 +83,16 @@ uint16_t AGBMemory::read16(uint32_t addr) const
 
 uint32_t AGBMemory::read32(uint32_t addr) const
 {
-    auto ptr = mapAddress(addr);
+    // IO
+    if(addr >> 24 == 4)
+        return read16(addr & ~3) | read16((addr & ~3)  + 2) << 16;
+
+    auto ptr = mapAddress(addr & ~3);
 
     // out of bounds rom access returns low bits of address
     if(!ptr && (addr & 0x8000000))
     {
-        auto addrLow = (addr >> 1) & 0xFFFF;
+        auto addrLow = (addr >> 1) & 0xFFFE;
         return addrLow | (addrLow + 1) << 16;
     }
 
@@ -194,7 +198,7 @@ void AGBMemory::write16(uint32_t addr, uint16_t data)
         return;
     }
 
-    auto ptr = mapAddress(addr);
+    auto ptr = mapAddress(addr & ~1);
     if(ptr)
     {
         *reinterpret_cast<uint16_t *>(ptr) = data;
@@ -206,7 +210,14 @@ void AGBMemory::write16(uint32_t addr, uint16_t data)
 
 void AGBMemory::write32(uint32_t addr, uint32_t data)
 {
-    auto ptr = mapAddress(addr);
+    if((addr >> 24) == 0x4)
+    {
+        write16(addr, data);
+        write16(addr + 2, data >> 16);
+        return;
+    }
+
+    auto ptr = mapAddress(addr & ~3);
     if(ptr)
     {
         *reinterpret_cast<uint32_t *>(ptr) = data;
