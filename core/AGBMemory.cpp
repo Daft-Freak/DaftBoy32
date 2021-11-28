@@ -411,7 +411,7 @@ void AGBMemory::writeFlash(uint32_t addr, uint8_t data)
         else if(data == 0x30 && flashState == FlashState::Erase)
         {
             // erase 4k sector
-            memset(cartSaveData + (addr & 0xF000) + (flashBank << 16), 0xFF, 0xFFF);
+            memset(cartSaveData + (addr & 0xF000) + (flashBank << 16), 0xFF, 0x1000);
             flashState = FlashState::Read;
         }
         else if(data == 0x80 && addr == 0xE005555)
