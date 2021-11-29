@@ -2408,6 +2408,8 @@ void AGBCPU::updateTimers()
             {
                 if((timer & timerPrescalers[i]) ^ ((timer + 1) & timerPrescalers[i]))
                     timerCounters[i]++;
+                else
+                    continue;
             }
 
             // overflow
