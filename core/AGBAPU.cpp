@@ -757,7 +757,7 @@ void AGBAPU::sampleOutput()
     auto &mem = cpu.getMem();
 
     // wait for the audio thread/interrupt to catch up
-    while(writeOff == readOff - 1) {}
+    while((writeOff + 1) % bufferSize == readOff) {}
 
     // TODO: master left/right volume in low byte
     auto outputSelect = mem.readIOReg(IO_SOUNDCNT_L) >> 8;
