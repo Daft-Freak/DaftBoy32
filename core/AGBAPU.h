@@ -16,6 +16,7 @@ public:
 
     int16_t getSample();
     int getNumSamples() const;
+    bool hasSample() const {return readOff != writeOff;}
 
     uint16_t readReg(uint32_t addr, uint16_t val);
     bool writeReg(uint32_t addr, uint16_t data);
