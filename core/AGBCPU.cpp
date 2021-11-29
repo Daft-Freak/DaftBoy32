@@ -352,8 +352,16 @@ int AGBCPU::runCycles(int cycles)
             if(enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount))
                 display.update();
 
-            if(currentInterrupts && interruptDelay && !(--interruptDelay))
-                serviceInterrupts(); // cycles?
+            if(currentInterrupts && interruptDelay)
+            {
+                if(interruptDelay <= exec)
+                {
+                    serviceInterrupts(); // cycles?
+                    interruptDelay = 0;
+                }
+                else
+                    interruptDelay -= exec;
+            }
 
             if(halted)
             {
