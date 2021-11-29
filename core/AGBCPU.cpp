@@ -202,6 +202,9 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
                 timerInterruptEnabled &= ~(1 << index);
             }
 
+            if(timerEnabled)
+                calculateNextTimerOverflow();
+
             break;
         }
 
@@ -2387,6 +2390,8 @@ void AGBCPU::updateTimers()
     auto passed = cycleCount - lastTimerUpdate;
     lastTimerUpdate = cycleCount;
 
+    bool anyOverflow = false;
+
     while(passed--)
     {
         uint8_t overflow = 0;
@@ -2422,8 +2427,44 @@ void AGBCPU::updateTimers()
 
                 if(i < 2)
                     apu.timerOverflow(i, timer);
+
+                // overflow was where we expected
+                // (only check the first as the next update info is outdated after that)
+                assert(timer + 1 == nextTimerUpdate || anyOverflow);
+
+                anyOverflow = true;
             }
         }
         timer++;
     }
+
+    if(anyOverflow)
+        calculateNextTimerOverflow();
+}
+
+void AGBCPU::calculateNextTimerOverflow()
+{
+    uint32_t nextOverflow = ~0;
+
+    auto enabled = timerEnabled;
+    for(int i = 0; enabled; i++, enabled >>= 1)
+    {
+        if(!(enabled & 1))
+            continue;
+
+        // count-up timer is updated when the previous timer overflows
+        if(timerPrescalers[i] == -1)
+            continue;
+
+        // increments to overflow
+        int incs = 0xFFFF - timerCounters[i];
+
+        auto thisTimerOverflow = incs * timerPrescalers[i]
+                               + timerPrescalers[i] - (cycleCount & (timerPrescalers[i] - 1));
+
+        if(thisTimerOverflow < nextOverflow)
+            nextOverflow = thisTimerOverflow;
+    }
+
+    nextTimerUpdate = cycleCount + nextOverflow;
 }
