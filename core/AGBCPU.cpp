@@ -352,7 +352,9 @@ int AGBCPU::runCycles(int cycles)
             //if(timerInterruptEnabled)
                 updateTimers();
 
-            if(enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount))
+            bool displayInterruptsEnabled = enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount);
+
+            if(displayInterruptsEnabled)
                 display.update();
 
             if(currentInterrupts && interruptDelay)
@@ -366,15 +368,23 @@ int AGBCPU::runCycles(int cycles)
                     interruptDelay -= exec;
             }
 
-            if(halted)
+            if(halted && cycles > 0)
             {
-                // skip to next display update
-                // TODO: handle timers
-                // TODO: other interrupts
-                //if(!(enabledInterrutps & (Int_Timer0 | Int_Timer1 | Int_Timer2 | Int_Timer3)))
-                //    exec = std::min(cycles, display.getCyclesToNextUpdate());
-                //else
-                    exec = 4; // FIXME: this is wrong but higher = less overhead
+                // skip ahead
+                exec = cycles;
+
+                // limit to display interrupt
+                if(displayInterruptsEnabled)
+                    exec = std::min(cycles, display.getCyclesToNextUpdate());
+
+                // limit to next timer overflow
+                if(timerEnabled)
+                    exec = std::min(exec, nextTimerUpdate - cycleCount);
+
+                if(interruptDelay)
+                    exec = std::min(exec, static_cast<unsigned int>(interruptDelay));
+
+                assert(exec > 0);
             }
         }
         while(halted && !(dmaTriggered) && cycles > 0);
