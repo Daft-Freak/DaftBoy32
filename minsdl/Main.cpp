@@ -257,8 +257,8 @@ int main(int argc, char *argv[])
 
             if(turbo)
             {
-                while(dmgCPU.getAPU().getNumSamples())
-                    dmgCPU.getAPU().getSample();
+                while(agbCPU.getAPU().getNumSamples())
+                    agbCPU.getAPU().getSample();
             }
         }
         else
