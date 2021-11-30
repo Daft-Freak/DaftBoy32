@@ -205,6 +205,7 @@ private:
 
     uint32_t getARMShiftedReg(Reg r, uint8_t shift, bool &carry);
     int doARMHalfwordTransfer(uint32_t opcode, bool isPre);
+    int doARMMultiply(uint32_t opcode);
     int doARMSingleDataTransfer(uint32_t opcode, bool isReg, bool isPre);
     int doARMBlockDataTransfer(uint32_t opcode, bool isPre);
 

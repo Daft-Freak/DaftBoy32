@@ -505,83 +505,7 @@ int AGBCPU::executeARMInstruction()
                 if((opcode >> 5) & 3) // halfword transfer
                     return doARMHalfwordTransfer(opcode, false);
 
-                if(opcode & (1 << 23)) // MULL/MLAL
-                {
-                    bool isSigned = opcode & (1 << 22);
-                    bool accumulate = opcode & (1 << 21);
-                    bool setCondCode = opcode & (1 << 20);
-                    auto destHiReg = static_cast<Reg>((opcode >> 16) & 0xF);
-                    auto destLoReg = static_cast<Reg>((opcode >> 12) & 0xF);
-                    auto op2Reg = static_cast<Reg>((opcode >> 8) & 0xF);
-                    auto op1Reg = static_cast<Reg>(opcode & 0xF);
-
-                    auto op2 = reg(op2Reg);
-
-                    uint64_t res;
-
-                    if(isSigned) // SMULL
-                        res = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(reg(op1Reg))) * static_cast<int32_t>(op2));
-                    else // UMULL
-                        res = static_cast<uint64_t>(reg(op1Reg)) * op2;
-                    
-                    if(accumulate) // S/UMLAL
-                        res += (static_cast<uint64_t>(reg(destHiReg)) << 32) | reg(destLoReg);
-
-                    reg(destHiReg) = res >> 32;
-                    reg(destLoReg) = res & 0xFFFFFFFF;
-
-                    if(setCondCode)
-                    {
-                        // v and c are meaningless
-                        cpsr = (cpsr & ~(Flag_N | Flag_Z))
-                             | (res & (1ull << 63) ? Flag_N : 0)
-                             | (res == 0 ? Flag_Z : 0);
-                    }
-
-                    // leading 0s or 1s
-                    auto tmp = (isSigned && (op2 & (1 << 31))) ? ~op2 : op2;
-                    int prefix = tmp ? __builtin_clz(tmp) : 32;
-
-                    // more cycles the more bytes are non 0/ff (or just non 0 for unsigned)
-                    int iCycles = (prefix == 32 ? 1 : (4 - prefix / 8)) + (accumulate ? 1 : 0);
-                    return pcNCycles + iCycles + 1; // TODO: N here is prefetch bug
-                }
-                else // MUL/MLA
-                {
-                    bool accumulate = opcode & (1 << 21);
-                    bool setCondCode = opcode & (1 << 20);
-                    auto destReg = static_cast<Reg>((opcode >> 16) & 0xF);
-                    auto op3Reg = static_cast<Reg>((opcode >> 12) & 0xF);
-                    auto op2Reg = static_cast<Reg>((opcode >> 8) & 0xF);
-                    auto op1Reg = static_cast<Reg>(opcode & 0xF);
-
-                    auto op2 = reg(op2Reg);
-
-                    uint32_t res = reg(op1Reg) * op2;
-
-                    if(accumulate)
-                        res += reg(op3Reg);
-                    else
-                        assert(op3Reg == Reg::R0); // should be 0
-
-                    reg(destReg) = res;
-
-                    if(setCondCode)
-                    {
-                        // v is unaffected, c is meaningless
-                        cpsr = (cpsr & ~(Flag_N | Flag_Z))
-                             | (res & signBit ? Flag_N : 0)
-                             | (res == 0 ? Flag_Z : 0);
-                    }
-
-                    // leading 0s or 1s
-                    auto tmp = (op2 & (1 << 31)) ? ~op2 : op2;
-                    int prefix = tmp ? __builtin_clz(tmp) : 32;
-
-                    // more cycles the more bytes are non 0/ff
-                    int iCycles = (prefix == 32 ? 1 : (4 - prefix / 8)) + (accumulate ? 1 : 0);
-                    return pcNCycles + iCycles; // TODO: N here is prefetch disable bug
-                }
+                return doARMMultiply(opcode);
             }
 
             auto op2Shift = (opcode >> 4) & 0xFF;
@@ -1014,6 +938,87 @@ int AGBCPU::doARMHalfwordTransfer(uint32_t opcode, bool isPre)
         writeMem16(addr, val); // STRH
 
         return pcNCycles + mem.getAccessCycles(addr, 2, false);
+    }
+}
+
+int AGBCPU::doARMMultiply(uint32_t opcode)
+{
+    if(opcode & (1 << 23)) // MULL/MLAL
+    {
+        bool isSigned = opcode & (1 << 22);
+        bool accumulate = opcode & (1 << 21);
+        bool setCondCode = opcode & (1 << 20);
+        auto destHiReg = static_cast<Reg>((opcode >> 16) & 0xF);
+        auto destLoReg = static_cast<Reg>((opcode >> 12) & 0xF);
+        auto op2Reg = static_cast<Reg>((opcode >> 8) & 0xF);
+        auto op1Reg = static_cast<Reg>(opcode & 0xF);
+
+        auto op2 = reg(op2Reg);
+
+        uint64_t res;
+
+        if(isSigned) // SMULL
+            res = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(reg(op1Reg))) * static_cast<int32_t>(op2));
+        else // UMULL
+            res = static_cast<uint64_t>(reg(op1Reg)) * op2;
+        
+        if(accumulate) // S/UMLAL
+            res += (static_cast<uint64_t>(reg(destHiReg)) << 32) | reg(destLoReg);
+
+        reg(destHiReg) = res >> 32;
+        reg(destLoReg) = res & 0xFFFFFFFF;
+
+        if(setCondCode)
+        {
+            // v and c are meaningless
+            cpsr = (cpsr & ~(Flag_N | Flag_Z))
+                    | (res & (1ull << 63) ? Flag_N : 0)
+                    | (res == 0 ? Flag_Z : 0);
+        }
+
+        // leading 0s or 1s
+        auto tmp = (isSigned && (op2 & (1 << 31))) ? ~op2 : op2;
+        int prefix = tmp ? __builtin_clz(tmp) : 32;
+
+        // more cycles the more bytes are non 0/ff (or just non 0 for unsigned)
+        int iCycles = (prefix == 32 ? 1 : (4 - prefix / 8)) + (accumulate ? 1 : 0);
+        return pcNCycles + iCycles + 1; // TODO: N here is prefetch bug
+    }
+    else // MUL/MLA
+    {
+        bool accumulate = opcode & (1 << 21);
+        bool setCondCode = opcode & (1 << 20);
+        auto destReg = static_cast<Reg>((opcode >> 16) & 0xF);
+        auto op3Reg = static_cast<Reg>((opcode >> 12) & 0xF);
+        auto op2Reg = static_cast<Reg>((opcode >> 8) & 0xF);
+        auto op1Reg = static_cast<Reg>(opcode & 0xF);
+
+        auto op2 = reg(op2Reg);
+
+        uint32_t res = reg(op1Reg) * op2;
+
+        if(accumulate)
+            res += reg(op3Reg);
+        else
+            assert(op3Reg == Reg::R0); // should be 0
+
+        reg(destReg) = res;
+
+        if(setCondCode)
+        {
+            // v is unaffected, c is meaningless
+            cpsr = (cpsr & ~(Flag_N | Flag_Z))
+                    | (res & signBit ? Flag_N : 0)
+                    | (res == 0 ? Flag_Z : 0);
+        }
+
+        // leading 0s or 1s
+        auto tmp = (op2 & (1 << 31)) ? ~op2 : op2;
+        int prefix = tmp ? __builtin_clz(tmp) : 32;
+
+        // more cycles the more bytes are non 0/ff
+        int iCycles = (prefix == 32 ? 1 : (4 - prefix / 8)) + (accumulate ? 1 : 0);
+        return pcNCycles + iCycles; // TODO: N here is prefetch disable bug
     }
 }
 
