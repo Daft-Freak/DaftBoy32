@@ -894,6 +894,7 @@ void AGBDisplay::drawScanLine(int y)
         layerEnables &= winLayers;
     }
 
+    // get priority/active layers
     int layerPriority[] {
         bg0Control & BGCNT_Priority,
         bg1Control & BGCNT_Priority,
@@ -901,6 +902,26 @@ void AGBDisplay::drawScanLine(int y)
         bg3Control & BGCNT_Priority
     };
 
+    int numActiveLayers = 0;
+    std::tuple<uint16_t *, int> layers[9];
+
+    for(int priority = 0; priority < 4; priority++)
+    {
+        // objects
+        if(layerEnables & Layer_OBJ)
+            layers[numActiveLayers++] = {objData[priority], Layer_OBJ};
+
+        // background layers
+        for(int l = 0; l < 4; l++)
+        {
+            if((layerEnables & (1 << l)) && layerPriority[l] == priority)
+                layers[numActiveLayers++] = {bgData[l], 1 << l};
+        }
+    }
+
+    layers[numActiveLayers++] = {nullptr, 0};
+
+    // draw enabled layers
     if(layerEnables & Layer_BG0)
         drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control);
 
@@ -947,32 +968,28 @@ void AGBDisplay::drawScanLine(int y)
                 curLayerEnables &= winOut;
         }
 
-        bool haveCol = false;
-        for(int priority = 0; priority < 4 && !haveCol; priority++)
+        for(int i = 0; i < 9; i++)
         {
-            // objects
-            if((curLayerEnables & Layer_OBJ) && objData[priority][x])
+            uint16_t *data;
+            int mask;
+            std::tie(data, mask) = layers[i];
+
+            // backdrop
+            if(!mask)
             {
-                scanLine[x] = objData[priority][x];
-                haveCol = true;
+                scanLine[x] = palRAM[0];
                 break;
             }
 
-            // background layers
-            for(int l = 0; l < 4; l++)
-            {
-                if((curLayerEnables & (1 << l)) && layerPriority[l] == priority && bgData[l][x])
-                {
-                    scanLine[x] = bgData[l][x];
-                    haveCol = true;
-                    break;
-                }
-            }
+            // check if disabled by window
+            if(!(curLayerEnables & mask))
+                continue;
             
+            if(data[x])
+            {
+                scanLine[x] = data[x];
+                break;
+            }
         }
-
-        // backdrop
-        if(!haveCol)
-            scanLine[x] = palRAM[0];
     }
 }
