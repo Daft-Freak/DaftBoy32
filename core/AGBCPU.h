@@ -203,6 +203,11 @@ private:
     int executeARMInstruction();
     int executeTHUMBInstruction();
 
+    uint32_t getARMShiftedReg(Reg r, uint8_t shift, bool &carry);
+    int doARMHalfwordTransfer(uint32_t opcode, bool isPre);
+    int doARMSingleDataTransfer(uint32_t opcode, bool isReg, bool isPre);
+    int doARMBlockDataTransfer(uint32_t opcode, bool isPre);
+
     int doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry);
     int doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2);
 
