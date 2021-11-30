@@ -2453,11 +2453,17 @@ void AGBCPU::updateTimers()
 
                 // overflow was where we expected
                 assert(timer + step == nextTimerUpdate);
-
-                calculateNextTimerOverflow(timer + step);
             }
         }
+
+        // if we clamped the update there should've been an overflow
+        assert(overflow || !passed);
+
         timer += step;
+        
+        // an overflow happend, recalculate next
+        if(overflow)
+            calculateNextTimerOverflow(timer);
     }
 }
 
