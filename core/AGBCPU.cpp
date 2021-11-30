@@ -409,8 +409,6 @@ int AGBCPU::executeARMInstruction()
 
     // ... and execute
 
-    auto timing = pcSCycles;
-
     pc += 4;
 
     // 0-3
@@ -435,59 +433,59 @@ int AGBCPU::executeARMInstruction()
     {
         case 0x0: // equal
             if(!(cpsr & Flag_Z))
-                return timing;
+                return pcSCycles;
             break;
         case 0x1: // not equal
             if(cpsr & Flag_Z)
-                return timing;
+                return pcSCycles;
             break;
         case 0x2: // carry set
             if(!(cpsr & Flag_C))
-                return timing;
+                return pcSCycles;
             break;
         case 0x3: // carry clear
             if(cpsr & Flag_C)
-                return timing;
+                return pcSCycles;
             break;
         case 0x4: // negative
             if(!(cpsr & Flag_N))
-                return timing;
+                return pcSCycles;
             break;
         case 0x5: // positive or zero
             if((cpsr & Flag_N))
-                return timing;
+                return pcSCycles;
             break;
         case 0x6: // overflow
             if(!(cpsr & Flag_V))
-                return timing;
+                return pcSCycles;
             break;
         case 0x7: // no overflow
             if((cpsr & Flag_V))
-                return timing;
+                return pcSCycles;
             break;
         case 0x8: // unsigned higher
             if(!(cpsr & Flag_C) || (cpsr & Flag_Z))
-                return timing;
+                return pcSCycles;
             break;
         case 0x9: // unsigned lower or same
             if((cpsr & Flag_C) && !(cpsr & Flag_Z))
-                return timing;
+                return pcSCycles;
             break;
         case 0xA: // greater or equal
             if(!!(cpsr & Flag_N) != !!(cpsr & Flag_V))
-                return timing;
+                return pcSCycles;
             break;
         case 0xB: // less than
             if(!!(cpsr & Flag_N) == !!(cpsr & Flag_V))
-                return timing;
+                return pcSCycles;
             break;
         case 0xC: // greater than
             if((cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V))
-                return timing;
+                return pcSCycles;
             break;
         case 0xD: // less than or equal
             if(!(cpsr & Flag_Z) && !!(cpsr & Flag_N) == !!(cpsr & Flag_V))
-                return timing;
+                return pcSCycles;
             break;
         case 0xE: // always
             break;
@@ -563,7 +561,7 @@ int AGBCPU::executeARMInstruction()
                     reg(destReg) = v;
                 }
 
-                return timing; // TODO: timing
+                return pcSCycles; // TODO: timing
             }
 
             auto instOp = (opcode >> 21) & 0xF;
@@ -605,7 +603,7 @@ int AGBCPU::executeARMInstruction()
                         reg(destReg) = cpsr;
                 }
 
-                break;
+                return pcSCycles;
             }
 
             auto op2Shift = (opcode >> 4) & 0xFF;
@@ -666,7 +664,7 @@ int AGBCPU::executeARMInstruction()
                     modeChanged();
                 }
 
-                return timing;
+                return pcSCycles;
             }
 
             return doDataProcessing(opcode, op2, carry);
@@ -718,7 +716,7 @@ int AGBCPU::executeARMInstruction()
             break;
     }
 
-    return timing; // TODO: timings
+    __builtin_unreachable();
 }
 
 int AGBCPU::executeTHUMBInstruction()
