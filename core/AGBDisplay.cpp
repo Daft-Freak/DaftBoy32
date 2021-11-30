@@ -646,11 +646,15 @@ void AGBDisplay::reset()
 
 void AGBDisplay::update()
 {
-    auto stat = mem.readIOReg(IO_DISPSTAT);
-
     auto passed = cpu.getCycleCount() - lastUpdateCycle;
     passed >>= 2; // 4MHz
+
+    if(passed < remainingModeDots)
+        return;
+
     lastUpdateCycle += passed << 2;
+
+    auto stat = mem.readIOReg(IO_DISPSTAT);
 
     while(passed)
     {
