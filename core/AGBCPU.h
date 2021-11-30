@@ -235,7 +235,7 @@ private:
     int dmaTransfer(int channel);
 
     void updateTimers();
-    void calculateNextTimerOverflow();
+    void calculateNextTimerOverflow(uint32_t cycleCount);
 
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;

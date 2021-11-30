@@ -203,7 +203,7 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
             }
 
             if(timerEnabled)
-                calculateNextTimerOverflow();
+                calculateNextTimerOverflow(cycleCount);
 
             break;
         }
@@ -345,11 +345,12 @@ int AGBCPU::runCycles(int cycles)
         // loop until not halted or DMA was triggered
         do
         {
+            bool shouldUpdateTimers = timerEnabled && nextTimerUpdate - cycleCount <= exec;
+
             cycles -= exec;
             cycleCount += exec;
 
-            // TODO: this would need to be || dmaSoundEnabled... which is most of the time anyway
-            //if(timerInterruptEnabled)
+            if(shouldUpdateTimers)
                 updateTimers();
 
             bool displayInterruptsEnabled = enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount);
@@ -2396,14 +2397,25 @@ int AGBCPU::dmaTransfer(int channel)
 
 void AGBCPU::updateTimers()
 {
-    auto timer = lastTimerUpdate;
+    // no timers, skip ahead
+    if(!timerEnabled)
+    {
+        lastTimerUpdate = cycleCount;
+        return;
+    }
+
     auto passed = cycleCount - lastTimerUpdate;
+
+    auto timer = lastTimerUpdate;
     lastTimerUpdate = cycleCount;
 
-    bool anyOverflow = false;
-
-    while(passed--)
+    while(passed)
     {
+        auto step = std::min(nextTimerUpdate - timer, passed);
+        passed -= step;
+
+        assert(step > 0);
+
         uint8_t overflow = 0;
         auto enabled = timerEnabled;
         for(int i = 0; enabled; i++, enabled >>= 1)
@@ -2418,13 +2430,14 @@ void AGBCPU::updateTimers()
                     timerCounters[i]++;
             }
             else if(timerPrescalers[i] == 1)
-                timerCounters[i]++;
+                timerCounters[i] += step;
             else
             {
-                if((timer & timerPrescalers[i]) ^ ((timer + 1) & timerPrescalers[i]))
-                    timerCounters[i]++;
-                else
+                int inc = ((timer & (timerPrescalers[i] - 1)) + step) / timerPrescalers[i];
+                if(!inc)
                     continue;
+                
+                timerCounters[i] += inc;
             }
 
             // overflow
@@ -2439,20 +2452,16 @@ void AGBCPU::updateTimers()
                     apu.timerOverflow(i, timer);
 
                 // overflow was where we expected
-                // (only check the first as the next update info is outdated after that)
-                assert(timer + 1 == nextTimerUpdate || anyOverflow);
+                assert(timer + step == nextTimerUpdate);
 
-                anyOverflow = true;
+                calculateNextTimerOverflow(timer + step);
             }
         }
-        timer++;
+        timer += step;
     }
-
-    if(anyOverflow)
-        calculateNextTimerOverflow();
 }
 
-void AGBCPU::calculateNextTimerOverflow()
+void AGBCPU::calculateNextTimerOverflow(uint32_t cycleCount)
 {
     uint32_t nextOverflow = ~0;
 
