@@ -358,7 +358,7 @@ int AGBCPU::runCycles(int cycles)
             if(displayInterruptsEnabled)
                 display.update();
 
-            if(currentInterrupts && interruptDelay)
+            if(currentInterrupts)
             {
                 if(interruptDelay <= exec)
                 {
