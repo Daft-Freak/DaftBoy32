@@ -1814,8 +1814,11 @@ int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
     uint8_t word = opcode & 0xFF;
 
     // pc + 4, bit 1 forced to 0
-    auto base = pc  & ~2;
-    loReg(dstReg) = mem.read32Fast(base + (word << 2));
+    auto ptr = thumbPCPtr + word * 2;
+    if(pc & 2)
+        ptr--;
+
+    loReg(dstReg) = *reinterpret_cast<const uint32_t *>(ptr);
 
     return pcNCycles + mem.getAccessCycles(pc, 4, false) + 1;
 }
