@@ -2247,9 +2247,20 @@ void AGBCPU::updateARMPC(uint32_t pc)
     assert(!(pc & 3));
     assert(pc < 0xE000000); // trying to execute save data would be bad
 
-    armPCPtr = reinterpret_cast<const uint32_t *>(std::as_const(mem).mapAddress(pc));
-    pcSCycles = mem.getAccessCycles(pc, 4, true);
-    pcNCycles = mem.getAccessCycles(pc, 4, false);
+    thumbPCPtr = nullptr;
+
+    if(armPCPtr && pc >> 24 == loReg(Reg::PC) >> 24)
+    {
+        // memory region didn't change, skip recaclculating ptr/cycles
+        armPCPtr += static_cast<int32_t>(pc - loReg(Reg::PC)) / 4;
+        assert(*armPCPtr == mem.read32(pc));
+    }
+    else
+    {
+        armPCPtr = reinterpret_cast<const uint32_t *>(std::as_const(mem).mapAddress(pc));
+        pcSCycles = mem.getAccessCycles(pc, 4, true);
+        pcNCycles = mem.getAccessCycles(pc, 4, false);
+    }
 
     // refill the pipeline
     decodeOp = *armPCPtr++;
@@ -2260,13 +2271,24 @@ void AGBCPU::updateARMPC(uint32_t pc)
 
 void AGBCPU::updateTHUMBPC(uint32_t pc)
 {
+    // called when PC is updated in THUMB mode (except for incrementing)
     assert(!(pc & 1));
     assert(pc < 0xE000000);
 
-    // called when PC is updated in THUMB mode (except for incrementing)
-    thumbPCPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc)); // force const mapAddress
-    pcSCycles = mem.getAccessCycles(pc, 2, true);
-    pcNCycles = mem.getAccessCycles(pc, 2, false);
+    armPCPtr = nullptr;
+
+    if(thumbPCPtr && pc >> 24 == loReg(Reg::PC) >> 24)
+    {
+        // memory region didn't change, skip recaclculating ptr/cycles
+        thumbPCPtr += static_cast<int32_t>(pc - loReg(Reg::PC)) / 2;
+        assert(*thumbPCPtr == mem.read16(pc));
+    }
+    else
+    {
+        thumbPCPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc)); // force const mapAddress
+        pcSCycles = mem.getAccessCycles(pc, 2, true);
+        pcNCycles = mem.getAccessCycles(pc, 2, false);
+    }
 
     // refill the pipeline
     decodeOp = *thumbPCPtr++;
