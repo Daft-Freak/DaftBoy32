@@ -28,23 +28,6 @@ public:
     uint16_t read16(uint32_t addr) const;
     uint32_t read32(uint32_t addr) const;
 
-    // used for fetching instructions, makes some assumptions
-    uint16_t read16Fast(uint32_t addr) const
-    {
-        assert((addr & 1) == 0);
-        assert((addr >> 24) != 0x4); // not io
-
-        return *reinterpret_cast<const uint16_t *>(mapAddress(addr));
-    }
-
-    uint32_t read32Fast(uint32_t addr) const
-    {
-        assert((addr & 3) == 0);
-        assert((addr >> 24) != 0x4);
-
-        return *reinterpret_cast<const uint32_t *>(mapAddress(addr));
-    }
-
     void write8(uint32_t addr, uint8_t data);
     void write16(uint32_t addr, uint16_t data);
     void write32(uint32_t addr, uint32_t data);

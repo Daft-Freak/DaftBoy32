@@ -403,7 +403,7 @@ int AGBCPU::executeARMInstruction()
     decodeOp = fetchOp;
 
     // fetch next
-    assert(*armPCPtr == mem.read32Fast(pc));
+    assert(*armPCPtr == mem.read32(pc));
     fetchOp = *++armPCPtr;
 
     // ... and execute
@@ -722,7 +722,7 @@ int AGBCPU::executeTHUMBInstruction()
     decodeOp = fetchOp;
 
     assert(!(pc & 1));
-    assert(*thumbPCPtr == mem.read16Fast(pc));
+    assert(*thumbPCPtr == mem.read16(pc));
     fetchOp = *++thumbPCPtr;
 
     pc += 2;
@@ -1969,12 +1969,12 @@ int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
 
     if(isLoad)
     {
-        loReg(dstReg) = addr & 3 ? readMem32(addr) : mem.read32Fast(addr);
+        loReg(dstReg) = readMem32(addr);
         return pcNCycles + mem.getAccessCycles(addr, 4, false) + 1;
     }
     else
     {
-        mem.write32(addr, loReg(dstReg));
+        writeMem32(addr, loReg(dstReg));
         return pcNCycles + mem.getAccessCycles(addr, 4, false);
     }
 }
