@@ -335,6 +335,13 @@ T AGBMemory::doIORead(uint32_t addr) const
 }
 
 template<>
+uint8_t AGBMemory::doIORead(uint32_t addr) const
+{
+    // promote to 16-bit
+    return doIORead<uint16_t>(addr) >> (addr & 1) * 8;
+}
+
+template<>
 [[gnu::noinline]]
 uint32_t AGBMemory::doIORead(uint32_t addr) const
 {
@@ -352,6 +359,14 @@ void AGBMemory::doIOWrite(uint32_t addr, T data)
         return;
 
     doWrite(ioRegs, addr, data);
+}
+
+template<>
+void AGBMemory::doIOWrite(uint32_t addr, uint8_t data)
+{
+    // promote to 16-bit
+    auto tmp = ioRegs[addr & 0x3FE];
+    doIOWrite<uint16_t>(addr, addr & 1 ? (tmp & 0xFF) | data << 8 : (tmp & 0xFF00) | data);
 }
 
 template<>

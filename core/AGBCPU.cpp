@@ -244,13 +244,6 @@ void AGBCPU::setInputs(uint16_t newInputs)
 
 uint8_t AGBCPU::readMem8(uint32_t addr) const
 {
-    // handle IO reads as 16-bit
-    if((addr >> 24) == 0x4)
-    {
-        auto tmp = mem.read16(addr & ~1);
-        return (addr & 1) ? tmp >> 8 : tmp;
-    }
-
     return mem.read8(addr);
 }
 
@@ -292,22 +285,13 @@ uint32_t AGBCPU::readMem32Aligned(uint32_t addr)
 
 void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
 {
-    if((addr >> 24) == 0x4)
+    // POSTFLG/HALTCNT are annoyingly bytes...
+    if(addr == 0x4000301/*HALTCNT*/)
     {
-        if(addr == 0x4000301/*HALTCNT*/)
-        {
-            if(data & 0x80)
-                printf("STOP\n");
-            else
-                halted = true;
-        }
+        if(data & 0x80)
+            printf("STOP\n");
         else
-        {
-            // promote IO to 16-bit
-            auto tmp = mem.readIOReg((addr & ~1) & 0x3FF);
-            writeMem16(addr & ~1, addr & 1 ? (tmp & 0xFF) | (data << 8) : (tmp & 0xFF00) | data);
-            return;
-        }
+            halted = true;
     }
 
     mem.write8(addr, data);
