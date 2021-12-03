@@ -355,7 +355,7 @@ void AGBMemory::doIOWrite(uint32_t addr, T data)
     if(addr >= 0x4000400)
         return;
 
-    if(cpu.writeReg(addr & 0xFFFFFF, data))
+    if(cpu.writeReg(addr & 0x3FE, data))
         return;
 
     doWrite(ioRegs, addr, data);
@@ -365,7 +365,7 @@ template<>
 void AGBMemory::doIOWrite(uint32_t addr, uint8_t data)
 {
     // promote to 16-bit
-    auto tmp = ioRegs[addr & 0x3FE];
+    auto tmp = readIOReg(addr & 0x3FE);
     doIOWrite<uint16_t>(addr, addr & 1 ? (tmp & 0xFF) | data << 8 : (tmp & 0xFF00) | data);
 }
 
