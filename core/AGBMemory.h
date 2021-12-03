@@ -63,6 +63,50 @@ private:
         Bank,
     };
 
+    template<class T>
+    T read(uint32_t addr) const;
+    template<class T>
+    void write(uint32_t addr, T data);
+
+    template<class T, size_t size>
+    T doRead(const uint8_t (&mem)[size], uint32_t addr) const;
+    template<class T, size_t size>
+    void doWrite(uint8_t (&mem)[size], uint32_t addr, T data);
+
+    template<class T>
+    T doBIOSRead(uint32_t addr) const;
+
+    template<class T>
+    T doIORead(uint32_t addr) const;
+    template<class T>
+    void doIOWrite(uint32_t addr, T data);
+
+    template<class T>
+    void doPalRAMWrite(uint32_t addr, T data);
+
+    template<class T>
+    T doVRAMRead(uint32_t addr) const;
+    template<class T>
+    void doVRAMWrite(uint32_t addr, T data);
+
+    template<class T>
+    void doOAMWrite(uint32_t addr, T data);
+
+    template<class T>
+    T doROMRead(uint32_t addr) const;
+    template<class T>
+    T doROMOrEEPROMRead(uint32_t addr) const;
+    template<class T>
+    void doEEPROMWrite(uint32_t addr, T data);
+
+    template<class T>
+    T doSRAMRead(uint32_t addr) const;
+    template<class T>
+    void doSRAMWrite(uint32_t addr, T data);
+
+    template<class T>
+    T doOpenRead(uint32_t addr) const;
+
     void writeFlash(uint32_t addr, uint8_t data);
 
     AGBCPU &cpu;
