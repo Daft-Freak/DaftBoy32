@@ -91,10 +91,7 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
             return ewram + (addr & 0x3FFFF);
         case 0x3:
             return iwram + (addr & 0x7FFF);
-        case 0x4:
-            if(addr >= 0x4000400)
-                return reinterpret_cast<const uint8_t *>(&dummy); // IO regs don't mirror
-            return ioRegs + (addr & 0x3FF);
+
         case 0x5:
             return palRAM + (addr & 0x3FF);
         case 0x6:
@@ -114,19 +111,6 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
             if(addr >= cartROMSize)
                 return nullptr;
             return cartROM + addr;
-
-        case 0xE:
-        case 0xF:
-        {
-            if(saveType != SaveType::EEPROM)
-            {
-                if(flashState == FlashState::ID)
-                    return flashID + (addr & 1);
-
-                addr &= (saveType == SaveType::RAM ? 0x7FFF : 0xFFFF); // RAM is always 32K, flash has 1-2 64k banks
-                return cartSaveData + addr + (flashBank << 16);
-            }
-        }
     }
 
     return reinterpret_cast<const uint8_t *>(&dummy);
@@ -143,10 +127,7 @@ uint8_t *AGBMemory::mapAddress(uint32_t addr)
             return ewram + (addr & 0x3FFFF);
         case 0x3:
             return iwram + (addr & 0x7FFF);
-        case 0x4:
-            if(addr >= 0x4000400)
-                return nullptr; // IO regs don't mirror
-            return ioRegs + (addr & 0x3FF);
+
         case 0x5:
             return palRAM + (addr & 0x3FF);
         case 0x6:
@@ -156,17 +137,6 @@ uint8_t *AGBMemory::mapAddress(uint32_t addr)
             return vram + addr;
         case 0x7:
             return oam + (addr & 0x3FF);
-
-        case 0xE:
-        case 0xF:
-        {
-            if(saveType != SaveType::EEPROM)
-            {
-                // flash never makes it here
-                addr &= 0x7FFF;
-                return cartSaveData + addr;
-            }
-        }
     }
 
     return nullptr;
