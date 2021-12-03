@@ -219,6 +219,12 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data)
             currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? mem.readIOReg(IO_IE) & data : 0;
             return true;
 
+        case IO_WAITCNT:
+            mem.updateWaitControl(data);
+            pcSCycles = mem.getAccessCycles(loReg(Reg::PC), cpsr & Flag_T ? 2 : 4, true);
+            pcNCycles = mem.getAccessCycles(loReg(Reg::PC), cpsr & Flag_T ? 2 : 4, false);
+            break;
+
         case IO_IME:
             enabledInterrutps = (data & 1) ? mem.readIOReg(IO_IE) : 0;
             currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);

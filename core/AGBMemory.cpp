@@ -162,22 +162,6 @@ void AGBMemory::write16(uint32_t addr, uint16_t data)
     {
         if(cpu.writeReg(addr & 0xFFFFFF, data))
             return;
-
-        if((addr & 0xFFFFFF) == IO_WAITCNT)
-        {
-            // update ROM access times
-            static const int nTimings[]{4, 3, 2, 8};
-            cartAccessN[0] = nTimings[(data & WAITCNT_ROMWS0N) >> 2] + 1;
-            cartAccessN[1] = nTimings[(data & WAITCNT_ROMWS1N) >> 5] + 1;
-            cartAccessN[2] = nTimings[(data & WAITCNT_ROMWS1N) >> 8] + 1;
-
-            cartAccessS[0] = (data & WAITCNT_ROMWS0S) ? 2 : 3;
-            cartAccessS[1] = (data & WAITCNT_ROMWS1S) ? 2 : 5;
-            cartAccessS[2] = (data & WAITCNT_ROMWS2S) ? 2 : 9;
-
-            // ... and SRAM/flash
-            cartAccessN[3] = cartAccessS[3] = nTimings[data & WAITCNT_SRAM] + 1;
-        }
     }
 
     // EEPROM
@@ -376,6 +360,22 @@ int AGBMemory::getAccessCycles(uint32_t addr, int width, bool sequential) const
     }
 
     return 1;
+}
+
+void AGBMemory::updateWaitControl(uint16_t waitcnt)
+{
+    // update ROM access times
+    static const int nTimings[]{4, 3, 2, 8};
+    cartAccessN[0] = nTimings[(waitcnt & WAITCNT_ROMWS0N) >> 2] + 1;
+    cartAccessN[1] = nTimings[(waitcnt & WAITCNT_ROMWS1N) >> 5] + 1;
+    cartAccessN[2] = nTimings[(waitcnt & WAITCNT_ROMWS1N) >> 8] + 1;
+
+    cartAccessS[0] = (waitcnt & WAITCNT_ROMWS0S) ? 2 : 3;
+    cartAccessS[1] = (waitcnt & WAITCNT_ROMWS1S) ? 2 : 5;
+    cartAccessS[2] = (waitcnt & WAITCNT_ROMWS2S) ? 2 : 9;
+
+    // ... and SRAM/flash
+    cartAccessN[3] = cartAccessS[3] = nTimings[waitcnt & WAITCNT_SRAM] + 1;
 }
 
 void AGBMemory::writeFlash(uint32_t addr, uint8_t data)

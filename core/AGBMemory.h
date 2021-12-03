@@ -50,6 +50,8 @@ public:
 
     int getAccessCycles(uint32_t addr, int width, bool sequential) const;
 
+    void updateWaitControl(uint16_t waitcnt);
+
 private:
 
     enum class FlashState : uint8_t
