@@ -189,14 +189,14 @@ private:
         curLR = mapReg(Reg::LR);
     }
 
-    uint8_t readMem8(uint32_t addr) const;
-    uint32_t readMem16(uint32_t addr);
-    uint16_t readMem16Aligned(uint32_t addr);
-    uint32_t readMem32(uint32_t addr);
-    uint32_t readMem32Aligned(uint32_t addr);
-    void writeMem8(uint32_t addr, uint8_t data);
-    void writeMem16(uint32_t addr, uint16_t data);
-    void writeMem32(uint32_t addr, uint32_t data);
+    uint8_t readMem8(uint32_t addr, int &cycles, bool sequential = false) const;
+    uint32_t readMem16(uint32_t addr, int &cycles, bool sequential = false);
+    uint16_t readMem16Aligned(uint32_t addr, int &cycles, bool sequential = false);
+    uint32_t readMem32(uint32_t addr, int &cycles, bool sequential = false);
+    uint32_t readMem32Aligned(uint32_t addr, int &cycles, bool sequential = false);
+    void writeMem8(uint32_t addr, uint8_t data, int &cycles, bool sequential = false);
+    void writeMem16(uint32_t addr, uint16_t data, int &cycles, bool sequential = false);
+    void writeMem32(uint32_t addr, uint32_t data, int &cycles, bool sequential = false);
 
     int runCycles(int cycles);
 

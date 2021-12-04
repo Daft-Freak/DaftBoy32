@@ -252,59 +252,67 @@ void AGBCPU::setInputs(uint16_t newInputs)
     inputs = newInputs;
 }
 
-uint8_t AGBCPU::readMem8(uint32_t addr) const
+uint8_t AGBCPU::readMem8(uint32_t addr, int &cycles, bool sequential) const
 {
+    cycles += mem.getAccessCycles(addr, 1, sequential);
     return mem.read8(addr);
 }
 
-uint32_t AGBCPU::readMem16(uint32_t addr)
+uint32_t AGBCPU::readMem16(uint32_t addr, int &cycles, bool sequential)
 {
     if(!(addr & 1))
-        return readMem16Aligned(addr);
+        return readMem16Aligned(addr, cycles, sequential);
 
     // this returns the 32-bit result of an unaligned 16-bit read
+    cycles += mem.getAccessCycles(addr, 2, sequential);
     uint32_t val = mem.read16(addr);
 
     return (val >> 8) | (val << 24);
 }
 
-uint16_t AGBCPU::readMem16Aligned(uint32_t addr)
+uint16_t AGBCPU::readMem16Aligned(uint32_t addr, int &cycles, bool sequential)
 {
     assert((addr & 1) == 0);
 
+    cycles += mem.getAccessCycles(addr, 2, sequential);
     return mem.read16(addr);
 }
 
-uint32_t AGBCPU::readMem32(uint32_t addr)
+uint32_t AGBCPU::readMem32(uint32_t addr, int &cycles, bool sequential)
 {
     if(!(addr & 3))
-        return readMem32Aligned(addr);
+        return readMem32Aligned(addr, cycles, sequential);
 
+    cycles += mem.getAccessCycles(addr, 4, sequential);
     uint32_t val = mem.read32(addr);
 
     int shift = (addr & 3) << 3;
     return (val >> shift) | (val << (32 - shift));
 }
 
-uint32_t AGBCPU::readMem32Aligned(uint32_t addr)
+uint32_t AGBCPU::readMem32Aligned(uint32_t addr, int &cycles, bool sequential)
 {
     assert((addr & 3) == 0);
 
+    cycles += mem.getAccessCycles(addr, 4, sequential);
     return mem.read32(addr);
 }
 
-void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
+void AGBCPU::writeMem8(uint32_t addr, uint8_t data, int &cycles, bool sequential)
 {
+    cycles += mem.getAccessCycles(addr, 1, sequential);
     mem.write8(addr, data);
 }
 
-void AGBCPU::writeMem16(uint32_t addr, uint16_t data)
+void AGBCPU::writeMem16(uint32_t addr, uint16_t data, int &cycles, bool sequential)
 {
+    cycles += mem.getAccessCycles(addr, 2, sequential);
     mem.write16(addr, data);
 }
 
-void AGBCPU::writeMem32(uint32_t addr, uint32_t data)
+void AGBCPU::writeMem32(uint32_t addr, uint32_t data, int &cycles, bool sequential)
 {
+    cycles += mem.getAccessCycles(addr, 4, sequential);
     mem.write32(addr, data);
 }
 
@@ -537,20 +545,22 @@ int AGBCPU::executeARMInstruction()
 
                 auto addr = reg(baseReg);
 
+                int cycles = pcSCycles + 1;
+
                 if(isByte)
                 {
-                    auto v = readMem8(addr);
-                    writeMem8(addr, reg(srcReg));
+                    auto v = readMem8(addr, cycles);
+                    writeMem8(addr, reg(srcReg), cycles);
                     reg(destReg) = v;
                 }
                 else
                 {
-                    auto v = readMem32(addr);
-                    writeMem32(addr, reg(srcReg));
+                    auto v = readMem32(addr, cycles);
+                    writeMem32(addr, reg(srcReg), cycles);
                     reg(destReg) = v;
                 }
 
-                return pcSCycles; // TODO: timing
+                return cycles;
             }
 
             auto instOp = (opcode >> 21) & 0xF;
@@ -901,14 +911,16 @@ int AGBCPU::doARMHalfwordTransfer(uint32_t opcode, bool isPre)
         bool sign = opcode & (1 << 6);
         bool halfWords = opcode & (1 << 5);
 
-        if(halfWords && !sign)
-            loReg(srcDestReg) = readMem16(addr); // LDRH
-        else if(halfWords && !(addr & 1)) // LDRSH (aligned)
-            loReg(srcDestReg) = static_cast<int16_t>(readMem16Aligned(addr)); // sign extend
-        else // LDRSB ... or misaligned LDRSH
-            loReg(srcDestReg) = static_cast<int8_t>(readMem8(addr)); // sign extend
+        int cycles = pcNCycles/*prefetch bug*/ + 1;
 
-        return pcNCycles + mem.getAccessCycles(addr, halfWords ? 2 : 1, false) + 1;
+        if(halfWords && !sign)
+            loReg(srcDestReg) = readMem16(addr, cycles); // LDRH
+        else if(halfWords && !(addr & 1)) // LDRSH (aligned)
+            loReg(srcDestReg) = static_cast<int16_t>(readMem16Aligned(addr, cycles)); // sign extend
+        else // LDRSB ... or misaligned LDRSH
+            loReg(srcDestReg) = static_cast<int8_t>(readMem8(addr, cycles)); // sign extend
+
+        return cycles;
     }
     else
     {
@@ -919,9 +931,11 @@ int AGBCPU::doARMHalfwordTransfer(uint32_t opcode, bool isPre)
         if(srcDestReg == Reg::PC)
             val += 4;
 
-        writeMem16(addr, val); // STRH
+        int cycles = pcNCycles;
 
-        return pcNCycles + mem.getAccessCycles(addr, 2, false);
+        writeMem16(addr, val, cycles); // STRH
+
+        return cycles;
     }
 }
 
@@ -1047,31 +1061,32 @@ int AGBCPU::doARMSingleDataTransfer(uint32_t opcode, bool isReg, bool isPre)
     bool isByte = opcode & (1 << 22);
     if(opcode & (1 << 20)) // load
     {
-        uint32_t val = isByte ? readMem8(addr) : readMem32(addr);
-
-        int ret = mem.getAccessCycles(addr, isByte ? 1 : 4, false) + 1;
+        int cycles = pcNCycles/*prefetch bug*/ + 1;
+        uint32_t val = isByte ? readMem8(addr, cycles) : readMem32(addr, cycles);
 
         if(srcDestReg == Reg::PC)
         {
             updateARMPC(val);
-            ret += pcSCycles + pcNCycles;
+            cycles += pcSCycles + pcNCycles;
         }
         else
             loReg(srcDestReg) = val;
 
-        return pcNCycles/*prefetch bug*/ + ret;
+        return cycles;
     }
     else
     {
         if(srcDestReg == Reg::PC)
             val += 4;
 
-        if(isByte)
-            writeMem8(addr, val);
-        else
-            writeMem32(addr, val);
+        int cycles = pcNCycles;
 
-        return pcNCycles + mem.getAccessCycles(addr, isByte ? 1 : 4, false); // 2N
+        if(isByte)
+            writeMem8(addr, val, cycles);
+        else
+            writeMem32(addr, val, cycles);
+
+        return cycles;
     }
 }
 
@@ -1154,7 +1169,7 @@ int AGBCPU::doARMBlockDataTransfer(uint32_t opcode, bool preIndex)
             if(isLoad)
             {
                 if(reg == Reg::PC)
-                    updateARMPC(readMem32(addr));
+                    updateARMPC(*ptr++);
                 else
                     loReg(reg) = *ptr++;
             }
@@ -1195,19 +1210,17 @@ int AGBCPU::doARMBlockDataTransfer(uint32_t opcode, bool preIndex)
             if(isLoad)
             {
                 if(reg == Reg::PC)
-                    updateARMPC(readMem32(addr));
+                    updateARMPC(readMem32(addr, cycles, first));
                 else
-                    loReg(reg) = readMem32(addr);
+                    loReg(reg) = readMem32(addr, cycles, first);
             }
             else
             {
                 if(reg == Reg::PC)
-                    writeMem32(addr, loReg(reg) + 4);
+                    writeMem32(addr, loReg(reg) + 4, cycles);
                 else
-                    writeMem32(addr, loReg(reg));
+                    writeMem32(addr, loReg(reg), cycles);
             }
-
-            cycles += mem.getAccessCycles(addr, 4, !first);
 
             addr += 4;
             if(first && writeBack)
@@ -1831,36 +1844,40 @@ int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
         {
             if(hFlag && !(addr & 1)) // LDRSH, (misaligned gets treated as a byte!)
             {
-                auto val = readMem16(addr);
+                int cycles = pcNCycles /*prefetch bug*/ + 1;
+                auto val = readMem16(addr, cycles);
                 if(val & 0x8000)
                     loReg(dstReg) = val | 0xFFFF0000;
                 else
                     loReg(dstReg) = val;
 
-                return pcNCycles + mem.getAccessCycles(addr, 2, false) + 1;
+                return cycles;
             }
             else // LDRSB
             {
-                auto val = readMem8(addr);
+                int cycles = pcNCycles /*prefetch bug*/ + 1;
+                auto val = readMem8(addr, cycles);
                 if(val & 0x80)
                     loReg(dstReg) = val | 0xFFFFFF00;
                 else
                     loReg(dstReg) = val;
 
-                return pcNCycles + mem.getAccessCycles(addr, 1, false) + 1; // a little off if this was a misaligned LDRSH
+                return cycles;
             }
         }
         else
         {
             if(hFlag) // LDRH
             {
-                loReg(dstReg) = readMem16(addr);
-                return pcNCycles + mem.getAccessCycles(addr, 2, false) + 1;
+                int cycles = pcNCycles /*prefetch bug*/ + 1;
+                loReg(dstReg) = readMem16(addr, cycles);
+                return cycles;
             }
             else // STRH
             {
-                writeMem16(addr, loReg(dstReg));
-                return pcNCycles + mem.getAccessCycles(addr, 2, false);
+                int cycles = pcNCycles;
+                writeMem16(addr, loReg(dstReg), cycles);
+                return cycles;
             }
         }
     }
@@ -1871,21 +1888,23 @@ int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
 
         if(isLoad)
         {
+            int cycles = pcNCycles /*prefetch bug*/ + 1;
             if(isByte) // LDRB
-                loReg(dstReg) = readMem8(addr);
+                loReg(dstReg) = readMem8(addr, cycles);
             else // LDR
-                loReg(dstReg) = readMem32(addr);
+                loReg(dstReg) = readMem32(addr, cycles);
 
-            return pcNCycles + mem.getAccessCycles(addr, isByte ? 1 : 4, false) + 1;
+            return cycles;
         }
         else
         {
+            int cycles = pcNCycles;
             if(isByte) // STRB
-                writeMem8(addr, loReg(dstReg));
+                writeMem8(addr, loReg(dstReg), cycles);
             else // STR
-                writeMem32(addr, loReg(dstReg));
+                writeMem32(addr, loReg(dstReg), cycles);
 
-            return pcNCycles + mem.getAccessCycles(addr, isByte ? 1 : 4, false);
+            return cycles;
         }
     }
 }
@@ -1900,13 +1919,15 @@ int AGBCPU::doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t &pc)
     auto addr = loReg(baseReg) + (offset << 2);
     if(isLoad) // LDR
     {
-        loReg(dstReg) = readMem32(addr);
-        return pcNCycles + mem.getAccessCycles(addr, 4, false) + 1;
+        int cycles = pcNCycles /*prefetch bug*/ + 1;
+        loReg(dstReg) = readMem32(addr, cycles);
+        return cycles;
     }
     else // STR
     {
-        writeMem32(addr, loReg(dstReg));
-        return pcNCycles + mem.getAccessCycles(addr, 4, false);
+        int cycles = pcNCycles;
+        writeMem32(addr, loReg(dstReg), cycles);
+        return cycles;
     }
 }
 
@@ -1920,13 +1941,15 @@ int AGBCPU::doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t &pc)
     auto addr = loReg(baseReg) + offset;
     if(isLoad) // LDRB
     {
-        loReg(dstReg) = readMem8(addr);
-        return pcNCycles + mem.getAccessCycles(addr, 1, false) + 1;
+        int cycles = pcNCycles /*prefetch bug*/ + 1;
+        loReg(dstReg) = readMem8(addr, cycles);
+        return cycles;
     }
     else // STRB
     {
-        writeMem8(addr, loReg(dstReg));
-        return pcNCycles + mem.getAccessCycles(addr, 1, false);
+        int cycles = pcNCycles;
+        writeMem8(addr, loReg(dstReg), cycles);
+        return cycles;
     }
 }
 
@@ -1940,13 +1963,15 @@ int AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t &pc)
     auto addr = loReg(baseReg) + offset;
     if(isLoad) // LDRH
     {
-        loReg(dstReg) = readMem16(addr);
-        return pcNCycles + mem.getAccessCycles(addr, 2, false) + 1;
+        int cycles = pcNCycles /*prefetch bug*/ + 1;
+        loReg(dstReg) = readMem16(addr, cycles);
+        return cycles;
     }
     else // STRH
     {
-        writeMem16(addr, loReg(dstReg));
-        return pcNCycles + mem.getAccessCycles(addr, 2, false);
+        int cycles = pcNCycles;
+        writeMem16(addr, loReg(dstReg), cycles);
+        return cycles;
     }
 }
 
@@ -1960,13 +1985,15 @@ int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
 
     if(isLoad)
     {
-        loReg(dstReg) = readMem32(addr);
-        return pcNCycles + mem.getAccessCycles(addr, 4, false) + 1;
+        int cycles = pcNCycles /*prefetch bug*/ + 1;
+        loReg(dstReg) = readMem32(addr, cycles);
+        return cycles;
     }
     else
     {
-        writeMem32(addr, loReg(dstReg));
-        return pcNCycles + mem.getAccessCycles(addr, 4, false);
+        int cycles = pcNCycles;
+        writeMem32(addr, loReg(dstReg), cycles);
+        return cycles;
     }
 }
 
@@ -2070,17 +2097,19 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
 
     auto addr = loReg(baseReg);
 
+    int cycles = pcNCycles /*should be S for load*/ + (isLoad ? 1 : 0);
+
     if(!regList)
     {
         // empty list loads/stores PC... even though it isn't usually possible here
         if(isLoad)
-            updateTHUMBPC(readMem32(addr & ~3));
+            updateTHUMBPC(readMem32(addr & ~3, cycles));
         else
-            writeMem32(addr & ~3, pc + 2);
+            writeMem32(addr & ~3, pc + 2, cycles);
 
         reg(baseReg) = addr + 0x40;
 
-        return pcSCycles;
+        return cycles;
     }
 
     auto endAddr = addr;
@@ -2095,7 +2124,7 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
         addr &= ~3;
 
     int i = 0;
-    bool first = true;
+    bool first = true, seq = false;
 
     // prevent overriding base for loads
     // "A LDM will always overwrite the updated base if the base is in the list."
@@ -2108,9 +2137,9 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
             continue;
 
         if(isLoad)
-            regs[i] = readMem32(addr);
+            regs[i] = readMem32(addr, cycles, seq);
         else
-            writeMem32(addr, regs[i]);
+            writeMem32(addr, regs[i], cycles, seq);
 
         // base write-back is on the second cycle of the instruction
         // which is when the first reg is written
@@ -2118,11 +2147,12 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
             reg(baseReg) = endAddr;
 
         first = false;
+        seq = true;
 
         addr += 4;
     }
 
-    return pcNCycles;
+    return cycles;
 }
 
 int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
@@ -2352,19 +2382,21 @@ int AGBCPU::dmaTransfer(int channel)
 
     uint32_t lastVal = dmaLastVal;
 
+    int tmp = 0; // already calculated this...
+
     while(count--)
     {
         if(is32Bit)
         {
             if(isValidSrc) // no read if source address is invalid
-                lastVal = readMem32Aligned(srcAddr);
-            writeMem32(dstAddr, lastVal);
+                lastVal = readMem32Aligned(srcAddr, tmp);
+            writeMem32(dstAddr, lastVal, tmp);
         }
         else
         {
             if(isValidSrc)
-                lastVal = readMem16Aligned(srcAddr);
-            writeMem16(dstAddr, lastVal);
+                lastVal = readMem16Aligned(srcAddr, tmp);
+            writeMem16(dstAddr, lastVal, tmp);
         }
 
         if(dstMode == 0 || dstMode == 3)
