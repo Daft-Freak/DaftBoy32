@@ -86,6 +86,27 @@ static void audioCallback(void *userdata, Uint8 *stream, int len)
     }
 }
 
+static uint8_t *readSave(const std::string &savePath, size_t &saveSize)
+{
+    std::ifstream saveFile(savePath);
+
+    if(!saveFile)
+    {
+        std::cout << "Could not find " << savePath << ", no save loaded.\n";
+        return nullptr;
+    }
+
+    saveFile.seekg(0, std::ios::end);
+    saveSize = saveFile.tellg();
+    saveFile.seekg(0);
+
+    auto saveData = new uint8_t[saveSize];
+    saveFile.read(reinterpret_cast<char *>(saveData), saveSize);
+    std::cout << "Read " << saveSize << " bytes from " << savePath << "\n";
+
+    return saveData;
+}
+
 static void pollEvents()
 {
     auto &keyMap = isAGB ? agbKeyMap : dmgKeyMap;
@@ -194,6 +215,16 @@ int main(int argc, char *argv[])
         mem.setCartROM(romData, romSize);
 
         agbCPU.reset();
+
+        // attempt to read save
+        size_t size;
+        auto saveData = readSave(romFilename.substr(0, romFilename.length() - 3) + "sav", size);
+    
+        if(saveData)
+        {
+            mem.loadCartridgeSave(saveData, size);
+            delete[] saveData;
+        }
     }
     else
     {
@@ -204,6 +235,16 @@ int main(int argc, char *argv[])
         mem.addROMCache(romBankCache, sizeof(romBankCache));
 
         dmgCPU.reset();
+
+        // attempt to read save
+        size_t size;
+        auto saveData = readSave(romFilename + ".ram", size);
+    
+        if(saveData)
+        {
+            mem.loadCartridgeRAM(saveData, size);
+            delete[] saveData;
+        }
     }
 
     // SDL init
@@ -290,6 +331,36 @@ int main(int argc, char *argv[])
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, nullptr, nullptr);
         SDL_RenderPresent(renderer);
+    }
+
+    // write save
+    if(isAGB)
+    {
+        int size = 0;
+        switch(agbCPU.getMem().getCartridgeSaveType())
+        {
+            case AGBMemory::SaveType::Unknown:
+                break;
+            case AGBMemory::SaveType::EEPROM:
+                size = 512; // TODO: 4k
+                break;
+            case AGBMemory::SaveType::RAM:
+                size = 32 * 1024;
+                break;
+            case AGBMemory::SaveType::Flash:
+                size = 128 * 1024; // TODO: possibly 64k
+                break;
+        }
+        if(size)
+        {
+            std::ofstream saveFile(romFilename.substr(0, romFilename.length() - 3) + "sav");
+            saveFile.write(reinterpret_cast<char *>(agbCPU.getMem().getCartridgeSave()), size);
+        }
+    }
+    else
+    {
+        std::ofstream saveFile(romFilename + ".ram");
+        saveFile.write(reinterpret_cast<char *>(dmgCPU.getMem().getCartridgeRAM()), dmgCPU.getMem().getCartridgeRAMSize());
     }
 
     SDL_CloseAudioDevice(dev);
