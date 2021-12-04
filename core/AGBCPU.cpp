@@ -229,6 +229,19 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
             enabledInterrutps = (data & 1) ? mem.readIOReg(IO_IE) : 0;
             currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
             break;
+
+        case IO_HALTCNT - 1: // the address of POSTFLG, but we're ignoring that
+            if(mask >> 8) // ignore POSTFLG write
+            {
+                if(data & 0x8000)
+                    printf("STOP\n");
+                else
+                {
+                    printf("HALT\n");
+                    halted = true;
+                }
+            }
+            break;
     }
 
     return false;
@@ -285,15 +298,6 @@ uint32_t AGBCPU::readMem32Aligned(uint32_t addr)
 
 void AGBCPU::writeMem8(uint32_t addr, uint8_t data)
 {
-    // POSTFLG/HALTCNT are annoyingly bytes...
-    if(addr == 0x4000301/*HALTCNT*/)
-    {
-        if(data & 0x80)
-            printf("STOP\n");
-        else
-            halted = true;
-    }
-
     mem.write8(addr, data);
 }
 
