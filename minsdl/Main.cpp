@@ -60,19 +60,29 @@ static void audioCallback(void *userdata, Uint8 *stream, int len)
 {
     if(isAGB)
     {
-        while(!quit && agbCPU.getAPU().getNumSamples() < 512); // ohno
+        auto &apu = agbCPU.getAPU();
 
         auto ptr = reinterpret_cast<int16_t *>(stream);
         for(int i = 0; i < len / 2; i++)
-            *ptr++ = agbCPU.getAPU().getSample();
+        {
+            while(!quit && !apu.hasSample())
+                std::this_thread::yield();
+
+            *ptr++ = apu.getSample();
+        }
     }
     else
     {
-        while(!quit && dmgCPU.getAPU().getNumSamples() < 512); // ohno
+        auto &apu = dmgCPU.getAPU();
 
         auto ptr = reinterpret_cast<int16_t *>(stream);
         for(int i = 0; i < len / 2; i++)
-            *ptr++ = dmgCPU.getAPU().getSample();
+        {
+            while(!quit && !apu.getNumSamples())
+                std::this_thread::yield();
+
+            *ptr++ = apu.getSample();
+        }
     }
 }
 
