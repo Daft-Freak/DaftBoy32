@@ -45,7 +45,7 @@ public:
     void triggerDMA(int trigger);
 
     uint16_t readReg(uint32_t addr, uint16_t val);
-    bool writeReg(uint32_t addr, uint16_t data);
+    bool writeReg(uint32_t addr, uint16_t data, uint16_t mask);
 
     AGBAPU &getAPU() {return apu;}
     AGBDisplay &getDisplay() {return display;}

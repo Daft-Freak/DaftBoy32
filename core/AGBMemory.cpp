@@ -325,7 +325,7 @@ void AGBMemory::doIOWrite(uint32_t addr, T data)
     if(addr >= 0x4000400)
         return;
 
-    if(cpu.writeReg(addr & 0x3FE, data))
+    if(cpu.writeReg(addr & 0x3FE, data, 0xFFFF))
         return;
 
     doWrite(ioRegs, addr, data);
@@ -334,9 +334,18 @@ void AGBMemory::doIOWrite(uint32_t addr, T data)
 template<>
 void AGBMemory::doIOWrite(uint32_t addr, uint8_t data)
 {
+    if(addr >= 0x4000400)
+        return;
+
     // promote to 16-bit
     auto tmp = readIOReg(addr & 0x3FE);
-    doIOWrite<uint16_t>(addr, addr & 1 ? (tmp & 0xFF) | data << 8 : (tmp & 0xFF00) | data);
+    uint16_t data16 = addr & 1 ? (tmp & 0xFF) | data << 8 : (tmp & 0xFF00) | data;
+
+    // set mask to the byte actually getting written (important in some cases)
+    if(cpu.writeReg(addr & 0x3FE, data16, addr & 1 ? 0xFF00 : 0xFF))
+        return;
+
+    doWrite(ioRegs, addr, data);
 }
 
 template<>
