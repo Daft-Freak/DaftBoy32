@@ -6,12 +6,12 @@
 #include "AGBCPU.h"
 #include "AGBRegs.h"
 
-template uint8_t AGBMemory::read(uint32_t addr) const;
-template uint16_t AGBMemory::read(uint32_t addr) const;
-template uint32_t AGBMemory::read(uint32_t addr) const;
-template void AGBMemory::write(uint32_t addr, uint8_t val);
-template void AGBMemory::write(uint32_t addr, uint16_t val);
-template void AGBMemory::write(uint32_t addr, uint32_t val);
+template uint8_t AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const;
+template uint16_t AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const;
+template uint32_t AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const;
+template void AGBMemory::write(uint32_t addr, uint8_t val, int &cycles, bool sequential);
+template void AGBMemory::write(uint32_t addr, uint16_t val, int &cycles, bool sequential);
+template void AGBMemory::write(uint32_t addr, uint32_t val, int &cycles, bool sequential);
 
 AGBMemory::AGBMemory(AGBCPU &cpu) : cpu(cpu){}
 
@@ -58,25 +58,33 @@ void AGBMemory::reset()
 }
 
 template<class T>
-T AGBMemory::read(uint32_t addr) const
+T AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const
 {
     switch(addr >> 24)
     {
         case 0x0:
+            cycles++;
             return doBIOSRead<T>(addr);
         case 0x1: // unused
+            cycles++;
             return doOpenRead<T>(addr);
         case 0x2:
+            cycles += sizeof(T) == 4 ? 6 : 3;
             return doRead<T>(ewram, addr);
         case 0x3:
+            cycles++;
             return doRead<T>(iwram, addr);
         case 0x4: // IO
+            cycles++;
             return doIORead<T>(addr);
         case 0x5:
+            cycles += sizeof(T) == 4 ? 2 : 1;
             return doRead<T>(palRAM, addr);
         case 0x6:
+            cycles += sizeof(T) == 4 ? 2 : 1;
             return doVRAMRead<T>(addr);
         case 0x7:
+            cycles++;
             return doRead<T>(oam, addr);
 
         case 0x8: // wait state 0
@@ -84,12 +92,16 @@ T AGBMemory::read(uint32_t addr) const
         case 0xA: // wait state 1
         case 0xB:
         case 0xC: // wait state 2
+            cycles += (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4])
+                   + (sizeof(T) == 4 ? cartAccessS[(addr >> 25) - 4] : 0);
             return doROMRead<T>(addr);
         case 0xD:
+            cycles += (sequential ? cartAccessS[2] : cartAccessN[2]) + (sizeof(T) == 4 ? cartAccessS[2] : 0);
             return doROMOrEEPROMRead<T>(addr);
 
         case 0xE:
         case 0xF:
+            cycles += (sequential ? cartAccessS[3] : cartAccessN[3]) + (sizeof(T) == 4 ? cartAccessS[3] : 0);
             return doSRAMRead<T>(addr);
     }
 
@@ -97,28 +109,36 @@ T AGBMemory::read(uint32_t addr) const
 }
 
 template<class T>
-void AGBMemory::write(uint32_t addr, T data)
+void AGBMemory::write(uint32_t addr, T data, int &cycles, bool sequential)
 {
     switch(addr >> 24)
     {
         case 0x0: // bios
         case 0x1: // unused
+            cycles++;
             return;
         case 0x2:
+            cycles += sizeof(T) == 4 ? 6 : 3;
             doWrite(ewram, addr, data);
             return;
         case 0x3:
-            return doWrite(iwram, addr, data);
+            cycles++;
+            doWrite(iwram, addr, data);
+            return;
         case 0x4: // IO
+            cycles++;
             doIOWrite(addr, data);
             return;
         case 0x5:
+            cycles += sizeof(T) == 4 ? 2 : 1;
             doPalRAMWrite(addr, data);
             return;
         case 0x6:
+            cycles += sizeof(T) == 4 ? 2 : 1;
             doVRAMWrite(addr, data);
             return;
         case 0x7:
+            cycles++;
             doOAMWrite(addr, data);
             return;
 
@@ -127,12 +147,16 @@ void AGBMemory::write(uint32_t addr, T data)
         case 0xA: // wait state 1
         case 0xB:
         case 0xC: // wait state 2
+            cycles += (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4])
+                   + (sizeof(T) == 4 ? cartAccessS[(addr >> 25) - 4] : 0);
             return;
         case 0xD:
+            cycles += (sequential ? cartAccessS[2] : cartAccessN[2]) + (sizeof(T) == 4 ? cartAccessS[2] : 0);
             return doEEPROMWrite(addr, data);
 
         case 0xE:
         case 0xF:
+            cycles += (sequential ? cartAccessS[3] : cartAccessN[3]) + (sizeof(T) == 4 ? cartAccessS[3] : 0);
             doSRAMWrite(addr, data);
             return;
     }

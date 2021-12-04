@@ -25,9 +25,9 @@ public:
     void reset();
 
     template<class T>
-    T read(uint32_t addr) const;
+    T read(uint32_t addr, int &cycles, bool sequential) const;
     template<class T>
-    void write(uint32_t addr, T data);
+    void write(uint32_t addr, T data, int &cycles, bool sequential);
 
     // fast access to IO regs
     uint16_t readIOReg(uint16_t addr) const {return *reinterpret_cast<const uint16_t *>(ioRegs + addr);}
