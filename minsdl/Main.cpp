@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
             break;
     }
 
-    if(argc < i)
+    if(i == argc)
     {
         std::cerr << "No ROM specified!\n";
         return 1;
