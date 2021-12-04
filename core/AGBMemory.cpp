@@ -6,6 +6,13 @@
 #include "AGBCPU.h"
 #include "AGBRegs.h"
 
+template uint8_t AGBMemory::read(uint32_t addr) const;
+template uint16_t AGBMemory::read(uint32_t addr) const;
+template uint32_t AGBMemory::read(uint32_t addr) const;
+template void AGBMemory::write(uint32_t addr, uint8_t val);
+template void AGBMemory::write(uint32_t addr, uint16_t val);
+template void AGBMemory::write(uint32_t addr, uint32_t val);
+
 AGBMemory::AGBMemory(AGBCPU &cpu) : cpu(cpu){}
 
 void AGBMemory::setBIOSROM(const uint8_t *rom)
@@ -50,34 +57,85 @@ void AGBMemory::reset()
     cartAccessN[3] = cartAccessS[3] = 5;
 }
 
-uint8_t AGBMemory::read8(uint32_t addr) const
+template<class T>
+T AGBMemory::read(uint32_t addr) const
 {
-    return read<uint8_t>(addr);
+    switch(addr >> 24)
+    {
+        case 0x0:
+            return doBIOSRead<T>(addr);
+        case 0x1: // unused
+            return doOpenRead<T>(addr);
+        case 0x2:
+            return doRead<T>(ewram, addr);
+        case 0x3:
+            return doRead<T>(iwram, addr);
+        case 0x4: // IO
+            return doIORead<T>(addr);
+        case 0x5:
+            return doRead<T>(palRAM, addr);
+        case 0x6:
+            return doVRAMRead<T>(addr);
+        case 0x7:
+            return doRead<T>(oam, addr);
+
+        case 0x8: // wait state 0
+        case 0x9:
+        case 0xA: // wait state 1
+        case 0xB:
+        case 0xC: // wait state 2
+            return doROMRead<T>(addr);
+        case 0xD:
+            return doROMOrEEPROMRead<T>(addr);
+
+        case 0xE:
+        case 0xF:
+            return doSRAMRead<T>(addr);
+    }
+
+    return doOpenRead<T>(addr);
 }
 
-uint16_t AGBMemory::read16(uint32_t addr) const
+template<class T>
+void AGBMemory::write(uint32_t addr, T data)
 {
-    return read<uint16_t>(addr);
-}
+    switch(addr >> 24)
+    {
+        case 0x0: // bios
+        case 0x1: // unused
+            return;
+        case 0x2:
+            doWrite(ewram, addr, data);
+            return;
+        case 0x3:
+            return doWrite(iwram, addr, data);
+        case 0x4: // IO
+            doIOWrite(addr, data);
+            return;
+        case 0x5:
+            doPalRAMWrite(addr, data);
+            return;
+        case 0x6:
+            doVRAMWrite(addr, data);
+            return;
+        case 0x7:
+            doOAMWrite(addr, data);
+            return;
 
-uint32_t AGBMemory::read32(uint32_t addr) const
-{
-    return read<uint32_t>(addr);
-}
+        case 0x8: // wait state 0
+        case 0x9:
+        case 0xA: // wait state 1
+        case 0xB:
+        case 0xC: // wait state 2
+            return;
+        case 0xD:
+            return doEEPROMWrite(addr, data);
 
-void AGBMemory::write8(uint32_t addr, uint8_t data)
-{
-    write(addr, data);
-}
-
-void AGBMemory::write16(uint32_t addr, uint16_t data)
-{
-    write(addr, data);
-}
-
-void AGBMemory::write32(uint32_t addr, uint32_t data)
-{
-    write(addr, data);
+        case 0xE:
+        case 0xF:
+            doSRAMWrite(addr, data);
+            return;
+    }
 }
 
 const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
@@ -189,87 +247,6 @@ void AGBMemory::updateWaitControl(uint16_t waitcnt)
 
     // ... and SRAM/flash
     cartAccessN[3] = cartAccessS[3] = nTimings[waitcnt & WAITCNT_SRAM] + 1;
-}
-
-template<class T>
-T AGBMemory::read(uint32_t addr) const
-{
-    switch(addr >> 24)
-    {
-        case 0x0:
-            return doBIOSRead<T>(addr);
-        case 0x1: // unused
-            return doOpenRead<T>(addr);
-        case 0x2:
-            return doRead<T>(ewram, addr);
-        case 0x3:
-            return doRead<T>(iwram, addr);
-        case 0x4: // IO
-            return doIORead<T>(addr);
-        case 0x5:
-            return doRead<T>(palRAM, addr);
-        case 0x6:
-            return doVRAMRead<T>(addr);
-        case 0x7:
-            return doRead<T>(oam, addr);
-
-        case 0x8: // wait state 0
-        case 0x9:
-        case 0xA: // wait state 1
-        case 0xB:
-        case 0xC: // wait state 2
-            return doROMRead<T>(addr);
-        case 0xD:
-            return doROMOrEEPROMRead<T>(addr);
-
-        case 0xE:
-        case 0xF:
-            return doSRAMRead<T>(addr);
-    }
-
-    return doOpenRead<T>(addr);
-}
-
-template<class T>
-void AGBMemory::write(uint32_t addr, T data)
-{
-    switch(addr >> 24)
-    {
-        case 0x0: // bios
-        case 0x1: // unused
-            return;
-        case 0x2:
-            doWrite(ewram, addr, data);
-            return;
-        case 0x3:
-            return doWrite(iwram, addr, data);
-        case 0x4: // IO
-            doIOWrite(addr, data);
-            return;
-        case 0x5:
-            doPalRAMWrite(addr, data);
-            return;
-        case 0x6:
-            doVRAMWrite(addr, data);
-            return;
-        case 0x7:
-            doOAMWrite(addr, data);
-            return;
-
-        case 0x8: // wait state 0
-        case 0x9:
-        case 0xA: // wait state 1
-        case 0xB:
-        case 0xC: // wait state 2
-            return;
-        case 0xD:
-            return doEEPROMWrite(addr, data);
-
-        case 0xE:
-        case 0xF:
-            doSRAMWrite(addr, data);
-            return;
-    }
 }
 
 template<class T, size_t size>

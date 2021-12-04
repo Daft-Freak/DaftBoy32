@@ -24,13 +24,10 @@ public:
     void loadCartridgeSave(const uint8_t *data, uint32_t len);
     void reset();
 
-    uint8_t read8(uint32_t addr) const;
-    uint16_t read16(uint32_t addr) const;
-    uint32_t read32(uint32_t addr) const;
-
-    void write8(uint32_t addr, uint8_t data);
-    void write16(uint32_t addr, uint16_t data);
-    void write32(uint32_t addr, uint32_t data);
+    template<class T>
+    T read(uint32_t addr) const;
+    template<class T>
+    void write(uint32_t addr, T data);
 
     // fast access to IO regs
     uint16_t readIOReg(uint16_t addr) const {return *reinterpret_cast<const uint16_t *>(ioRegs + addr);}
@@ -62,11 +59,6 @@ private:
         Write,
         Bank,
     };
-
-    template<class T>
-    T read(uint32_t addr) const;
-    template<class T>
-    void write(uint32_t addr, T data);
 
     template<class T, size_t size>
     T doRead(const uint8_t (&mem)[size], uint32_t addr) const;

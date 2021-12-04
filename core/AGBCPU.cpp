@@ -255,7 +255,7 @@ void AGBCPU::setInputs(uint16_t newInputs)
 uint8_t AGBCPU::readMem8(uint32_t addr, int &cycles, bool sequential) const
 {
     cycles += mem.getAccessCycles(addr, 1, sequential);
-    return mem.read8(addr);
+    return mem.read<uint8_t>(addr);
 }
 
 uint32_t AGBCPU::readMem16(uint32_t addr, int &cycles, bool sequential)
@@ -265,7 +265,7 @@ uint32_t AGBCPU::readMem16(uint32_t addr, int &cycles, bool sequential)
 
     // this returns the 32-bit result of an unaligned 16-bit read
     cycles += mem.getAccessCycles(addr, 2, sequential);
-    uint32_t val = mem.read16(addr);
+    uint32_t val = mem.read<uint16_t>(addr);
 
     return (val >> 8) | (val << 24);
 }
@@ -275,7 +275,7 @@ uint16_t AGBCPU::readMem16Aligned(uint32_t addr, int &cycles, bool sequential)
     assert((addr & 1) == 0);
 
     cycles += mem.getAccessCycles(addr, 2, sequential);
-    return mem.read16(addr);
+    return mem.read<uint16_t>(addr);
 }
 
 uint32_t AGBCPU::readMem32(uint32_t addr, int &cycles, bool sequential)
@@ -284,7 +284,7 @@ uint32_t AGBCPU::readMem32(uint32_t addr, int &cycles, bool sequential)
         return readMem32Aligned(addr, cycles, sequential);
 
     cycles += mem.getAccessCycles(addr, 4, sequential);
-    uint32_t val = mem.read32(addr);
+    uint32_t val = mem.read<uint32_t>(addr);
 
     int shift = (addr & 3) << 3;
     return (val >> shift) | (val << (32 - shift));
@@ -295,25 +295,25 @@ uint32_t AGBCPU::readMem32Aligned(uint32_t addr, int &cycles, bool sequential)
     assert((addr & 3) == 0);
 
     cycles += mem.getAccessCycles(addr, 4, sequential);
-    return mem.read32(addr);
+    return mem.read<uint32_t>(addr);
 }
 
 void AGBCPU::writeMem8(uint32_t addr, uint8_t data, int &cycles, bool sequential)
 {
     cycles += mem.getAccessCycles(addr, 1, sequential);
-    mem.write8(addr, data);
+    mem.write<uint8_t>(addr, data);
 }
 
 void AGBCPU::writeMem16(uint32_t addr, uint16_t data, int &cycles, bool sequential)
 {
     cycles += mem.getAccessCycles(addr, 2, sequential);
-    mem.write16(addr, data);
+    mem.write<uint16_t>(addr, data);
 }
 
 void AGBCPU::writeMem32(uint32_t addr, uint32_t data, int &cycles, bool sequential)
 {
     cycles += mem.getAccessCycles(addr, 4, sequential);
-    mem.write32(addr, data);
+    mem.write<uint32_t>(addr, data);
 }
 
 int AGBCPU::runCycles(int cycles)
