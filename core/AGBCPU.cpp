@@ -118,7 +118,7 @@ uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
 
 bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
 {
-    if(display.writeReg(addr, data) || apu.writeReg(addr, data))
+    if(display.writeReg(addr, data) || apu.writeReg(addr, data, mask))
         return true;
 
     switch(addr & 0xFFFFFF)

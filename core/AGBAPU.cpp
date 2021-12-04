@@ -190,7 +190,7 @@ uint16_t AGBAPU::readReg(uint32_t addr, uint16_t val)
     return val;
 }
 
-bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
+bool AGBAPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
 {
     const uint8_t dutyPatterns[]{0b01000000, 0b11000000, 0b11110000, 0b00111111};
 
@@ -240,7 +240,7 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
                     channelEnabled &= ~(1 << 0); // done, disable
             }
 
-            if(data & SOUNDxCNT_Trigger)
+            if(data & mask & SOUNDxCNT_Trigger)
             {
                 // init sweep
                 auto sweepReg = mem.readIOReg(IO_SOUND1CNT_L);
@@ -321,7 +321,7 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
                     channelEnabled &= ~(1 << 1); // done, disable
             }
 
-            if(data & SOUNDxCNT_Trigger)
+            if(data & mask & SOUNDxCNT_Trigger)
             {
                 // reload envelope
                 ch2EnvVolume = mem.readIOReg(IO_SOUND2CNT_L) >> 12;
@@ -374,7 +374,7 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
                     channelEnabled &= ~(1 << 2); // done, disable
             }
 
-            if(data & SOUNDxCNT_Trigger)
+            if(data & mask & SOUNDxCNT_Trigger)
             {
                 ch3SampleIndex = 0;
                 ch3BankIndex = (mem.readIOReg(IO_SOUND3CNT_L) >> 6) & 1;
@@ -419,7 +419,7 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
                     channelEnabled &= ~(1 << 3); // done, disable
             }
 
-            if(data & SOUNDxCNT_Trigger)
+            if(data & mask & SOUNDxCNT_Trigger)
             {
                 // reload envelope
                 ch4EnvVolume = mem.readIOReg(IO_SOUND4CNT_L) >> 12;
@@ -486,7 +486,7 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data)
                 // disabled
                 for(int i = IO_SOUND1CNT_L; i < IO_SOUNDCNT_X; i++)
                 {
-                    writeReg(i, 0);
+                    writeReg(i, 0, 0xFFFF);
                     mem.writeIOReg(i, 0);
                 }
 
