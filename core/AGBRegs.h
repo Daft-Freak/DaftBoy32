@@ -102,6 +102,8 @@ enum AGBIOReg
     IO_IF = 0x202,
     IO_WAITCNT = 0x204,
     IO_IME = 0x208,
+
+    IO_HALTCNT = 0x301, // yeah, odd addr
 };
 
 enum DISPCNTBits
