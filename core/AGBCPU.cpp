@@ -236,10 +236,7 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
                 if(data & 0x8000)
                     printf("STOP\n");
                 else
-                {
-                    printf("HALT\n");
                     halted = true;
-                }
             }
             break;
     }
