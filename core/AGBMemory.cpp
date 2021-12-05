@@ -6,6 +6,26 @@
 #include "AGBCPU.h"
 #include "AGBRegs.h"
 
+enum MemoryRegion
+{
+    Region_BIOS      = 0x0,
+    Region_Unused    = 0x1,
+    Region_EWRAM     = 0x2,
+    Region_IWRAM     = 0x3,
+    Region_IO        = 0x4,
+    Region_Palette   = 0x5,
+    Region_VRAM      = 0x6,
+    Region_OAM       = 0x7,
+    Region_ROMWait0L = 0x8,
+    Region_ROMWait0H = 0x9,
+    Region_ROMWait1L = 0xA,
+    Region_ROMWait1H = 0xB,
+    Region_ROMWait2L = 0xC,
+    Region_ROMWait2H = 0xD,
+    Region_SaveL     = 0xE,
+    Region_SaveH     = 0xF,
+};
+
 template uint8_t AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const;
 template uint16_t AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const;
 template uint32_t AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const;
@@ -62,45 +82,45 @@ T AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const
 {
     switch(addr >> 24)
     {
-        case 0x0:
+        case Region_BIOS:
             cycles++;
             return doBIOSRead<T>(addr);
-        case 0x1: // unused
+        case Region_Unused:
             cycles++;
             return doOpenRead<T>(addr);
-        case 0x2:
+        case Region_EWRAM:
             cycles += sizeof(T) == 4 ? 6 : 3;
             return doRead<T>(ewram, addr);
-        case 0x3:
+        case Region_IWRAM:
             cycles++;
             return doRead<T>(iwram, addr);
-        case 0x4: // IO
+        case Region_IO:
             cycles++;
             return doIORead<T>(addr);
-        case 0x5:
+        case Region_Palette:
             cycles += sizeof(T) == 4 ? 2 : 1;
             return doRead<T>(palRAM, addr);
-        case 0x6:
+        case Region_VRAM:
             cycles += sizeof(T) == 4 ? 2 : 1;
             return doVRAMRead<T>(addr);
-        case 0x7:
+        case Region_OAM:
             cycles++;
             return doRead<T>(oam, addr);
 
-        case 0x8: // wait state 0
-        case 0x9:
-        case 0xA: // wait state 1
-        case 0xB:
-        case 0xC: // wait state 2
+        case Region_ROMWait0L:
+        case Region_ROMWait0H:
+        case Region_ROMWait1L:
+        case Region_ROMWait1H:
+        case Region_ROMWait2L:
             cycles += (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4])
                    + (sizeof(T) == 4 ? cartAccessS[(addr >> 25) - 4] : 0);
             return doROMRead<T>(addr);
-        case 0xD:
+        case Region_ROMWait2H:
             cycles += (sequential ? cartAccessS[2] : cartAccessN[2]) + (sizeof(T) == 4 ? cartAccessS[2] : 0);
             return doROMOrEEPROMRead<T>(addr);
 
-        case 0xE:
-        case 0xF:
+        case Region_SaveL:
+        case Region_SaveH:
             cycles += (sequential ? cartAccessS[3] : cartAccessN[3]) + (sizeof(T) == 4 ? cartAccessS[3] : 0);
             return doSRAMRead<T>(addr);
     }
@@ -113,49 +133,49 @@ void AGBMemory::write(uint32_t addr, T data, int &cycles, bool sequential)
 {
     switch(addr >> 24)
     {
-        case 0x0: // bios
-        case 0x1: // unused
+        case Region_BIOS:
+        case Region_Unused:
             cycles++;
             return;
-        case 0x2:
+        case Region_EWRAM:
             cycles += sizeof(T) == 4 ? 6 : 3;
             doWrite(ewram, addr, data);
             return;
-        case 0x3:
+        case Region_IWRAM:
             cycles++;
             doWrite(iwram, addr, data);
             return;
-        case 0x4: // IO
+        case Region_IO:
             cycles++;
             doIOWrite(addr, data);
             return;
-        case 0x5:
+        case Region_Palette:
             cycles += sizeof(T) == 4 ? 2 : 1;
             doPalRAMWrite(addr, data);
             return;
-        case 0x6:
+        case Region_VRAM:
             cycles += sizeof(T) == 4 ? 2 : 1;
             doVRAMWrite(addr, data);
             return;
-        case 0x7:
+        case Region_OAM:
             cycles++;
             doOAMWrite(addr, data);
             return;
 
-        case 0x8: // wait state 0
-        case 0x9:
-        case 0xA: // wait state 1
-        case 0xB:
-        case 0xC: // wait state 2
+        case Region_ROMWait0L:
+        case Region_ROMWait0H:
+        case Region_ROMWait1L:
+        case Region_ROMWait1H:
+        case Region_ROMWait2L:
             cycles += (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4])
                    + (sizeof(T) == 4 ? cartAccessS[(addr >> 25) - 4] : 0);
             return;
-        case 0xD:
+        case Region_ROMWait2H:
             cycles += (sequential ? cartAccessS[2] : cartAccessN[2]) + (sizeof(T) == 4 ? cartAccessS[2] : 0);
             return doEEPROMWrite(addr, data);
 
-        case 0xE:
-        case 0xF:
+        case Region_SaveL:
+        case Region_SaveH:
             cycles += (sequential ? cartAccessS[3] : cartAccessN[3]) + (sizeof(T) == 4 ? cartAccessS[3] : 0);
             doSRAMWrite(addr, data);
             return;
@@ -166,29 +186,29 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
 {
     switch(addr >> 24)
     {
-        case 0x0:
+        case Region_BIOS:
             return biosROM + (addr & 0x3FFF);
 
-        case 0x2:
+        case Region_EWRAM:
             return ewram + (addr & 0x3FFFF);
-        case 0x3:
+        case Region_IWRAM:
             return iwram + (addr & 0x7FFF);
 
-        case 0x5:
+        case Region_Palette:
             return palRAM + (addr & 0x3FF);
-        case 0x6:
+        case Region_VRAM:
             addr &= 0x1FFFF;
             if(addr >= 0x18000)
                 addr &= ~0x8000; // last 32K is the previous 32K
             return vram + addr;
-        case 0x7:
+        case Region_OAM:
             return oam + (addr & 0x3FF);
-        case 0x8: // wait state 0
-        case 0x9:
-        case 0xA: // wait state 1
-        case 0xB:
-        case 0xC: // wait state 2
-        case 0xD:
+        case Region_ROMWait0L:
+        case Region_ROMWait0H:
+        case Region_ROMWait1L:
+        case Region_ROMWait1H:
+        case Region_ROMWait2L:
+        case Region_ROMWait2H:
             addr &= 0x1FFFFFF;
             if(addr >= cartROMSize)
                 return nullptr;
@@ -202,22 +222,19 @@ uint8_t *AGBMemory::mapAddress(uint32_t addr)
 {
     switch(addr >> 24)
     {
-        case 0x0:
-            return nullptr; // bios rom
-
-        case 0x2:
+        case Region_EWRAM:
             return ewram + (addr & 0x3FFFF);
-        case 0x3:
+        case Region_IWRAM:
             return iwram + (addr & 0x7FFF);
 
-        case 0x5:
+        case Region_Palette:
             return palRAM + (addr & 0x3FF);
-        case 0x6:
+        case Region_VRAM:
             addr &= 0x1FFFF;
             if(addr >= 0x18000)
                 addr &= ~0x8000; // last 32K is the previous 32K
             return vram + addr;
-        case 0x7:
+        case Region_OAM:
             return oam + (addr & 0x3FF);
     }
 
@@ -228,27 +245,27 @@ int AGBMemory::getAccessCycles(uint32_t addr, int width, bool sequential) const
 {
     switch(addr >> 24)
     {
-        case 0x0: // BIOS
-        case 0x3: // IWRAM
-        case 0x4: // IO
-        case 0x7: // OAM
+        case Region_BIOS:
+        case Region_IWRAM:
+        case Region_IO:
+        case Region_OAM:
             return 1;
 
-        case 0x2: // EWRAM
+        case Region_EWRAM:
             return width == 4 ? 6 : 3;
 
-        case 0x5: // pal
-        case 0x6: // VRAM
+        case Region_Palette:
+        case Region_VRAM:
             return width == 4 ? 2 : 1;
 
-        case 0x8: // wait state 0
-        case 0x9:
-        case 0xA: // wait state 1
-        case 0xB:
-        case 0xC: // wait state 2
-        case 0xD:
-        case 0xE: // SRAM/flash
-        case 0xF:
+        case Region_ROMWait0L:
+        case Region_ROMWait0H:
+        case Region_ROMWait1L:
+        case Region_ROMWait1H:
+        case Region_ROMWait2L:
+        case Region_ROMWait2H:
+        case Region_SaveL:
+        case Region_SaveH:
             return (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4])
                    + (width == 4 ? cartAccessS[(addr >> 25) - 4] : 0); // extra time for reading 32bit value is always sequential
 
