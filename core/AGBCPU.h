@@ -261,8 +261,11 @@ private:
     uint8_t interruptDelay = 0;
 
     // dma
-    uint8_t dmaTriggered = 0;
-    uint32_t dmaCount[4], dmaSrc[4], dmaDst[4]; // internal values, reloaded on enable
+    uint8_t dmaTriggered = 0, dmaActive = 0;
+    uint16_t dmaCount[4];          // internal values
+    uint32_t dmaSrc[4], dmaDst[4]; // reloaded on enable
+    uint16_t dmaCurCount[4]; // tmp values while DMA is in progress
+    uint32_t dmaCurDst[4];   //
     uint32_t dmaLastVal = 0; // last value copied by any DMA
 
     uint32_t cycleCount = 0;

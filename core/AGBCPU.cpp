@@ -139,8 +139,8 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
                 {
                     int regOffset = (addr & 0xFFFFFF) - IO_DMA0CNT_H;
                     dmaSrc[index] = (mem.readIOReg(IO_DMA0SAD + regOffset) | (mem.readIOReg(IO_DMA0SAD + regOffset + 2) << 16)) & 0xFFFFFFF;
-                    dmaDst[index] = (mem.readIOReg(IO_DMA0DAD + regOffset) | (mem.readIOReg(IO_DMA0DAD + regOffset + 2) << 16)) & 0xFFFFFFF;
-                    dmaCount[index] = mem.readIOReg(IO_DMA0CNT_L + regOffset);
+                    dmaDst[index] = dmaCurDst[index] = (mem.readIOReg(IO_DMA0DAD + regOffset) | (mem.readIOReg(IO_DMA0DAD + regOffset + 2) << 16)) & 0xFFFFFFF;
+                    dmaCount[index] = dmaCurCount[index] = mem.readIOReg(IO_DMA0CNT_L + regOffset);
 
                     // reading from ROM with DMA0 is invalid, remap it to something low so that the check later stops it
                     if(index == 0 && dmaSrc[index] >= 0x8000000)
@@ -148,7 +148,7 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
 
                     // only DMA3 can write to the ROM area
                     if(index != 3 && dmaDst[index] >= 0x8000000)
-                        dmaDst[index] = 0;
+                        dmaDst[index] = dmaCurDst[index] = 0;
                 }
             }
             else
@@ -319,12 +319,15 @@ int AGBCPU::runCycles(int cycles)
         {
             exec = 0;
             auto trig = dmaTriggered;
-            for(int chan = 0; chan < 4 && dmaTriggered; chan++, trig >>= 1)
+            for(int chan = 0; chan < 4 && trig; chan++, trig >>= 1)
             {
                 if(trig & 1)
                     exec += dmaTransfer(chan);
+
+                // channel still active, don't update next channel
+                if(dmaActive & (1 << chan))
+                    break;
             }
-            dmaTriggered = trig;
         }
         else if(!halted)
         {
@@ -2352,8 +2355,8 @@ int AGBCPU::dmaTransfer(int channel)
 
     auto &dmaControl = mem.getIOReg(IO_DMA0CNT_H + regOffset);
     auto srcAddr = dmaSrc[channel];
-    auto dstAddr = dmaDst[channel];
-    auto count = dmaCount[channel];
+    auto dstAddr = dmaCurDst[channel];
+    int count = dmaCurCount[channel];
 
     bool is32Bit = dmaControl & DMACNTH_32Bit;
     int dstMode = (dmaControl & DMACNTH_DestMode) >> 5;
@@ -2361,10 +2364,14 @@ int AGBCPU::dmaTransfer(int channel)
 
     bool isValidSrc = srcAddr >= 0x2000000;
 
+    bool started = dmaActive & (1 << channel);
+    dmaActive |= 1 << channel;
+
     // sound DMA copies 4 to fixed dest
     if((channel == 1 || channel == 2) && (dmaControl & DMACNTH_Start) == 3 << 12)
     {
-        count = 4;
+        if(!started)
+            count = 4;
         dstMode = 2;
     }
     // reading from ROM always increments src
@@ -2372,42 +2379,48 @@ int AGBCPU::dmaTransfer(int channel)
         srcMode = 0;
 
     int width = is32Bit ? 4 : 2;
-    int cycles = mem.getAccessCycles(srcAddr, width, false) + mem.getAccessCycles(srcAddr, width, true) * (count - 1) // 1N + (n-1)S read
-               + mem.getAccessCycles(dstAddr, width, false) + mem.getAccessCycles(dstAddr, width, true) * (count - 1) // 1N + (n-1)S write
-               + 2;
 
-    // less cycles if both addresses are in the gamepak areas
-    // gbatek says the opposite, but this makes more tests pass...
-    // TODO: that probably doesn't include SRAM?
-    if(srcAddr >= 0x8000000 && dstAddr >= 0x8000000)
-        cycles -= 2;
+    int cycles = 0;
+
+    if(!started)
+    {
+        cycles = 2;
+
+        // less cycles if both addresses are in the gamepak areas
+        // gbatek says the opposite, but this makes more tests pass...
+        // TODO: that probably doesn't include SRAM?
+        if(srcAddr >= 0x8000000 && dstAddr >= 0x8000000)
+            cycles -= 2;
+    }
 
     srcAddr &= ~(width - 1);
     dstAddr &= ~(width - 1);
 
     uint32_t lastVal = dmaLastVal;
 
-    int tmp = 0; // already calculated this...
-
     while(count--)
     {
         if(is32Bit)
         {
             if(isValidSrc) // no read if source address is invalid
-                lastVal = readMem32Aligned(srcAddr, tmp);
-            writeMem32(dstAddr, lastVal, tmp);
+                lastVal = readMem32Aligned(srcAddr, cycles, started);
+
+            writeMem32(dstAddr, lastVal, cycles, started);
         }
         else
         {
             if(isValidSrc)
-                lastVal = readMem16Aligned(srcAddr, tmp);
-            writeMem16(dstAddr, lastVal, tmp);
+                lastVal = readMem16Aligned(srcAddr, cycles, started);
+
+            writeMem16(dstAddr, lastVal, cycles, started);
         }
 
         if(dstMode == 0 || dstMode == 3)
             dstAddr += width;
         else if(dstMode == 1)
             dstAddr -= width;
+
+        started = true;
 
         // bad src, don't inc/dec
         if(!isValidSrc)
@@ -2424,21 +2437,33 @@ int AGBCPU::dmaTransfer(int channel)
     if(isValidSrc && width == 2)
         dmaLastVal |= lastVal << 16;
 
+    dmaSrc[channel] = srcAddr;
+
+    // we're not done
+    if(count > 0)
+    {
+        dmaCurCount[channel] = count;
+        dmaCurDst[channel] = dstAddr;
+        return cycles;
+    }
+
+    // done, maybe repeat
     if(!(dmaControl & DAMCNTH_Repeat))
     {
         dmaControl &= ~DMACNTH_Enable;
-        dmaCount[channel] = 0;
+        dmaCount[channel] = dmaCurCount[channel] = 0;
     }
-
-    dmaSrc[channel] = srcAddr;
 
     // store unless we're reloading
     if(dstMode != 3)
-        dmaDst[channel] = dstAddr;
+        dmaDst[channel] = dmaCurDst[channel] = dstAddr;
 
     // flag interrupt
     if(dmaControl & DMACNTH_IRQEnable)
         flagInterrupt(Int_DMA0 << channel);
+
+    dmaTriggered &= ~(1 << channel);
+    dmaActive &= ~(1 << channel);
 
     return cycles;
 }
