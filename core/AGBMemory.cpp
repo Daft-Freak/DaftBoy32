@@ -80,31 +80,37 @@ void AGBMemory::reset()
 template<class T>
 T AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const
 {
+    auto accessCycles = [&cycles, this](int c)
+    {
+        cycles += c;
+        prefetchCycles -= c;
+    };
+
     switch(addr >> 24)
     {
         case Region_BIOS:
-            cycles++;
+            accessCycles(1);
             return doBIOSRead<T>(addr);
         case Region_Unused:
-            cycles++;
+            accessCycles(1);
             return doOpenRead<T>(addr);
         case Region_EWRAM:
-            cycles += sizeof(T) == 4 ? 6 : 3;
+            accessCycles(sizeof(T) == 4 ? 6 : 3);
             return doRead<T>(ewram, addr);
         case Region_IWRAM:
-            cycles++;
+            accessCycles(1);
             return doRead<T>(iwram, addr);
         case Region_IO:
-            cycles++;
+            accessCycles(1);
             return doIORead<T>(addr);
         case Region_Palette:
-            cycles += sizeof(T) == 4 ? 2 : 1;
+            accessCycles(sizeof(T) == 4 ? 2 : 1);
             return doRead<T>(palRAM, addr);
         case Region_VRAM:
-            cycles += sizeof(T) == 4 ? 2 : 1;
+            accessCycles(sizeof(T) == 4 ? 2 : 1);
             return doVRAMRead<T>(addr);
         case Region_OAM:
-            cycles++;
+            accessCycles(1);
             return doRead<T>(oam, addr);
 
         case Region_ROMWait0L:
@@ -114,9 +120,13 @@ T AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const
         case Region_ROMWait2L:
             cycles += (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4])
                    + (sizeof(T) == 4 ? cartAccessS[(addr >> 25) - 4] : 0);
+
+            prefetchCycles = cartAccessN[(addr >> 25) - 4] + 1; // cart bus active, interrupt prefetch (+1 seems hacky but improves results?)
             return doROMRead<T>(addr);
         case Region_ROMWait2H:
             cycles += (sequential ? cartAccessS[2] : cartAccessN[2]) + (sizeof(T) == 4 ? cartAccessS[2] : 0);
+
+            prefetchCycles = cartAccessN[2] + 1;
             return doROMOrEEPROMRead<T>(addr);
 
         case Region_SaveL:
@@ -131,34 +141,40 @@ T AGBMemory::read(uint32_t addr, int &cycles, bool sequential) const
 template<class T>
 void AGBMemory::write(uint32_t addr, T data, int &cycles, bool sequential)
 {
+    auto accessCycles = [&cycles, this](int c)
+    {
+        cycles += c;
+        prefetchCycles -= c;
+    };
+
     switch(addr >> 24)
     {
         case Region_BIOS:
         case Region_Unused:
-            cycles++;
+            accessCycles(1);
             return;
         case Region_EWRAM:
-            cycles += sizeof(T) == 4 ? 6 : 3;
+            accessCycles(sizeof(T) == 4 ? 6 : 3);
             doWrite(ewram, addr, data);
             return;
         case Region_IWRAM:
-            cycles++;
+            accessCycles(1);
             doWrite(iwram, addr, data);
             return;
         case Region_IO:
-            cycles++;
+            accessCycles(1);
             doIOWrite(addr, data);
             return;
         case Region_Palette:
-            cycles += sizeof(T) == 4 ? 2 : 1;
+            accessCycles(sizeof(T) == 4 ? 2 : 1);
             doPalRAMWrite(addr, data);
             return;
         case Region_VRAM:
-            cycles += sizeof(T) == 4 ? 2 : 1;
+            accessCycles(sizeof(T) == 4 ? 2 : 1);
             doVRAMWrite(addr, data);
             return;
         case Region_OAM:
-            cycles++;
+            accessCycles(1);
             doOAMWrite(addr, data);
             return;
 
@@ -288,6 +304,20 @@ void AGBMemory::updateWaitControl(uint16_t waitcnt)
 
     // ... and SRAM/flash
     cartAccessN[3] = cartAccessS[3] = nTimings[waitcnt & WAITCNT_SRAM] + 1;
+
+    cartPrefetchEnabled = waitcnt & WAITCNT_Prefetch;
+}
+
+void AGBMemory::updatePC(uint32_t pc)
+{
+    // can't execure from save area anyway...
+    pcInROM = (pc >> 24) >= Region_ROMWait0L;
+
+    if(pcInROM)
+    {
+        prefetchCycles = prefetchSCycles = cartAccessS[(pc >> 25) - 4]; // pipeline refill makes next access S
+        prefetchedHalfWords = 0;
+    }
 }
 
 template<class T, size_t size>

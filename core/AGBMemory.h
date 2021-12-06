@@ -48,6 +48,50 @@ public:
     int getAccessCycles(uint32_t addr, int width, bool sequential) const;
 
     void updateWaitControl(uint16_t waitcnt);
+    void updatePC(uint32_t pc);
+
+    inline int iCycle(int i = 1)
+    {
+        prefetchCycles -= i;
+        return i;
+    }
+
+    // 32 bits is more work due to 16-bit bus...
+    int prefetchTiming16(int cycles, int bugCycles = 0)
+    {
+        // not in ROM
+        if(!pcInROM)
+            return cycles;
+
+        if(!cartPrefetchEnabled)
+        {
+            // prefetch disable bug, N cycle instead of S
+            if(bugCycles)
+                return bugCycles;
+            
+            return cycles;
+        }
+
+        prefetchCycles--;
+
+        while(prefetchCycles <= 0)
+        {
+            if(prefetchedHalfWords < 8)
+                prefetchedHalfWords++;
+            prefetchCycles += prefetchSCycles;
+        }
+
+        if(prefetchedHalfWords)
+        {
+            prefetchedHalfWords--;
+            return 1;
+        }
+
+        // prefetch isn't done... wait for it
+        cycles = prefetchCycles + 1;
+        prefetchCycles = prefetchSCycles;
+        return cycles;
+    }
 
 private:
 
@@ -130,6 +174,10 @@ private:
     uint32_t dummy = 0xBADADD55;
 
     int8_t cartAccessN[4], cartAccessS[4]; // ROM and RAM
+    bool cartPrefetchEnabled = false, pcInROM = false;
+    int prefetchSCycles = 0;
+    mutable int prefetchCycles = 0;
+    int prefetchedHalfWords = 0;
 
     //CartRamUpdateCallback cartRamUpdateCallback;
 };
