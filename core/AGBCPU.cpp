@@ -423,59 +423,59 @@ int AGBCPU::executeARMInstruction()
     {
         case 0x0: // equal
             if(!(cpsr & Flag_Z))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0x1: // not equal
             if(cpsr & Flag_Z)
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0x2: // carry set
             if(!(cpsr & Flag_C))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0x3: // carry clear
             if(cpsr & Flag_C)
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0x4: // negative
             if(!(cpsr & Flag_N))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0x5: // positive or zero
             if((cpsr & Flag_N))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0x6: // overflow
             if(!(cpsr & Flag_V))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0x7: // no overflow
             if((cpsr & Flag_V))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0x8: // unsigned higher
             if(!(cpsr & Flag_C) || (cpsr & Flag_Z))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0x9: // unsigned lower or same
             if((cpsr & Flag_C) && !(cpsr & Flag_Z))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0xA: // greater or equal
             if(!!(cpsr & Flag_N) != !!(cpsr & Flag_V))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0xB: // less than
             if(!!(cpsr & Flag_N) == !!(cpsr & Flag_V))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0xC: // greater than
             if((cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0xD: // less than or equal
             if(!(cpsr & Flag_Z) && !!(cpsr & Flag_N) == !!(cpsr & Flag_V))
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             break;
         case 0xE: // always
             break;
@@ -537,7 +537,7 @@ int AGBCPU::executeARMInstruction()
 
                 auto addr = reg(baseReg);
 
-                int cycles = pcSCycles + 1;
+                int cycles = 0;
 
                 if(isByte)
                 {
@@ -552,7 +552,7 @@ int AGBCPU::executeARMInstruction()
                     reg(destReg) = v;
                 }
 
-                return cycles;
+                return cycles + mem.iCycle() + mem.prefetchTiming32(pcSCycles);
             }
 
             auto instOp = (opcode >> 21) & 0xF;
@@ -594,7 +594,7 @@ int AGBCPU::executeARMInstruction()
                         reg(destReg) = cpsr;
                 }
 
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             }
 
             auto op2Shift = (opcode >> 4) & 0xFF;
@@ -655,7 +655,7 @@ int AGBCPU::executeARMInstruction()
                     modeChanged();
                 }
 
-                return pcSCycles;
+                return mem.prefetchTiming32(pcSCycles);
             }
 
             return doDataProcessing(opcode, op2, carry);
@@ -903,7 +903,7 @@ int AGBCPU::doARMHalfwordTransfer(uint32_t opcode, bool isPre)
         bool sign = opcode & (1 << 6);
         bool halfWords = opcode & (1 << 5);
 
-        int cycles = pcNCycles/*prefetch bug*/ + 1;
+        int cycles = 0;
 
         if(halfWords && !sign)
             loReg(srcDestReg) = readMem16(addr, cycles); // LDRH
@@ -912,7 +912,7 @@ int AGBCPU::doARMHalfwordTransfer(uint32_t opcode, bool isPre)
         else // LDRSB ... or misaligned LDRSH
             loReg(srcDestReg) = static_cast<int8_t>(readMem8(addr, cycles)); // sign extend
 
-        return cycles;
+        return cycles + mem.iCycle() + mem.prefetchTiming32(pcSCycles, pcNCycles);
     }
     else
     {
@@ -923,11 +923,11 @@ int AGBCPU::doARMHalfwordTransfer(uint32_t opcode, bool isPre)
         if(srcDestReg == Reg::PC)
             val += 4;
 
-        int cycles = pcNCycles;
+        int cycles = 0;
 
         writeMem16(addr, val, cycles); // STRH
 
-        return cycles;
+        return cycles + mem.prefetchTiming32(pcNCycles);
     }
 }
 
@@ -972,7 +972,7 @@ int AGBCPU::doARMMultiply(uint32_t opcode)
 
         // more cycles the more bytes are non 0/ff (or just non 0 for unsigned)
         int iCycles = (prefix == 32 ? 1 : (4 - prefix / 8)) + (accumulate ? 1 : 0);
-        return pcNCycles + iCycles + 1; // TODO: N here is prefetch bug
+        return mem.iCycle(iCycles + 1) + mem.prefetchTiming32(pcSCycles, pcNCycles);
     }
     else // MUL/MLA
     {
@@ -1008,7 +1008,7 @@ int AGBCPU::doARMMultiply(uint32_t opcode)
 
         // more cycles the more bytes are non 0/ff
         int iCycles = (prefix == 32 ? 1 : (4 - prefix / 8)) + (accumulate ? 1 : 0);
-        return pcNCycles + iCycles; // TODO: N here is prefetch disable bug
+        return mem.iCycle(iCycles) + mem.prefetchTiming32(pcSCycles, pcNCycles);
     }
 }
 
@@ -1053,32 +1053,32 @@ int AGBCPU::doARMSingleDataTransfer(uint32_t opcode, bool isReg, bool isPre)
     bool isByte = opcode & (1 << 22);
     if(opcode & (1 << 20)) // load
     {
-        int cycles = pcNCycles/*prefetch bug*/ + 1;
+        int cycles = 0;
         uint32_t val = isByte ? readMem8(addr, cycles) : readMem32(addr, cycles);
 
         if(srcDestReg == Reg::PC)
         {
             updateARMPC(val);
-            cycles += pcSCycles + pcNCycles;
+            return cycles + mem.iCycle() + pcSCycles * 2 + pcNCycles;
         }
         else
             loReg(srcDestReg) = val;
 
-        return cycles;
+        return cycles + mem.iCycle() + mem.prefetchTiming32(pcSCycles, pcNCycles);
     }
     else
     {
         if(srcDestReg == Reg::PC)
             val += 4;
 
-        int cycles = pcNCycles;
+        int cycles = 0;
 
         if(isByte)
             writeMem8(addr, val, cycles);
         else
             writeMem32(addr, val, cycles);
 
-        return cycles;
+        return cycles + mem.prefetchTiming32(pcNCycles);
     }
 }
 
@@ -1091,7 +1091,7 @@ int AGBCPU::doARMBlockDataTransfer(uint32_t opcode, bool preIndex)
     auto baseReg = mapReg(static_cast<Reg>((opcode >> 16) & 0xF));
     uint16_t regList = opcode;
 
-    int cycles = pcNCycles + (isLoad ? 1 : 0); // extra cycle for loads
+    int cycles = 0;
 
     if(isLoadForce)
     {
@@ -1182,7 +1182,8 @@ int AGBCPU::doARMBlockDataTransfer(uint32_t opcode, bool preIndex)
             first = false;
         }
 
-        cycles += numRegs * mem.getAccessCycles(addr, 4, true); // it's RAM so N == S
+        cycles = numRegs * mem.getAccessCycles(addr, 4, true); // it's RAM so N == S
+        mem.iCycle(cycles); // not I cycles, but need to update prefetch...
     }
     else
     {
@@ -1224,7 +1225,11 @@ int AGBCPU::doARMBlockDataTransfer(uint32_t opcode, bool preIndex)
         }
     }
 
-    return cycles;
+
+    if(isLoad)
+        return cycles + mem.iCycle() + mem.prefetchTiming32(pcSCycles, pcNCycles);
+    else
+        return cycles + mem.prefetchTiming32(pcNCycles);
 }
 
 int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
@@ -1331,7 +1336,7 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
             __builtin_unreachable();
     }
 
-    return pcSCycles;
+    return mem.prefetchTiming32(pcSCycles);
 }
 
 int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
@@ -1399,7 +1404,7 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
     else
         reg(destReg) = dest;
 
-    return pcSCycles;
+    return mem.prefetchTiming32(pcSCycles);
 }
 
 int AGBCPU::doTHUMB01MoveShifted(uint16_t opcode, uint32_t &pc)

@@ -56,7 +56,6 @@ public:
         return i;
     }
 
-    // 32 bits is more work due to 16-bit bus...
     int prefetchTiming16(int cycles, int bugCycles = 0)
     {
         // not in ROM
@@ -89,6 +88,47 @@ public:
 
         // prefetch isn't done... wait for it
         cycles = prefetchCycles + 1;
+        prefetchCycles = prefetchSCycles;
+        return cycles;
+    }
+
+    int prefetchTiming32(int cycles, int bugCycles = 0)
+    {
+        // not in ROM
+        if(!pcInROM)
+            return cycles;
+
+        if(!cartPrefetchEnabled)
+        {
+            // prefetch disable bug, N cycle instead of S
+            if(bugCycles)
+                return bugCycles;
+            
+            return cycles;
+        }
+
+        prefetchCycles--;
+
+        while(prefetchCycles <= 0)
+        {
+            if(prefetchedHalfWords < 8)
+                prefetchedHalfWords++;
+            prefetchCycles += prefetchSCycles;
+        }
+
+        if(prefetchedHalfWords > 1)
+        {
+            prefetchedHalfWords -= 2;
+            return 1; // can fetch a word in one cycle
+        }
+        
+        // prefetch isn't done... wait for it
+        if(prefetchedHalfWords)
+            cycles = 1 /*first half*/ + prefetchCycles/* + 1 */; // cycle for first half allows prefetch to continue?
+        else
+            cycles = prefetchCycles + 1 /*first half*/ + prefetchSCycles;
+
+        prefetchedHalfWords = 0;
         prefetchCycles = prefetchSCycles;
         return cycles;
     }
