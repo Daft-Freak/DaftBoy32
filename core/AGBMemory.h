@@ -133,6 +133,23 @@ public:
         return cycles;
     }
 
+    // verify that pointer returns the same as a regular read to the address
+    // without affecting prefetch (used for asserts)
+    template<class T>
+    bool verifyPointer(const T *ptr, uint32_t addr)
+    {
+        auto tmpCycles = prefetchCycles;
+        auto tmpHalfWords = prefetchedHalfWords;
+
+        int tmp;
+        bool ret = read<T>(addr, tmp, false) == *ptr;
+
+        prefetchCycles = tmpCycles;
+        prefetchedHalfWords = tmpHalfWords;
+        
+        return ret;
+    }
+
 private:
 
     enum class FlashState : uint8_t

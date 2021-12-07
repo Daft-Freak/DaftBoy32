@@ -398,8 +398,7 @@ int AGBCPU::executeARMInstruction()
     decodeOp = fetchOp;
 
     // fetch next
-    [[maybe_unused]] int tmp;
-    assert(*armPCPtr == readMem32Aligned(pc, tmp));
+    assert(mem.verifyPointer(armPCPtr, pc));
     fetchOp = *++armPCPtr;
 
     // ... and execute
@@ -719,8 +718,7 @@ int AGBCPU::executeTHUMBInstruction()
 
     decodeOp = fetchOp;
 
-    [[maybe_unused]] int tmp;
-    assert(*thumbPCPtr == readMem16Aligned(pc, tmp));
+    assert(mem.verifyPointer(thumbPCPtr, pc));
     fetchOp = *++thumbPCPtr;
 
     pc += 2;
@@ -2284,8 +2282,7 @@ void AGBCPU::updateARMPC(uint32_t pc)
         // memory region didn't change, skip recaclculating ptr/cycles
         armPCPtr += static_cast<int32_t>(pc - loReg(Reg::PC)) / 4;
 
-        [[maybe_unused]] int tmp;
-        assert(*armPCPtr == readMem32(pc, tmp));
+        assert(mem.verifyPointer(armPCPtr, pc));
     }
     else
     {
@@ -2316,8 +2313,7 @@ void AGBCPU::updateTHUMBPC(uint32_t pc)
         // memory region didn't change, skip recaclculating ptr/cycles
         thumbPCPtr += static_cast<int32_t>(pc - loReg(Reg::PC)) / 2;
 
-        [[maybe_unused]] int tmp;
-        assert(*thumbPCPtr == readMem16Aligned(pc, tmp));
+        assert(mem.verifyPointer(thumbPCPtr, pc));
     }
     else
     {
