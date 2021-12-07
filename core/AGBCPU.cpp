@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib> //exit
 #include <cstring>
+#include <limits>
 #include <utility>
 
 #include "AGBCPU.h"
@@ -2398,7 +2399,18 @@ int AGBCPU::dmaTransfer(int channel)
 
     uint32_t lastVal = dmaLastVal;
 
-    while(count--)
+    // stop to allow other DMA triggers
+    // TODO: duplication
+    int maxCycles = std::numeric_limits<int>::max();
+
+    bool displayInterruptsEnabled = enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount);
+    if(displayInterruptsEnabled)
+        maxCycles = std::min(maxCycles, display.getCyclesToNextUpdate());
+
+    if(timerEnabled)
+        maxCycles = std::min(maxCycles, static_cast<int>(nextTimerUpdate - cycleCount));
+
+    while(cycles < maxCycles && count--)
     {
         if(is32Bit)
         {
