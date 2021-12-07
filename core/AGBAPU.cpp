@@ -96,9 +96,12 @@ void AGBAPU::timerOverflow(int timer, uint32_t cycle)
     // enabled and using this timer
     if(control & 0x300 && ((control & (1 << 10)) != 0) == (timer == 1))
     {
-        dmaAVal = dmaAFIFO[fifoARead];
-        fifoARead = (fifoARead + 1) & 0x1F;
-        fifoAFilled--;
+        if(fifoAFilled)
+        {
+            dmaAVal = dmaAFIFO[fifoARead];
+            fifoARead = (fifoARead + 1) & 0x1F;
+            fifoAFilled--;
+        }
 
         // trigger DMA for more data
         if(fifoAFilled <= 16)
@@ -107,9 +110,12 @@ void AGBAPU::timerOverflow(int timer, uint32_t cycle)
 
     if(control & 0x3000 && ((control & (1 << 14)) != 0) == (timer == 1))
     {
-        dmaBVal = dmaBFIFO[fifoBRead];
-        fifoBRead = (fifoBRead + 1) & 0x1F;
-        fifoBFilled--;
+        if(fifoBFilled)
+        {
+            dmaBVal = dmaBFIFO[fifoBRead];
+            fifoBRead = (fifoBRead + 1) & 0x1F;
+            fifoBFilled--;
+        }
 
         if(fifoBFilled <= 16)
             cpu.triggerDMA(AGBCPU::Trig_SoundB);
