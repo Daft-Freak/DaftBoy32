@@ -51,6 +51,8 @@ void AGBCPU::flagInterrupt(int interrupt)
 
     if(!interruptDelay)
         interruptDelay = 7; // unsure of this, but 7 seems to pass more tests than 6
+
+    calculateNextUpdate(cycleCount);
 }
 
 void AGBCPU::triggerDMA(int trigger)
@@ -203,7 +205,10 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
             }
 
             if(timerEnabled)
+            {
                 calculateNextTimerOverflow(cycleCount);
+                calculateNextUpdate(cycleCount);
+            }
 
             break;
         }
@@ -213,6 +218,7 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
 
             enabledInterrutps = (mem.readIOReg(IO_IME) & 1) ? data : 0;
             currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
+            calculateNextUpdate(cycleCount);
             break;
 
         case IO_IF: // writing IF bits clears them internally
@@ -220,6 +226,7 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
             mem.writeIOReg(IO_IF, data);
 
             currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? mem.readIOReg(IO_IE) & data : 0;
+            calculateNextUpdate(cycleCount);
             return true;
 
         case IO_WAITCNT:
@@ -233,6 +240,8 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
 
             enabledInterrutps = (data & 1) ? mem.readIOReg(IO_IE) : 0;
             currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
+
+            calculateNextUpdate(cycleCount);
             break;
 
         case IO_HALTCNT - 1: // the address of POSTFLG, but we're ignoring that
@@ -343,18 +352,22 @@ int AGBCPU::runCycles(int cycles)
         // loop until not halted or DMA was triggered
         do
         {
-            bool shouldUpdateTimers = timerEnabled && nextTimerUpdate - cycleCount <= exec;
+            bool shouldUpdate = nextUpdateCycle - cycleCount <= exec;
 
             cycles -= exec;
             cycleCount += exec;
 
-            if(shouldUpdateTimers)
+            if(shouldUpdate)
+            {
                 updateTimers();
 
-            bool displayInterruptsEnabled = enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount);
+                bool displayInterruptsEnabled = enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount);
 
-            if(displayInterruptsEnabled)
-                display.update();
+                if(displayInterruptsEnabled)
+                    display.update();
+
+                calculateNextUpdate(cycleCount);
+            }
 
             if(currentInterrupts)
             {
@@ -362,6 +375,7 @@ int AGBCPU::runCycles(int cycles)
                 {
                     serviceInterrupts(); // cycles?
                     interruptDelay = 0;
+                    calculateNextUpdate(cycleCount);
                 }
                 else
                     interruptDelay -= exec;
@@ -372,16 +386,8 @@ int AGBCPU::runCycles(int cycles)
                 // skip ahead
                 exec = cycles;
 
-                // limit to display interrupt
-                if(displayInterruptsEnabled)
-                    exec = std::min(cycles, display.getCyclesToNextUpdate());
-
-                // limit to next timer overflow
-                if(timerEnabled)
-                    exec = std::min(exec, nextTimerUpdate - cycleCount);
-
-                if(interruptDelay)
-                    exec = std::min(exec, static_cast<unsigned int>(interruptDelay));
+                // limit to next update
+                exec = std::min(exec, nextUpdateCycle - cycleCount);
 
                 assert(exec > 0);
             }
@@ -2405,15 +2411,7 @@ int AGBCPU::dmaTransfer(int channel)
     uint32_t lastVal = dmaLastVal;
 
     // stop to allow other DMA triggers
-    // TODO: duplication
-    int maxCycles = std::numeric_limits<int>::max();
-
-    bool displayInterruptsEnabled = enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount);
-    if(displayInterruptsEnabled)
-        maxCycles = std::min(maxCycles, display.getCyclesToNextUpdate());
-
-    if(timerEnabled)
-        maxCycles = std::min(maxCycles, static_cast<int>(nextTimerUpdate - cycleCount));
+    int maxCycles = nextUpdateCycle - cycleCount;
 
     while(cycles < maxCycles && count--)
     {
@@ -2582,4 +2580,26 @@ void AGBCPU::calculateNextTimerOverflow(uint32_t cycleCount)
     }
 
     nextTimerUpdate = cycleCount + nextOverflow;
+}
+
+void AGBCPU::calculateNextUpdate(uint32_t cycleCount)
+{
+    bool displayInterruptsEnabled = enabledInterrutps & (Int_LCDVBlank | Int_LCDHBlank | Int_LCDVCount);
+
+    int toUpdate = std::numeric_limits<int>::max();
+
+    // limit to display interrupt
+    if(displayInterruptsEnabled)
+        toUpdate = std::min(toUpdate, display.getCyclesToNextUpdate(cycleCount));
+
+    // limit to next timer overflow
+    if(timerEnabled)
+        toUpdate = std::min(toUpdate, static_cast<int>(nextTimerUpdate - cycleCount));
+
+    if(interruptDelay)
+        toUpdate = std::min(toUpdate, static_cast<int>(interruptDelay + this->cycleCount - cycleCount));
+
+    assert(toUpdate > 0 || nextUpdateCycle == cycleCount + toUpdate);
+
+    nextUpdateCycle = cycleCount + toUpdate;
 }

@@ -243,6 +243,8 @@ private:
     void updateTimers();
     void calculateNextTimerOverflow(uint32_t cycleCount);
 
+    void calculateNextUpdate(uint32_t cycleCount);
+
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
 
@@ -270,6 +272,8 @@ private:
 
     uint32_t cycleCount = 0;
     int lastExtraCycles = 0; // used to keep runFrame in sync
+
+    uint32_t nextUpdateCycle = 0; // next cycle where something needs updated
 
     // timers
     uint32_t lastTimerUpdate = 0;

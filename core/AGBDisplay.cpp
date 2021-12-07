@@ -754,9 +754,9 @@ void AGBDisplay::update()
     }
 }
 
-int AGBDisplay::getCyclesToNextUpdate() const
+int AGBDisplay::getCyclesToNextUpdate(uint32_t cycleCount) const
 {
-    auto passed = cpu.getCycleCount() - lastUpdateCycle;
+    auto passed = cycleCount - lastUpdateCycle;
     return (remainingModeDots * 4 - passed);
 }
 

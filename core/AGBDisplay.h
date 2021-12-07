@@ -12,7 +12,7 @@ public:
     void reset();
 
     void update();
-    int getCyclesToNextUpdate() const;
+    int getCyclesToNextUpdate(uint32_t cycleCount) const;
 
     void setFramebuffer(uint16_t *data);
 
