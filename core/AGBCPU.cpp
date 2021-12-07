@@ -209,6 +209,8 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
         }
 
         case IO_IE:
+            display.update();
+
             enabledInterrutps = (mem.readIOReg(IO_IME) & 1) ? data : 0;
             currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
             break;
@@ -227,6 +229,8 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
             break;
 
         case IO_IME:
+            display.update();
+
             enabledInterrutps = (data & 1) ? mem.readIOReg(IO_IE) : 0;
             currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
             break;
