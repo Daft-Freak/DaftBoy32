@@ -43,6 +43,10 @@ enum AGBIOReg
     IO_WININ = 0x48,
     IO_WINOUT = 0x4A,
 
+    IO_BLDCNT = 0x50,
+    IO_BLDALPHA = 0x52,
+    IO_BLDY = 0x54,
+
     // Audio
     IO_SOUND1CNT_L = 0x60,
     IO_SOUND1CNT_H = 0x62,
@@ -179,6 +183,25 @@ enum WINOUTBits
     WINOUT_ObjWinBG3     = 1 << 11,
     WINOUT_ObjWinObject  = 1 << 12,
     WINOUT_ObjWinEffect  = 1 << 13,
+};
+
+enum BLDCNTBits
+{
+    BLDCNT_SrcBG0      = 1 << 0,
+    BLDCNT_SrcBG1      = 1 << 1,
+    BLDCNT_SrcBG2      = 1 << 2,
+    BLDCNT_SrcBG3      = 1 << 3,
+    BLDCNT_SrcObject   = 1 << 4,
+    BLDCNT_SrcBackdrop = 1 << 5,
+
+    BLDCNT_Effect      = 3 << 6,
+    
+    BLDCNT_DstBG0      = 1 << 8,
+    BLDCNT_DstBG1      = 1 << 9,
+    BLDCNT_DstBG2      = 1 << 10,
+    BLDCNT_DstBG3      = 1 << 11,
+    BLDCNT_DstObject   = 1 << 12,
+    BLDCNT_DstBackdrop = 1 << 13,
 };
 
 enum SOUND1CNTBits
