@@ -1009,95 +1009,100 @@ void AGBDisplay::drawScanLine(int y)
             int mask;
             std::tie(data, mask) = layers[i];
 
+            uint16_t col;
+
             // backdrop
             if(!mask)
             {
-                // TODO: light/dark blend
-                scanLine[x] = palRAM[0];
-                break;
+                col = palRAM[0];
+                mask = BLDCNT_SrcBackdrop; // for blending check
             }
-
-            // check if disabled by window
-            if(!(curLayerEnables & mask))
-                continue;
-            
-            if(data[x])
+            else
             {
-                // blend enabled and layer is src (masks conveniently line up)
-                if(blendMode && (blendControl & mask))
+                // check if disabled by window
+                if(!(curLayerEnables & mask))
+                    continue;
+
+                if(!data[x])
+                    continue;
+
+                col = data[x];
+            }
+        
+            // blend enabled and layer is src (masks conveniently line up)
+            if(blendMode && (blendControl & mask))
+            {
+                // TODO: sprite blend override
+
+                int srcR = (col >> 10) & 0x1F;
+                int srcG = (col >> 5) & 0x1F;
+                int srcB = col & 0x1F;
+
+                if(blendMode == 1 && mask) // alpha, ignore if backdrop (nothing to blend with)
                 {
-                    // TODO: sprite blend override
+                    // get next layer
+                    uint16_t *nextData;
+                    int nextMask;
+                    int nextLayer = i + 1;
 
-                    int srcR = (data[x] >> 10) & 0x1F;
-                    int srcG = (data[x] >> 5) & 0x1F;
-                    int srcB = data[x] & 0x1F;
-
-                    if(blendMode == 1) // alpha
+                    // find next non-transparent layer (also not the smae layer (objects))
+                    do
                     {
-                        // get next layer
-                        uint16_t *nextData;
-                        int nextMask;
-                        int nextLayer = i + 1;
+                        std::tie(nextData, nextMask) = layers[nextLayer++];
+                    } while(nextMask && (nextMask == mask || !(curLayerEnables & nextMask) || !nextData[x]));
 
-                        // find next non-transparent layer (also not the smae layer (objects))
-                        do
-                        {
-                            std::tie(nextData, nextMask) = layers[nextLayer++];
-                        } while(nextMask && (nextMask == mask || !(curLayerEnables & nextMask) || !nextData[x]));
+                    nextMask = nextMask ? nextMask << 8 : (1 << 13); // shift up, handle 0 for backdrop
 
-                        nextMask = nextMask ? nextMask << 8 : (1 << 13); // shift up, handle 0 for backdrop
-
-                        // check if its a dst target
-                        if(!(blendControl & nextMask))
-                        {
-                            scanLine[x] = data[x];
-                            break;
-                        }
-
-                        // do blend
-                        int srcA = std::min(16, blendAlpha & 0x1F);
-
-                        auto dstCol = nextData ? nextData[x] : palRAM[0]; // handle backdrop
-
-                        int dstR = (dstCol >> 10) & 0x1F;
-                        int dstG = (dstCol >> 5) & 0x1F;
-                        int dstB = dstCol & 0x1F;
-                        int dstA = std::min(16, (blendAlpha >> 8) & 0x1F);
-
-                        int r = std::min(31, (srcR * srcA + dstR * dstA) / 16);
-                        int g = std::min(31, (srcG * srcA + dstG * dstA) / 16);
-                        int b = std::min(31, (srcB * srcA + dstB * dstA) / 16);
-
-                        scanLine[x] = r << 10 | g << 5 | b;
-                    }
-                    else if(blendMode == 2) // lighten
+                    // check if its a dst target
+                    if(!(blendControl & nextMask))
                     {
-                        int evy = std::min(16, blendY & 0x1F);
-
-                        int r = srcR + ((31 - srcR) * evy) / 16;
-                        int g = srcG + ((31 - srcG) * evy) / 16;
-                        int b = srcB + ((31 - srcB) * evy) / 16;
-
-                        scanLine[x] = r << 10 | g << 5 | b;
-                    }
-                    else if(blendMode == 3) // darken
-                    {
-                        int evy = std::min(16, blendY & 0x1F);
-
-                        int r = srcR - (srcR * evy) / 16;
-                        int g = srcG - (srcG * evy) / 16;
-                        int b = srcB - (srcB * evy) / 16;
-
-                        scanLine[x] = r << 10 | g << 5 | b;
-                    }
-                    else
                         scanLine[x] = data[x];
+                        break;
+                    }
+
+                    // do blend
+                    int srcA = std::min(16, blendAlpha & 0x1F);
+
+                    auto dstCol = nextData ? nextData[x] : palRAM[0]; // handle backdrop
+
+                    int dstR = (dstCol >> 10) & 0x1F;
+                    int dstG = (dstCol >> 5) & 0x1F;
+                    int dstB = dstCol & 0x1F;
+                    int dstA = std::min(16, (blendAlpha >> 8) & 0x1F);
+
+                    int r = std::min(31, (srcR * srcA + dstR * dstA) / 16);
+                    int g = std::min(31, (srcG * srcA + dstG * dstA) / 16);
+                    int b = std::min(31, (srcB * srcA + dstB * dstA) / 16);
+
+                    scanLine[x] = r << 10 | g << 5 | b;
+                }
+                else if(blendMode == 2) // lighten
+                {
+                    int evy = std::min(16, blendY & 0x1F);
+
+                    int r = srcR + ((31 - srcR) * evy) / 16;
+                    int g = srcG + ((31 - srcG) * evy) / 16;
+                    int b = srcB + ((31 - srcB) * evy) / 16;
+
+                    scanLine[x] = r << 10 | g << 5 | b;
+                }
+                else if(blendMode == 3) // darken
+                {
+                    int evy = std::min(16, blendY & 0x1F);
+
+                    int r = srcR - (srcR * evy) / 16;
+                    int g = srcG - (srcG * evy) / 16;
+                    int b = srcB - (srcB * evy) / 16;
+
+                    scanLine[x] = r << 10 | g << 5 | b;
                 }
                 else
-                    scanLine[x] = data[x];
-
-                break;
+                    scanLine[x] = col;
             }
+            else
+                scanLine[x] = col;
+
+            break;
         }
     }
 }
