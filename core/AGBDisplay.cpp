@@ -750,7 +750,13 @@ void AGBDisplay::update()
                 refPointY[1] |= 0xF0000000;
         }
         else if(y >= 228)
+        {
             y = 0; // end vblank
+
+            // vcount interrupt for first line
+            if((stat & DISPSTAT_VCountInt) && !(stat >> 8))
+                cpu.flagInterrupt(AGBCPU::Int_LCDVCount);
+        }
     }
 }
 
