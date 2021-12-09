@@ -2468,10 +2468,14 @@ int AGBCPU::dmaTransfer(int channel)
         dmaControl &= ~DMACNTH_Enable;
         dmaCount[channel] = dmaCurCount[channel] = 0;
     }
+    else
+        dmaCurCount[channel] = dmaCount[channel]; // reset count for repeat
 
     // store unless we're reloading
     if(dstMode != 3)
         dmaDst[channel] = dmaCurDst[channel] = dstAddr;
+    else
+        dmaCurDst[channel] = dmaDst[channel]; // reload dest
 
     // flag interrupt
     if(dmaControl & DMACNTH_IRQEnable)
