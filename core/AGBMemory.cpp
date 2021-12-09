@@ -518,6 +518,7 @@ void AGBMemory::doEEPROMWrite(uint32_t addr, uint16_t data)
                             | (eepromInBits[5] << 2) | (eepromInBits[6] << 1) | eepromInBits[7];
 
         uint64_t data = reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr];
+        data = __builtin_bswap64(data);
 
         for(int i = 0; i < 64; i++)
             eepromOutBits[i + 4] = (data & (1ull << (63 - i))) ? 1 : 0;
@@ -532,7 +533,7 @@ void AGBMemory::doEEPROMWrite(uint32_t addr, uint16_t data)
         for(int i = 0; i < 64; i++)
             data |= static_cast<uint64_t>(eepromInBits[i + 8]) << (63 - i);
 
-        reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr] = data;
+        reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr] = __builtin_bswap64(data);
 
         eepromOutBits[0] = 1;
     }
