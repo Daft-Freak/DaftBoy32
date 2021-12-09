@@ -587,7 +587,7 @@ void AGBMemory::doSRAMWrite(uint32_t addr, uint8_t data)
 
     if(saveType == SaveType::Flash)
         writeFlash(addr, data);
-    else // RAM
+    else if(saveType == SaveType::RAM)
         cartSaveData[addr & 0x7FFF] = data;
 }
 
