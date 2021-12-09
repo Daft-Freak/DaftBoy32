@@ -376,7 +376,7 @@ static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
         memset(scanLine, 0, 240 * 2);
 }
 
-static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl)
+static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t objMask[240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl)
 {
     auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
     const int entrySize = 4; // * 16 bit
@@ -388,6 +388,10 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint16_t 
         16, 32, 32, 64, // wide
          8,  8, 16, 32  // tall
     };
+
+    // extra mask so we can ignore the regular one for windows
+    // though really we only need the mask for windows anyway...
+    uint8_t winMask[240]{0}; 
 
     auto charPtr = vram + 0x10000;
 
@@ -510,19 +514,20 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint16_t 
             int ty = ((spriteH / 2) << 8) + (sx - halfW) * c + (sy - halfH) * d;
 
             auto out = scanLine[priority] + (spriteX + sx);
+            auto outMask = (priority == 4 ? winMask : objMask) + (spriteX + sx);
             auto outEnd = scanLine[priority] + 240;
 
             if(!(attr0 & Attr0_SinglePal))
                 spritePal += ((attr2 & Attr2_Pal) >> 8);
 
-            for(int x = sx; x < halfW * 2 && out != outEnd && cyclesRemaining > 1; x++, out++, tx += a, ty += c)
+            for(int x = sx; x < halfW * 2 && out != outEnd && cyclesRemaining > 1; x++, out++, outMask++, tx += a, ty += c)
             {
                 cyclesRemaining -= 2;
 
                 if(tx < 0 || ty < 0 || tx >= (spriteW << 8) || ty >= (spriteH << 8))
                     continue;
 
-                if(*out)
+                if(*outMask)
                     continue;
 
                 auto tile = startTile;
@@ -537,7 +542,10 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint16_t 
                     auto tilePtr = charPtr + tile * 32 + (tx >> 11) * 64 + ((ty >> 8) & 7) * 8 + ((tx >> 8) & 7);
 
                     if(*tilePtr)
+                    {
                         *out = spritePal[*tilePtr] | 0x8000;
+                        *outMask = 1 + effect;
+                    }
                 }
                 else
                 {
@@ -545,7 +553,10 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint16_t 
                     tileRow >>= ((tx >> 8) & 7) * 4;
 
                     if(tileRow & 0xF)
+                    {
                         *out = spritePal[tileRow & 0xF] | 0x8000;
+                        *outMask = 1 + effect;
+                    }
                 }
             }
         }
@@ -565,6 +576,7 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint16_t 
 
             int xOff = sx & 7;
             auto out = scanLine[priority] + (spriteX + sx);
+            auto outMask = (priority == 4 ? winMask : objMask) + (spriteX + sx);
             auto outEnd = scanLine[priority] + 240;
 
             int tilesX = spriteW >> 3;
@@ -583,13 +595,16 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint16_t 
                         tilePtr += xOff;
 
                     // pixels in tile
-                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, out++)
+                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, out++, outMask++)
                     {
                         cyclesRemaining--;
 
                         auto palIndex = *tilePtr;
-                        if(!*out && palIndex)
+                        if(!*outMask && palIndex)
+                        {
                             *out = spritePal[palIndex] | 0x8000;
+                            *outMask = 1 + effect;
+                        }
 
                         if(hFlip)
                             --tilePtr;
@@ -620,11 +635,14 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint16_t 
                     if(xOff)
                         tileRow >>= (xOff * 4);
 
-                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, tileRow >>= 4, out++)
+                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, tileRow >>= 4, out++, outMask++)
                     {
                         cyclesRemaining--;
-                        if(!*out && (tileRow & 0xF))
+                        if(!*outMask && (tileRow & 0xF))
+                        {
                             *out = spritePal[tileRow & 0xF] | 0x8000;
+                            *outMask = 1 + effect;
+                        }
                     }
 
                     xOff = 0;
@@ -868,6 +886,7 @@ void AGBDisplay::drawScanLine(int y)
 
     uint16_t bgData[4][screenWidth];
     uint16_t objData[5][screenWidth]{0}; // four priority levels for objs +1 for obj window
+    uint8_t objMask[240]{0}; // 1 = sprite here, 2 = semi-transparent sprite
 
     int layerEnables = dispControl >> 8;
     bool windowEnabled = false;
@@ -941,21 +960,15 @@ void AGBDisplay::drawScanLine(int y)
         drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]);
 
     if(layerEnables & Layer_OBJ)
-        drawOBJs(mem, y, objData, palRAM, vram, dispControl);
+        drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl);
 
     // start with window enabled if start/end are flipped
     bool xInWin0 = (win0h & 0xFF) < (win0h >> 8), xInWin1 = (win1h & 0xFF) < (win1h >> 8);
 
     // blending setup
     auto blendControl = mem.readIOReg(IO_BLDCNT);
-    uint16_t blendAlpha;
-    uint16_t blendY;
-
-    if(blendControl & BLDCNT_Effect)
-    {
-        blendAlpha = mem.readIOReg(IO_BLDALPHA);
-        blendY = mem.readIOReg(IO_BLDY);
-    }
+    uint16_t blendAlpha = mem.readIOReg(IO_BLDALPHA);
+    uint16_t blendY = mem.readIOReg(IO_BLDY);
 
     // merge layers
     for(int x = 0; x < screenWidth; x++)
@@ -1028,12 +1041,19 @@ void AGBDisplay::drawScanLine(int y)
 
                 col = data[x];
             }
-        
-            // blend enabled and layer is src (masks conveniently line up)
-            if(blendMode && (blendControl & mask))
-            {
-                // TODO: sprite blend override
 
+            // blend enabled and layer is src (masks conveniently line up)
+            bool shouldBlend = blendMode && (blendControl & mask);
+
+            // forced blend for objects
+            if(mask == Layer_OBJ && objMask[x] == 2)
+            {
+                blendMode = 1;
+                shouldBlend = true;
+            }
+
+            if(shouldBlend)
+            {
                 int srcR = (col >> 10) & 0x1F;
                 int srcG = (col >> 5) & 0x1F;
                 int srcB = col & 0x1F;
@@ -1045,7 +1065,7 @@ void AGBDisplay::drawScanLine(int y)
                     int nextMask;
                     int nextLayer = i + 1;
 
-                    // find next non-transparent layer (also not the smae layer (objects))
+                    // find next non-transparent layer (also not the same layer (objects))
                     do
                     {
                         std::tie(nextData, nextMask) = layers[nextLayer++];
@@ -1056,7 +1076,7 @@ void AGBDisplay::drawScanLine(int y)
                     // check if its a dst target
                     if(!(blendControl & nextMask))
                     {
-                        scanLine[x] = data[x];
+                        scanLine[x] = col;
                         break;
                     }
 
