@@ -51,8 +51,10 @@ void AGBMemory::loadCartridgeSave(const uint8_t *data, uint32_t len)
     memcpy(cartSaveData, data, len);
 
     // determine the type of save from the size
-    if(len == 512 || len == 4 * 1024)
-        saveType = SaveType::EEPROM; // TODO: 4k
+    if(len == 512)
+        saveType = SaveType::EEPROM_512;
+    else if(len == 8 * 1024)
+        saveType = SaveType::EEPROM_8K;
     else if(len == 32 * 1024)
         saveType = SaveType::RAM;
     else if(len == 64 * 1024 || len == 128 * 1024)
@@ -487,7 +489,7 @@ template<>
 uint16_t AGBMemory::doROMOrEEPROMRead(uint32_t addr) const
 {
     // 16-bit read from high ROM addr could be EEPROM
-    if(saveType == SaveType::EEPROM)
+    if(saveType == SaveType::EEPROM_512 || saveType == SaveType::EEPROM_8K)
         return eepromOutBits[(addr & 0xFF) >> 1];
 
     return doROMRead<uint16_t>(addr);
@@ -503,16 +505,19 @@ template<>
 void AGBMemory::doEEPROMWrite(uint32_t addr, uint16_t data)
 {
     if(saveType == SaveType::Unknown)
-        saveType = SaveType::EEPROM;
+        saveType = SaveType::EEPROM_512;
 
-    if(saveType != SaveType::EEPROM)
+    if(saveType != SaveType::EEPROM_512 && saveType != SaveType::EEPROM_8K)
         return;
 
     eepromInBits[(addr & 0xFF) >> 1] = data;
 
-    // TODO: 4k
+    // long read request, must be an 8K EEPROM
+    if((addr & 0xFF) > 0x11 && eepromInBits[0] && eepromInBits[1])
+        saveType = SaveType::EEPROM_8K;
 
-    if((addr & 0xFF) == 0x10 && eepromInBits[0] && eepromInBits[1]) // end of read request for 512b
+    // end of read request for 512b
+    if((addr & 0xFF) == 0x10 && eepromInBits[0] && eepromInBits[1] && saveType == SaveType::EEPROM_512)
     {
         uint16_t eepromAddr = (eepromInBits[2] << 5) | (eepromInBits[3] << 4) | (eepromInBits[4] << 3)
                             | (eepromInBits[5] << 2) | (eepromInBits[6] << 1) | eepromInBits[7];
@@ -523,7 +528,8 @@ void AGBMemory::doEEPROMWrite(uint32_t addr, uint16_t data)
         for(int i = 0; i < 64; i++)
             eepromOutBits[i + 4] = (data & (1ull << (63 - i))) ? 1 : 0;
     }
-    else if((addr & 0xFF) == 0x90 && eepromInBits[0] && !eepromInBits[1])
+    // end of write request for 512b
+    else if((addr & 0xFF) == 0x90 && eepromInBits[0] && !eepromInBits[1] && saveType == SaveType::EEPROM_512)
     {
         uint16_t eepromAddr = (eepromInBits[2] << 5) | (eepromInBits[3] << 4) | (eepromInBits[4] << 3)
                             | (eepromInBits[5] << 2) | (eepromInBits[6] << 1) | eepromInBits[7];
@@ -532,6 +538,39 @@ void AGBMemory::doEEPROMWrite(uint32_t addr, uint16_t data)
 
         for(int i = 0; i < 64; i++)
             data |= static_cast<uint64_t>(eepromInBits[i + 8]) << (63 - i);
+
+        reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr] = __builtin_bswap64(data);
+
+        eepromOutBits[0] = 1;
+    }
+    // end of read request for 8k
+    else if((addr & 0xFF) == 0x20 && eepromInBits[0] && eepromInBits[1])
+    {
+        uint16_t eepromAddr = (eepromInBits[ 2] << 13) | (eepromInBits[ 3] << 12) | (eepromInBits[ 4] << 11)
+                            | (eepromInBits[ 5] << 10) | (eepromInBits[ 6] <<  9) | (eepromInBits[ 7] <<  8)
+                            | (eepromInBits[ 8] <<  7) | (eepromInBits[ 9] <<  6) | (eepromInBits[10] <<  5)
+                            | (eepromInBits[11] <<  4) | (eepromInBits[12] <<  3) | (eepromInBits[13] <<  2)
+                            | (eepromInBits[14] <<  1) |  eepromInBits[15];
+
+        uint64_t data = reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr];
+        data = __builtin_bswap64(data);
+
+        for(int i = 0; i < 64; i++)
+            eepromOutBits[i + 4] = (data & (1ull << (63 - i))) ? 1 : 0;
+    }
+    // end write request for 8k
+    else if((addr & 0xFF) == 0xA0 && eepromInBits[0] && !eepromInBits[1])
+    {
+        uint16_t eepromAddr = (eepromInBits[ 2] << 13) | (eepromInBits[ 3] << 12) | (eepromInBits[ 4] << 11)
+                            | (eepromInBits[ 5] << 10) | (eepromInBits[ 6] <<  9) | (eepromInBits[ 7] <<  8)
+                            | (eepromInBits[ 8] <<  7) | (eepromInBits[ 9] <<  6) | (eepromInBits[10] <<  5)
+                            | (eepromInBits[11] <<  4) | (eepromInBits[12] <<  3) | (eepromInBits[13] <<  2)
+                            | (eepromInBits[14] <<  1) |  eepromInBits[15];
+
+        uint64_t data = 0;
+
+        for(int i = 0; i < 64; i++)
+            data |= static_cast<uint64_t>(eepromInBits[i + 16]) << (63 - i);
 
         reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr] = __builtin_bswap64(data);
 
@@ -554,7 +593,8 @@ uint8_t AGBMemory::doSRAMRead(uint32_t addr) const
     switch(saveType)
     {
         case SaveType::Unknown:
-        case SaveType::EEPROM:
+        case SaveType::EEPROM_512:
+        case SaveType::EEPROM_8K:
             return 0xFF;
         case SaveType::RAM:
             return cartSaveData[addr & 0x7FFF]; // SRAM is 32k

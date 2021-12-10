@@ -341,8 +341,11 @@ int main(int argc, char *argv[])
         {
             case AGBMemory::SaveType::Unknown:
                 break;
-            case AGBMemory::SaveType::EEPROM:
-                size = 512; // TODO: 4k
+            case AGBMemory::SaveType::EEPROM_512:
+                size = 512;
+                break;
+            case AGBMemory::SaveType::EEPROM_8K:
+                size = 8 * 1024;
                 break;
             case AGBMemory::SaveType::RAM:
                 size = 32 * 1024;

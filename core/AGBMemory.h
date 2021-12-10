@@ -10,7 +10,8 @@ public:
     enum class SaveType : uint8_t
     {
         Unknown,
-        EEPROM,
+        EEPROM_512,
+        EEPROM_8K,
         RAM,
         Flash
     };
