@@ -788,7 +788,7 @@ void AGBAPU::sampleOutput()
     vol = ch4EnvVolume;
     auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : -vol;
 
-    int32_t left = 0, right = 0;
+    int left = 0, right = 0;
 
     if(outputSelect & 0x01)
         right += ch1Val * 8;

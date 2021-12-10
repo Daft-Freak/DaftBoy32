@@ -326,7 +326,7 @@ int AGBCPU::runCycles(int cycles)
 {
     while(cycles > 0)
     {
-        unsigned int exec = 1;
+        uint32_t exec = 1;
 
         // DMA
         if(dmaTriggered)

@@ -664,7 +664,7 @@ void AGBDisplay::reset()
 
 void AGBDisplay::update()
 {
-    auto passed = cpu.getCycleCount() - lastUpdateCycle;
+    unsigned int passed = cpu.getCycleCount() - lastUpdateCycle;
     passed >>= 2; // 4MHz
 
     if(passed < remainingModeDots)
