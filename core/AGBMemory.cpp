@@ -490,7 +490,13 @@ uint16_t AGBMemory::doROMOrEEPROMRead(uint32_t addr) const
 {
     // 16-bit read from high ROM addr could be EEPROM
     if(saveType == SaveType::EEPROM_512 || saveType == SaveType::EEPROM_8K)
-        return eepromOutBits[(addr & 0xFF) >> 1];
+    {
+        int bit = (addr & 0xFF) >> 1;
+        if(bit < 4)
+            return 1; // first 4 bits are ignored for reads, write waits for 1 at bit 0
+        
+        return (eepromReadData >> (67 - bit)) & 1;
+    }
 
     return doROMRead<uint16_t>(addr);
 }
@@ -510,71 +516,47 @@ void AGBMemory::doEEPROMWrite(uint32_t addr, uint16_t data)
     if(saveType != SaveType::EEPROM_512 && saveType != SaveType::EEPROM_8K)
         return;
 
-    eepromInBits[(addr & 0xFF) >> 1] = data;
+    // set/clear command bit
+    int bit = (addr & 0xFF) >> 1;
+    uint64_t mask = 1ull << (63 - bit % 64);
+    eepromCommandData[bit / 64] = (data & 1) ? (eepromCommandData[bit / 64] | mask) : (eepromCommandData[bit / 64] & ~mask);
 
     // long read request, must be an 8K EEPROM
-    if((addr & 0xFF) > 0x11 && eepromInBits[0] && eepromInBits[1])
+    if(bit > 8 && (eepromCommandData[0] >> 62) == 3)
         saveType = SaveType::EEPROM_8K;
 
     // end of read request for 512b
-    if((addr & 0xFF) == 0x10 && eepromInBits[0] && eepromInBits[1] && saveType == SaveType::EEPROM_512)
+    if(bit == 8 && (eepromCommandData[0] >> 62) == 3 && saveType == SaveType::EEPROM_512)
     {
-        uint16_t eepromAddr = (eepromInBits[2] << 5) | (eepromInBits[3] << 4) | (eepromInBits[4] << 3)
-                            | (eepromInBits[5] << 2) | (eepromInBits[6] << 1) | eepromInBits[7];
+        uint16_t eepromAddr = (eepromCommandData[0] >> 56) & 0x3F;
 
         uint64_t data = reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr];
-        data = __builtin_bswap64(data);
-
-        for(int i = 0; i < 64; i++)
-            eepromOutBits[i + 4] = (data & (1ull << (63 - i))) ? 1 : 0;
+        eepromReadData = __builtin_bswap64(data);
     }
     // end of write request for 512b
-    else if((addr & 0xFF) == 0x90 && eepromInBits[0] && !eepromInBits[1] && saveType == SaveType::EEPROM_512)
+    else if(bit == 72 && (eepromCommandData[0] >> 62) == 2 && saveType == SaveType::EEPROM_512)
     {
-        uint16_t eepromAddr = (eepromInBits[2] << 5) | (eepromInBits[3] << 4) | (eepromInBits[4] << 3)
-                            | (eepromInBits[5] << 2) | (eepromInBits[6] << 1) | eepromInBits[7];
+        uint16_t eepromAddr = (eepromCommandData[0] >> 56) & 0x3F;
 
-        uint64_t data = 0;
-
-        for(int i = 0; i < 64; i++)
-            data |= static_cast<uint64_t>(eepromInBits[i + 8]) << (63 - i);
+        uint64_t data = eepromCommandData[0] << 8 | eepromCommandData[1] >> 56;
 
         reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr] = __builtin_bswap64(data);
-
-        eepromOutBits[0] = 1;
     }
     // end of read request for 8k
-    else if((addr & 0xFF) == 0x20 && eepromInBits[0] && eepromInBits[1])
+    else if(bit == 16 && (eepromCommandData[0] >> 62) == 3)
     {
-        uint16_t eepromAddr = (eepromInBits[ 2] << 13) | (eepromInBits[ 3] << 12) | (eepromInBits[ 4] << 11)
-                            | (eepromInBits[ 5] << 10) | (eepromInBits[ 6] <<  9) | (eepromInBits[ 7] <<  8)
-                            | (eepromInBits[ 8] <<  7) | (eepromInBits[ 9] <<  6) | (eepromInBits[10] <<  5)
-                            | (eepromInBits[11] <<  4) | (eepromInBits[12] <<  3) | (eepromInBits[13] <<  2)
-                            | (eepromInBits[14] <<  1) |  eepromInBits[15];
+        uint16_t eepromAddr = (eepromCommandData[0] >> 48) & 0x3FF;
 
         uint64_t data = reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr];
-        data = __builtin_bswap64(data);
-
-        for(int i = 0; i < 64; i++)
-            eepromOutBits[i + 4] = (data & (1ull << (63 - i))) ? 1 : 0;
+        eepromReadData = __builtin_bswap64(data);
     }
     // end write request for 8k
-    else if((addr & 0xFF) == 0xA0 && eepromInBits[0] && !eepromInBits[1])
+    else if(bit == 80 && (eepromCommandData[0] >> 62) == 2)
     {
-        uint16_t eepromAddr = (eepromInBits[ 2] << 13) | (eepromInBits[ 3] << 12) | (eepromInBits[ 4] << 11)
-                            | (eepromInBits[ 5] << 10) | (eepromInBits[ 6] <<  9) | (eepromInBits[ 7] <<  8)
-                            | (eepromInBits[ 8] <<  7) | (eepromInBits[ 9] <<  6) | (eepromInBits[10] <<  5)
-                            | (eepromInBits[11] <<  4) | (eepromInBits[12] <<  3) | (eepromInBits[13] <<  2)
-                            | (eepromInBits[14] <<  1) |  eepromInBits[15];
-
-        uint64_t data = 0;
-
-        for(int i = 0; i < 64; i++)
-            data |= static_cast<uint64_t>(eepromInBits[i + 16]) << (63 - i);
+        uint16_t eepromAddr = (eepromCommandData[0] >> 48) & 0x3FF;
+        uint64_t data = eepromCommandData[0] << 16 | eepromCommandData[1] >> 48;
 
         reinterpret_cast<uint64_t *>(cartSaveData)[eepromAddr] = __builtin_bswap64(data);
-
-        eepromOutBits[0] = 1;
     }
 }
 

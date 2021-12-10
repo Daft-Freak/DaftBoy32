@@ -220,8 +220,8 @@ private:
 
     SaveType saveType = SaveType::Unknown;
 
-    uint8_t eepromInBits[81]; // could be smaller if bits packed
-    uint8_t eepromOutBits[68];
+    uint64_t eepromCommandData[2]; // max 81 bits
+    uint64_t eepromReadData;
     uint8_t cartSaveData[128 * 1024]; // RAM/flash
 
     FlashState flashState = FlashState::Read;
