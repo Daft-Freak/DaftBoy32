@@ -356,8 +356,14 @@ int main(int argc, char *argv[])
         }
         if(size)
         {
-            std::ofstream saveFile(romFilename.substr(0, romFilename.length() - 3) + "sav");
+            auto saveFilename = romFilename.substr(0, romFilename.length() - 3) + "sav";
+            std::ofstream saveFile(saveFilename);
             saveFile.write(reinterpret_cast<char *>(agbCPU.getMem().getCartridgeSave()), size);
+
+            if(!saveFile)
+                std::cerr << "Failed to write " << saveFilename << "\n";
+            else
+                std::cout << "Wrote " << size << " bytes to " << saveFilename << "\n";
         }
     }
     else
