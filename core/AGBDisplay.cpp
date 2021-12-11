@@ -858,6 +858,20 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
             refPointY[1] = tmp << 16 | (refPointY[1] & 0xFFFF);
             break;
         }
+
+        case IO_BLDCNT:
+            mem.writeIOReg(addr, data & 0x3FFF);
+            return true;
+        case IO_BLDALPHA:
+            mem.writeIOReg(addr, data & 0x1F1F); // upper three bits aren't writable and this saves some masking later
+            return true;
+        case IO_BLDY:
+            // not readable, saves some work later
+            data &= 0x1F;
+            if(data > 16)
+                data = 16;
+            mem.writeIOReg(addr, data);
+            return true;
     }
 
     return false;
@@ -1081,14 +1095,14 @@ void AGBDisplay::drawScanLine(int y)
                     }
 
                     // do blend
-                    int srcA = std::min(16, blendAlpha & 0x1F);
+                    int srcA = std::min(16, blendAlpha & 0xFF);
 
                     auto dstCol = nextData ? nextData[x] : palRAM[0]; // handle backdrop
 
                     int dstR = (dstCol >> 10) & 0x1F;
                     int dstG = (dstCol >> 5) & 0x1F;
                     int dstB = dstCol & 0x1F;
-                    int dstA = std::min(16, (blendAlpha >> 8) & 0x1F);
+                    int dstA = std::min(16, blendAlpha >> 8);
 
                     int r = std::min(31, (srcR * srcA + dstR * dstA) / 16);
                     int g = std::min(31, (srcG * srcA + dstG * dstA) / 16);
@@ -1098,7 +1112,7 @@ void AGBDisplay::drawScanLine(int y)
                 }
                 else if(blendMode == 2) // lighten
                 {
-                    int evy = std::min(16, blendY & 0x1F);
+                    int evy = blendY;
 
                     int r = srcR + ((31 - srcR) * evy) / 16;
                     int g = srcG + ((31 - srcG) * evy) / 16;
@@ -1108,7 +1122,7 @@ void AGBDisplay::drawScanLine(int y)
                 }
                 else if(blendMode == 3) // darken
                 {
-                    int evy = std::min(16, blendY & 0x1F);
+                    int evy = blendY;
 
                     int r = srcR - (srcR * evy) / 16;
                     int g = srcG - (srcG * evy) / 16;
