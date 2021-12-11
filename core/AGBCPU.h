@@ -200,8 +200,8 @@ private:
 
     int runCycles(int cycles);
 
-    int executeARMInstruction();
-    int executeTHUMBInstruction();
+
+    bool checkARMCondition(int cond) const;
 
     uint32_t getARMShiftedReg(Reg r, uint8_t shift, bool &carry);
     int doARMHalfwordTransfer(uint32_t opcode, bool isPre);

@@ -430,73 +430,8 @@ int AGBCPU::executeARMInstruction()
     };
 
     // condition
-    auto cond = opcode >> 28;
-
-    // the conditions here have to be backwards...
-    switch(cond)
-    {
-        case 0x0: // equal
-            if(!(cpsr & Flag_Z))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0x1: // not equal
-            if(cpsr & Flag_Z)
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0x2: // carry set
-            if(!(cpsr & Flag_C))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0x3: // carry clear
-            if(cpsr & Flag_C)
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0x4: // negative
-            if(!(cpsr & Flag_N))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0x5: // positive or zero
-            if((cpsr & Flag_N))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0x6: // overflow
-            if(!(cpsr & Flag_V))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0x7: // no overflow
-            if((cpsr & Flag_V))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0x8: // unsigned higher
-            if(!(cpsr & Flag_C) || (cpsr & Flag_Z))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0x9: // unsigned lower or same
-            if((cpsr & Flag_C) && !(cpsr & Flag_Z))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0xA: // greater or equal
-            if(!!(cpsr & Flag_N) != !!(cpsr & Flag_V))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0xB: // less than
-            if(!!(cpsr & Flag_N) == !!(cpsr & Flag_V))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0xC: // greater than
-            if((cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0xD: // less than or equal
-            if(!(cpsr & Flag_Z) && !!(cpsr & Flag_N) == !!(cpsr & Flag_V))
-                return mem.prefetchTiming32(pcSCycles);
-            break;
-        case 0xE: // always
-            break;
-        // F is reserved
-        default:
-            assert(!"Invalid condition");
-    }
+    if(!checkARMCondition(opcode >> 28))
+        return mem.prefetchTiming32(pcSCycles);
 
     switch((opcode >> 24) & 0xF)
     {
@@ -769,6 +704,48 @@ int AGBCPU::executeTHUMBInstruction()
     }
 
     __builtin_unreachable();
+}
+
+bool AGBCPU::checkARMCondition(int cond) const
+{
+    switch(cond)
+    {
+        case 0x0: // equal
+            return cpsr & Flag_Z;
+        case 0x1: // not equal
+            return !(cpsr & Flag_Z);
+        case 0x2: // carry set
+            return cpsr & Flag_C;
+        case 0x3: // carry clear
+            return !(cpsr & Flag_C);
+        case 0x4: // negative
+            return cpsr & Flag_N;
+        case 0x5: // positive or zero
+            return !(cpsr & Flag_N);
+        case 0x6: // overflow
+            return cpsr & Flag_V;
+        case 0x7: // no overflow
+            return !(cpsr & Flag_V);
+        case 0x8: // unsigned higher
+            return (cpsr & Flag_C) && !(cpsr & Flag_Z);
+        case 0x9: // unsigned lower or same
+            return !(cpsr & Flag_C) || (cpsr & Flag_Z);
+        case 0xA: // greater or equal
+            return !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
+        case 0xB: // less than
+            return !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
+        case 0xC: // greater than
+            return !(cpsr & Flag_Z) && !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
+        case 0xD: // less than or equal
+            return (cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
+        case 0xE: // always
+            return true;
+        // F is reserved
+        default:
+            assert(!"Invalid condition");
+    }
+
+    return false;
 }
 
 uint32_t AGBCPU::getARMShiftedReg(Reg r, uint8_t shift, bool &carry)
