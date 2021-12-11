@@ -820,6 +820,15 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
 
     switch(addr)
     {
+        case IO_DISPCNT:
+        {
+            if(!(data & DISPCNT_Window0On))
+                yInWin0 = false;
+            if(!(data & DISPCNT_Window1On))
+                yInWin1 = false;
+
+            break;
+        }
 
         // affine reference points
         case IO_BG2X_L:
@@ -921,10 +930,10 @@ void AGBDisplay::drawScanLine(int y)
 
         int winLayers = winOut; // outside
 
-        if((dispControl & DISPCNT_Window0On) && yInWin0)
+        if(yInWin0)
             winLayers |= winIn;
 
-        if((dispControl & DISPCNT_Window1On) && yInWin1)
+        if(yInWin1)
             winLayers |= winIn >> 8;
 
         if((dispControl & DISPCNT_OBJWindowOn)) // assume inside for now
@@ -1002,15 +1011,15 @@ void AGBDisplay::drawScanLine(int y)
             if(x == (win1h & 0xFF))
                 xInWin1 = false;
             else if(x == win1h >> 8)
-                xInWin1 = true;    
+                xInWin1 = true;
 
-            if((dispControl & DISPCNT_Window0On) && yInWin0 && xInWin0)
+            if(yInWin0 && xInWin0)
             {
                 curLayerEnables &= winIn;
                 if(!(winIn & WININ_Win0Effect))
                     blendMode = 0;
             }
-            else if((dispControl & DISPCNT_Window1On) && yInWin1 && xInWin1)
+            else if(yInWin1 && xInWin1)
             {
                 curLayerEnables &= (winIn >> 8);
                 if(!(winIn & WININ_Win1Effect))
