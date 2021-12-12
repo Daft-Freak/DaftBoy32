@@ -502,10 +502,10 @@ int AGBCPU::executeARMInstruction()
                 return cycles + mem.iCycle() + mem.prefetchTiming32(pcSCycles);
             }
 
-            auto instOp = (opcode >> 21) & 0xF;
+            auto instOp = (opcode >> 21) & 0xF; // 8-F
             bool setCondCode = (opcode & (1 << 20));
 
-            if(!setCondCode && (instOp >= 0x8/*TST*/ && instOp <= 0xB /*CMN*/)) // PSR Transfer
+            if(!setCondCode && instOp <= 0xB /*CMN*/) // PSR Transfer (TST-CMN)
             {
                 bool isSPSR = opcode & (1 << 22);
                 if(opcode & (1 << 21)) // MSR
@@ -563,7 +563,7 @@ int AGBCPU::executeARMInstruction()
         }
         case 0x3: // same as above, but also possibly MSR
         {
-            auto instOp = (opcode >> 21) & 0xF;
+            auto instOp = (opcode >> 21) & 0xF; // 8-F
             bool setCondCode = (opcode & (1 << 20));
 
             // get the immediate value
@@ -574,7 +574,7 @@ int AGBCPU::executeARMInstruction()
             bool carry = shift ? op2 & (1 << 31) : cpsr & Flag_C;
 
             // TODO: a bit duplicated with 0/1
-            if(!setCondCode && (instOp >= 0x8/*TST*/ && instOp <= 0xB /*CMN*/)) // MSR
+            if(!setCondCode && instOp <= 0xB /*CMN*/) // MSR (TST-CMN)
             {
                 bool isSPSR = opcode & (1 << 22);
 
