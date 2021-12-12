@@ -994,7 +994,7 @@ void AGBDisplay::drawScanLine(int y)
     layers[numActiveLayers++] = {nullptr, 0};
 
     // start with window enabled if start/end are flipped
-    bool xInWin0 = (win0h & 0xFF) < (win0h >> 8), xInWin1 = (win1h & 0xFF) < (win1h >> 8);
+    bool xInWin0 = yInWin0 && (win0h & 0xFF) < (win0h >> 8), xInWin1 = yInWin1 && (win1h & 0xFF) < (win1h >> 8);
 
     // blending setup
     auto blendControl = mem.readIOReg(IO_BLDCNT);
@@ -1011,23 +1011,29 @@ void AGBDisplay::drawScanLine(int y)
 
         if(windowEnabled)
         {
-            if(x == (win0h & 0xFF))
-                xInWin0 = false;
-            else if(x == win0h >> 8)
-                xInWin0 = true;
+            if(yInWin0)
+            {
+                if(x == (win0h & 0xFF))
+                    xInWin0 = false;
+                else if(x == win0h >> 8)
+                    xInWin0 = true;
+            }
 
-            if(x == (win1h & 0xFF))
-                xInWin1 = false;
-            else if(x == win1h >> 8)
-                xInWin1 = true;
+            if(yInWin1)
+            {
+                if(x == (win1h & 0xFF))
+                    xInWin1 = false;
+                else if(x == win1h >> 8)
+                    xInWin1 = true;
+            }
 
-            if(yInWin0 && xInWin0)
+            if(xInWin0)
             {
                 curLayerEnables &= winIn;
                 if(!(winIn & WININ_Win0Effect))
                     blendMode = 0;
             }
-            else if(yInWin1 && xInWin1)
+            else if(xInWin1)
             {
                 curLayerEnables &= (winIn >> 8);
                 if(!(winIn & WININ_Win1Effect))
