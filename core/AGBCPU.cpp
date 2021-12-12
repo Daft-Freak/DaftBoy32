@@ -445,14 +445,12 @@ int AGBCPU::executeARMInstruction()
                 return doARMMultiply(opcode);
             }
 
-            auto op2Shift = (opcode >> 4) & 0xFF;
-            auto op2Reg = static_cast<Reg>(opcode & 0xF);
-
             // reg arg2
             bool carry;
-            auto op2 = getARMShiftedReg(op2Reg, op2Shift, carry);
+            auto op2 = getARMShiftedReg(opcode, carry);
 
-            return doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 4 : 0) + (op2Shift & 1); // +1I if shift by reg
+            bool isRegShift = opcode & (1 << 4);
+            return doDataProcessing(opcode, op2, carry, isRegShift ? 4 : 0) + (isRegShift ? 1 : 0); // +1I if shift by reg
         }
         case 0x1: // data processing with register (and branch exchange/swap)
         {
@@ -546,14 +544,12 @@ int AGBCPU::executeARMInstruction()
                 return mem.prefetchTiming32(pcSCycles);
             }
 
-            auto op2Shift = (opcode >> 4) & 0xFF;
-            auto op2Reg = static_cast<Reg>(opcode & 0xF);
-
             // reg arg2
             bool carry;
-            auto op2 = getARMShiftedReg(op2Reg, op2Shift, carry);
+            auto op2 = getARMShiftedReg(opcode, carry);
 
-            return doDataProcessing(opcode, op2, carry, (op2Shift & 1) ? 4 : 0) + (op2Shift & 1); // +1I if shift by reg
+            bool isRegShift = opcode & (1 << 4);
+            return doDataProcessing(opcode, op2, carry, isRegShift ? 4 : 0) + (isRegShift ? 1 : 0); // +1I if shift by reg
         }
         case 0x2: // data processing with immediate
         {
@@ -748,26 +744,30 @@ bool AGBCPU::checkARMCondition(int cond) const
     return false;
 }
 
-uint32_t AGBCPU::getARMShiftedReg(Reg r, uint8_t shift, bool &carry)
+// shift is usually the bottom 12 bits of the opcode
+uint32_t AGBCPU::getARMShiftedReg(uint16_t shift, bool &carry)
 {
+    auto r = static_cast<Reg>(shift & 0xF);
     auto ret = reg(r);
 
+    bool byReg = shift & (1 << 4);
+
     // prefetch
-    if(r == Reg::PC && (shift & 1))
+    if(r == Reg::PC && byReg)
         ret += 4;
 
-    if(!shift) // left shift by immediate 0, do nothing and preserve carry
+    if(!((shift >> 4) & 0xFF)) // left shift by immediate 0, do nothing and preserve carry
     {
         carry = cpsr & Flag_C;
         return ret;
     }
 
-    int shiftType = (shift >> 1) & 3;
+    int shiftType = (shift >> 5) & 3;
     int shiftAmount;
-    if(shift & 1)
+    if(byReg)
     {
-        assert((shift & (1 << 3)) == 0);
-        shiftAmount = reg(static_cast<Reg>(shift >> 4)) & 0xFF;
+        assert((shift & (1 << 7)) == 0);
+        shiftAmount = reg(static_cast<Reg>((shift >> 8) & 0xF)) & 0xFF;
 
         if(!shiftAmount)
         {
@@ -777,7 +777,7 @@ uint32_t AGBCPU::getARMShiftedReg(Reg r, uint8_t shift, bool &carry)
     }
     else
     {
-        shiftAmount = shift >> 3;
+        shiftAmount = (shift >> 7) & 0x1F;
         if(shiftAmount == 0) // lsr/asr shift by 32 instead of 0
             shiftAmount = 32;
     }
@@ -824,7 +824,7 @@ uint32_t AGBCPU::getARMShiftedReg(Reg r, uint8_t shift, bool &carry)
             break;
         }
         case 3:
-            if(!(shift & 1) && shiftAmount == 32) // RRX (immediate 0)
+            if(!byReg && shiftAmount == 32) // RRX (immediate 0)
             {
                 carry = ret & 1; // carry out
 
@@ -1017,7 +1017,7 @@ int AGBCPU::doARMSingleDataTransfer(uint32_t opcode, bool isReg, bool isPre)
     {
         assert((opcode & (1 << 4)) == 0); // no reg shift
         bool carry;
-        offset = getARMShiftedReg(static_cast<Reg>(opcode & 0xF), (opcode >> 4) & 0xFE, carry);
+        offset = getARMShiftedReg(opcode, carry);
     }
 
     if(!(opcode & (1 << 23))) // !up
