@@ -376,8 +376,9 @@ static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
         memset(scanLine, 0, 240 * 2);
 }
 
-static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t objMask[240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl)
+static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t objMask[240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl)
 {
+    int usedPriorities = 0;
     auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
     const int entrySize = 4; // * 16 bit
 
@@ -481,6 +482,8 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t o
 
         // palette
         auto spritePal = palRam + 256;
+
+        usedPriorities |= 1 << priority;
 
         if(mode != 0)
         {
@@ -650,6 +653,8 @@ static void drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t o
             }
         }
     }
+
+    return usedPriorities;
 }
 
 AGBDisplay::AGBDisplay(AGBCPU &cpu) : cpu(cpu), mem(cpu.getMem())
@@ -942,6 +947,25 @@ void AGBDisplay::drawScanLine(int y)
         layerEnables &= winLayers;
     }
 
+    // draw enabled layers
+    if(layerEnables & Layer_BG0)
+        drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control);
+
+    if(layerEnables & Layer_BG1)
+        drawBG1(mem, y, bgData[1], palRAM, vram, dispControl, bg1Control);
+
+    if(layerEnables & Layer_BG2)
+        drawBG2(mem, y, bgData[2], palRAM, vram, dispControl, bg2Control, refPointX[0], refPointY[0]);
+
+    if(layerEnables & Layer_BG3)
+        drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]);
+
+    int spritePriorities;
+    if(layerEnables & Layer_OBJ)
+        spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl);
+    else
+        spritePriorities = 0;
+
     // get priority/active layers
     int layerPriority[] {
         bg0Control & BGCNT_Priority,
@@ -956,7 +980,7 @@ void AGBDisplay::drawScanLine(int y)
     for(int priority = 0; priority < 4; priority++)
     {
         // objects
-        if(layerEnables & Layer_OBJ)
+        if(spritePriorities & (1 << priority))
             layers[numActiveLayers++] = {objData[priority], Layer_OBJ};
 
         // background layers
@@ -968,22 +992,6 @@ void AGBDisplay::drawScanLine(int y)
     }
 
     layers[numActiveLayers++] = {nullptr, 0};
-
-    // draw enabled layers
-    if(layerEnables & Layer_BG0)
-        drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control);
-
-    if(layerEnables & Layer_BG1)
-        drawBG1(mem, y, bgData[1], palRAM, vram, dispControl, bg1Control);
-
-    if(layerEnables & Layer_BG2)
-        drawBG2(mem, y, bgData[2], palRAM, vram, dispControl, bg2Control, refPointX[0], refPointY[0]);
-
-    if(layerEnables & Layer_BG3)
-        drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]);
-
-    if(layerEnables & Layer_OBJ)
-        drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl);
 
     // start with window enabled if start/end are flipped
     bool xInWin0 = (win0h & 0xFF) < (win0h >> 8), xInWin1 = (win1h & 0xFF) < (win1h >> 8);
