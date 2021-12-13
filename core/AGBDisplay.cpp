@@ -906,8 +906,7 @@ void AGBDisplay::drawScanLine(int y)
     // forced blank, display white
     if(dispControl & DISPCNT_ForceBlank)
     {
-        for(int i = 0; i < screenWidth; i++)
-            scanLine[i] = 0x7FFF;
+        memset(scanLine, 0xFF, screenWidth * 2);
         return;
     }
 
