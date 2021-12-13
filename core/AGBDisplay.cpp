@@ -430,7 +430,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
         int doubledH = mode == 3 ? spriteH * 2 : spriteH;
 
         // wrap
-        if(((spriteY + doubledH - 1) & 0xFF) < spriteY)
+        if(spriteY + doubledH > 256)
             spriteY -= 256;
 
         if(spriteY > y)
