@@ -382,12 +382,12 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
     auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
     const int entrySize = 4; // * 16 bit
 
-    // width, flip the shape bits for heights
-    static const int sizes[]
+    // height, flip the shape bits for widths
+    static const int sizes[][4]
     {
-         8, 16, 32, 64, // square
-        16, 32, 32, 64, // wide
-         8,  8, 16, 32  // tall
+        { 8, 16, 32, 64}, // square
+        { 8,  8, 16, 32}, // tall
+        {16, 32, 32, 64}, // wide
     };
 
     // extra mask so we can ignore the regular one for windows
@@ -422,9 +422,9 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
         // check y
         int spriteY = attr0 & Attr0_Y;
 
-        auto shape = (attr0 & Attr0_Shape) >> 12;
-        int sizeShape = (shape ? shape ^ 0xC : 0) | ((attr1 & Attr1_Size) >> 14);
-        int spriteH = sizes[sizeShape];
+        auto shape = (attr0 & Attr0_Shape) >> 14;
+        int size = ((attr1 & Attr1_Size) >> 14);
+        int spriteH = sizes[shape][size];
 
         // possibly doubled size
         int doubledH = mode == 3 ? spriteH * 2 : spriteH;
@@ -447,8 +447,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
 
         // get X/W
         int spriteX = attr1 & Attr1_X;
-        sizeShape = shape | ((attr1 & Attr1_Size) >> 14);
-        const int spriteW = sizes[sizeShape];
+        const int spriteW = sizes[shape ? shape ^ 3 : 0][size];
 
         // wrap
         if(((spriteX + spriteW) & 0x1FF) < spriteX)
