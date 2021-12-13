@@ -1095,7 +1095,7 @@ void AGBDisplay::drawScanLine(int y)
                 int srcG = (col >> 5) & 0x1F;
                 int srcB = col & 0x1F;
 
-                if(blendMode == 1 && mask) // alpha, ignore if backdrop (nothing to blend with)
+                if(blendMode == 1 && data) // alpha, ignore if backdrop (nothing to blend with)
                 {
                     // get next layer
                     uint16_t *nextData;
