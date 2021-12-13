@@ -945,6 +945,36 @@ void AGBDisplay::drawScanLine(int y)
         layerEnables &= winLayers;
     }
 
+    // draw sprites first
+    int spritePriorities;
+    if(layerEnables & Layer_OBJ)
+        spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl);
+    else
+        spritePriorities = 0;
+
+    // if the object window was enabled, but there are no objects with the window bit set
+    if((dispControl & DISPCNT_OBJWindowOn) && !(spritePriorities & (1 << 4)))
+    {
+        // ...recalculate enabled layers
+        int winLayers = winOut; // outside
+
+        // if there are no other windows and blending isn't being disabled, disable windows entirely
+        if(!yInWin0 && !yInWin1 && (winOut & WINOUT_OutsideEffect))
+            windowEnabled = false;
+        else
+        {
+            // otherwise just disable checking the object window
+            dispControl &= ~DISPCNT_OBJWindowOn;
+            if(yInWin0)
+                winLayers |= winIn;
+
+            if(yInWin1)
+                winLayers |= winIn >> 8;
+        }
+
+        layerEnables &= winLayers;
+    }
+
     // draw enabled layers
     if(layerEnables & Layer_BG0)
         drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control);
@@ -957,12 +987,6 @@ void AGBDisplay::drawScanLine(int y)
 
     if(layerEnables & Layer_BG3)
         drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]);
-
-    int spritePriorities;
-    if(layerEnables & Layer_OBJ)
-        spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl);
-    else
-        spritePriorities = 0;
 
     // get priority/active layers
     int layerPriority[] {
