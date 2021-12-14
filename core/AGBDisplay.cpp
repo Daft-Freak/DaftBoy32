@@ -42,12 +42,146 @@ enum OAMAttr2Bits
     Attr2_Pal      = 0xF << 12
 };
 
+static const int screenBlockTiles = 32; // 32x32
+
+// draw screen block 4/8 helpers
+static void drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
+{
+    auto validDataEnd = vram + 0x10000;
+
+    int tx = (x + xOffset) & 7;
+    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
+
+    for(; x < 240 && bx < screenBlockTiles; bx++)
+    {
+        uint16_t tileMeta = 0;
+    
+        // screen base pointing past first 64k is invalid
+        // reading as zero matches what the DS does
+        if(reinterpret_cast<uint8_t *>(screenPtr) < validDataEnd)
+            tileMeta = screenPtr[bx];
+
+        // v flip
+        int tty = ty;
+        if(tileMeta & (1 << 11))
+            tty = 7 - ty;
+
+        // 4bit tiles
+        uint32_t tileRow = 0;
+        auto thisTilePtr = charPtr + (tileMeta & 0x3FF) * 32;
+        // char base pointing past first 64k is invalid
+        if(thisTilePtr < validDataEnd)
+            tileRow = reinterpret_cast<uint32_t *>(thisTilePtr)[tty];
+        // this is what the GBA would do, but the DS just reads 0 so let's avoid some code here
+        //else
+        //    tileRow = (tileMeta & 0x3FF) | (tileMeta & 0x3FF) << 16;
+
+        auto tilePal = palRam + ((tileMeta & 0xF000) >> 8);
+
+        // h flip
+        if(tileMeta & (1 << 10))
+        {
+            tileRow = __builtin_bswap32(tileRow);
+            tileRow = ((tileRow & 0xF0F0F0F0) >> 4) | ((tileRow & 0x0F0F0F0F) << 4);
+        }
+
+        if(!tx && x + 8 < 240)
+        {
+            // full tile
+            x += 8;
+            for(int tx = 0; tx < 8; tx++, tileRow >>= 4, scanLine++)
+            {
+                if(tileRow & 0xF)
+                    *scanLine = tilePal[tileRow & 0xF] | 0x8000;
+                else
+                    *scanLine = 0;
+            }
+        }
+        else
+        {
+            // edges
+            tileRow >>= (tx * 4);
+
+            for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
+            {
+                if(tileRow & 0xF)
+                    *scanLine = tilePal[tileRow & 0xF] | 0x8000;
+                else
+                    *scanLine = 0;
+            }
+
+            tx = 0;
+        }
+    }
+}
+
+static void drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
+{
+    auto validDataEnd = vram + 0x10000;
+
+    int tx = (x + xOffset) & 7;
+    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
+
+    for(; x < 240 && bx < screenBlockTiles; bx++)
+    {
+        uint16_t tileMeta = 0;
+    
+        // screen base pointing past first 64k is invalid
+        // reading as zero matches what the DS does
+        if(reinterpret_cast<uint8_t *>(screenPtr) < validDataEnd)
+            tileMeta = screenPtr[bx];
+
+        // v flip
+        int tty = ty;
+        if(tileMeta & (1 << 11))
+            tty = 7 - ty;
+
+        // 8bit tiles
+        uint64_t tileRow = 0;
+        auto thisTilePtr = charPtr + (tileMeta & 0x3FF) * 64;
+
+        if(thisTilePtr < validDataEnd)
+            tileRow = reinterpret_cast<uint64_t *>(thisTilePtr)[tty];
+
+        // h flip
+        if(tileMeta & (1 << 10))
+            tileRow = __builtin_bswap64(tileRow);
+
+        auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow) + tx;
+
+        if(!tx && x + 8 < 240)
+        {
+            // full tile
+            x += 8;
+            for(int tx = 0; tx < 8; tx++, scanLine++)
+            {
+                auto palIndex = *tilePtr++;
+                if(palIndex)
+                    *scanLine = palRam[palIndex] | 0x8000;
+                else
+                    *scanLine = 0;
+            }
+        }
+        else
+        {
+            // edges
+            for(; tx < 8 && x < 240; tx++, x++, scanLine++)
+            {
+                auto palIndex = *tilePtr++;
+                if(palIndex)
+                    *scanLine = palRam[palIndex] | 0x8000;
+                else
+                    *scanLine = 0;
+            }
+
+            tx = 0;
+        }
+    }
+}
+
 // bg layer helpers
 // hopefully this gets mostly inlined
-static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t xOffset, uint16_t yOffset)
 {
-    const int screenBlockTiles = 32; // 32x32
-
     int screenSize = (control & BGCNT_ScreenSize) >> 14;
 
     int ty = (y + yOffset) & 7;
@@ -63,126 +197,33 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
     by &= (screenBlockTiles - 1);
 
     auto blockBase = (control & BGCNT_ScreenBase) << 3; // >> 8 * 0x800
-    uint16_t *screenPtr = reinterpret_cast<uint16_t *>(vram + blockBase + blockIndex * 0x800);
+    uint16_t *screenPtr = reinterpret_cast<uint16_t *>(vram + blockBase + blockIndex * 0x800) + by * screenBlockTiles;
 
     auto charBase = ((control & BGCNT_CharBase) >> 2) * 0x4000;
     auto charPtr = vram + charBase;
-    auto validDataEnd = vram + 0x10000;
 
-    for(int x = 0; x < 240;)
+    auto firstBlockPtr = screenPtr;
+    // second column
+    if((xOffset >> 3) >= screenBlockTiles && (screenSize & 1))  // 2x1, 2x2
+        firstBlockPtr += screenBlockTiles * screenBlockTiles;
+
+    int x = 0;
+    if(control & BGCNT_SinglePal)
+        drawScreenBlock8(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
+    else
+        drawScreenBlock4(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
+
+    // possible second block
+    if(x < 240)
     {
-        int tx = (x + xOffset) & 7;
-        int bx = (x + xOffset) >> 3;
-
-        auto tilePtr = screenPtr + by * screenBlockTiles;
-
-        // second column
-        if(screenSize & 1 && (bx & screenBlockTiles)) // 2x1, 2x2
-            tilePtr += screenBlockTiles * screenBlockTiles;
-
-        // wrap
-        bx &= (screenBlockTiles - 1);
-
-        uint16_t tileMeta = 0;
-    
-        // screen base pointing past first 64k is invalid
-        // reading as zero matches what the DS does
-        if(reinterpret_cast<uint8_t *>(tilePtr) < validDataEnd)
-            tileMeta = tilePtr[bx];
-
-        // v flip
-        int tty = ty;
-        if(tileMeta & (1 << 11))
-            tty = 7 - ty;
+        // first block wasn't the second column, so second block is
+        if((xOffset >> 3) < screenBlockTiles && (screenSize & 1))  // 2x1, 2x2
+            screenPtr += screenBlockTiles * screenBlockTiles;
 
         if(control & BGCNT_SinglePal)
-        {
-            // 8bit tiles
-            uint64_t tileRow = 0;
-            auto thisTilePtr = charPtr + (tileMeta & 0x3FF) * 64;
-
-            if(thisTilePtr < validDataEnd)
-                tileRow = reinterpret_cast<uint64_t *>(thisTilePtr)[tty];
-
-            // h flip
-            if(tileMeta & (1 << 10))
-                tileRow = __builtin_bswap64(tileRow);
-
-            auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow) + tx;
-
-            if(!tx && x + 8 < 240)
-            {
-                // full tile
-                x += 8;
-                for(; tx < 8; tx++, scanLine++)
-                {
-                    auto palIndex = *tilePtr++;
-                    if(palIndex)
-                        *scanLine = palRam[palIndex] | 0x8000;
-                    else
-                        *scanLine = 0;
-                }
-            }
-            else
-            {
-                // edges
-                for(; tx < 8 && x < 240; tx++, x++, scanLine++)
-                {
-                    auto palIndex = *tilePtr++;
-                    if(palIndex)
-                        *scanLine = palRam[palIndex] | 0x8000;
-                    else
-                        *scanLine = 0;
-                }
-            }
-        }
+            drawScreenBlock8(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset);
         else
-        {
-            // 4bit tiles
-            uint32_t tileRow = 0;
-            auto thisTilePtr = charPtr + (tileMeta & 0x3FF) * 32;
-            // char base pointing past first 64k is invalid
-            if(thisTilePtr < validDataEnd)
-                tileRow = reinterpret_cast<uint32_t *>(thisTilePtr)[tty];
-            // this is what the GBA would do, but the DS just reads 0 so let's avoid some code here
-            //else
-            //    tileRow = (tileMeta & 0x3FF) | (tileMeta & 0x3FF) << 16;
-
-            auto tilePal = palRam + ((tileMeta & 0xF000) >> 8);
-
-            // h flip
-            if(tileMeta & (1 << 10))
-            {
-                tileRow = __builtin_bswap32(tileRow);
-                tileRow = ((tileRow & 0xF0F0F0F0) >> 4) | ((tileRow & 0x0F0F0F0F) << 4);
-            }
-
-            if(!tx && x + 8 < 240)
-            {
-                // full tile
-                x += 8;
-                for(; tx < 8; tx++, tileRow >>= 4, scanLine++)
-                {
-                    if(tileRow & 0xF)
-                        *scanLine = tilePal[tileRow & 0xF] | 0x8000;
-                    else
-                        *scanLine = 0;
-                }
-            }
-            else
-            {
-                // edges
-                tileRow >>= (tx * 4);
-
-                for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
-                {
-                    if(tileRow & 0xF)
-                        *scanLine = tilePal[tileRow & 0xF] | 0x8000;
-                    else
-                        *scanLine = 0;
-                }
-            }
-        }
+            drawScreenBlock4(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset);
     }
 }
 
