@@ -82,12 +82,12 @@ void AGBCPU::triggerDMA(int trigger)
 
 uint16_t AGBCPU::readReg(uint32_t addr, uint16_t val)
 {
-    if((addr & 0xFFFFFF) < IO_SOUND1CNT_L)
+    if(addr < IO_SOUND1CNT_L)
         return display.readReg(addr, val);
-    else if((addr & 0xFFFFFF) <= IO_FIFO_B)
+    else if(addr <= IO_FIFO_B)
         return apu.readReg(addr, val);
 
-    switch(addr & 0xFFFFFF)
+    switch(addr)
     {
         // not readable
         // TODO: src/dest regs are open bus
@@ -124,14 +124,14 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
     if(display.writeReg(addr, data) || apu.writeReg(addr, data, mask))
         return true;
 
-    switch(addr & 0xFFFFFF)
+    switch(addr)
     {
         case IO_DMA0CNT_H:
         case IO_DMA1CNT_H:
         case IO_DMA2CNT_H:
         case IO_DMA3CNT_H:
         {
-            int index = ((addr & 0xFFFFFF) - IO_DMA0CNT_H) / 12;
+            int index = (addr - IO_DMA0CNT_H) / 12;
             if(data & DMACNTH_Enable)
             {
                 if((data & DMACNTH_Start) == 0)
@@ -175,7 +175,7 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
         case IO_TM2CNT_H:
         case IO_TM3CNT_H:
         {
-            int index = ((addr & 0xFFFFFF) - IO_TM0CNT_H) >> 2;
+            int index = (addr - IO_TM0CNT_H) >> 2;
             static const int prescalers[]{1, 64, 256, 1024};
 
             // sync

@@ -887,7 +887,7 @@ uint16_t AGBDisplay::readReg(uint32_t addr, uint16_t val)
 
 bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
 {
-    if((addr & 0xFFFFFF) < 0x60/*SOUND1CNT_L*/)
+    if(addr < IO_SOUND1CNT_L)
         update();
 
     switch(addr)

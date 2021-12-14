@@ -144,7 +144,7 @@ uint16_t AGBAPU::readReg(uint32_t addr, uint16_t val)
 {
     update();
 
-    switch(addr & 0xFFFFFF)
+    switch(addr)
     {
         case IO_SOUND1CNT_L:
             return val & 0x7F; // other bits are unused
@@ -200,12 +200,10 @@ bool AGBAPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
 {
     const uint8_t dutyPatterns[]{0b01000000, 0b11000000, 0b11110000, 0b00111111};
 
-    if((addr & 0xFFFFFF) < IO_SOUND1CNT_L || (addr & 0xFFFFFF) > IO_FIFO_B + 2)
+    if(addr < IO_SOUND1CNT_L || addr > IO_FIFO_B + 2)
         return false;
 
     update();
-
-    addr = addr & 0xFFFFFF;
 
     auto &mem = cpu.getMem();
 
