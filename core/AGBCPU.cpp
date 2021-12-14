@@ -476,30 +476,7 @@ int AGBCPU::executeARMInstruction()
                 if((opcode >> 5) & 3) // halfword transfer
                     return doARMHalfwordTransfer(opcode, true);
 
-                // SWP
-                bool isByte = opcode & (1 << 22);
-                auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
-                auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
-                auto srcReg = static_cast<Reg>(opcode & 0xF);
-
-                auto addr = reg(baseReg);
-
-                int cycles = 0;
-
-                if(isByte)
-                {
-                    auto v = readMem8(addr, cycles);
-                    writeMem8(addr, reg(srcReg), cycles);
-                    reg(destReg) = v;
-                }
-                else
-                {
-                    auto v = readMem32(addr, cycles);
-                    writeMem32(addr, reg(srcReg), cycles);
-                    reg(destReg) = v;
-                }
-
-                return cycles + mem.iCycle() + mem.prefetchTiming32(pcSCycles);
+                return doARMSwap(opcode);
             }
 
             auto instOp = (opcode >> 21) & 0xF; // 8-F
@@ -937,6 +914,34 @@ int AGBCPU::doARMMultiply(uint32_t opcode)
         int iCycles = (prefix == 32 ? 1 : (4 - prefix / 8)) + (accumulate ? 1 : 0);
         return mem.iCycle(iCycles) + mem.prefetchTiming32(pcSCycles, pcNCycles);
     }
+}
+
+int AGBCPU::doARMSwap(uint32_t opcode)
+{
+    // SWP
+    bool isByte = opcode & (1 << 22);
+    auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
+    auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
+    auto srcReg = static_cast<Reg>(opcode & 0xF);
+
+    auto addr = reg(baseReg);
+
+    int cycles = 0;
+
+    if(isByte)
+    {
+        auto v = readMem8(addr, cycles);
+        writeMem8(addr, reg(srcReg), cycles);
+        reg(destReg) = v;
+    }
+    else
+    {
+        auto v = readMem32(addr, cycles);
+        writeMem32(addr, reg(srcReg), cycles);
+        reg(destReg) = v;
+    }
+
+    return cycles + mem.iCycle() + mem.prefetchTiming32(pcSCycles);
 }
 
 // op2 is only for the immediate version
