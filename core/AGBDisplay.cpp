@@ -1103,13 +1103,16 @@ void AGBDisplay::drawScanLine(int y)
     uint16_t blendAlpha = mem.readIOReg(IO_BLDALPHA);
     uint16_t blendY = mem.readIOReg(IO_BLDY);
 
+
     // merge layers
-    for(int x = 0; x < screenWidth; x++)
+    for(int x = 0; x < screenWidth;)
     {
-        // TODO: maybe don't do this every pixel
         int curLayerEnables = layerEnables;
 
         int blendMode = (blendControl & BLDCNT_Effect) >> 6;
+
+        // attempt to draw as many pixels as possible before checking window again
+        int end = screenWidth;
 
         if(windowEnabled)
         {
@@ -1125,7 +1128,7 @@ void AGBDisplay::drawScanLine(int y)
             {
                 if(x == (win1h & 0xFF))
                     xInWin1 = false;
-                else if(x == win1h >> 8)
+                else if(x >= win1h >> 8)
                     xInWin1 = true;
             }
 
@@ -1134,70 +1137,106 @@ void AGBDisplay::drawScanLine(int y)
                 curLayerEnables &= winIn;
                 if(!(winIn & WININ_Win0Effect))
                     blendMode = 0;
+
+                // end of win 0, unless the coords are flipped
+                if((win0h & 0xFF) > x)
+                    end = win0h & 0xFF;
             }
             else if(xInWin1)
             {
                 curLayerEnables &= (winIn >> 8);
                 if(!(winIn & WININ_Win1Effect))
                     blendMode = 0;
+
+                // end of win 1 or start of win 0
+                if((win1h & 0xFF) > x)
+                    end = win1h & 0xFF;
+                if(yInWin0 && (win0h >> 8) < end && (win0h >> 8) > x)
+                    end = win0h >> 8;
             }
             else if((dispControl & DISPCNT_OBJWindowOn) && objData[4][x])
             {
                 curLayerEnables &= (winOut >> 8);
                 if(!(winOut & WINOUT_ObjWinEffect))
                     blendMode = 0;
+
+                // "end" of object window
+                end = x + 1;
+                while(objData[4][end] && end < 240)
+                    end++;
+                // or start of win 0
+                if(yInWin0 && (win0h >> 8) < end && (win0h >> 8) > x)
+                    end = win0h >> 8;
+                // ... or win 1
+                if(yInWin1 && (win1h >> 8) < end && (win1h >> 8) > x)
+                    end = win1h >> 8;
             }
             else //outside
             {
                 curLayerEnables &= winOut;
                 if(!(winOut & WINOUT_OutsideEffect))
                     blendMode = 0;
+
+                // start of win 0
+                if(yInWin0 && (win0h >> 8) > x)
+                    end = win0h >> 8;
+                // ... or win 1
+                if(yInWin1 && (win1h >> 8) < end && (win1h >> 8) > x)
+                    end = win1h >> 8;
+
+                // ... or object window
+                if(dispControl & DISPCNT_OBJWindowOn)
+                {
+                    int spriteStart = x + 1;
+                    while(!objData[4][spriteStart] && spriteStart < end)
+                        spriteStart++;
+
+                    end = spriteStart;
+                }
             }
         }
 
-        for(int i = 0; i < 9; i++)
+        for(; x < end;x++)
         {
-            uint16_t *data;
-            int mask;
-            std::tie(data, mask) = layers[i];
-
-            uint16_t col;
-
-            // backdrop
-            if(!mask)
+            for(int i = 0; i < 9; i++)
             {
-                col = palRAM[0];
-                mask = BLDCNT_SrcBackdrop; // for blending check
-            }
-            else
-            {
-                // check if disabled by window
-                if(!(curLayerEnables & mask))
-                    continue;
+                uint16_t *data;
+                int mask;
+                std::tie(data, mask) = layers[i];
 
-                if(!data[x])
-                    continue;
+                uint16_t col;
 
-                col = data[x];
-            }
+                // backdrop
+                if(!mask)
+                {
+                    col = palRAM[0];
+                    mask = BLDCNT_SrcBackdrop; // for blending check
+                }
+                else
+                {
+                    // check if disabled by window
+                    if(!(curLayerEnables & mask))
+                        continue;
 
-            // blend enabled and layer is src (masks conveniently line up)
-            bool shouldBlend = blendMode && (blendControl & mask);
+                    if(!data[x])
+                        continue;
 
-            // forced blend for objects
-            if(mask == Layer_OBJ && objMask[x] == 2)
-            {
-                blendMode = 1;
-                shouldBlend = true;
-            }
+                    col = data[x];
+                }
 
-            if(shouldBlend)
-            {
+                int curBlendMode = blendMode;
+                // make sure layer is src (masks conveniently line up)
+                if(!(blendControl & mask))
+                    curBlendMode = 0;
+                // forced blend for objects
+                else if(mask == Layer_OBJ && objMask[x] == 2)
+                    curBlendMode = 1;
+
                 int srcR = (col >> 10) & 0x1F;
                 int srcG = (col >> 5) & 0x1F;
                 int srcB = col & 0x1F;
 
-                if(blendMode == 1 && data) // alpha, ignore if backdrop (nothing to blend with)
+                if(curBlendMode == 1 && data) // alpha, ignore if backdrop (nothing to blend with)
                 {
                     // get next layer
                     uint16_t *nextData;
@@ -1235,7 +1274,7 @@ void AGBDisplay::drawScanLine(int y)
 
                     scanLine[x] = r << 11 | g << 6 | b;
                 }
-                else if(blendMode == 2) // lighten
+                else if(curBlendMode == 2) // lighten
                 {
                     int evy = blendY;
 
@@ -1245,7 +1284,7 @@ void AGBDisplay::drawScanLine(int y)
 
                     scanLine[x] = r << 11 | g << 6 | b;
                 }
-                else if(blendMode == 3) // darken
+                else if(curBlendMode == 3) // darken
                 {
                     int evy = blendY;
 
@@ -1257,11 +1296,9 @@ void AGBDisplay::drawScanLine(int y)
                 }
                 else
                     scanLine[x] = (col & 0x1F) | (col & 0x7FE0) << 1;
-            }
-            else
-                scanLine[x] = (col & 0x1F) | (col & 0x7FE0) << 1;
 
-            break;
+                break;
+            }
         }
     }
 }
