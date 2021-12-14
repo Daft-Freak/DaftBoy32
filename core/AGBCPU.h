@@ -200,6 +200,8 @@ private:
 
     int runCycles(int cycles);
 
+    int executeARMInstruction();
+    int executeTHUMBInstruction();
 
     bool checkARMCondition(int cond) const;
 
