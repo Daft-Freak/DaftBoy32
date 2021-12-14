@@ -437,7 +437,7 @@ int AGBCPU::executeARMInstruction()
     {
         case 0x0: // data processing with register (and halfword transfer/multiply)
         {
-            if(((opcode >> 4) & 9) == 9)
+            if((opcode & 0x90) == 0x90)
             {
                 if((opcode >> 5) & 3) // halfword transfer
                     return doARMHalfwordTransfer(opcode, false);
@@ -454,9 +454,9 @@ int AGBCPU::executeARMInstruction()
         }
         case 0x1: // data processing with register (and branch exchange/swap)
         {
-            if((opcode & 0x0FFFFF00) == 0x012FFF00) // Branch and Exchange (BX)
+            if(((opcode >> 8) & 0xFFFF) == 0x2FFF) // Branch and Exchange (BX)
             {
-                auto instOp = (opcode >> 4) & 0xF;
+                [[maybe_unused]] auto instOp = (opcode >> 4) & 0xF;
                 assert(instOp == 1); //
                 auto newPC = reg(static_cast<Reg>(opcode & 0xF));
 
@@ -471,7 +471,7 @@ int AGBCPU::executeARMInstruction()
                 return pcSCycles * 2 + pcNCycles;
             }
 
-            if(((opcode >> 4) & 9) == 9)
+            if((opcode & 0x90) == 0x90)
             {
                 if((opcode >> 5) & 3) // halfword transfer
                     return doARMHalfwordTransfer(opcode, true);
