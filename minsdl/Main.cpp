@@ -262,7 +262,7 @@ int main(int argc, char *argv[])
     SDL_RenderSetLogicalSize(renderer, screenWidth, screenHeight);
     SDL_RenderSetIntegerScale(renderer, SDL_TRUE);
 
-    auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGR555, SDL_TEXTUREACCESS_STREAMING, screenWidth, screenHeight);
+    auto texture = SDL_CreateTexture(renderer, isAGB ? SDL_PIXELFORMAT_BGR565 : SDL_PIXELFORMAT_BGR555, SDL_TEXTUREACCESS_STREAMING, screenWidth, screenHeight);
 
     // audio
     SDL_AudioSpec spec{};

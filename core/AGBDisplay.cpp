@@ -1166,7 +1166,7 @@ void AGBDisplay::drawScanLine(int y)
             // backdrop
             if(!mask)
             {
-                col = palRAM[0] | 0x8000;
+                col = palRAM[0];
                 mask = BLDCNT_SrcBackdrop; // for blending check
             }
             else
@@ -1215,7 +1215,7 @@ void AGBDisplay::drawScanLine(int y)
                     // check if its a dst target
                     if(!(blendControl & nextMask))
                     {
-                        scanLine[x] = col;
+                        scanLine[x] = (col & 0x1F) | (col & 0x7FE0) << 1;
                         break;
                     }
 
@@ -1233,7 +1233,7 @@ void AGBDisplay::drawScanLine(int y)
                     int g = std::min(31, (srcG * srcA + dstG * dstA) / 16);
                     int b = std::min(31, (srcB * srcA + dstB * dstA) / 16);
 
-                    scanLine[x] = r << 10 | g << 5 | b | 0x8000;
+                    scanLine[x] = r << 11 | g << 6 | b;
                 }
                 else if(blendMode == 2) // lighten
                 {
@@ -1243,7 +1243,7 @@ void AGBDisplay::drawScanLine(int y)
                     int g = srcG + ((31 - srcG) * evy) / 16;
                     int b = srcB + ((31 - srcB) * evy) / 16;
 
-                    scanLine[x] = r << 10 | g << 5 | b | 0x8000;
+                    scanLine[x] = r << 11 | g << 6 | b;
                 }
                 else if(blendMode == 3) // darken
                 {
@@ -1253,13 +1253,13 @@ void AGBDisplay::drawScanLine(int y)
                     int g = srcG - (srcG * evy) / 16;
                     int b = srcB - (srcB * evy) / 16;
 
-                    scanLine[x] = r << 10 | g << 5 | b | 0x8000;
+                    scanLine[x] = r << 11 | g << 6 | b;
                 }
                 else
-                    scanLine[x] = col;
+                    scanLine[x] = (col & 0x1F) | (col & 0x7FE0) << 1;
             }
             else
-                scanLine[x] = col;
+                scanLine[x] = (col & 0x1F) | (col & 0x7FE0) << 1;
 
             break;
         }
