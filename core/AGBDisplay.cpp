@@ -52,7 +52,7 @@ static void drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     int tx = (x + xOffset) & 7;
     int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
-    for(; x < 240 && bx < screenBlockTiles; bx++)
+    auto getTileRow = [ty, screenPtr, charPtr, palRam, validDataEnd](int bx, uint16_t *&tilePal)
     {
         uint16_t tileMeta = 0;
     
@@ -76,7 +76,7 @@ static void drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         //else
         //    tileRow = (tileMeta & 0x3FF) | (tileMeta & 0x3FF) << 16;
 
-        auto tilePal = palRam + ((tileMeta & 0xF000) >> 8);
+        tilePal = palRam + ((tileMeta & 0xF000) >> 8);
 
         // h flip
         if(tileMeta & (1 << 10))
@@ -85,33 +85,60 @@ static void drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
             tileRow = ((tileRow & 0xF0F0F0F0) >> 4) | ((tileRow & 0x0F0F0F0F) << 4);
         }
 
-        if(!tx && x + 8 < 240)
-        {
-            // full tile
-            x += 8;
-            for(int tx = 0; tx < 8; tx++, tileRow >>= 4, scanLine++)
-            {
-                if(tileRow & 0xF)
-                    *scanLine = tilePal[tileRow & 0xF] | 0x8000;
-                else
-                    *scanLine = 0;
-            }
-        }
-        else
-        {
-            // edges
-            tileRow >>= (tx * 4);
+        return tileRow;
+    };
 
-            for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
-            {
-                if(tileRow & 0xF)
-                    *scanLine = tilePal[tileRow & 0xF] | 0x8000;
-                else
-                    *scanLine = 0;
-            }
+    // left edge
+    if(tx)
+    {
+        uint16_t *tilePal;
+        uint32_t tileRow = getTileRow(bx, tilePal);
+        tileRow >>= (tx * 4);
 
-            tx = 0;
+        for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
+        {
+            if(tileRow & 0xF)
+                *scanLine = tilePal[tileRow & 0xF] | 0x8000;
+            else
+                *scanLine = 0;
         }
+
+        bx++;
+    }
+
+    // full tiles
+    for(; x <= 240 - 8 && bx < screenBlockTiles; bx++)
+    {
+        uint16_t *tilePal;
+        uint32_t tileRow = getTileRow(bx, tilePal);
+
+        x += 8;
+        for(int tx = 0; tx < 8; tx++, tileRow >>= 4, scanLine++)
+        {
+            if(tileRow & 0xF)
+                *scanLine = tilePal[tileRow & 0xF] | 0x8000;
+            else
+                *scanLine = 0;
+        }
+    }
+
+    // right edge
+    if(bx < screenBlockTiles)
+    {
+        uint16_t *tilePal;
+        uint32_t tileRow = getTileRow(bx, tilePal);
+
+        int w = 240 - x;
+        
+        for(int tx = 0; tx < w; tx++, tileRow >>= 4, scanLine++)
+        {
+            if(tileRow & 0xF)
+                *scanLine = tilePal[tileRow & 0xF] | 0x8000;
+            else
+                *scanLine = 0;
+        }
+
+        x = 240;
     }
 }
 
