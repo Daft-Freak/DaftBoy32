@@ -398,7 +398,7 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
             {
                 int px = curX >> 8;
                 int py = curY >> 8;
-                if(px < 0 || px >= 240 || py < 0 || py >= 160)
+                if(px < 0 || px >= 240 || py < 0 || py >= 160 || !inPtr[px + py * 240])
                     *outPtr = 0;
                 else
                     *outPtr = palRam[inPtr[px + py * 240]] | 0x8000;
