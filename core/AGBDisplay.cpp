@@ -902,6 +902,17 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
             break;
         }
 
+        case IO_BG0HOFS:
+        case IO_BG0VOFS:
+        case IO_BG1HOFS:
+        case IO_BG1VOFS:
+        case IO_BG2HOFS:
+        case IO_BG2VOFS:
+        case IO_BG3HOFS:
+        case IO_BG3VOFS:
+            mem.writeIOReg(addr, data & 0x1FF);
+            return true;
+
         // affine reference points
         case IO_BG2X_L:
             refPointX[0] = data | (refPointX[0] & 0xFFFF0000);
