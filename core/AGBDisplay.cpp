@@ -208,6 +208,7 @@ static void drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 
 // bg layer helpers
 // hopefully this gets mostly inlined
+static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t xOffset, uint16_t yOffset)
 {
     int screenSize = (control & BGCNT_ScreenSize) >> 14;
 
