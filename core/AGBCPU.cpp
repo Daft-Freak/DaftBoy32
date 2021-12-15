@@ -2780,6 +2780,117 @@ void AGBCPU::handleSWI(int num)
             break;
         }
 
+        case 0x11: // LZ77 8-bit write
+        {
+            auto src = regs[0];
+            auto dst = regs[1];
+
+            int cycles = 0; // TODO
+
+            auto header = readMem32(src, cycles);
+            src += 4;
+            auto decompressedSize = header >> 8;
+
+            int flags = 0;
+            int flagBits = 0;
+
+            auto dstEnd = dst + decompressedSize;
+
+            while(dst < dstEnd)
+            {
+                if(!flagBits)
+                {
+                    flags = readMem8(src++, cycles);
+                    flagBits = 8;
+                }
+
+                auto b = readMem8(src++, cycles);
+
+                if(flags & 0x80)
+                {
+                    auto count = (b >> 4) + 3;
+                    auto disp = (b & 0xF) << 8 | readMem8(src++, cycles);
+
+                    auto off = dst - disp - 1;
+
+                    for(int j = 0; j < count; j++)
+                        writeMem8(dst++, readMem8(off++, cycles), cycles);
+                }
+                else
+                    writeMem8(dst++, b, cycles);
+
+                flagBits--;
+                flags <<= 1;
+            }
+            break;
+        }
+
+        case 0x12: // LZ77 16-bit write
+        {
+            auto src = regs[0];
+            auto dst = regs[1];
+
+            int cycles = 0; // TODO
+
+            auto header = readMem32(src, cycles);
+            src += 4;
+            auto decompressedSize = header >> 8;
+
+            int flags = 0;
+            int flagBits = 0;
+
+            // save byte to write 16-bits
+            bool low = true;
+            uint8_t savedByte;
+
+            auto dstEnd = dst + decompressedSize;
+
+            while(dst < dstEnd)
+            {
+                if(!flagBits)
+                {
+                    flags = readMem8(src++, cycles);
+                    flagBits = 8;
+                }
+
+                auto b = readMem8(src++, cycles);
+
+                if(flags & 0x80)
+                {
+                    auto count = (b >> 4) + 3;
+                    auto disp = (b & 0xF) << 8 | readMem8(src++, cycles);
+
+                    auto off = dst - disp - 1;
+
+                    for(int j = 0; j < count; j++)
+                    {
+                        b = readMem8(off++, cycles);
+                        if(low)
+                            savedByte = b;
+                        else
+                            writeMem16(dst - 1, b << 8 | savedByte, cycles);
+
+                        dst++;
+                        low = !low;
+                    }
+                }
+                else
+                {
+                    if(low)
+                        savedByte = b;
+                    else
+                        writeMem16(dst - 1, b << 8 | savedByte, cycles);
+
+                    dst++;
+                    low = !low;
+                }
+
+                flagBits--;
+                flags <<= 1;
+            }
+            break;
+        }
+
         default:
             printf("SWI %x\n", num);
     }
