@@ -249,6 +249,8 @@ private:
 
     void calculateNextUpdate(uint32_t cycleCount);
 
+    void handleBIOSBranch(uint32_t pc);
+
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
 

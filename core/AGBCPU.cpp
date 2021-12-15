@@ -2313,6 +2313,13 @@ void AGBCPU::updateARMPC(uint32_t pc)
     else
     {
         armPCPtr = reinterpret_cast<const uint32_t *>(std::as_const(mem).mapAddress(pc));
+        
+        if(!armPCPtr && !(pc >> 24) && !mem.hasBIOS())
+        {
+            handleBIOSBranch(pc);
+            return;
+        }
+
         pcSCycles = mem.getAccessCycles(pc, 4, true);
         pcNCycles = mem.getAccessCycles(pc, 4, false);
     }
@@ -2623,4 +2630,88 @@ void AGBCPU::calculateNextUpdate(uint32_t cycleCount)
     assert(toUpdate >= 0 || nextUpdateCycle == cycleCount + toUpdate);
 
     nextUpdateCycle = cycleCount + toUpdate;
+}
+
+// high-level BIOS emulation
+void AGBCPU::handleBIOSBranch(uint32_t pc)
+{
+    switch(pc)
+    {
+        case 0x8: // SWI
+        {
+            int cycles = 0; // TODO
+            int swiNum = readMem8(loReg(Reg::R14_svc) - 2, cycles);
+
+            // TODO: actually do things
+            printf("SWI %x\n", swiNum);
+
+            // return
+            auto retAddr = loReg(Reg::R14_svc);
+            cpsr = getSPSR();
+            modeChanged();
+
+            if(cpsr & Flag_T)
+                updateTHUMBPC(retAddr);
+            else
+                updateARMPC(retAddr);
+
+            return;
+        }
+
+        case 0x18: // IRQ
+        {
+            // push some regs
+            auto &sp = loReg(Reg::R13_irq);
+            sp -= 6 * 4;
+
+            auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(sp));
+
+            for(int i = 0; i < 4; i++)
+                *ptr++ = regs[i];
+
+            *ptr++ = loReg(Reg::R12);
+            *ptr++ = loReg(Reg::R14_irq);
+
+            loReg(Reg::R14_irq) = 0x138;
+
+            // jump to user handler
+            int cycles = 3 + 3 /*B*/ + 7 /*STM*/ + 1 /*MOV*/ + 1 /*ADD*/ + 1 /*LDR (I)*/;
+            updateARMPC(readMem32(0x3007FFC, cycles));
+
+            // TODO: use these cycles
+
+            return;
+        }
+
+        case 0x138: // return from IRQ
+        {
+            // pop some regs
+            auto &sp = loReg(Reg::R13_irq);
+            auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(sp));
+            sp += 6 * 4;
+
+            for(int i = 0; i < 4; i++)
+                regs[i] = *ptr++;
+
+            loReg(Reg::R12) = *ptr++;
+            loReg(Reg::R14_irq) = *ptr++;
+
+            // return
+            auto retAddr = loReg(Reg::R14_irq) - 4;
+            cpsr = getSPSR();
+            modeChanged();
+
+            if(cpsr & Flag_T)
+                updateTHUMBPC(retAddr);
+            else
+                updateARMPC(retAddr);
+
+            // pop cycles + 3 cycles for the branch we just replaced?
+
+            return;
+        }
+    }
+
+    printf("BIOS %08X(%08X) -> %x!\n", regs[15], reg(Reg::LR), pc);
+    abort();
 }
