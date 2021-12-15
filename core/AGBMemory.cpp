@@ -205,7 +205,7 @@ const uint8_t *AGBMemory::mapAddress(uint32_t addr) const
     switch(addr >> 24)
     {
         case Region_BIOS:
-            return biosROM + (addr & 0x3FFF);
+            return biosROM ? biosROM + (addr & 0x3FFF) : nullptr;
 
         case Region_EWRAM:
             return ewram + (addr & 0x3FFFF);
@@ -339,6 +339,9 @@ void AGBMemory::doWrite(uint8_t (&mem)[size], uint32_t addr, T data)
 template<class T>
 T AGBMemory::doBIOSRead(uint32_t addr) const
 {
+    if(!biosROM)
+        return 0; // TODO: (this must be from outside if we have no BIOS)
+
     // TODO: reading from outside BIOS
     const size_t size = 0x4000;
     return *reinterpret_cast<const T *>(biosROM + (addr & (size - 1)));
