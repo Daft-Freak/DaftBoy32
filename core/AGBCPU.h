@@ -264,6 +264,7 @@ private:
     // internal state
     //bool stopped, halted;
     bool halted;
+    uint16_t swiWaitFlags = 0; // interrupt flags for IntrWait
 
     uint16_t currentInterrupts = 0; // IME ? (IE & IF) : 0
     uint16_t enabledInterrutps = 0;

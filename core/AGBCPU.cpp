@@ -2638,21 +2638,30 @@ void AGBCPU::handleBIOSBranch(uint32_t pc)
     switch(pc)
     {
         case 0x8: // SWI
+        case 0x348: // halt in IntrWait
         {
             int cycles = 0; // TODO
             int swiNum = readMem8(loReg(Reg::R14_svc) - 2, cycles);
 
+            if(pc == 0x8)
+                cpsr = (getSPSR() & Flag_I) | 0x1F; // switch back to system mode
+
             handleSWI(swiNum);
 
-            // return
-            auto retAddr = loReg(Reg::R14_svc);
-            cpsr = getSPSR();
-            modeChanged();
+            // return if not waiting for interrupt
+            if(!(halted && swiWaitFlags))
+            {
+                cpsr = Flag_I | 0x13; // back to SVC
 
-            if(cpsr & Flag_T)
-                updateTHUMBPC(retAddr);
-            else
-                updateARMPC(retAddr);
+                auto retAddr = loReg(Reg::R14_svc);
+                cpsr = getSPSR();
+                modeChanged();
+
+                if(cpsr & Flag_T)
+                    updateTHUMBPC(retAddr);
+                else
+                    updateARMPC(retAddr);
+            }
 
             return;
         }
@@ -2724,6 +2733,43 @@ void AGBCPU::handleSWI(int num)
             halted = true;
             // bx
             break;
+
+        case 0x4: // IntrWait
+        case 0x5: // VBlankIntrWait
+        {
+            bool discardFlags = num == 5 || regs[0];
+            uint16_t flags = num == 5 ? 1 : regs[1];
+
+            int cycles = 0; // TODO
+
+            // an interrupt happened and we returned to here
+            if(swiWaitFlags)
+            {
+                auto interrupts = readMem32(0x3007FF8, cycles);
+                writeMem32(0x3007FF8, interrupts & ~flags, cycles);
+                writeReg(IO_IME, 1, 0xFF);
+
+                if(interrupts & flags)
+                {
+                    // done
+                    swiWaitFlags = 0;
+                    break;
+                }
+            }
+            else if(discardFlags)
+            {
+                // clear flags and enable ime
+                writeMem32(0x3007FF8, readMem32(0x3007FF8, cycles) & ~flags, cycles);
+                writeReg(IO_IME, 1, 0xFF);
+            }
+
+            halted = true;
+
+            // don't return yet
+            swiWaitFlags = flags;
+            loReg(Reg::PC) = 0x34C; // pretend we're actually in the function
+            return;
+        }
 
         case 0xB: // CpuSet
         {
