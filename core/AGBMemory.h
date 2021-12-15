@@ -21,6 +21,8 @@ public:
     //using CartRamUpdateCallback = void(*)(uint8_t *, unsigned int);
 
     void setBIOSROM(const uint8_t *rom);
+    bool hasBIOS() const {return biosROM;}
+
     void setCartROM(const uint8_t *rom, uint32_t size);
     void loadCartridgeSave(const uint8_t *data, uint32_t len);
     void reset();

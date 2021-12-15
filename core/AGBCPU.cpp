@@ -15,9 +15,12 @@ AGBCPU::AGBCPU() : apu(*this), display(*this), mem(*this)
 
 void AGBCPU::reset()
 {
+    for(auto &reg: regs)
+        reg = 0;
+
     cpsr = Flag_I | Flag_F | 0x13 /*supervisor mode*/;
     modeChanged();
-    updateARMPC(0);
+    
     halted = false;
 
     cycleCount = 0;
@@ -31,6 +34,28 @@ void AGBCPU::reset()
     mem.reset();
     apu.reset();
     display.reset();
+
+    // TODO: also allow skipping if it's loaded?
+    if(!mem.hasBIOS())
+    {
+        loReg(Reg::LR) = 0x8000000;
+        loReg(Reg::R13) = 0x3007F00;
+        loReg(Reg::R13_svc) = 0x3007FE0;
+        loReg(Reg::R13_irq) = 0x3007FA0;
+
+        cpsr = 0x1F; // system mode
+        modeChanged();
+       
+        updateARMPC(0x8000000);
+
+        mem.writeIOReg(IO_DISPCNT, DISPCNT_ForceBlank);
+        // BG[23]P[AD] are set to 0x100
+        mem.writeIOReg(IO_SOUNDBIAS, 0x200);
+        mem.writeIOReg(0x134/*RCNT*/, 0x8000/*GPIO mode*/);
+        mem.writeIOReg(0x300/*POSTFLG/HALTCNT*/, 1);
+    }
+    else
+        updateARMPC(0);
 }
 
 void AGBCPU::run(int ms)
