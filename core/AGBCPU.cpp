@@ -577,8 +577,9 @@ int AGBCPU::executeARMInstruction()
 
             cpsr = (cpsr & ~0x1F) | Flag_I | 0x13; //supervisor mode
             modeChanged();
-            updateARMPC(8);
             loReg(curLR) = ret;
+            updateARMPC(8);
+
             return pcSCycles * 2 + pcNCycles;
         }
 
@@ -2194,8 +2195,8 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
 
         cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x13; //supervisor mode
         modeChanged();
-        updateARMPC(8);
         loReg(curLR) = ret;
+        updateARMPC(8);
     }
     else // format 16, conditional branch
     {
@@ -2371,8 +2372,9 @@ bool AGBCPU::serviceInterrupts()
 
     cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x12; // irq mode
     modeChanged();
-    updateARMPC(0x18);
     loReg(curLR) = ret;
+    updateARMPC(0x18);
+
     return true;
 }
 
