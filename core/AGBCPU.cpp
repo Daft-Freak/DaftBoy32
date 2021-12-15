@@ -2642,8 +2642,7 @@ void AGBCPU::handleBIOSBranch(uint32_t pc)
             int cycles = 0; // TODO
             int swiNum = readMem8(loReg(Reg::R14_svc) - 2, cycles);
 
-            // TODO: actually do things
-            printf("SWI %x\n", swiNum);
+            handleSWI(swiNum);
 
             // return
             auto retAddr = loReg(Reg::R14_svc);
@@ -2714,4 +2713,20 @@ void AGBCPU::handleBIOSBranch(uint32_t pc)
 
     printf("BIOS %08X(%08X) -> %x!\n", regs[15], reg(Reg::LR), pc);
     abort();
+}
+
+void AGBCPU::handleSWI(int num)
+{
+    switch(num)
+    {
+        case 0x2: // Halt
+            // 2x mov + strb
+            halted = true;
+            // bx
+            break;
+
+
+        default:
+            printf("SWI %x\n", num);
+    }
 }
