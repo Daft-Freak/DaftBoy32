@@ -205,6 +205,12 @@ private:
 
     AGBCPU &cpu;
 
+    // prefetch state
+    bool cartPrefetchEnabled = false, pcInROM = false;
+    int prefetchSCycles = 0;
+    mutable int prefetchCycles = 0;
+    int prefetchedHalfWords = 0;
+
     const uint8_t *biosROM = nullptr;
     uint8_t ewram[0x40000]; // external wram, two wait states, 16bit bus
     uint8_t iwram[0x8000]; // internal wram
@@ -232,10 +238,6 @@ private:
     uint32_t dummy = 0xBADADD55;
 
     int8_t cartAccessN[4], cartAccessS[4]; // ROM and RAM
-    bool cartPrefetchEnabled = false, pcInROM = false;
-    int prefetchSCycles = 0;
-    mutable int prefetchCycles = 0;
-    int prefetchedHalfWords = 0;
 
     //CartRamUpdateCallback cartRamUpdateCallback;
 };
