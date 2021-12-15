@@ -377,6 +377,18 @@ int AGBCPU::runCycles(int cycles)
         // loop until not halted or DMA was triggered
         do
         {
+            if(currentInterrupts)
+            {
+                if(interruptDelay <= exec)
+                {
+                    exec += serviceInterrupts();
+                    interruptDelay = 0;
+                    calculateNextUpdate(cycleCount);
+                }
+                else
+                    interruptDelay -= exec;
+            }
+
             bool shouldUpdate = nextUpdateCycle - cycleCount <= exec;
 
             cycles -= exec;
@@ -392,18 +404,6 @@ int AGBCPU::runCycles(int cycles)
                     display.update();
 
                 calculateNextUpdate(cycleCount);
-            }
-
-            if(currentInterrupts)
-            {
-                if(interruptDelay <= exec)
-                {
-                    serviceInterrupts(); // cycles?
-                    interruptDelay = 0;
-                    calculateNextUpdate(cycleCount);
-                }
-                else
-                    interruptDelay -= exec;
             }
 
             if(halted && cycles > 0)
@@ -2357,10 +2357,10 @@ void AGBCPU::updateTHUMBPC(uint32_t pc)
     loReg(Reg::PC) = pc + 2; // pointing at last fetch
 }
 
-bool AGBCPU::serviceInterrupts()
+int AGBCPU::serviceInterrupts()
 {
     if((cpsr & Flag_I))
-        return false;
+        return 0;
 
     halted = false;
 
@@ -2375,7 +2375,7 @@ bool AGBCPU::serviceInterrupts()
     loReg(curLR) = ret;
     updateARMPC(0x18);
 
-    return true;
+    return pcSCycles * 2 + pcNCycles; // I'm assuming this is like a branch...
 }
 
 int AGBCPU::dmaTransfer(int channel)
@@ -2620,7 +2620,7 @@ void AGBCPU::calculateNextUpdate(uint32_t cycleCount)
     if(interruptDelay)
         toUpdate = std::min(toUpdate, static_cast<int>(interruptDelay + this->cycleCount - cycleCount));
 
-    assert(toUpdate > 0 || nextUpdateCycle == cycleCount + toUpdate);
+    assert(toUpdate >= 0 || nextUpdateCycle == cycleCount + toUpdate);
 
     nextUpdateCycle = cycleCount + toUpdate;
 }

@@ -240,7 +240,7 @@ private:
     void updateARMPC(uint32_t pc);
     void updateTHUMBPC(uint32_t pc);
 
-    bool serviceInterrupts();
+    int serviceInterrupts();
 
     int dmaTransfer(int channel);
 
