@@ -2725,6 +2725,60 @@ void AGBCPU::handleSWI(int num)
             // bx
             break;
 
+        case 0xB: // CpuSet
+        {
+            auto src = regs[0];
+            auto dst = regs[1];
+            auto count = regs[2] & 0x1FFFFF;
+            bool isFill = regs[2] & (1 << 24);
+            bool isWords = regs[2] & (1 << 26);
+
+            int cycles = 0; // TODO
+
+            if(isFill)
+            {
+                if(isWords)
+                {
+                    auto val = readMem32(src, cycles);
+                    while(count--)
+                    {
+                        writeMem32(dst, val, cycles);
+                        dst += 4;
+                    }
+                }
+                else
+                {
+                    auto val = readMem16(src, cycles);
+                    while(count--)
+                    {
+                        writeMem16(dst, val, cycles);
+                        dst += 2;
+                    }
+                }
+            }
+            else
+            {
+                if(isWords)
+                {
+                    while(count--)
+                    {
+                        writeMem32(dst, readMem32(src, cycles), cycles);
+                        src += 4;
+                        dst += 4;
+                    }
+                }
+                else
+                {
+                    while(count--)
+                    {
+                        writeMem16(dst, readMem16(src, cycles), cycles);
+                        src += 2;
+                        dst += 2;
+                    }
+                }
+            }
+            break;
+        }
 
         default:
             printf("SWI %x\n", num);
