@@ -2826,6 +2826,39 @@ void AGBCPU::handleSWI(int num)
             break;
         }
 
+        case 0xC: // CpuFastSet
+        {
+            auto src = regs[0];
+            auto dst = regs[1];
+            auto count = regs[2] & 0x1FFFFF;
+            bool isFill = regs[2] & (1 << 24);
+
+            int cycles = 0; // TODO
+
+            // force to multiple of 8
+            count = (count + 7) & ~7;
+
+            if(isFill)
+            {
+                auto val = readMem32(src, cycles);
+                while(count--)
+                {
+                    writeMem32(dst, val, cycles);
+                    dst += 4;
+                }
+            }
+            else
+            {
+                while(count--)
+                {
+                    writeMem32(dst, readMem32(src, cycles), cycles);
+                    src += 4;
+                    dst += 4;
+                }
+            }
+            break;
+        }
+
         case 0x11: // LZ77 8-bit write
         {
             auto src = regs[0];
