@@ -2765,7 +2765,11 @@ void AGBCPU::handleSWI(int num)
             swiCPUFastSet();
             break;
 
-        case 0xF: //ObjAffineSet
+        case 0xE: // BgAffineSet
+            swiBgAffineSet();
+            break;
+
+        case 0xF: // ObjAffineSet
             swiObjAffineSet();
             break;
 
@@ -2967,6 +2971,56 @@ void AGBCPU::swiCPUFastSet()
             src += 4;
             dst += 4;
         }
+    }
+}
+
+void AGBCPU::swiBgAffineSet()
+{
+    auto src = regs[0];
+    auto dst = regs[1];
+    auto count = regs[2];
+
+    int cycles = 0; // TODO
+
+    while(count--)
+    {
+        auto inX = static_cast<int32_t>(readMem32(src, cycles));
+        auto inY = static_cast<int32_t>(readMem32(src + 4, cycles));
+    
+        int outX = static_cast<int16_t>(readMem16(src + 8, cycles));
+        int outY = static_cast<int16_t>(readMem16(src + 10, cycles));
+
+        int xScale = static_cast<int16_t>(readMem16(src + 12, cycles));
+        int yScale = static_cast<int16_t>(readMem16(src + 14, cycles));
+        auto ang = readMem16(src + 16, cycles) >> 8; // low bits ignored
+
+        static const float pi = 3.14159265358979323846f;
+
+        // real BIOS uses a 256 halfword lookup table
+        int sinAng = int(std::sin(ang * pi / 128) * (1 << 14));
+        int cosAng = int(std::cos(ang * pi / 128) * (1 << 14));
+
+        int xs = (sinAng * xScale) >> 14;
+        int ys = (sinAng * yScale) >> 14;
+        int xc = (cosAng * xScale) >> 14;        
+        int yc = (cosAng * yScale) >> 14;
+
+        writeMem16(dst, xc, cycles);
+        dst += 2;
+        writeMem16(dst, -xs, cycles);
+        dst += 2;
+        writeMem16(dst, ys, cycles);
+        dst += 2;
+        writeMem16(dst, yc, cycles);
+        dst += 2;
+
+        // start coord
+        writeMem32(dst, inX + xc * -outX + xs * outY, cycles);
+        dst += 4;
+        writeMem32(dst, inY + ys * -outX + yc * -outY, cycles);
+        dst += 4;
+
+        src += 20;
     }
 }
 
