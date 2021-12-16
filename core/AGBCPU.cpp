@@ -2896,6 +2896,18 @@ void AGBCPU::swiCPUSet()
     bool isFill = regs[2] & (1 << 24);
     bool isWords = regs[2] & (1 << 26);
 
+    // BIOS area is not allowed
+    // also it doesn't exist if we're here...
+    if(src < 0x2000000)
+        return;
+
+    // force alignment
+    if(isWords && src < 0xE000000)
+        src &= ~3;
+
+    if(isWords && dst < 0xE000000)
+        dst &= ~3;
+
     int cycles = 0; // TODO
 
     if(isFill)
@@ -2953,6 +2965,17 @@ void AGBCPU::swiCPUFastSet()
 
     // force to multiple of 8
     count = (count + 7) & ~7;
+
+    // BIOS area is not allowed
+    if(src < 0x2000000)
+        return;
+
+    // force alignment
+    if(src < 0xE000000)
+        src &= ~3;
+
+    if(dst < 0xE000000)
+        dst &= ~3;
 
     if(isFill)
     {
