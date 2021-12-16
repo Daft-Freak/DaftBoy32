@@ -254,6 +254,8 @@ private:
 
     void swiIntrWait(bool discardFlags, uint16_t flags);
     void swiDiv();
+    uint32_t swiArcTan(int tan);
+    uint32_t swiArcTan2();
     void swiCPUSet();
     void swiCPUFastSet();
     void swiLZ77Write8();

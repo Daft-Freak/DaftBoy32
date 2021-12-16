@@ -2747,6 +2747,15 @@ void AGBCPU::handleSWI(int num)
             swiDiv();
             break;
 
+        case 0x9: // ArcTan
+            regs[0] = swiArcTan(regs[0]);
+            break;
+
+        case 0xA: // ArcTan2
+            regs[0] = swiArcTan2();
+            regs[3] = 0x170; // r3 is used for the return BX
+            break;
+
         case 0xB: // CpuSet
             swiCPUSet();
             break;
@@ -2820,6 +2829,55 @@ void AGBCPU::swiDiv()
     regs[3] = std::abs(res);
 }
 
+uint32_t AGBCPU::swiArcTan(int tan)
+{
+    int n = -((tan * tan) >> 14);
+
+    static const int consts[]{
+        0x0390, 0x091C, 0x0FB6, 0x16AA, 0x2081, 0x3651, 0xA2F9
+    };
+
+    int res = 0xA9;
+
+    for(auto c : consts)
+        res = ((res * n) >> 14) + c;
+
+    regs[1] = n;
+    regs[3] = res;
+
+    return (res * tan) >> 16;
+}
+
+uint32_t AGBCPU::swiArcTan2()
+{
+    int x = regs[0];
+    int y = regs[1];
+
+    if(y == 0)
+        return x < 0 ? 0x8000 : 0;
+    else if(x == 0)
+        return y < 0 ? 0xC000 : 0x4000;
+
+    if(y >= 0)
+    {
+        if(x >= 0 && x >= y)
+            return swiArcTan((y << 14) / x);
+        else if(x < 0 && -x >= y)
+            return 0x8000 + swiArcTan((y << 14) / x);
+
+        return 0x4000 - swiArcTan((x << 14) / y);
+    }
+
+    if(x <= 0)
+    {
+        if(-x > -y)
+            return 0x8000 + swiArcTan((y << 14) / x);
+    }
+    else if(x >= -y)
+        return 0x10000 + swiArcTan((y << 14) / x);
+
+    return 0xC000 - swiArcTan((x << 14) / y);
+}
 
 void AGBCPU::swiCPUSet()
 {
