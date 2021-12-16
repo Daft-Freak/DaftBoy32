@@ -252,6 +252,12 @@ private:
     void handleBIOSBranch(uint32_t pc);
     void handleSWI(int num);
 
+    void swiIntrWait(bool discardFlags, uint16_t flags);
+    void swiCPUSet();
+    void swiCPUFastSet();
+    void swiLZ77Write8();
+    void swiLZ77Write16();
+
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
 

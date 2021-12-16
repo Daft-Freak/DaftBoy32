@@ -2739,238 +2739,257 @@ void AGBCPU::handleSWI(int num)
         {
             bool discardFlags = num == 5 || regs[0];
             uint16_t flags = num == 5 ? 1 : regs[1];
-
-            int cycles = 0; // TODO
-
-            // an interrupt happened and we returned to here
-            if(swiWaitFlags)
-            {
-                auto interrupts = readMem32(0x3007FF8, cycles);
-                writeMem32(0x3007FF8, interrupts & ~flags, cycles);
-                writeReg(IO_IME, 1, 0xFF);
-
-                if(interrupts & flags)
-                {
-                    // done
-                    swiWaitFlags = 0;
-                    break;
-                }
-            }
-            else if(discardFlags)
-            {
-                // clear flags and enable ime
-                writeMem32(0x3007FF8, readMem32(0x3007FF8, cycles) & ~flags, cycles);
-                writeReg(IO_IME, 1, 0xFF);
-            }
-
-            halted = true;
-
-            // don't return yet
-            swiWaitFlags = flags;
-            loReg(Reg::PC) = 0x34C; // pretend we're actually in the function
-            return;
+            swiIntrWait(discardFlags, flags);
+            break;
         }
+
 
         case 0xB: // CpuSet
-        {
-            auto src = regs[0];
-            auto dst = regs[1];
-            auto count = regs[2] & 0x1FFFFF;
-            bool isFill = regs[2] & (1 << 24);
-            bool isWords = regs[2] & (1 << 26);
-
-            int cycles = 0; // TODO
-
-            if(isFill)
-            {
-                if(isWords)
-                {
-                    auto val = readMem32(src, cycles);
-                    while(count--)
-                    {
-                        writeMem32(dst, val, cycles);
-                        dst += 4;
-                    }
-                }
-                else
-                {
-                    auto val = readMem16(src, cycles);
-                    while(count--)
-                    {
-                        writeMem16(dst, val, cycles);
-                        dst += 2;
-                    }
-                }
-            }
-            else
-            {
-                if(isWords)
-                {
-                    while(count--)
-                    {
-                        writeMem32(dst, readMem32(src, cycles), cycles);
-                        src += 4;
-                        dst += 4;
-                    }
-                }
-                else
-                {
-                    while(count--)
-                    {
-                        writeMem16(dst, readMem16(src, cycles), cycles);
-                        src += 2;
-                        dst += 2;
-                    }
-                }
-            }
+            swiCPUSet();
             break;
-        }
 
         case 0xC: // CpuFastSet
-        {
-            auto src = regs[0];
-            auto dst = regs[1];
-            auto count = regs[2] & 0x1FFFFF;
-            bool isFill = regs[2] & (1 << 24);
-
-            int cycles = 0; // TODO
-
-            // force to multiple of 8
-            count = (count + 7) & ~7;
-
-            if(isFill)
-            {
-                auto val = readMem32(src, cycles);
-                while(count--)
-                {
-                    writeMem32(dst, val, cycles);
-                    dst += 4;
-                }
-            }
-            else
-            {
-                while(count--)
-                {
-                    writeMem32(dst, readMem32(src, cycles), cycles);
-                    src += 4;
-                    dst += 4;
-                }
-            }
+            swiCPUFastSet();
             break;
-        }
 
         case 0x11: // LZ77 8-bit write
-        {
-            auto src = regs[0];
-            auto dst = regs[1];
-
-            int cycles = 0; // TODO
-
-            auto header = readMem32(src, cycles);
-            src += 4;
-            auto decompressedSize = header >> 8;
-
-            int flags = 0;
-            int flagBits = 0;
-
-            auto dstEnd = dst + decompressedSize;
-
-            while(dst < dstEnd)
-            {
-                if(!flagBits)
-                {
-                    flags = readMem8(src++, cycles);
-                    flagBits = 8;
-                }
-
-                auto b = readMem8(src++, cycles);
-
-                if(flags & 0x80)
-                {
-                    auto count = (b >> 4) + 3;
-                    auto disp = (b & 0xF) << 8 | readMem8(src++, cycles);
-
-                    auto off = dst - disp - 1;
-
-                    for(int j = 0; j < count; j++)
-                        writeMem8(dst++, readMem8(off++, cycles), cycles);
-                }
-                else
-                    writeMem8(dst++, b, cycles);
-
-                flagBits--;
-                flags <<= 1;
-            }
+            swiLZ77Write8();
             break;
-        }
 
         case 0x12: // LZ77 16-bit write
-        {
-            auto src = regs[0];
-            auto dst = regs[1];
-
-            int cycles = 0; // TODO
-
-            auto header = readMem32(src, cycles);
-            src += 4;
-            auto decompressedSize = header >> 8;
-
-            int flags = 0;
-            int flagBits = 0;
-
-            // save byte to write 16-bits
-            bool low = true;
-            uint8_t savedByte;
-
-            auto dstEnd = dst + decompressedSize;
-
-            while(dst < dstEnd)
-            {
-                if(!flagBits)
-                {
-                    flags = readMem8(src++, cycles);
-                    flagBits = 8;
-                }
-
-                auto b = readMem8(src++, cycles);
-
-                if(flags & 0x80)
-                {
-                    auto count = (b >> 4) + 3;
-                    auto disp = (b & 0xF) << 8 | readMem8(src++, cycles);
-
-                    auto off = dst - disp - 1;
-
-                    for(int j = 0; j < count; j++)
-                    {
-                        b = readMem8(off++, cycles);
-                        if(low)
-                            savedByte = b;
-                        else
-                            writeMem16(dst - 1, b << 8 | savedByte, cycles);
-
-                        dst++;
-                        low = !low;
-                    }
-                }
-                else
-                {
-                    if(low)
-                        savedByte = b;
-                    else
-                        writeMem16(dst - 1, b << 8 | savedByte, cycles);
-
-                    dst++;
-                    low = !low;
-                }
-
-                flagBits--;
-                flags <<= 1;
-            }
+            swiLZ77Write16();
             break;
-        }
 
         default:
             printf("SWI %x\n", num);
+    }
+}
+
+void AGBCPU::swiIntrWait(bool discardFlags, uint16_t flags)
+{
+   int cycles = 0; // TODO
+
+    // an interrupt happened and we returned to here
+    if(swiWaitFlags)
+    {
+        auto interrupts = readMem32(0x3007FF8, cycles);
+        writeMem32(0x3007FF8, interrupts & ~flags, cycles);
+        writeReg(IO_IME, 1, 0xFF);
+
+        if(interrupts & flags)
+        {
+            // done
+            swiWaitFlags = 0;
+            return;
+        }
+    }
+    else if(discardFlags)
+    {
+        // clear flags and enable ime
+        writeMem32(0x3007FF8, readMem32(0x3007FF8, cycles) & ~flags, cycles);
+        writeReg(IO_IME, 1, 0xFF);
+    }
+
+    halted = true;
+
+    // don't return yet
+    swiWaitFlags = flags;
+    loReg(Reg::PC) = 0x34C; // pretend we're actually in the function
+}
+
+
+
+void AGBCPU::swiCPUSet()
+{
+    auto src = regs[0];
+    auto dst = regs[1];
+    auto count = regs[2] & 0x1FFFFF;
+    bool isFill = regs[2] & (1 << 24);
+    bool isWords = regs[2] & (1 << 26);
+
+    int cycles = 0; // TODO
+
+    if(isFill)
+    {
+        if(isWords)
+        {
+            auto val = readMem32(src, cycles);
+            while(count--)
+            {
+                writeMem32(dst, val, cycles);
+                dst += 4;
+            }
+        }
+        else
+        {
+            auto val = readMem16(src, cycles);
+            while(count--)
+            {
+                writeMem16(dst, val, cycles);
+                dst += 2;
+            }
+        }
+    }
+    else
+    {
+        if(isWords)
+        {
+            while(count--)
+            {
+                writeMem32(dst, readMem32(src, cycles), cycles);
+                src += 4;
+                dst += 4;
+            }
+        }
+        else
+        {
+            while(count--)
+            {
+                writeMem16(dst, readMem16(src, cycles), cycles);
+                src += 2;
+                dst += 2;
+            }
+        }
+    }
+}
+
+void AGBCPU::swiCPUFastSet()
+{
+    auto src = regs[0];
+    auto dst = regs[1];
+    auto count = regs[2] & 0x1FFFFF;
+    bool isFill = regs[2] & (1 << 24);
+
+    int cycles = 0; // TODO
+
+    // force to multiple of 8
+    count = (count + 7) & ~7;
+
+    if(isFill)
+    {
+        auto val = readMem32(src, cycles);
+        while(count--)
+        {
+            writeMem32(dst, val, cycles);
+            dst += 4;
+        }
+    }
+    else
+    {
+        while(count--)
+        {
+            writeMem32(dst, readMem32(src, cycles), cycles);
+            src += 4;
+            dst += 4;
+        }
+    }
+}
+
+void AGBCPU::swiLZ77Write8()
+{
+    auto src = regs[0];
+    auto dst = regs[1];
+
+    int cycles = 0; // TODO
+
+    auto header = readMem32(src, cycles);
+    src += 4;
+    auto decompressedSize = header >> 8;
+
+    int flags = 0;
+    int flagBits = 0;
+
+    auto dstEnd = dst + decompressedSize;
+
+    while(dst < dstEnd)
+    {
+        if(!flagBits)
+        {
+            flags = readMem8(src++, cycles);
+            flagBits = 8;
+        }
+
+        auto b = readMem8(src++, cycles);
+
+        if(flags & 0x80)
+        {
+            auto count = (b >> 4) + 3;
+            auto disp = (b & 0xF) << 8 | readMem8(src++, cycles);
+
+            auto off = dst - disp - 1;
+
+            for(int j = 0; j < count; j++)
+                writeMem8(dst++, readMem8(off++, cycles), cycles);
+        }
+        else
+            writeMem8(dst++, b, cycles);
+
+        flagBits--;
+        flags <<= 1;
+    }
+}
+
+void AGBCPU::swiLZ77Write16()
+{
+    auto src = regs[0];
+    auto dst = regs[1];
+
+    int cycles = 0; // TODO
+
+    auto header = readMem32(src, cycles);
+    src += 4;
+    auto decompressedSize = header >> 8;
+
+    int flags = 0;
+    int flagBits = 0;
+
+    // save byte to write 16-bits
+    bool low = true;
+    uint8_t savedByte;
+
+    auto dstEnd = dst + decompressedSize;
+
+    while(dst < dstEnd)
+    {
+        if(!flagBits)
+        {
+            flags = readMem8(src++, cycles);
+            flagBits = 8;
+        }
+
+        auto b = readMem8(src++, cycles);
+
+        if(flags & 0x80)
+        {
+            auto count = (b >> 4) + 3;
+            auto disp = (b & 0xF) << 8 | readMem8(src++, cycles);
+
+            auto off = dst - disp - 1;
+
+            for(int j = 0; j < count; j++)
+            {
+                b = readMem8(off++, cycles);
+                if(low)
+                    savedByte = b;
+                else
+                    writeMem16(dst - 1, b << 8 | savedByte, cycles);
+
+                dst++;
+                low = !low;
+            }
+        }
+        else
+        {
+            if(low)
+                savedByte = b;
+            else
+                writeMem16(dst - 1, b << 8 | savedByte, cycles);
+
+            dst++;
+            low = !low;
+        }
+
+        flagBits--;
+        flags <<= 1;
     }
 }
