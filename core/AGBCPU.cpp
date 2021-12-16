@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib> //exit
 #include <cstring>
@@ -2764,6 +2765,10 @@ void AGBCPU::handleSWI(int num)
             swiCPUFastSet();
             break;
 
+        case 0xF: //ObjAffineSet
+            swiObjAffineSet();
+            break;
+
         case 0x11: // LZ77 8-bit write
             swiLZ77Write8();
             break;
@@ -2962,6 +2967,40 @@ void AGBCPU::swiCPUFastSet()
             src += 4;
             dst += 4;
         }
+    }
+}
+
+void AGBCPU::swiObjAffineSet()
+{
+    auto src = regs[0];
+    auto dst = regs[1];
+    auto count = regs[2];
+    auto stride = regs[3];
+
+    int cycles = 0; // TODO
+
+    while(count--)
+    {
+        int xScale = static_cast<int16_t>(readMem16(src, cycles));
+        int yScale = static_cast<int16_t>(readMem16(src + 2, cycles));
+        auto ang = readMem16(src + 4, cycles) >> 8; // low bits ignored
+
+        static const float pi = 3.14159265358979323846f;
+
+        // real BIOS uses a 256 halfword lookup table
+        int sinAng = int(std::sin(ang * pi / 128) * (1 << 14));
+        int cosAng = int(std::cos(ang * pi / 128) * (1 << 14));
+
+        writeMem16(dst, (cosAng * xScale) >> 14, cycles);
+        dst += stride;
+        writeMem16(dst, -(sinAng * xScale) >> 14, cycles);
+        dst += stride;
+        writeMem16(dst, (sinAng * yScale) >> 14, cycles);
+        dst += stride;
+        writeMem16(dst, (cosAng * yScale) >> 14, cycles);
+        dst += stride;
+
+        src += 4;
     }
 }
 

@@ -258,6 +258,7 @@ private:
     uint32_t swiArcTan2();
     void swiCPUSet();
     void swiCPUFastSet();
+    void swiObjAffineSet();
     void swiLZ77Write8();
     void swiLZ77Write16();
 
