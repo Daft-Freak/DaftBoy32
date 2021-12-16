@@ -2743,6 +2743,9 @@ void AGBCPU::handleSWI(int num)
             break;
         }
 
+        case 0x6: // Div
+            swiDiv();
+            break;
 
         case 0xB: // CpuSet
             swiCPUSet();
@@ -2797,6 +2800,25 @@ void AGBCPU::swiIntrWait(bool discardFlags, uint16_t flags)
     loReg(Reg::PC) = 0x34C; // pretend we're actually in the function
 }
 
+void AGBCPU::swiDiv()
+{
+    auto n = static_cast<int32_t>(regs[0]);
+    auto d = static_cast<int32_t>(regs[1]);
+    int res = n ? n : 1;
+    int rem = n;
+
+    if(n == std::numeric_limits<int>::min() && d == -1)
+        rem = 0;
+    else if(d)
+    {
+        res = n / d;
+        rem = n % d;
+    }
+
+    regs[0] = res;
+    regs[1] = rem;
+    regs[3] = std::abs(res);
+}
 
 
 void AGBCPU::swiCPUSet()

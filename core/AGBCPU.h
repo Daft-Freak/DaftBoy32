@@ -253,6 +253,7 @@ private:
     void handleSWI(int num);
 
     void swiIntrWait(bool discardFlags, uint16_t flags);
+    void swiDiv();
     void swiCPUSet();
     void swiCPUFastSet();
     void swiLZ77Write8();
