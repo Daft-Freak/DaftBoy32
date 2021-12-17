@@ -69,7 +69,7 @@ void AGBCPU::runFrame()
     lastExtraCycles = runCycles(308 * 228 * 4 + lastExtraCycles);
 }
 
-void AGBCPU::flagInterrupt(int interrupt)
+void AGBCPU::flagInterrupt(int interrupt, bool recalculateUpdate)
 {
     mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) | interrupt);
 
@@ -78,7 +78,8 @@ void AGBCPU::flagInterrupt(int interrupt)
     if(!interruptDelay)
         interruptDelay = 7; // unsure of this, but 7 seems to pass more tests than 6
 
-    calculateNextUpdate(cycleCount);
+    if(recalculateUpdate)
+        calculateNextUpdate(cycleCount);
 }
 
 void AGBCPU::triggerDMA(int trigger)
@@ -2563,7 +2564,7 @@ void AGBCPU::updateTimers()
                 overflow |= (1 << i);
                 timerCounters[i] = mem.readIOReg(IO_TM0CNT_L + i * 4);
                 if(timerInterruptEnabled & (1 << i))
-                    flagInterrupt(Int_Timer0 << i);
+                    flagInterrupt(Int_Timer0 << i, false);
 
                 if(i < 2)
                     apu.timerOverflow(i, timer);

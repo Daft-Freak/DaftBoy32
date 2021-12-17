@@ -41,7 +41,7 @@ public:
     void run(int ms);
     void runFrame();
 
-    void flagInterrupt(int interrupt);
+    void flagInterrupt(int interrupt, bool recalculateUpdate = true);
     void triggerDMA(int trigger);
 
     uint16_t readReg(uint32_t addr, uint16_t val);
