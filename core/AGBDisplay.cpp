@@ -461,7 +461,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
 
     // extra mask so we can ignore the regular one for windows
     // though really we only need the mask for windows anyway...
-    uint8_t winMask[240]{0}; 
+    uint8_t winMask[240]{0};
 
     auto charPtr = vram + 0x10000;
 
@@ -598,7 +598,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                 if(tx < 0 || ty < 0 || tx >= (spriteW << 8) || ty >= (spriteH << 8))
                     continue;
 
-                if(*outMask)
+                if(*out)
                     continue;
 
                 auto tile = startTile;
@@ -671,7 +671,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         cyclesRemaining--;
 
                         auto palIndex = *tilePtr;
-                        if(!*outMask && palIndex)
+                        if(!*out && palIndex)
                         {
                             *out = spritePal[palIndex] | 0x8000;
                             *outMask = 1 + effect;
@@ -709,7 +709,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                     for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, tileRow >>= 4, out++, outMask++)
                     {
                         cyclesRemaining--;
-                        if(!*outMask && (tileRow & 0xF))
+                        if(!*out && (tileRow & 0xF))
                         {
                             *out = spritePal[tileRow & 0xF] | 0x8000;
                             *outMask = 1 + effect;
