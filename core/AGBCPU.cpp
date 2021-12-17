@@ -2737,9 +2737,14 @@ void AGBCPU::handleSWI(int num)
 {
     switch(num)
     {
+        case 0x0: // SoftReset
+            swiSoftReset();
+            return; // doesn't return normally
+
         case 0x1: // RegisterRamReset
             swiRegisterRAMReset();
             break;
+
         case 0x2: // Halt
             // 2x mov + strb
             halted = true;
@@ -2832,6 +2837,35 @@ void AGBCPU::handleSWI(int num)
         updateTHUMBPC(retAddr);
     else
         updateARMPC(retAddr);
+}
+
+void AGBCPU::swiSoftReset()
+{
+    int cycles = 0;
+    auto toRAM = readMem8(0x3007FFA, cycles) != 0;
+
+    // clear last 512 bytes of IWRAM
+    memset(mem.mapAddress(0x3000000 + 0x8000 - 512), 0, 512);
+
+    loReg(Reg::LR) = toRAM ? 0x2000000 : 0x8000000;
+
+    // reset stack ptrs
+    loReg(Reg::R13) = 0x3007F00;
+    loReg(Reg::R13_svc) = 0x3007FE0;
+    loReg(Reg::R13_irq) = 0x3007FA0;
+
+    // clear regs
+    for(int i = 0; i < 13; i++)
+        regs[i] = 0;
+
+    loReg(Reg::R14_irq) = 0;
+    spsr[1] = 0; // SVC
+    spsr[3] = 0; // IRQ
+
+    cpsr = 0x1F; // system mode
+    modeChanged();
+
+    updateARMPC(loReg(Reg::LR));
 }
 
 void AGBCPU::swiRegisterRAMReset()
