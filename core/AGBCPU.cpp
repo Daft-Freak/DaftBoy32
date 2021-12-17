@@ -2795,6 +2795,10 @@ void AGBCPU::handleSWI(int num)
             swiLZ77Write16();
             break;
 
+        case 0x13: // Huffman
+            swiHuffmanDecode();
+            break;
+
         default:
             printf("SWI %x\n", num);
     }
@@ -3323,5 +3327,77 @@ void AGBCPU::swiLZ77Write16()
 
         flagBits--;
         flags <<= 1;
+    }
+}
+
+void AGBCPU::swiHuffmanDecode()
+{
+    auto src = regs[0];
+    auto dst = regs[1];
+
+    int cycles = 0; // TODO
+
+    auto header = readMem32(src, cycles);
+    src += 4;
+    auto dataBits = header & 0xF;
+    auto decompressedSize = header >> 8;
+
+    int treeSize = (readMem8(src++, cycles) + 1) * 2;
+    auto treeAddr = src;
+
+    src += treeSize - 1; // skip tree
+
+    auto dstEnd = dst + decompressedSize;
+
+    // start at root
+    auto ptr = treeAddr;
+
+    uint32_t outData = 0;
+    int outBits = 0;
+
+    while(dst < dstEnd)
+    {
+        uint32_t bits = readMem32(src, cycles);
+        src += 4;
+
+        for(int i = 0; i < 32; i++, bits <<= 1)
+        {
+            auto node = readMem8(ptr, cycles);
+
+            // get offset to child
+            ptr = (ptr & ~1) + ((node & 0x3F) + 1) * 2;
+            bool isLeaf;
+
+            if(bits & (1 << 31)) // node 1
+            {
+                isLeaf = node & (1 << 6);
+                ptr++;
+            }
+            else
+                isLeaf = node & (1 << 7);
+
+            if(isLeaf)
+            {
+                node = readMem8(ptr, cycles);
+                assert(!(node & (0xFF << dataBits))); // unused high bits should be 0
+
+                // add data bits
+                outData |= node << outBits;
+                outBits += dataBits;
+
+                // write when we have a word
+                if(outBits == 32)
+                {
+                    writeMem32(dst, outData, cycles);
+                    dst += 4;
+
+                    outBits = 0;
+                    outData = 0;
+                }
+
+                // back to root
+                ptr = treeAddr;
+            }
+        }
     }
 }

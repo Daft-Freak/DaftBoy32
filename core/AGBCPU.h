@@ -263,6 +263,7 @@ private:
     void swiObjAffineSet();
     void swiLZ77Write8();
     void swiLZ77Write16();
+    void swiHuffmanDecode();
 
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
