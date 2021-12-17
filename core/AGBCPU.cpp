@@ -2645,24 +2645,31 @@ void AGBCPU::handleBIOSBranch(uint32_t pc)
             int swiNum = readMem8(loReg(Reg::R14_svc) - 2, cycles);
 
             if(pc == 0x8)
+            {
+                // push r11-12, lr
+                // TODO: only need to do this if not returning immediately?
+                auto &sp = loReg(Reg::R13_svc);
+                sp -= 3 * 4;
+
+                auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(sp));
+
+                *ptr++ = loReg(Reg::R11);
+                *ptr++ = loReg(Reg::R12);
+                *ptr++ = loReg(Reg::R14_svc);
+
+                // push SPSR
+                sp -= 4;
+                ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(sp));
+                *ptr = getSPSR();
+
                 cpsr = (getSPSR() & Flag_I) | 0x1F; // switch back to system mode
 
-            handleSWI(swiNum);
-
-            // return if not waiting for interrupt
-            if(!(halted && swiWaitFlags))
-            {
-                cpsr = Flag_I | 0x13; // back to SVC
-
-                auto retAddr = loReg(Reg::R14_svc);
-                cpsr = getSPSR();
-                modeChanged();
-
-                if(cpsr & Flag_T)
-                    updateTHUMBPC(retAddr);
-                else
-                    updateARMPC(retAddr);
+                // push r2, lr to SYSTEM stack?
             }
+            else
+                swiNum = 5; // LR will be wrong if another SWI was nested...
+
+            handleSWI(swiNum);
 
             return;
         }
@@ -2740,7 +2747,10 @@ void AGBCPU::handleSWI(int num)
         {
             bool discardFlags = num == 5 || regs[0];
             uint16_t flags = num == 5 ? 1 : regs[1];
-            swiIntrWait(discardFlags, flags);
+
+            if(!swiIntrWait(discardFlags, flags))
+                return; // skip the return part, we're waiting for an interrupt
+
             break;
         }
 
@@ -2786,13 +2796,46 @@ void AGBCPU::handleSWI(int num)
     }
 }
 
-void AGBCPU::swiIntrWait(bool discardFlags, uint16_t flags)
+    // pop r2, lr from sys stack
+
+    cpsr = Flag_I | 0x13; // back to SVC
+
+    // pop SPSR
+    auto &sp = loReg(Reg::R13_svc);
+    auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(sp));
+    sp += 4;
+
+    getSPSR() = *ptr++;
+
+    // pop some regs
+    sp += 3 * 4;
+
+    loReg(Reg::R11) = *ptr++;
+    loReg(Reg::R12) = *ptr++;
+    loReg(Reg::R14_svc) = *ptr++;
+
+    // return
+    auto retAddr = loReg(Reg::R14_svc);
+    cpsr = getSPSR();
+    modeChanged();
+
+    //printf("SWI ret %08X (sys LR %08X)\n", retAddr, loReg(Reg::LR));
+
+    if(cpsr & Flag_T)
+        updateTHUMBPC(retAddr);
+    else
+        updateARMPC(retAddr);
+}
+
+bool AGBCPU::swiIntrWait(bool discardFlags, uint16_t flags)
 {
    int cycles = 0; // TODO
 
     // an interrupt happened and we returned to here
     if(swiWaitFlags)
     {
+        flags = swiWaitFlags; // can't trust regs
+
         auto interrupts = readMem32(0x3007FF8, cycles);
         writeMem32(0x3007FF8, interrupts & ~flags, cycles);
         writeReg(IO_IME, 1, 0xFF);
@@ -2801,7 +2844,7 @@ void AGBCPU::swiIntrWait(bool discardFlags, uint16_t flags)
         {
             // done
             swiWaitFlags = 0;
-            return;
+            return true;
         }
     }
     else if(discardFlags)
@@ -2816,6 +2859,12 @@ void AGBCPU::swiIntrWait(bool discardFlags, uint16_t flags)
     // don't return yet
     swiWaitFlags = flags;
     loReg(Reg::PC) = 0x34C; // pretend we're actually in the function
+
+    // we just changed PC, so these aren't valid
+    armPCPtr = nullptr;
+    thumbPCPtr = nullptr;
+
+    return false;
 }
 
 void AGBCPU::swiDiv()
