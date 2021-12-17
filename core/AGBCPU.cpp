@@ -2794,7 +2794,6 @@ void AGBCPU::handleSWI(int num)
         default:
             printf("SWI %x\n", num);
     }
-}
 
     // pop r2, lr from sys stack
 
