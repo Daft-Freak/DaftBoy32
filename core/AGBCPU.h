@@ -252,6 +252,7 @@ private:
     void handleBIOSBranch(uint32_t pc);
     void handleSWI(int num);
 
+    void swiRegisterRAMReset();
     bool swiIntrWait(bool discardFlags, uint16_t flags);
     void swiDiv();
     uint32_t swiArcTan(int tan);

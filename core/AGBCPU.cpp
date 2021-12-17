@@ -2736,6 +2736,9 @@ void AGBCPU::handleSWI(int num)
 {
     switch(num)
     {
+        case 0x1: // RegisterRamReset
+            swiRegisterRAMReset();
+            break;
         case 0x2: // Halt
             // 2x mov + strb
             halted = true;
@@ -2824,6 +2827,90 @@ void AGBCPU::handleSWI(int num)
         updateTHUMBPC(retAddr);
     else
         updateARMPC(retAddr);
+}
+
+void AGBCPU::swiRegisterRAMReset()
+{
+    auto flags = regs[0];
+
+    display.writeReg(IO_DISPCNT, DISPCNT_ForceBlank);
+
+    if(flags & (1 << 0)) // clear EWRAM
+        memset(mem.mapAddress(0x2000000), 0, 256 * 1024);
+
+    if(flags & (1 << 1)) // clear IWRAM
+        memset(mem.mapAddress(0x3000000), 0, 32 * 1024 - 512);
+
+    if(flags & (1 << 2)) // clear palette
+        memset(mem.getPalRAM(), 0, 1024);
+
+    if(flags & (1 << 3)) // clear VRAM
+        memset(mem.getVRAM(), 0, 96 * 1024);
+
+    if(flags & (1 << 4)) // clear OAM
+        memset(mem.getOAM(), 0, 1024);
+
+    if(flags & (1 << 5)) // SIO regs
+    {
+        // reset SIO
+        // TODO: names
+        mem.writeIOReg(0x120, 0);
+        mem.writeIOReg(0x122, 0);
+        mem.writeIOReg(0x124, 0);
+        mem.writeIOReg(0x126, 0);
+        mem.writeIOReg(0x128, 0);
+        mem.writeIOReg(0x12A, 0);
+    }
+    
+    // oh no, a bug!
+    mem.writeIOReg(0x134, 0x8000); // gpio mode
+    // also writes JOYCNT?
+
+    if(flags & (1 << 6)) // sound regs
+    {
+        // turn it off and back on
+        apu.writeReg(IO_SOUNDCNT_X, 0, 0xFFFF);
+        apu.writeReg(IO_SOUNDCNT_X, 0x80, 0xFFFF);
+
+        apu.writeReg(IO_SOUNDCNT_L, 0, 0xFFFF); // reset vol
+        apu.writeReg(IO_SOUNDCNT_H, 0x880E, 0xFFFF); // reset FIFOs, reset vol
+        mem.getIOReg(IO_SOUNDBIAS) &= 0x3FF;
+
+        // clear wave RAM
+        apu.writeReg(IO_SOUND3CNT_L, 0x40, 0xFFFF); // bank 1 in use, write bank 0
+        for(int i = 0; i < 8; i++)
+            apu.writeReg(0x90 + i * 2, 0, 0xFFFF);
+
+        apu.writeReg(IO_SOUND3CNT_L, 0, 0xFFFF); // bank 0 in use, write bank 1
+        for(int i = 0; i < 8; i++)
+            apu.writeReg(0x90 + i * 2, 0, 0xFFFF);
+
+        // turn off again
+        apu.writeReg(IO_SOUNDCNT_X, 0, 0xFFFF);
+    }
+
+    if(flags & (1 << 7)) // "other" regs
+    {
+        // clear display regs
+        for(int addr = IO_DISPSTAT; addr < IO_SOUND1CNT_L; addr += 2)
+            writeReg(addr, 0, 0xFFFF);
+
+        // reset affine params
+        writeReg(IO_BG2PA, 0x100, 0xFFFF);
+        writeReg(IO_BG2PD, 0x100, 0xFFFF);
+        writeReg(IO_BG3PA, 0x100, 0xFFFF);
+        writeReg(IO_BG3PD, 0x100, 0xFFFF);
+
+        // clear DMA/timer regs
+        for(int addr = IO_DMA0SAD; addr < 0x120; addr += 2)
+            writeReg(addr, 0, 0xFFFF);
+
+        // reset interrupt/wait
+        writeReg(IO_IE, 0, 0xFFFF);
+        writeReg(IO_IF, 0xFFFF, 0xFFFF);
+        writeReg(IO_WAITCNT, 0, 0xFFFF);
+        writeReg(IO_IME, 0, 0xFFFF);
+    }
 }
 
 bool AGBCPU::swiIntrWait(bool discardFlags, uint16_t flags)
