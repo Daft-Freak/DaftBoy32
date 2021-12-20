@@ -277,8 +277,7 @@ private:
     Reg curSP = Reg::SP, curLR = Reg::LR;
     int regBankOffset = 0;
 
-    const uint32_t *armPCPtr = nullptr;
-    const uint16_t *thumbPCPtr = nullptr;
+    const uint8_t *pcPtr = nullptr;
     int pcSCycles = 0, pcNCycles = 0;
 
     // pipeline

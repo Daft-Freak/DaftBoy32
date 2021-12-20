@@ -435,12 +435,12 @@ int AGBCPU::executeARMInstruction()
     decodeOp = fetchOp;
 
     // fetch next
+    pc += 4;
+    auto armPCPtr = reinterpret_cast<const uint32_t *>(pcPtr + pc);
     assert(mem.verifyPointer(armPCPtr, pc));
-    fetchOp = *++armPCPtr;
+    fetchOp = *armPCPtr;
 
     // ... and execute
-
-    pc += 4;
 
     // 0-3
     const auto doDataProcessing = [this](uint32_t opcode, uint32_t op2, bool carry, int pcInc = 0)
@@ -601,10 +601,10 @@ int AGBCPU::executeTHUMBInstruction()
 
     decodeOp = fetchOp;
 
-    assert(mem.verifyPointer(thumbPCPtr, pc));
-    fetchOp = *++thumbPCPtr;
-
     pc += 2;
+    auto thumbPCPtr = reinterpret_cast<const uint16_t *>(pcPtr + pc);
+    assert(mem.verifyPointer(thumbPCPtr, pc));
+    fetchOp = *thumbPCPtr;
 
     switch(opcode >> 12)
     {
@@ -2303,24 +2303,23 @@ void AGBCPU::updateARMPC(uint32_t pc)
     assert(!(pc & 3));
     assert(pc < 0xE000000); // trying to execute save data would be bad
 
-    thumbPCPtr = nullptr;
-
-    if(armPCPtr && pc >> 24 == loReg(Reg::PC) >> 24)
+    if(pcPtr && pc >> 24 == loReg(Reg::PC) >> 24)
     {
         // memory region didn't change, skip recaclculating ptr/cycles
-        armPCPtr += static_cast<int32_t>(pc - loReg(Reg::PC)) / 4;
-
+        [[maybe_unused]] auto armPCPtr = reinterpret_cast<const uint32_t *>(pcPtr + pc);
         assert(mem.verifyPointer(armPCPtr, pc));
     }
     else
     {
-        armPCPtr = reinterpret_cast<const uint32_t *>(std::as_const(mem).mapAddress(pc));
+        pcPtr = std::as_const(mem).mapAddress(pc);
         
-        if(!armPCPtr && !(pc >> 24) && !mem.hasBIOS())
+        if(!pcPtr && !(pc >> 24) && !mem.hasBIOS())
         {
             handleBIOSBranch(pc);
             return;
         }
+
+        pcPtr -= pc; // adjust so that we can index by pc later
 
         pcSCycles = mem.getAccessCycles(pc, 4, true);
         pcNCycles = mem.getAccessCycles(pc, 4, false);
@@ -2329,6 +2328,8 @@ void AGBCPU::updateARMPC(uint32_t pc)
     mem.updatePC(pc);
 
     // refill the pipeline
+    auto armPCPtr = reinterpret_cast<const uint32_t *>(pcPtr + pc);
+    assert(mem.verifyPointer(armPCPtr, pc));
     decodeOp = *armPCPtr++;
     fetchOp = *armPCPtr;
 
@@ -2341,18 +2342,15 @@ void AGBCPU::updateTHUMBPC(uint32_t pc)
     assert(!(pc & 1));
     assert(pc < 0xE000000);
 
-    armPCPtr = nullptr;
-
-    if(thumbPCPtr && pc >> 24 == loReg(Reg::PC) >> 24)
+    if(pcPtr && pc >> 24 == loReg(Reg::PC) >> 24)
     {
         // memory region didn't change, skip recaclculating ptr/cycles
-        thumbPCPtr += static_cast<int32_t>(pc - loReg(Reg::PC)) / 2;
-
+        [[maybe_unused]] auto thumbPCPtr = reinterpret_cast<const uint16_t *>(pcPtr + pc);
         assert(mem.verifyPointer(thumbPCPtr, pc));
     }
     else
     {
-        thumbPCPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc)); // force const mapAddress
+        pcPtr = std::as_const(mem).mapAddress(pc) - pc; // force const mapAddress
         pcSCycles = mem.getAccessCycles(pc, 2, true);
         pcNCycles = mem.getAccessCycles(pc, 2, false);
     }
@@ -2360,6 +2358,7 @@ void AGBCPU::updateTHUMBPC(uint32_t pc)
     mem.updatePC(pc);
 
     // refill the pipeline
+    auto thumbPCPtr = reinterpret_cast<const uint16_t *>(pcPtr + pc);
     decodeOp = *thumbPCPtr++;
     fetchOp = *thumbPCPtr;
 
@@ -2985,9 +2984,8 @@ bool AGBCPU::swiIntrWait(bool discardFlags, uint16_t flags)
     swiWaitFlags = flags;
     loReg(Reg::PC) = 0x34C; // pretend we're actually in the function
 
-    // we just changed PC, so these aren't valid
-    armPCPtr = nullptr;
-    thumbPCPtr = nullptr;
+    // we just changed PC, so this isn't valid
+    pcPtr = nullptr;
 
     return false;
 }
