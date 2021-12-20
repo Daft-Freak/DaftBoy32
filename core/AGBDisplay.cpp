@@ -1225,12 +1225,13 @@ void AGBDisplay::drawScanLine(int y)
                 }
 
                 int curBlendMode = blendMode;
-                // make sure layer is src (masks conveniently line up)
-                if(!(blendControl & mask))
-                    curBlendMode = 0;
+
                 // forced blend for objects
-                else if(mask == Layer_OBJ && objMask[x] == 2)
+                if(mask == Layer_OBJ && objMask[x] == 2)
                     curBlendMode = 1;
+                // make sure layer is src (masks conveniently line up)
+                else if(!(blendControl & mask))
+                    curBlendMode = 0;
 
                 int srcR = (col >> 10) & 0x1F;
                 int srcG = (col >> 5) & 0x1F;
