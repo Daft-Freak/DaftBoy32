@@ -1438,7 +1438,7 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
     return mem.prefetchTiming32(pcSCycles);
 }
 
-int AGBCPU::doTHUMB01MoveShifted(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB01MoveShifted(uint16_t opcode, uint32_t pc)
 {
     auto instOp = (opcode >> 11) & 0x1;
     auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
@@ -1482,7 +1482,7 @@ int AGBCPU::doTHUMB01MoveShifted(uint16_t opcode, uint32_t &pc)
     return mem.prefetchTiming16(pcSCycles);
 }
 
-int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t pc)
 {
     auto instOp = (opcode >> 11) & 0x3;
     auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
@@ -1552,7 +1552,7 @@ int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t &pc)
     return mem.prefetchTiming16(pcSCycles);
 }
 
-int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t pc)
 {
     auto instOp = (opcode >> 11) & 0x3;
     auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
@@ -1594,7 +1594,7 @@ int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t &pc)
     return mem.prefetchTiming16(pcSCycles);
 }
 
-int AGBCPU::doTHUMB040506(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB040506(uint16_t opcode, uint32_t pc)
 {
     if(opcode & (1 << 11)) // format 6, PC-relative load
         return doTHUMB06PCRelLoad(opcode, pc);
@@ -1604,7 +1604,7 @@ int AGBCPU::doTHUMB040506(uint16_t opcode, uint32_t &pc)
         return doTHUMB04ALU(opcode, pc);
 }
 
-int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t pc)
 {
     auto instOp = (opcode >> 6) & 0xF;
     auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
@@ -1771,7 +1771,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t &pc)
     return mem.prefetchTiming16(pcSCycles);
 }
 
-int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t pc)
 {
     auto op = (opcode >> 8) & 3;
     bool h1 = opcode & (1 << 7);
@@ -1840,7 +1840,7 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t &pc)
     return mem.prefetchTiming16(pcSCycles);
 }
 
-int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t pc)
 {
     auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
     uint8_t word = opcode & 0xFF;
@@ -1852,7 +1852,7 @@ int AGBCPU::doTHUMB06PCRelLoad(uint16_t opcode, uint32_t &pc)
     return cycles + mem.iCycle() + mem.prefetchTiming16(pcSCycles, pcNCycles);
 }
 
-int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t pc)
 {
     auto offReg = static_cast<Reg>((opcode >> 6) & 7);
     auto baseReg = static_cast<Reg>((opcode >> 3) & 7);
@@ -1934,7 +1934,7 @@ int AGBCPU::doTHUMB0708(uint16_t opcode, uint32_t &pc)
     }
 }
 
-int AGBCPU::doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t pc)
 {
     bool isLoad = opcode & (1 << 11);
     auto offset = ((opcode >> 6) & 0x1F);
@@ -1956,7 +1956,7 @@ int AGBCPU::doTHUMB09LoadStoreWord(uint16_t opcode, uint32_t &pc)
     }
 }
 
-int AGBCPU::doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t pc)
 {
     bool isLoad = opcode & (1 << 11);
     auto offset = ((opcode >> 6) & 0x1F);
@@ -1978,7 +1978,7 @@ int AGBCPU::doTHUMB09LoadStoreByte(uint16_t opcode, uint32_t &pc)
     }
 }
 
-int AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t pc)
 {
     bool isLoad = opcode & (1 << 11);
     auto offset = ((opcode >> 6) & 0x1F) << 1;
@@ -2000,7 +2000,7 @@ int AGBCPU::doTHUMB10LoadStoreHalf(uint16_t opcode, uint32_t &pc)
     }
 }
 
-int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t pc)
 {
     bool isLoad = opcode & (1 << 11);
     auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
@@ -2022,7 +2022,7 @@ int AGBCPU::doTHUMB11SPRelLoadStore(uint16_t opcode, uint32_t &pc)
     }
 }
 
-int AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t pc)
 {
     bool isSP = opcode & (1 << 11);
     auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
@@ -2036,7 +2036,7 @@ int AGBCPU::doTHUMB12LoadAddr(uint16_t opcode, uint32_t &pc)
     return mem.prefetchTiming16(pcSCycles);
 }
 
-int AGBCPU::doTHUMB1314(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB1314(uint16_t opcode, uint32_t pc)
 {
     if(opcode & (1 << 10)) // format 14, push/pop
         return doTHUMB14PushPop(opcode, pc);
@@ -2044,7 +2044,7 @@ int AGBCPU::doTHUMB1314(uint16_t opcode, uint32_t &pc)
         return doTHUMB13SPOffset(opcode, pc);
 }
 
-int AGBCPU::doTHUMB13SPOffset(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB13SPOffset(uint16_t opcode, uint32_t pc)
 {
     bool isNeg = opcode & (1 << 7);
     int off = (opcode & 0x7F) << 2;
@@ -2057,7 +2057,7 @@ int AGBCPU::doTHUMB13SPOffset(uint16_t opcode, uint32_t &pc)
     return mem.prefetchTiming16(pcSCycles);
 }
 
-int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t pc)
 {
     // timings here are very off
 
@@ -2116,7 +2116,7 @@ int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t &pc)
     return pcNCycles;
 }
 
-int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t pc)
 {
     bool isLoad = opcode & (1 << 11);
     auto baseReg = static_cast<Reg>((opcode >> 8) & 7);
@@ -2187,7 +2187,7 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t &pc)
     return cycles;
 }
 
-int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t pc)
 {
     auto cond = (opcode >> 8) & 0xF;
     if(cond == 0xF) // format 17, SWI
@@ -2264,7 +2264,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t &pc)
     return pcSCycles * 2 + pcNCycles; // 2S + 1N, probably a bit wrong for SWI
 }
 
-int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t pc)
 {
     uint32_t offset = static_cast<int16_t>(opcode << 5) >> 4; // sign extend and * 2
 
@@ -2273,7 +2273,7 @@ int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t &pc)
     return pcSCycles * 2 + pcNCycles; // 2S + 1N
 }
 
-int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t &pc)
+int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t pc)
 {
     bool high = opcode & (1 << 11);
     uint32_t offset = opcode & 0x7FF;
