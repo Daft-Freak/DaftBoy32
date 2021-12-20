@@ -2059,16 +2059,19 @@ int AGBCPU::doTHUMB13SPOffset(uint16_t opcode, uint32_t pc)
 
 int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t pc)
 {
-    // timings here are very off
+    // timings here are probably off
 
     bool isLoad = opcode & (1 << 11);
     bool pclr = opcode & (1 << 8); // store LR/load PC
     uint8_t regList = opcode & 0xFF;
 
+    int cycles = 0;
+
     if(isLoad) // POP
     {
         auto addr = loReg(curSP);
         auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(addr & ~3));
+        auto loadCycles = mem.getAccessCycles(addr, 4, true);
 
         int i = 0;
         for(; regList; regList >>= 1, i++)
@@ -2077,6 +2080,7 @@ int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t pc)
             {
                 regs[i] = *ptr++;
                 addr += 4;
+                cycles += loadCycles;
             }
         }
 
@@ -2084,9 +2088,15 @@ int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t pc)
         {
             updateTHUMBPC(*ptr++ & ~1); /*ignore thumb bit*/
             addr += 4;
+
+            cycles += loadCycles; // TODO
         }
 
+        cycles++; // I cycle
+
         loReg(curSP) = addr;
+
+        return mem.iCycle(cycles) + mem.prefetchTiming16(pcSCycles, pcNCycles);
     }
     else // PUSH
     {
@@ -2101,19 +2111,26 @@ int AGBCPU::doTHUMB14PushPop(uint16_t opcode, uint32_t pc)
         loReg(curSP) = addr;
 
         auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(addr & ~3));
+        auto storeCycles = mem.getAccessCycles(addr, 4, true);
 
         int i = 0;
         for(; regList; regList >>= 1, i++)
         {
             if(regList & 1)
+            {
                 *ptr++ = regs[i];
+                cycles += storeCycles;
+            }
         }
 
         if(pclr)
+        {
             *ptr++ = loReg(curLR);
-    }
+            cycles += storeCycles;
+        }
 
-    return pcNCycles;
+        return mem.iCycle(cycles) +  mem.prefetchTiming16(pcNCycles);
+    }
 }
 
 int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t pc)
