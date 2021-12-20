@@ -269,9 +269,18 @@ private:
     static const uint32_t clockSpeed = 16*1024*1024;
     static const uint32_t signBit = 0x80000000;
 
+    // registers
+    uint32_t regs[31]{};
+    uint32_t cpsr;
+    uint32_t spsr[6]; // fiq, svc, abt, irq, und
+
+    Reg curSP = Reg::SP, curLR = Reg::LR;
+    int regBankOffset = 0;
+
     const uint32_t *armPCPtr = nullptr;
     const uint16_t *thumbPCPtr = nullptr;
     int pcSCycles = 0, pcNCycles = 0;
+
     // pipeline
     uint32_t fetchOp = 0, decodeOp = 0;
 
@@ -304,14 +313,6 @@ private:
 
     uint16_t timerCounters[4]{};
     int timerPrescalers[4]{};
-
-    // registers
-    uint32_t regs[31]{};
-    uint32_t cpsr;
-    uint32_t spsr[6]; // fiq, svc, abt, irq, und
-
-    Reg curSP = Reg::SP, curLR = Reg::LR;
-    int regBankOffset = 0;
 
     uint16_t inputs = 0;
     
