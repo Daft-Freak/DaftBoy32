@@ -1133,6 +1133,14 @@ void AGBDisplay::drawScanLine(int y)
     uint16_t blendAlpha = mem.readIOReg(IO_BLDALPHA);
     uint16_t blendY = mem.readIOReg(IO_BLDY);
 
+    int blendSrcAlpha = 0;
+    int blendDstAlpha = 0;
+
+    if(blendAlpha)
+    {
+        blendSrcAlpha = std::min(16, blendAlpha & 0xFF);
+        blendDstAlpha = std::min(16, blendAlpha >> 8);
+    }
 
     // merge layers
     for(int x = 0; x < screenWidth;)
@@ -1290,18 +1298,15 @@ void AGBDisplay::drawScanLine(int y)
                     }
 
                     // do blend
-                    int srcA = std::min(16, blendAlpha & 0xFF);
-
                     auto dstCol = nextData ? nextData[x] : palRAM[0]; // handle backdrop
 
                     int dstR = (dstCol >> 10) & 0x1F;
                     int dstG = (dstCol >> 5) & 0x1F;
                     int dstB = dstCol & 0x1F;
-                    int dstA = std::min(16, blendAlpha >> 8);
 
-                    int r = std::min(31, (srcR * srcA + dstR * dstA) / 16);
-                    int g = std::min(31, (srcG * srcA + dstG * dstA) / 16);
-                    int b = std::min(31, (srcB * srcA + dstB * dstA) / 16);
+                    int r = std::min(31, (srcR * blendSrcAlpha + dstR * blendDstAlpha) / 16);
+                    int g = std::min(31, (srcG * blendSrcAlpha + dstG * blendDstAlpha) / 16);
+                    int b = std::min(31, (srcB * blendSrcAlpha + dstB * blendDstAlpha) / 16);
 
                     scanLine[x] = r << 11 | g << 6 | b;
                 }
