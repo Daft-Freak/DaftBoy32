@@ -2206,79 +2206,81 @@ int AGBCPU::doTHUMB15MultiLoadStore(uint16_t opcode, uint32_t pc)
 
 int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t pc)
 {
+    // format 16, conditional branch (+ SWI)
     auto cond = (opcode >> 8) & 0xF;
-    if(cond == 0xF) // format 17, SWI
-    {
-        auto ret = (pc - 2) & ~1;
-        spsr[1/*svc*/] = cpsr;
 
-        cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x13; //supervisor mode
-        modeChanged();
-        loReg(curLR) = ret;
-        updateARMPC(8);
-    }
-    else // format 16, conditional branch
+    int offset = static_cast<int8_t>(opcode & 0xFF);
+    bool condVal = false;
+    switch(cond)
     {
-        int offset = static_cast<int8_t>(opcode & 0xFF);
-        bool condVal = false;
-        switch(cond)
+        case 0x0: // BEQ
+            condVal = cpsr & Flag_Z;
+            break;
+        case 0x1: // BNE
+            condVal = !(cpsr & Flag_Z);
+            break;
+        case 0x2: // BCS
+            condVal = cpsr & Flag_C;
+            break;
+        case 0x3: // BCC
+            condVal = !(cpsr & Flag_C);
+            break;
+        case 0x4: // BMI
+            condVal = cpsr & Flag_N;
+            break;
+        case 0x5: // BPL
+            condVal = !(cpsr & Flag_N);
+            break;
+        case 0x6: // BVS
+            condVal = cpsr & Flag_V;
+            break;
+        case 0x7: // BVC
+            condVal = !(cpsr & Flag_V);
+            break;
+        case 0x8: // BHI
+            condVal = (cpsr & Flag_C) && !(cpsr & Flag_Z);
+            break;
+        case 0x9: // BLS
+            condVal = !(cpsr & Flag_C) || (cpsr & Flag_Z);
+            break;
+        case 0xA: // BGE
+            condVal = !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
+            break;
+        case 0xB: // BLT
+            condVal = !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
+            break;
+        case 0xC: // BGT
+            condVal = !(cpsr & Flag_Z) && !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
+            break;
+        case 0xD: // BLE
+            condVal = (cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
+            break;
+
+        // E undefined
+
+        case 0xF: // format 17, SWI
         {
-            case 0x0: // BEQ
-                condVal = cpsr & Flag_Z;
-                break;
-            case 0x1: // BNE
-                condVal = !(cpsr & Flag_Z);
-                break;
-            case 0x2: // BCS
-                condVal = cpsr & Flag_C;
-                break;
-            case 0x3: // BCC
-                condVal = !(cpsr & Flag_C);
-                break;
-            case 0x4: // BMI
-                condVal = cpsr & Flag_N;
-                break;
-            case 0x5: // BPL
-                condVal = !(cpsr & Flag_N);
-                break;
-            case 0x6: // BVS
-                condVal = cpsr & Flag_V;
-                break;
-            case 0x7: // BVC
-                condVal = !(cpsr & Flag_V);
-                break;
-            case 0x8: // BHI
-                condVal = (cpsr & Flag_C) && !(cpsr & Flag_Z);
-                break;
-            case 0x9: // BLS
-                condVal = !(cpsr & Flag_C) || (cpsr & Flag_Z);
-                break;
-            case 0xA: // BGE
-                condVal = !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
-                break;
-            case 0xB: // BLT
-                condVal = !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
-                break;
-            case 0xC: // BGT
-                condVal = !(cpsr & Flag_Z) && !!(cpsr & Flag_N) == !!(cpsr & Flag_V);
-                break;
-            case 0xD: // BLE
-                condVal = (cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
-                break;
-            // E undefined
-            // F is SWI
+            auto ret = (pc - 2) & ~1;
+            spsr[1/*svc*/] = cpsr;
 
-            default:
-                assert(!"Invalid THUMB cond");
+            cpsr = (cpsr & ~(0x1F | Flag_T)) | Flag_I | 0x13; //supervisor mode
+            modeChanged();
+            loReg(curLR) = ret;
+            updateARMPC(8);
+
+            return pcSCycles * 2 + pcNCycles;
         }
 
-        if(condVal)
-            updateTHUMBPC(pc + offset * 2);
-        else
-            return pcSCycles; // no extra cycles if branch not taken
+        default:
+            assert(!"Invalid THUMB cond");
     }
 
-    return pcSCycles * 2 + pcNCycles; // 2S + 1N, probably a bit wrong for SWI
+    if(!condVal)
+        return pcSCycles; // no extra cycles if branch not taken
+    
+    updateTHUMBPC(pc + offset * 2);
+
+    return pcSCycles * 2 + pcNCycles;
 }
 
 int AGBCPU::doTHUMB18UncondBranch(uint16_t opcode, uint32_t pc)
