@@ -683,7 +683,7 @@ bool AGBCPU::checkARMCondition(int cond) const
             assert(!"Invalid condition");
     }
 
-    return false;
+    return true;
 }
 
 // shift is usually the bottom 12 bits of the opcode
