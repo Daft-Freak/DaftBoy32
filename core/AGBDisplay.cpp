@@ -149,7 +149,7 @@ static void drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     int tx = (x + xOffset) & 7;
     int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
-    for(; x < 240 && bx < screenBlockTiles; bx++)
+    auto getTileRow = [ty, screenPtr, charPtr, validDataEnd](int bx)
     {
         uint16_t tileMeta = 0;
     
@@ -174,35 +174,65 @@ static void drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         if(tileMeta & (1 << 10))
             tileRow = __builtin_bswap64(tileRow);
 
+        return tileRow;
+    };
+
+    auto tilePal = palRam;
+
+    // left edge
+    if(tx)
+    {
+        uint64_t tileRow = getTileRow(bx);
         auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow) + tx;
 
-        if(!tx && x + 8 < 240)
+        for(; tx < 8 && x < 240; tx++, x++, scanLine++)
         {
-            // full tile
-            x += 8;
-            for(int tx = 0; tx < 8; tx++, scanLine++)
-            {
-                auto palIndex = *tilePtr++;
-                if(palIndex)
-                    *scanLine = palRam[palIndex] | 0x8000;
-                else
-                    *scanLine = 0;
-            }
+            auto palIndex = *tilePtr++;
+            if(palIndex)
+                *scanLine = tilePal[palIndex] | 0x8000;
+            else
+                *scanLine = 0;
         }
-        else
-        {
-            // edges
-            for(; tx < 8 && x < 240; tx++, x++, scanLine++)
-            {
-                auto palIndex = *tilePtr++;
-                if(palIndex)
-                    *scanLine = palRam[palIndex] | 0x8000;
-                else
-                    *scanLine = 0;
-            }
 
-            tx = 0;
+        bx++;
+    }
+
+    // full tiles
+    for(; x <= 240 - 8 && bx < screenBlockTiles; bx++)
+    {
+        uint64_t tileRow = getTileRow(bx);
+        auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow);
+
+        x += 8;
+
+        for(int tx = 0; tx < 8; tx++, scanLine++)
+        {
+            auto palIndex = *tilePtr++;
+            if(palIndex)
+                *scanLine = tilePal[palIndex] | 0x8000;
+            else
+                *scanLine = 0;
         }
+    }
+
+    // right edge
+    if(bx < screenBlockTiles)
+    {
+        uint64_t tileRow = getTileRow(bx);
+        auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow);
+
+        int w = 240 - x;
+        
+        for(int tx = 0; tx < w; tx++, scanLine++)
+        {
+            auto palIndex = *tilePtr++;
+            if(palIndex)
+                *scanLine = tilePal[palIndex] | 0x8000;
+            else
+                *scanLine = 0;
+        }
+
+        x = 240;
     }
 }
 
