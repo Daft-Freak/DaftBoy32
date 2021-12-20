@@ -75,7 +75,7 @@ void AGBCPU::flagInterrupt(int interrupt, bool recalculateUpdate)
 
     currentInterrupts = enabledInterrutps & mem.readIOReg(IO_IF);
 
-    if(!interruptDelay)
+    if(!interruptDelay && currentInterrupts)
         interruptDelay = 7; // unsure of this, but 7 seems to pass more tests than 6
 
     if(recalculateUpdate)
