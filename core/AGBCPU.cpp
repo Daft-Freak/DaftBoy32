@@ -1118,115 +1118,73 @@ int AGBCPU::doARMSingleDataTransfer(uint32_t opcode, bool isReg, bool isPre)
 
 int AGBCPU::doARMBlockDataTransfer(uint32_t opcode, bool preIndex)
 {
-    bool isUp = opcode & (1 << 23);
-    bool isLoadForce = opcode & (1 << 22);
-    bool writeBack = opcode & (1 << 21);
-    bool isLoad = opcode & (1 << 20);
-    auto baseReg = mapReg(static_cast<Reg>((opcode >> 16) & 0xF));
     uint16_t regList = opcode;
 
-    int cycles = 0;
+    // count regs
+    int numRegs = 0;
+    
+    if(regList == 0)
+    {
+        // empty list loads/stores R15/PC
+        regList = 1 << 15;
 
+        // ...and inc/decrements all the way
+        numRegs = 16;
+    }
+    else
+    {
+        for(uint32_t t = regList; t; t >>= 1)
+        {
+            if(t & 1)
+                numRegs++;
+        }
+    }
+
+    auto baseReg = static_cast<Reg>((opcode >> 16) & 0xF);
+    auto addr = reg(baseReg);
+    uint32_t writeBackAddr;
+
+    // flip decrement addressing around so that regs are stored in the right order
+    bool isUp = opcode & (1 << 23);
+    if(!isUp)
+    {
+        addr -= numRegs * 4;
+        writeBackAddr = addr;
+
+        if(!preIndex)
+            addr += 4;
+    }
+    else
+    {
+        writeBackAddr = addr + numRegs * 4;
+        if(preIndex)
+            addr += 4;
+    }
+
+    // force alingment for everything but SRAM...
+    if(addr < 0xE000000)
+        addr &= ~3;
+
+    bool writeBack = opcode & (1 << 21);
+    bool isLoad = opcode & (1 << 20);
+
+    bool isLoadForce = opcode & (1 << 22);
     if(isLoadForce)
     {
         //assert(!writeBack); // "should not be used"
         assert(!isLoad || !(regList & (1 << 15))); // TODO: load with r15 (mode change)
     }
 
-    auto addr = loReg(baseReg);
+    int cycles = 0;
 
-    // count regs
-    int numRegs = 0;
-    for(uint16_t t = regList; t; t >>= 1)
+    if(isLoad)
     {
-        if(t & 1)
-            numRegs++;
-    }
-
-    uint32_t lowAddr = 0;
-    auto highAddr = addr + numRegs * 4;
-
-    // flip decrement addressing around so that regs are stored in the right order    
-    if(!isUp)
-    {
-        addr -= numRegs * 4;
-        lowAddr = addr;
-
-        if(!preIndex)
-            addr += 4;
-    }
-    else if(preIndex)
-        addr += 4;
-
-    if(isLoad && regList & (1 << static_cast<int>(baseReg)))
-        writeBack = false; // don't override
-
-    // empty list loads/stores R15/PC
-    if(regList == 0)
-    {
-        regList = 1 << 15;
-
-        // ...ans inc/decrements all the way
-        if(isUp)
-            highAddr += 0x40;
-        else
-        {
-            addr -= 0x40;
-            lowAddr = addr - (preIndex ? 0 : 4);
-        }
-    }
-
-    int i = 0;
-    if(baseReg == curSP)
-    {
-        // stack push/pull, we can assume RAM
-        // this is some annoying duplication...
-        auto ptr = reinterpret_cast<uint32_t *>(mem.mapAddress(addr & ~3));
+        if(writeBack && !(regList & (1 << static_cast<int>(baseReg))))
+            reg(baseReg) = writeBackAddr;
 
         bool first = true;
-        for(; regList && i < 16; regList >>= 1, i++)
-        {
-            if(!(regList & 1))
-                continue;
 
-            // directly index to force user
-            auto reg = isLoadForce ? static_cast<Reg>(i): mapReg(static_cast<Reg>(i));
-
-            if(isLoad)
-            {
-                if(reg == Reg::PC)
-                    updateARMPC(*ptr++);
-                else
-                    loReg(reg) = *ptr++;
-            }
-            else
-            {
-                if(reg == Reg::PC)
-                    *ptr++ = loReg(reg) + 4;
-                else
-                    *ptr++ = loReg(reg);
-            }
-
-            addr += 4;
-            if(first && writeBack)
-            {
-                // write back after first store
-                loReg(baseReg) = isUp ? highAddr : lowAddr;
-            }
-            first = false;
-        }
-
-        cycles = numRegs * mem.getAccessCycles(addr, 4, true); // it's RAM so N == S
-        mem.iCycle(cycles); // not I cycles, but need to update prefetch...
-    }
-    else
-    {
-        // force alingment for everything but SRAM...
-        if(addr < 0xE000000)
-            addr &= ~3;
-
-        bool first = true;
-        for(; regList; regList >>= 1, i++)
+        for(int i = 0; regList; regList >>= 1, i++)
         {
             if(!(regList & 1))
                 continue;
@@ -1234,36 +1192,47 @@ int AGBCPU::doARMBlockDataTransfer(uint32_t opcode, bool preIndex)
             // directly index to force user
             auto reg = isLoadForce ? static_cast<Reg>(i) : mapReg(static_cast<Reg>(i));
 
-            if(isLoad)
-            {
-                if(reg == Reg::PC)
-                    updateARMPC(readMem32(addr, cycles, first));
-                else
-                    loReg(reg) = readMem32(addr, cycles, first);
-            }
+            if(reg == Reg::PC)
+                updateARMPC(readMem32(addr, cycles, first));
             else
-            {
-                if(reg == Reg::PC)
-                    writeMem32(addr, loReg(reg) + 4, cycles);
-                else
-                    writeMem32(addr, loReg(reg), cycles);
-            }
+                loReg(reg) = readMem32(addr, cycles, first);
+
+            addr += 4;
+            first = false;
+        }
+
+        return cycles + mem.iCycle() + mem.prefetchTiming32(pcSCycles, pcNCycles);
+    }
+    else
+    {
+        bool first = true;
+
+        baseReg = mapReg(baseReg);
+
+        for(int i = 0; regList; regList >>= 1, i++)
+        {
+            if(!(regList & 1))
+                continue;
+
+            // directly index to force user
+            auto reg = isLoadForce ? static_cast<Reg>(i) : mapReg(static_cast<Reg>(i));
+
+            if(reg == Reg::PC)
+                writeMem32(addr, loReg(reg) + 4, cycles);
+            else
+                writeMem32(addr, loReg(reg), cycles);
 
             addr += 4;
             if(first && writeBack)
             {
                 // write back after first store
-                loReg(baseReg) = isUp ? highAddr : lowAddr;
+                loReg(baseReg) = writeBackAddr;
             }
             first = false;
         }
-    }
 
-
-    if(isLoad)
-        return cycles + mem.iCycle() + mem.prefetchTiming32(pcSCycles, pcNCycles);
-    else
         return cycles + mem.prefetchTiming32(pcNCycles);
+    }
 }
 
 int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
