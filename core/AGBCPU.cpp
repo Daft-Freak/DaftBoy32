@@ -50,7 +50,10 @@ void AGBCPU::reset()
         updateARMPC(0x8000000);
 
         mem.writeIOReg(IO_DISPCNT, DISPCNT_ForceBlank);
-        // BG[23]P[AD] are set to 0x100
+        mem.writeIOReg(IO_BG2PA, 0x100);
+        mem.writeIOReg(IO_BG2PD, 0x100);
+        mem.writeIOReg(IO_BG3PA, 0x100);
+        mem.writeIOReg(IO_BG3PD, 0x100);
         mem.writeIOReg(IO_SOUNDBIAS, 0x200);
         mem.writeIOReg(0x134/*RCNT*/, 0x8000/*GPIO mode*/);
         mem.writeIOReg(0x300/*POSTFLG/HALTCNT*/, 1);
