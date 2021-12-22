@@ -765,7 +765,6 @@ void AGBAPU::sampleOutput()
 
     // TODO: master left/right volume in low byte
     auto outputSelect = mem.readIOReg(IO_SOUNDCNT_L) >> 8;
-    // TODO sound 1-4 volume in bit 0-1
     auto dmaControl = mem.readIOReg(IO_SOUNDCNT_H);
 
     auto vol = ch1EnvVolume;
@@ -788,25 +787,27 @@ void AGBAPU::sampleOutput()
 
     int left = 0, right = 0;
 
+    int scale = 2 << (dmaControl & 3); // 2, 4, 8 (25, 50 and 100%)
+
     if(outputSelect & 0x01)
-        right += ch1Val * 8;
+        right += ch1Val * scale;
     if(outputSelect & 0x10)
-        left += ch1Val * 8;
+        left += ch1Val * scale;
 
     if(outputSelect & 0x02)
-        right += ch2Val * 8;
+        right += ch2Val * scale;
     if(outputSelect & 0x20)
-        left += ch2Val * 8;
+        left += ch2Val * scale;
 
     if(outputSelect & 0x04)
-        right += ch3Val * 8;
+        right += ch3Val * scale;
     if(outputSelect & 0x40)
-        left += ch3Val * 8;
+        left += ch3Val * scale;
 
     if(outputSelect & 0x08)
-        right += ch4Val * 8;
+        right += ch4Val * scale;
     if(outputSelect & 0x80)
-        left += ch4Val * 8;
+        left += ch4Val * scale;
 
     // shiny new DMA channels
     int dmaAVal = this->dmaAVal * 4;
