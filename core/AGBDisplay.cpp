@@ -982,6 +982,15 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
             break;
         }
 
+        case IO_WIN0H:
+        case IO_WIN1H:
+        {
+            auto start = std::min(screenWidth, data >> 8);
+            auto end = std::min(screenWidth, data & 0xFF);
+            mem.writeIOReg(addr, start << 8 | end);
+            return true;
+        }
+
         case IO_BLDCNT:
             mem.writeIOReg(addr, data & 0x3FFF);
             return true;
