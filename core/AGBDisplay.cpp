@@ -1200,7 +1200,7 @@ void AGBDisplay::drawScanLine(int y)
 
                 // "end" of object window
                 end = x + 1;
-                while(objData[4][end] && end < 240)
+                while(end < 240 && objData[4][end])
                     end++;
                 // or start of win 0
                 if(yInWin0 && (win0h >> 8) < end && (win0h >> 8) > x)
@@ -1226,7 +1226,7 @@ void AGBDisplay::drawScanLine(int y)
                 if(dispControl & DISPCNT_OBJWindowOn)
                 {
                     int spriteStart = x + 1;
-                    while(!objData[4][spriteStart] && spriteStart < end)
+                    while(spriteStart < end && !objData[4][spriteStart])
                         spriteStart++;
 
                     end = spriteStart;
