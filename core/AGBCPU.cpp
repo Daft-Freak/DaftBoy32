@@ -2782,6 +2782,10 @@ void AGBCPU::handleSWI(int num)
             swiObjAffineSet();
             break;
 
+        case 0x10: // BitUnPack
+            swiBitUnpack();
+            break;
+
         case 0x11: // LZ77 8-bit write
             swiLZ77Write8();
             break;
@@ -3241,6 +3245,53 @@ void AGBCPU::swiObjAffineSet()
         dst += stride;
 
         src += 4;
+    }
+}
+
+void AGBCPU::swiBitUnpack()
+{
+    auto src = regs[0];
+    auto dst = regs[1];
+    auto infoPtr = regs[2];
+
+    int cycles = 0; // TODO
+
+    int len = readMem16(infoPtr, cycles);
+    int srcWidth = readMem8(infoPtr + 2, cycles);
+    int dstWidth = readMem8(infoPtr + 3, cycles);
+    auto offset = readMem32(infoPtr + 4, cycles);
+    bool zeroFlag = offset & (1 << 31);
+    offset &= ~(1 << 31);
+
+    uint32_t outData = 0;
+    int outBits = 0;
+
+    for(int i = 0; i < len; i++)
+    {
+        uint8_t byte = readMem8(src++, cycles);
+
+        for(int bit = 0; bit < 8; bit += srcWidth)
+        {
+            // get input bits
+            uint32_t val = (byte >> bit) & ((1 << srcWidth) - 1);
+
+            // add offset
+            if(val || zeroFlag)
+                val += offset;
+
+            // append to output data
+            outData |= val << outBits;
+            outBits += dstWidth;
+
+            // write when we have a word
+            if(outBits == 32)
+            {
+                writeMem32(dst, outData, cycles);
+                dst += 4;
+                outData = 0;
+                outBits = 0;
+            }
+        }
     }
 }
 

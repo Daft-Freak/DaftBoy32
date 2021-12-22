@@ -262,6 +262,7 @@ private:
     void swiCPUFastSet();
     void swiBgAffineSet();
     void swiObjAffineSet();
+    void swiBitUnpack();
     void swiLZ77Write8();
     void swiLZ77Write16();
     void swiHuffmanDecode();
