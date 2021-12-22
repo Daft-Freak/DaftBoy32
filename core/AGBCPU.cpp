@@ -256,7 +256,6 @@ bool AGBCPU::writeReg(uint32_t addr, uint16_t data, uint16_t mask)
             mem.writeIOReg(IO_IF, data);
 
             currentInterrupts = (mem.readIOReg(IO_IME) & 1) ? mem.readIOReg(IO_IE) & data : 0;
-            calculateNextUpdate(cycleCount);
             return true;
 
         case IO_WAITCNT:
@@ -387,8 +386,11 @@ int AGBCPU::runCycles(int cycles)
                 if(interruptDelay <= exec)
                 {
                     exec += serviceInterrupts();
-                    interruptDelay = 0;
-                    calculateNextUpdate(cycleCount);
+                    if(interruptDelay)
+                    {
+                        interruptDelay = 0;
+                        calculateNextUpdate(cycleCount);
+                    }
                 }
                 else
                     interruptDelay -= exec;
