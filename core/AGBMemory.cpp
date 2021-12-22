@@ -48,7 +48,8 @@ void AGBMemory::setCartROM(const uint8_t *rom, uint32_t size)
 
 void AGBMemory::loadCartridgeSave(const uint8_t *data, uint32_t len)
 {
-    memcpy(cartSaveData, data, len);
+    if(data)
+        memcpy(cartSaveData, data, len);
 
     // determine the type of save from the size
     if(len == 512)
