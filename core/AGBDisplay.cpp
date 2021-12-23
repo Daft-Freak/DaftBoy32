@@ -45,14 +45,16 @@ enum OAMAttr2Bits
 static const int screenBlockTiles = 32; // 32x32
 
 // draw screen block 4/8 helpers
-static void drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
+static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
 {
     auto validDataEnd = vram + 0x10000;
 
     int tx = (x + xOffset) & 7;
     int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
-    auto getTileRow = [ty, screenPtr, charPtr, palRam, validDataEnd](int bx, uint16_t *&tilePal)
+    bool hasData = false;
+
+    auto getTileRow = [ty, screenPtr, charPtr, palRam, validDataEnd, &hasData](int bx, uint16_t *&tilePal)
     {
         uint16_t tileMeta = 0;
     
@@ -84,6 +86,9 @@ static void drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
             tileRow = __builtin_bswap32(tileRow);
             tileRow = ((tileRow & 0xF0F0F0F0) >> 4) | ((tileRow & 0x0F0F0F0F) << 4);
         }
+
+        if(tileRow)
+            hasData = true;
 
         return tileRow;
     };
@@ -140,16 +145,20 @@ static void drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 
         x = 240;
     }
+
+    return hasData;
 }
 
-static void drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
+static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
 {
     auto validDataEnd = vram + 0x10000;
 
     int tx = (x + xOffset) & 7;
     int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
-    auto getTileRow = [ty, screenPtr, charPtr, validDataEnd](int bx)
+    bool hasData = false;
+
+    auto getTileRow = [ty, screenPtr, charPtr, validDataEnd, &hasData](int bx)
     {
         uint16_t tileMeta = 0;
     
@@ -173,6 +182,9 @@ static void drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         // h flip
         if(tileMeta & (1 << 10))
             tileRow = __builtin_bswap64(tileRow);
+
+        if(tileRow)
+            hasData = true;
 
         return tileRow;
     };
@@ -234,11 +246,13 @@ static void drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 
         x = 240;
     }
+
+    return hasData;
 }
 
 // bg layer helpers
 // hopefully this gets mostly inlined
-static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t xOffset, uint16_t yOffset)
+static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t xOffset, uint16_t yOffset)
 {
     int screenSize = (control & BGCNT_ScreenSize) >> 14;
 
@@ -266,10 +280,11 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
         firstBlockPtr += screenBlockTiles * screenBlockTiles;
 
     int x = 0;
+    bool hasData;
     if(control & BGCNT_SinglePal)
-        drawScreenBlock8(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
+        hasData = drawScreenBlock8(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
     else
-        drawScreenBlock4(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
+        hasData = drawScreenBlock4(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
 
     // possible second block
     if(x < 240)
@@ -279,13 +294,15 @@ static void drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
             screenPtr += screenBlockTiles * screenBlockTiles;
 
         if(control & BGCNT_SinglePal)
-            drawScreenBlock8(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset);
+            hasData = drawScreenBlock8(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset) || hasData;
         else
-            drawScreenBlock4(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset);
+            hasData = drawScreenBlock4(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset) || hasData;
     }
+
+    return hasData;
 }
 
-static void drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t xOffset, int32_t yOffset, int16_t a, int16_t c)
+static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t xOffset, int32_t yOffset, int16_t a, int16_t c)
 {
     int screenSize = (control & BGCNT_ScreenSize) >> 14;
 
@@ -356,42 +373,36 @@ static void drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
         else
             *scanLine = 0;
     }
+
+    return true; // TODO?
 }
 
 // these two are always "text" mode
-static void drawBG0(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+static bool drawBG0(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
 {
     if((dispControl & DISPCNT_Mode) > 1)
-    {
-        memset(scanLine, 0, 240 * 2);
-        return;
-    }
+        return false;
 
-    drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG0HOFS), mem.readIOReg(IO_BG0VOFS));
+    return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG0HOFS), mem.readIOReg(IO_BG0VOFS));
 }
 
-static void drawBG1(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+static bool drawBG1(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
 {
     if((dispControl & DISPCNT_Mode) > 1)
-    {
-        memset(scanLine, 0, 240 * 2);
-        return;
-    }
+        return false;
 
-    drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG1HOFS), mem.readIOReg(IO_BG1VOFS));
+    return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG1HOFS), mem.readIOReg(IO_BG1VOFS));
 }
 
-static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t refPointX, int32_t refPointY)
+static bool drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t refPointX, int32_t refPointY)
 {
     switch(dispControl & DISPCNT_Mode)
     {
         case 0: // "text" mode
-            drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG2HOFS), mem.readIOReg(IO_BG2VOFS));
-            break;
+            return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG2HOFS), mem.readIOReg(IO_BG2VOFS));
         case 1: // affine mode
         case 2:
-            drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG2PA), mem.readIOReg(IO_BG2PC));
-            break;
+            return drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG2PA), mem.readIOReg(IO_BG2PC));
         case 3: // 16-bit fullscreen bitmap
         {
             auto inPtr = reinterpret_cast<uint16_t *>(vram);
@@ -411,7 +422,7 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
                     *outPtr = inPtr[px + py * 240] | 0x8000;
             }
 
-            break;
+            return true; // probably not much point optimising these modes as there's only one layer anyway
         }
         case 4: // paletted fullscreen bitmap
         {
@@ -434,7 +445,7 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
                 else
                     *outPtr = palRam[inPtr[px + py * 240]] | 0x8000;
             }
-            break;
+            return true;
         }
         case 5: // 16-bit 160*128 bitmap
         {
@@ -457,22 +468,21 @@ static void drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
                 else
                     *outPtr = inPtr[px + py * 160] | 0x8000;
             }
-            break;
+            return true;
         }
         default:
-            memset(scanLine, 0, 240 * 2);
-            return;
+            return false;
     }
 }
 
-static void drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t refPointX, int32_t refPointY)
+static bool drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t refPointX, int32_t refPointY)
 {
     if((dispControl & DISPCNT_Mode) == 0)
-        drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG3HOFS), mem.readIOReg(IO_BG3VOFS));
+        return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG3HOFS), mem.readIOReg(IO_BG3VOFS));
     else if((dispControl & DISPCNT_Mode) == 2)
-        drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG3PA), mem.readIOReg(IO_BG3PC));
-    else
-        memset(scanLine, 0, 240 * 2);
+        return drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG3PA), mem.readIOReg(IO_BG3PC));
+    
+    return false;
 }
 
 static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t objMask[240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl)
@@ -1096,16 +1106,28 @@ void AGBDisplay::drawScanLine(int y)
 
     // draw enabled layers
     if(layerEnables & Layer_BG0)
-        drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control);
+    {
+        if(!drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control))
+            layerEnables &= ~Layer_BG0; // pretend it's not enabled if there's nothing in it
+    }
 
     if(layerEnables & Layer_BG1)
-        drawBG1(mem, y, bgData[1], palRAM, vram, dispControl, bg1Control);
+    {
+        if(!drawBG1(mem, y, bgData[1], palRAM, vram, dispControl, bg1Control))
+            layerEnables &= ~Layer_BG1;
+    }
 
     if(layerEnables & Layer_BG2)
-        drawBG2(mem, y, bgData[2], palRAM, vram, dispControl, bg2Control, refPointX[0], refPointY[0]);
+    {
+        if(!drawBG2(mem, y, bgData[2], palRAM, vram, dispControl, bg2Control, refPointX[0], refPointY[0]))
+            layerEnables &= ~Layer_BG2;
+    }
 
     if(layerEnables & Layer_BG3)
-        drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]);
+    {
+        if(!drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]))
+            layerEnables &= ~Layer_BG3;
+    }
 
     // get priority/active layers
     int layerPriority[] {
