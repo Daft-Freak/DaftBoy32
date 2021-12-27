@@ -199,9 +199,14 @@ int main(int argc, char *argv[])
 
         // need the bios for now
         std::ifstream biosFile(basePath + "bios.gba");
-        biosFile.read(reinterpret_cast<char *>(agbBIOSROM), sizeof(agbBIOSROM));
+        if(biosFile)
+        {
+            biosFile.read(reinterpret_cast<char *>(agbBIOSROM), sizeof(agbBIOSROM));
 
-        mem.setBIOSROM(agbBIOSROM);
+            mem.setBIOSROM(agbBIOSROM);
+        }
+        else
+            std::cout << "BIOS emulation is unfinished and likely inaccurate!";
         
         // read the entire ROM, this one doesn't have the load callback/caching setup
         romFile.seekg(0, std::ios::end);
