@@ -47,6 +47,9 @@ static const std::unordered_map<SDL_Keycode, int> agbKeyMap {
     {SDLK_x,      1 << 1},
     {SDLK_c,      1 << 2},
     {SDLK_v,      1 << 3},
+
+    {SDLK_q,      1 << 9},
+    {SDLK_e,      1 << 8},
 };
 
 static void getROMBank(uint8_t bank, uint8_t *ptr)
