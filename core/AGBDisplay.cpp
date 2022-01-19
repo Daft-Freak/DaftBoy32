@@ -1276,18 +1276,18 @@ void AGBDisplay::drawScanLine(int y)
                 uint16_t col;
 
                 // backdrop
-                if(!mask)
+                if(!data)
                 {
                     col = palRAM[0];
                     mask = BLDCNT_SrcBackdrop; // for blending check
                 }
                 else
                 {
-                    // check if disabled by window
-                    if(!(curLayerEnables & mask))
+                    if(!data[x])
                         continue;
 
-                    if(!data[x])
+                    // check if disabled by window
+                    if(!(curLayerEnables & mask))
                         continue;
 
                     col = data[x];
@@ -1302,11 +1302,7 @@ void AGBDisplay::drawScanLine(int y)
                 else if(!(blendControl & mask))
                     curBlendMode = 0;
 
-                int srcR = (col >> 10) & 0x1F;
-                int srcG = (col >> 5) & 0x1F;
-                int srcB = col & 0x1F;
-
-                if(curBlendMode == 1 && data) // alpha, ignore if backdrop (nothing to blend with)
+                if(curBlendMode == 1 && data && (blendSrcAlpha < 16 || blendDstAlpha)) // alpha, ignore if backdrop (nothing to blend with)
                 {
                     // get next layer
                     uint16_t *nextData;
@@ -1317,7 +1313,7 @@ void AGBDisplay::drawScanLine(int y)
                     do
                     {
                         std::tie(nextData, nextMask) = layers[nextLayer++];
-                    } while(nextMask && (nextMask == mask || !(curLayerEnables & nextMask) || !nextData[x]));
+                    } while(nextMask && (!nextData[x] || !(curLayerEnables & nextMask) || nextMask == mask));
 
                     nextMask = nextMask ? nextMask << 8 : (1 << 13); // shift up, handle 0 for backdrop
 
@@ -1330,6 +1326,10 @@ void AGBDisplay::drawScanLine(int y)
 
                     // do blend
                     auto dstCol = nextData ? nextData[x] : palRAM[0]; // handle backdrop
+
+                    int srcR = (col >> 10) & 0x1F;
+                    int srcG = (col >> 5) & 0x1F;
+                    int srcB = col & 0x1F;
 
                     int dstR = (dstCol >> 10) & 0x1F;
                     int dstG = (dstCol >> 5) & 0x1F;
@@ -1345,6 +1345,10 @@ void AGBDisplay::drawScanLine(int y)
                 {
                     int evy = blendY;
 
+                    int srcR = (col >> 10) & 0x1F;
+                    int srcG = (col >> 5) & 0x1F;
+                    int srcB = col & 0x1F;
+
                     int r = srcR + ((31 - srcR) * evy) / 16;
                     int g = srcG + ((31 - srcG) * evy) / 16;
                     int b = srcB + ((31 - srcB) * evy) / 16;
@@ -1354,6 +1358,10 @@ void AGBDisplay::drawScanLine(int y)
                 else if(curBlendMode == 3) // darken
                 {
                     int evy = blendY;
+
+                    int srcR = (col >> 10) & 0x1F;
+                    int srcG = (col >> 5) & 0x1F;
+                    int srcB = col & 0x1F;
 
                     int r = srcR - (srcR * evy) / 16;
                     int g = srcG - (srcG * evy) / 16;
