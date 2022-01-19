@@ -306,22 +306,24 @@ int main(int argc, char *argv[])
 
         if(isAGB)
         {
-            // clamp updates as this can still be really slow
-            auto time = now - lastTick;
-            if(time > 30)
-            {
-                std::cout << "slow " << time << "\n";
-                time = 30;
-            }
-
             agbCPU.setInputs(inputs);
-            agbCPU.run(turbo ? 10 : time);
-            agbCPU.getAPU().update();
 
-            if(turbo)
+            // run frames until there isn't any room left for audio
+            while(true)
             {
-                while(agbCPU.getAPU().getNumSamples())
-                    agbCPU.getAPU().getSample();
+                // 548-549 samples per update 
+                if(agbCPU.getAPU().getNumSamples() > 2047 - 549)
+                    break;
+
+                agbCPU.runFrame();
+                agbCPU.getAPU().update();
+                agbCPU.getDisplay().update();
+
+                if(turbo)
+                {
+                    while(agbCPU.getAPU().getNumSamples())
+                        agbCPU.getAPU().getSample();
+                }
             }
         }
         else
@@ -337,7 +339,7 @@ int main(int argc, char *argv[])
         }
 
         lastTick = now;
-    
+
         // TODO: sync
         SDL_UpdateTexture(texture, nullptr, screenData, screenWidth * 2);
         SDL_RenderClear(renderer);
