@@ -147,6 +147,7 @@ int main(int argc, char *argv[])
     int screenWidth = 160;
     int screenHeight = 144;
     int screenScale = 5;
+    bool useBIOS = true;
 
     std::string romFilename;
 
@@ -160,6 +161,8 @@ int main(int argc, char *argv[])
             screenScale = std::stoi(argv[++i]);
         else if(arg == "--turbo")
             turbo = true;
+        else if(arg == "--no-bios")
+            useBIOS = false;
         else
             break;
     }
@@ -201,15 +204,23 @@ int main(int argc, char *argv[])
         auto &mem = agbCPU.getMem();
 
         // need the bios for now
-        std::ifstream biosFile(basePath + "bios.gba");
-        if(biosFile)
+        if(useBIOS)
         {
-            biosFile.read(reinterpret_cast<char *>(agbBIOSROM), sizeof(agbBIOSROM));
+            std::ifstream biosFile(basePath + "bios.gba");
+            if(biosFile)
+            {
+                biosFile.read(reinterpret_cast<char *>(agbBIOSROM), sizeof(agbBIOSROM));
 
-            mem.setBIOSROM(agbBIOSROM);
+                mem.setBIOSROM(agbBIOSROM);
+            }
+            else
+            {
+                std::cerr << "bios.gba not found use --no-bios to run without\n";
+                return 1;
+            }
         }
         else
-            std::cout << "BIOS emulation is unfinished and likely inaccurate!";
+            std::cout << "BIOS emulation is unfinished and likely inaccurate!\n";
         
         // read the entire ROM, this one doesn't have the load callback/caching setup
         romFile.seekg(0, std::ios::end);
