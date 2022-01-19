@@ -85,7 +85,7 @@ private:
 
     // output
     int sampleClock = 0;
-    static const int bufferSize = 1024;
+    static const int bufferSize = 2048;
     volatile uint16_t readOff = 0, writeOff = 64;
     int16_t sampleData[bufferSize] = {0};
 };
