@@ -226,13 +226,16 @@ int main(int argc, char *argv[])
         agbCPU.reset();
 
         // attempt to read save
-        size_t size;
-        auto saveData = readSave(romFilename.substr(0, romFilename.length() - 3) + "sav", size);
-    
-        if(saveData)
+        if(!turbo)
         {
-            mem.loadCartridgeSave(saveData, size);
-            delete[] saveData;
+            size_t size;
+            auto saveData = readSave(romFilename.substr(0, romFilename.length() - 3) + "sav", size);
+
+            if(saveData)
+            {
+                mem.loadCartridgeSave(saveData, size);
+                delete[] saveData;
+            }
         }
     }
     else
@@ -363,7 +366,7 @@ int main(int argc, char *argv[])
                 size = 128 * 1024; // TODO: possibly 64k
                 break;
         }
-        if(size)
+        if(size && !turbo)
         {
             auto saveFilename = romFilename.substr(0, romFilename.length() - 3) + "sav";
             std::ofstream saveFile(saveFilename);
