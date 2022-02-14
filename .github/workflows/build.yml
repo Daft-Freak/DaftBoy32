@@ -129,7 +129,7 @@ jobs:
 
     # When it's a release, generate tar/zip files of the build
     - name: Package Release
-      if: github.event_name == 'release' && matrix.release-suffix != ''
+      if: matrix.release-suffix != ''
       shell: bash
       working-directory: ${{runner.workspace}}/main/build
       run: |
@@ -158,3 +158,10 @@ jobs:
         upload_url: ${{github.event.release.upload_url}}
         asset_name: ${{env.RELEASE_FILE}}.zip
         asset_content_type: application/zip
+        
+    - name: Upload artifact
+      if: github.event_name != 'release' && matrix.release-suffix != ''
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{env.RELEASE_FILE}}
+        path: ${{runner.workspace}}/main/build/${{env.RELEASE_FILE}}.zip
