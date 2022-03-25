@@ -81,43 +81,7 @@ void DMGCPU::run(int ms)
             executeInstruction();
 
             if(gdmaTriggered) // GDMA (stops execution)
-            {
-                uint16_t srcAddr = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
-                uint16_t dstAddr = 0x8000 | ((mem.readIOReg(IO_HDMA3) & 0x1F) << 8) | (mem.readIOReg(IO_HDMA4) & 0xF0);
-                uint16_t count = ((mem.readIOReg(IO_HDMA5) & 0x7F) + 1) << 4;
-
-                auto src = mem.mapAddress(srcAddr);
-                auto dst = const_cast<uint8_t *>(mem.mapAddress(dstAddr)); // always VRAM
-
-                srcAddr += count;
-                dstAddr += count;
-
-                // twice the cycles in double speed + overhead
-                // (doubleSpeed ? 16 : 8) * (count / 16) + 4
-                int exec = (doubleSpeed ? count : count / 2) + 4;
-
-                if(src) // super unlikely to be false
-                {
-                    for(; count; count--, src++, dst++)
-                        *dst = *src;
-                }
-
-                // write the addresses back
-                // these aren't readable, but the value needs to persist
-                mem.writeIOReg(IO_HDMA1, srcAddr >> 8);
-                mem.writeIOReg(IO_HDMA2, srcAddr & 0xFF);
-                mem.writeIOReg(IO_HDMA3, dstAddr >> 8);
-                mem.writeIOReg(IO_HDMA4, dstAddr & 0xFF);
-
-                mem.writeIOReg(IO_HDMA5, 0xFF);
-                gdmaTriggered = false;
-
-                while(exec)
-                {
-                    cycleExecuted();
-                    exec -= 4;
-                }
-            }
+                doGDMA();
         }
 
         do
@@ -2490,5 +2454,44 @@ void DMGCPU::updateOAMDMA()
     {
         *oamDMADest++ = *oamDMASrc++;
         oamDMACount--;
+    }
+}
+
+void DMGCPU::doGDMA()
+{
+    uint16_t srcAddr = (mem.readIOReg(IO_HDMA1) << 8) | (mem.readIOReg(IO_HDMA2) & 0xF0);
+    uint16_t dstAddr = 0x8000 | ((mem.readIOReg(IO_HDMA3) & 0x1F) << 8) | (mem.readIOReg(IO_HDMA4) & 0xF0);
+    uint16_t count = ((mem.readIOReg(IO_HDMA5) & 0x7F) + 1) << 4;
+
+    auto src = mem.mapAddress(srcAddr);
+    auto dst = const_cast<uint8_t *>(mem.mapAddress(dstAddr)); // always VRAM
+
+    srcAddr += count;
+    dstAddr += count;
+
+    // twice the cycles in double speed + overhead
+    // (doubleSpeed ? 16 : 8) * (count / 16) + 4
+    int exec = (doubleSpeed ? count : count / 2) + 4;
+
+    if(src) // super unlikely to be false
+    {
+        for(; count; count--, src++, dst++)
+            *dst = *src;
+    }
+
+    // write the addresses back
+    // these aren't readable, but the value needs to persist
+    mem.writeIOReg(IO_HDMA1, srcAddr >> 8);
+    mem.writeIOReg(IO_HDMA2, srcAddr & 0xFF);
+    mem.writeIOReg(IO_HDMA3, dstAddr >> 8);
+    mem.writeIOReg(IO_HDMA4, dstAddr & 0xFF);
+
+    mem.writeIOReg(IO_HDMA5, 0xFF);
+    gdmaTriggered = false;
+
+    while(exec)
+    {
+        cycleExecuted();
+        exec -= 4;
     }
 }

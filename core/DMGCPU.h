@@ -103,6 +103,7 @@ private:
     bool serviceInterrupts();
 
     void updateOAMDMA();
+    void doGDMA();
 
     static const uint32_t clockSpeed = 4194304;
 
