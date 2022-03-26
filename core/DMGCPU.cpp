@@ -1012,6 +1012,20 @@ void DMGCPU::executeInstruction()
         {
             pc += off;
             cycleExecuted();
+
+            // busy-wait detection
+            // (mostly tested with tetris, could be improved)
+            if(off == -5 && readMem(pc) == 0xF0/*LDH*/)
+            {
+                auto addr = readMem(pc + 1);
+                auto nextOp = readMem(pc + 2);
+
+                if(addr >= 0x80/*in HRAM*/ && nextOp == 0xA7 /*AND*/)
+                {
+                    // value in RAM isn't going to change unless an interrupt does it, so wait for one
+                    halted = true;
+                }
+            }
         }
     };
 
