@@ -328,9 +328,10 @@ int DMGDisplay::getCyclesToNextUpdate() const
     return (remainingModeCycles - passed) * (doubleSpeed ? 2 : 1);
 }
 
-void DMGDisplay::setFramebuffer(uint16_t *data)
+void DMGDisplay::setFramebuffer(uint16_t *data, int stride)
 {
     screenData = data;
+    screenStride = stride ? stride : screenWidth;
 }
 
 uint8_t DMGDisplay::readReg(uint16_t addr, uint8_t val)
@@ -631,7 +632,7 @@ void DMGDisplay::drawScanLine(int y)
     // need to avoid writing unfinished lines directly to the framebuffer as we're not synced
     uint16_t scanLine[screenWidth];
 #else
-    auto scanLine = screenData + y * screenWidth;
+    auto scanLine = screenData + y * screenStride;
 #endif
 
     auto lcdc = mem.readIOReg(IO_LCDC);
@@ -669,7 +670,7 @@ void DMGDisplay::drawScanLine(int y)
         drawSprites(scanLine, bgRaw);
 
 #ifdef PICO_BUILD
-    memcpy(screenData + y * screenWidth, scanLine, screenWidth * 2);
+    memcpy(screenData + y * screenStride, scanLine, screenWidth * 2);
 #endif
 }
 
