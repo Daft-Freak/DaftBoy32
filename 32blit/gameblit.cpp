@@ -88,7 +88,12 @@ static uint16_t screenData[160 * 144];
 
 // ROM cache
 #ifdef PICO_BUILD
+#ifdef DISPLAY_SCANVIDEO
+static const int romBankCacheSize = 3;
+#else
+// default (st7789/picosystem)
 static const int romBankCacheSize = 0; // could fit 2 with GBC removed
+#endif
 #else
 static const int romBankCacheSize = 11;
 static const int extraROMBankCacheSize = 4;
@@ -373,6 +378,8 @@ void init()
     cpu.getMem().addROMCache(romBankCache, romBankCacheSize * 0x4000);
 
 #ifdef PICO_BUILD
+
+#ifdef DISPLAY_ST7789
     // force the background onto the screen
     packedToRGB(asset_background_square, blit::screen.data);
     st7789::update();
@@ -388,6 +395,12 @@ void init()
     cpu.getMem().addROMCache(blit::screen.data + newSize, origSize - newSize);
 
     cpu.getDisplay().setFramebuffer(reinterpret_cast<uint16_t *>(blit::screen.data));
+
+#elif defined(DISPLAY_SCANVIDEO)
+    // relying on the 212x160 mode
+    cpu.getDisplay().setFramebuffer(reinterpret_cast<uint16_t *>(blit::screen.data + blit::screen.row_stride * 8) + 26, 212);
+#endif
+
 #else
     // 32blit extra cache
     cpu.getMem().addROMCache(extraROMBankCache, extraROMBankCacheSize * 0x4000);
@@ -461,6 +474,18 @@ void render(uint32_t time_ms)
 #endif
         return;
     }
+
+#if defined(PICO_BUILD) && defined(DISPLAY_SCANVIDEO)
+
+    if(redwawBG && !menuOpen)
+    {
+        // need to fill the border
+        // results in a little bit of flicker after closing the menu
+        blit::screen.pen = blit::Pen(145, 142, 147);
+        blit::screen.clear();
+        redwawBG = false;
+    }
+#endif
 
 #ifndef PICO_BUILD
     bool updateRunning = time_ms - lastUpdate < 20;
