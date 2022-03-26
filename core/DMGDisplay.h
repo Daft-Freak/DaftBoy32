@@ -38,7 +38,7 @@ private:
     bool compareMatch = false;
     int windowY = 0;
     bool firstFrame = false; // first frame after enabling display
-    
+
     bool interruptsEnabled = false;
     uint8_t statInterruptActive = 0;
 
@@ -51,4 +51,9 @@ private:
 
     // GBC
     uint16_t bgPalette[8 * 4], objPalette[8 * 4];
+
+#ifdef DISPLAY_RGB565
+    uint16_t bgPaletteRaw[8 * 4], objPaletteRaw[8 * 4];
+    bool bgPaletteDirty = false, objPaletteDirty = false;
+#endif
 };
