@@ -525,9 +525,10 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
 // get the two data bytes for a tile row
 // handles x/y flips
+template<bool isColour>
 static uint16_t getTileRow(uint8_t lcdc, uint8_t *mapPtr, uint8_t *tileDataPtr, int tileY, int &attrs)
 {
-    attrs = mapPtr[0x2000]; // GBC, bank 1
+    attrs = isColour ? mapPtr[0x2000] : 0; // GBC, bank 1
 
     // tile id is signed if addr == 0x8800
     int tileId = (lcdc & LCDC_TileData8000) ? *mapPtr : (int8_t)(*mapPtr) + 128;
@@ -548,11 +549,12 @@ static uint16_t getTileRow(uint8_t lcdc, uint8_t *mapPtr, uint8_t *tileDataPtr, 
     return d;
 };
 
+template<bool isColour>
 static uint16_t getTileRow(uint8_t lcdc, uint8_t *mapPtr, uint8_t *tileDataPtr, int x, int y, int tileY, int &attrs)
 {
     int tileId = x + y * screenSizeTiles;
 
-    return getTileRow(lcdc, mapPtr + tileId, tileDataPtr, tileY, attrs);
+    return getTileRow<isColour>(lcdc, mapPtr + tileId, tileDataPtr, tileY, attrs);
 };
 
 // gets the two bit index from the top of the two bytes
@@ -597,6 +599,7 @@ static void copyFullTile(uint8_t lcdc, uint16_t d, int tileAttrs, uint16_t *bgPa
     }
 };
 
+template<bool isColour>
 static void copyTiles(uint8_t lcdc, uint8_t *tileDataPtr, uint8_t *mapPtr, uint16_t *bgPalette, int &x, int xLimit, int offsetX, uint8_t oy, uint16_t *&out, uint8_t *&rawOut)
 {
     // full tiles
@@ -607,7 +610,7 @@ static void copyTiles(uint8_t lcdc, uint8_t *tileDataPtr, uint8_t *mapPtr, uint1
     while(x + 7 < xLimit)
     {
         int mapAttrs;
-        auto d = getTileRow(lcdc, rowMapPtr + ox / 8, tileDataPtr, oy & 7, mapAttrs);
+        auto d = getTileRow<isColour>(lcdc, rowMapPtr + ox / 8, tileDataPtr, oy & 7, mapAttrs);
 
         copyFullTile(lcdc, d, mapAttrs, bgPalette, out, rawOut);
         x += 8;
@@ -617,7 +620,7 @@ static void copyTiles(uint8_t lcdc, uint8_t *tileDataPtr, uint8_t *mapPtr, uint1
     if(x < xLimit)
     {
         int mapAttrs;
-        auto d = getTileRow(lcdc, rowMapPtr + ox / 8, tileDataPtr, oy & 7, mapAttrs);
+        auto d = getTileRow<isColour>(lcdc, rowMapPtr + ox / 8, tileDataPtr, oy & 7, mapAttrs);
 
         copyPartialTile(lcdc, x, xLimit, d, mapAttrs, bgPalette, out, rawOut);
     }
@@ -696,6 +699,10 @@ void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)
             windowX = mem.readIOReg(IO_WX) - 7;
     }
 
+    const bool isColour = cpu.getColourMode();
+
+    auto doCopyTiles = isColour ? copyTiles<true> : copyTiles<false>;
+
     // background
     if(windowX > 0)
     {
@@ -707,7 +714,12 @@ void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)
         {
             uint8_t oy = y + scrollY;
             int mapAttrs;
-            auto d = getTileRow(lcdc, bgMapPtr, tileDataPtr, scrollX / 8, oy / 8, oy & 7, mapAttrs);
+            uint16_t d;
+
+            if(isColour)
+                d = getTileRow<true>(lcdc, bgMapPtr, tileDataPtr, scrollX / 8, oy / 8, oy & 7, mapAttrs);
+            else
+                d = getTileRow<false>(lcdc, bgMapPtr, tileDataPtr, scrollX / 8, oy / 8, oy & 7, mapAttrs);
 
             // skip bits
             d <<= scrollX & 7;
@@ -716,13 +728,13 @@ void DMGDisplay::drawBackground(uint16_t *scanLine, uint8_t *bgRaw)
         }
 
         int xEnd = windowX < screenWidth ? windowX : screenWidth;
-        copyTiles(lcdc, tileDataPtr, bgMapPtr, bgPalette, x, xEnd, scrollX, y + scrollY, out, rawOut);
+        doCopyTiles(lcdc, tileDataPtr, bgMapPtr, bgPalette, x, xEnd, scrollX, y + scrollY, out, rawOut);
     }
 
     // window
     if(x < screenWidth)
     {
-        copyTiles(lcdc, tileDataPtr, winMapPtr, bgPalette, x, screenWidth, -windowX, windowY, out, rawOut);
+        doCopyTiles(lcdc, tileDataPtr, winMapPtr, bgPalette, x, screenWidth, -windowX, windowY, out, rawOut);
         windowY++;
     }
 }
