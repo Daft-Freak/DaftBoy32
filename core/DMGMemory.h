@@ -74,8 +74,14 @@ private:
 
     uint8_t iohram[0x100]; // io @ 0xFF00, hram @ 0xFF80, ie & 0xFFFF
 
-    uint8_t vram[0x2000 * 2]; // 8k @ 0x8000, two banks on GBC
-    uint8_t wram[0x1000 * 8]; // 8k @ 0xC000, second half switchable on GBC
+    static const int dmgWRAMSize = 0x2000; // 8k @ 0x8000
+    static const int dmgVRAMSize = 0x2000; // 8k @ 0xC000
+    static const int cgbWRAMSize = 0x2000 * 4; // 4k @ 0x8000 + 4k x7 @ 0xA000
+    static const int cgbVRAMSize = 0x2000 * 2; // 8k x2 @ 0xC000
+
+    uint8_t ram[cgbWRAMSize + cgbVRAMSize]; // wram + vram
+    uint8_t *vram = nullptr;
+
     uint8_t oam[0xA0]; // @ 0xFE00
 
     bool isGBC = false;

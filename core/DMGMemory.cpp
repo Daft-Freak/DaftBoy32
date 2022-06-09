@@ -38,9 +38,6 @@ void DMGMemory::addROMCache(uint8_t *ptr, uint32_t size)
 
 void DMGMemory::reset()
 {
-    vramBank = 0;
-    wramBank = 1;
-
     // io regs
     memset(iohram, 0xFF, 0x80);
 
@@ -97,7 +94,7 @@ void DMGMemory::reset()
     for(auto it = cachedROMBanks.begin(); it != cachedROMBanks.end();)
     {
         // remove cart ram/wram, will re-add later if possible
-        if(it->ptr == cartRam || it->ptr == cartRam + 0x4000 || it->ptr == wram + 0x4000)
+        if(it->ptr == cartRam || it->ptr == cartRam + 0x4000 || (it->ptr >= ram && it->ptr < ram + sizeof(ram)))
         {
             it = cachedROMBanks.erase(it);
             continue;
@@ -174,8 +171,30 @@ void DMGMemory::reset()
     if(cartRamSize <= 0x4000)
         cachedROMBanks.emplace_back(ROMCacheEntry{cartRam + 0x4000, 0});
 
-    if(!(cartROMBank0[0x143] & 0x80))// CGB flag
-        cachedROMBanks.emplace_back(ROMCacheEntry{wram + 0x4000, 0}); // spare WRAM (really 0x6000)
+    // assgin RAM based on DMG/CGB
+    int wramSize = 0, vramSize = 0;
+
+    // CGB flag (don't know what mode will be used yet...)
+    if(cartROMBank0[0x143] & 0x80)
+    {
+        wramSize = cgbWRAMSize;
+        vramSize = cgbVRAMSize;
+    }
+    else
+    {
+        wramSize = dmgWRAMSize;
+        vramSize = dmgVRAMSize;
+        // spare WRAM/VRAM (32k)
+        cachedROMBanks.emplace_back(ROMCacheEntry{ram + dmgWRAMSize + dmgVRAMSize, 0});
+        cachedROMBanks.emplace_back(ROMCacheEntry{ram + dmgWRAMSize + dmgVRAMSize + 0x4000, 0});
+    }
+
+    vramBank = 0;
+    wramBank = 1;
+
+    // clear vram
+    vram = ram + wramSize;
+    memset(vram, 0, vramSize);
 
     // grab the first bank to use for bank 1
     auto cartROMBank1 = cachedROMBanks.front().ptr;
@@ -203,6 +222,8 @@ void DMGMemory::reset()
     mbcROMBank = 1;
     mbcRAMBank = 0;
     mbcRAMBankMode = false;
+
+    auto wram = ram;
 
     regions[0x0] =
     regions[0x1] =
@@ -472,7 +493,7 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
             if(!isGBC) return;
 
             wramBank = (data & 0x7) ? (data & 0x7) : 1; // 0 is also 1
-            regions[0xD] = wram + (wramBank * 0x1000) - 0xD000;
+            regions[0xD] = ram + (wramBank * 0x1000) - 0xD000;
         }
         else if(cpu.writeReg(addr, data))
             return;
