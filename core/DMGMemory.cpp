@@ -101,9 +101,6 @@ void DMGMemory::reset()
         ++it;
     }
 
-    // grab the first bank to use for bank 1
-    auto cartROMBank1 = cachedROMBanks.front().ptr;
-
     // get ROM size
     int size = cartROMBank0[0x148];
     if(size <= 8)
@@ -165,6 +162,18 @@ void DMGMemory::reset()
             mbcType = MBCType::None;
     }
 
+    // use spare RAM as rom cache
+    if(cartRamSize == 0 && mbcType != MBCType::MBC2)
+        cachedROMBanks.emplace_back(ROMCacheEntry{cartRam, 0});
+    if(cartRamSize <= 0x4000)
+        cachedROMBanks.emplace_back(ROMCacheEntry{cartRam + 0x4000, 0});
+
+    if(!(cartROMBank0[0x143] & 0x80))// CGB flag
+        cachedROMBanks.emplace_back(ROMCacheEntry{wram + 0x4000, 0}); // spare WRAM (really 0x6000)
+
+    // grab the first bank to use for bank 1
+    auto cartROMBank1 = cachedROMBanks.front().ptr;
+
     if(mbcType == MBCType::MBC1 && cartROMBanks == 64)
     {
         // 1M MBC1 may be a multicart
@@ -183,15 +192,6 @@ void DMGMemory::reset()
 
     // load the second bank too
     romBankCallback(1, cartROMBank1);
-
-    // use spare RAM as rom cache
-    if(cartRamSize == 0 && mbcType != MBCType::MBC2)
-        cachedROMBanks.emplace_back(ROMCacheEntry{cartRam, 0});
-    if(cartRamSize <= 0x4000)
-        cachedROMBanks.emplace_back(ROMCacheEntry{cartRam + 0x4000, 0});
-
-    if(!(cartROMBank0[0x143] & 0x80))// CGB flag
-        cachedROMBanks.emplace_back(ROMCacheEntry{wram + 0x4000, 0}); // spare WRAM (really 0x6000)
 
     mbcRAMEnabled = false;
     mbcROMBank = 1;
