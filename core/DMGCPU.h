@@ -26,6 +26,34 @@ public:
         CGB
     };
 
+    enum class Reg
+    {
+        A = 0,
+        F,
+        B,
+        C,
+        D,
+        E,
+        H,
+        L
+    };
+
+    enum class WReg
+    {
+        AF = 0,
+        BC,
+        DE,
+        HL
+    };
+
+    enum Flags
+    {
+        Flag_C = (1 << 4),
+        Flag_H = (1 << 5),
+        Flag_N = (1 << 6),
+        Flag_Z = (1 << 7)
+    };
+
     DMGCPU();
 
     void reset();
@@ -59,34 +87,6 @@ public:
     void setInputs(uint8_t newInputs);
 
 private:
-    enum class Reg
-    {
-        A = 0,
-        F,
-        B,
-        C,
-        D,
-        E,
-        H,
-        L
-    };
-
-    enum class WReg
-    {
-        AF = 0,
-        BC,
-        DE,
-        HL
-    };
-
-    enum Flags
-    {
-        Flag_C = (1 << 4),
-        Flag_H = (1 << 5),
-        Flag_N = (1 << 6),
-        Flag_Z = (1 << 7)
-    };
-
     // this only works on little-endian...
     uint8_t reg(Reg r) const {return reinterpret_cast<const uint8_t *>(regs)[static_cast<int>(r) ^ 1];}
     uint8_t &reg(Reg r) {return reinterpret_cast<uint8_t *>(regs)[static_cast<int>(r) ^ 1];}
