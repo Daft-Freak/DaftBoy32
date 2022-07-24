@@ -568,6 +568,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     // SP = R9D
     // cycles = ESI
 
+    // TODO: should be able to avoid this
+    const auto incPC = [&builder]()
+    {
+        builder.lea(Reg32::R8D, Reg64::R8, 1);
+    };
+
     const auto callSave = [&builder]()
     {
         builder.push(Reg64::RAX);
@@ -642,35 +648,41 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
-    const auto load8 = [this, &pc, &builder, &cycleExecuted](Reg r)
+    const auto load8 = [this, &pc, &builder, &incPC, &cycleExecuted](Reg r)
     {
+        incPC();
         cycleExecuted();
         uint8_t v = cpu.readMem(pc++);
         builder.mov(reg(r), v);
+        incPC();
         cycleExecuted();
         return true;
     };
 
-    const auto copy8 = [&builder, &cycleExecuted](Reg dst, Reg src)
+    const auto copy8 = [&builder, &incPC, &cycleExecuted](Reg dst, Reg src)
     {
+        incPC();
         cycleExecuted();
         builder.mov(reg(dst), reg(src));
         return true;
     };
 
-    const auto load16 = [this, &pc, &builder, &cycleExecuted](WReg r)
+    const auto load16 = [this, &pc, &builder, &incPC, &cycleExecuted](WReg r)
     {
         auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
+        incPC();
         cycleExecuted();
 
         uint8_t v = cpu.readMem(pc++);
         builder.mov(lowReg, v);
+        incPC();
         cycleExecuted();
 
         v = cpu.readMem(pc++);
         builder.mov(highReg, v);
+        incPC();
         cycleExecuted();
         return true;
     };
@@ -811,6 +823,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         case 0x7D: // LD A,L
             return copy8(Reg::A, Reg::L);
         case 0x7E: // LD A,(HL)
+            incPC();
             cycleExecuted();
             readMem(reg(WReg::HL), reg(Reg::A));
             cycleExecuted();
@@ -820,6 +833,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return copy8(Reg::A, Reg::A);
 
         case 0xAF: // XOR A
+            incPC();
             cycleExecuted();
             builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
             break;
