@@ -386,6 +386,37 @@ void X86Builder::encodeREX(bool w, int reg, int index, int base)
                | (base > 7 ? REX_B : 0));
 }
 
+// helpers
+static const Reg8 regMap8[]
+{
+    Reg8::AH, // A
+    Reg8::AL, // F
+    Reg8::CH, // B
+    Reg8::CL, // C
+    Reg8::DH, // D
+    Reg8::DL, // E
+    Reg8::BH, // H
+    Reg8::BL  // L
+};
+
+static const Reg16 regMap16[]
+{
+    Reg16::AX, // AF
+    Reg16::CX, // BC
+    Reg16::DX, // DE
+    Reg16::BX  // HL
+};
+
+inline Reg8 reg(DMGCPU::Reg r)
+{
+    return regMap8[static_cast<int>(r)];
+};
+
+inline Reg16 reg(DMGCPU::WReg r)
+{
+    return regMap16[static_cast<int>(r)];
+};
+
 DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
 {
     // allocate some memory
@@ -537,26 +568,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     // SP = R9D
     // cycles = ESI
 
-    static const Reg8 regMap8[]
-    {
-        Reg8::AH, // A
-        Reg8::AL, // F
-        Reg8::CH, // B
-        Reg8::CL, // C
-        Reg8::DH, // D
-        Reg8::DL, // E
-        Reg8::BH, // H
-        Reg8::BL  // L
-    };
-
-    static const Reg16 regMap16[]
-    {
-        Reg16::AX, // AF
-        Reg16::CX, // BC
-        Reg16::DX, // DE
-        Reg16::BX  // HL
-    };
-
     // TODO: shared trampolines?
     auto cycleExecuted = [&builder, this]()
     {
@@ -630,7 +641,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     {
         cycleExecuted();
         uint8_t v = cpu.readMem(pc++);
-        builder.mov(regMap8[static_cast<int>(r)], v);
+        builder.mov(reg(r), v);
         cycleExecuted();
         return true;
     };
@@ -638,13 +649,13 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     const auto copy8 = [&builder, &cycleExecuted](Reg dst, Reg src)
     {
         cycleExecuted();
-        builder.mov(regMap8[static_cast<int>(dst)], regMap8[static_cast<int>(src)]);
+        builder.mov(reg(dst), reg(src));
         return true;
     };
 
     const auto load16 = [this, &pc, &builder, &cycleExecuted](WReg r)
     {
-        auto lowReg = static_cast<Reg8>(regMap16[static_cast<int>(r)]); // AX == AL, CX == CL, ...
+        auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
         cycleExecuted();
@@ -796,7 +807,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return copy8(Reg::A, Reg::L);
         case 0x7E: // LD A,(HL)
             cycleExecuted();
-            readMem(regMap16[static_cast<int>(WReg::HL)], regMap8[static_cast<int>(Reg::A)]);
+            readMem(reg(WReg::HL), reg(Reg::A));
             cycleExecuted();
             break;
 
