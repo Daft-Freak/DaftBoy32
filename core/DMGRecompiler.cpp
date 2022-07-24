@@ -534,6 +534,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         Reg8::BL  // L
     };
 
+    static const Reg16 regMap16[]
+    {
+        Reg16::AX, // AF
+        Reg16::CX, // BC
+        Reg16::DX, // DE
+        Reg16::BX  // HL
+    };
+
     // TODO: shared trampolines?
     auto cycleExecuted = [&builder, this]()
     {
@@ -561,6 +569,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     };
 
     using Reg = DMGCPU::Reg;
+    using WReg = DMGCPU::WReg;
 
     const auto load8 = [this, &pc, &builder, &cycleExecuted](Reg r)
     {
@@ -578,19 +587,45 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
+    const auto load16 = [this, &pc, &builder, &cycleExecuted](WReg r)
+    {
+        auto lowReg = static_cast<Reg8>(regMap16[static_cast<int>(r)]); // AX == AL, CX == CL, ...
+        auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
+
+        cycleExecuted();
+
+        uint8_t v = cpu.readMem(pc++);
+        builder.mov(lowReg, v);
+        cycleExecuted();
+
+        v = cpu.readMem(pc++);
+        builder.mov(highReg, v);
+        cycleExecuted();
+        return true;
+    };
+
     switch(opcode)
     {
+        case 0x01: // LD BC,nn
+            return load16(WReg::BC);
+
         case 0x06: // LD B,n
             return load8(Reg::B);
 
         case 0x0E: // LD C,n
             return load8(Reg::C);
 
+        case 0x11: // LD DE,nn
+            return load16(WReg::DE);
+
         case 0x16: // LD D,n
             return load8(Reg::D);
 
         case 0x1E: // LD E,n
             return load8(Reg::E);
+
+        case 0x21: // LD HL,nn
+            return load16(WReg::HL);
 
         case 0x26: // LD H,n
             return load8(Reg::H);
