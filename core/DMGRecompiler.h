@@ -20,6 +20,7 @@ private:
     bool recompileInstruction(uint16_t &pc, X86Builder &builder);
 
     static void cycleExecuted(DMGCPU *cpu);
+    static uint8_t readMem(DMGCPU *cpu, uint16_t addr);
 
     uint8_t *codeBuf, *curCodePtr;
     unsigned int codeBufSize;
