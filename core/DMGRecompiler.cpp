@@ -119,8 +119,9 @@ public:
     void mov(Reg8 dst, Reg8 src);
     void mov(Reg32 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg16 r, Reg64 base, bool isStore = false, int disp = 0);
-    void mov(Reg32 r, uint32_t imm);
     void mov(Reg64 r, uint64_t imm);
+    void mov(Reg32 r, uint32_t imm);
+    void mov(Reg8 r, uint8_t imm);
 
     void movzxW(Reg32 r, Reg64 base, int disp = 0);
 
@@ -241,22 +242,7 @@ void X86Builder::mov(Reg16 r, Reg64 base, bool isStore, int disp)
     mov(static_cast<Reg32>(r), base, isStore, disp);
 }
 
-// imm -> reg
-void X86Builder::mov(Reg32 r, uint32_t imm)
-{
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-
-    write(0xB8 | (reg & 7)); // opcode
-
-    // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
-};
-
+// imm -> reg, 64 bit
 void X86Builder::mov(Reg64 r, uint64_t imm)
 {
     auto reg = static_cast<int>(r);
@@ -274,6 +260,35 @@ void X86Builder::mov(Reg64 r, uint64_t imm)
     write(imm >> 40);
     write(imm >> 48);
     write(imm >> 56);
+};
+
+// imm -> reg
+void X86Builder::mov(Reg32 r, uint32_t imm)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+
+    write(0xB8 | (reg & 7)); // opcode
+
+    // immediate
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
+};
+
+// imm -> reg, 8 bit
+void X86Builder::mov(Reg8 r, uint8_t imm)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+
+    write(0xB0 | (reg & 7)); // opcode
+
+    // immediate
+    write(imm);
 };
 
 // sign extend, mem -> reg, 16 bit
@@ -541,6 +556,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
     using Reg = DMGCPU::Reg;
 
+    const auto load8 = [this, &pc, &builder, &cycleExecuted](Reg r)
+    {
+        cycleExecuted();
+        uint8_t v = cpu.readMem(pc++);
+        builder.mov(regMap8[static_cast<int>(r)], v);
+        cycleExecuted();
+        return true;
+    };
+
     const auto copy8 = [&builder, &cycleExecuted](Reg dst, Reg src)
     {
         cycleExecuted();
@@ -550,6 +574,27 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
     switch(opcode)
     {
+        case 0x06: // LD B,n
+            return load8(Reg::B);
+
+        case 0x0E: // LD C,n
+            return load8(Reg::C);
+
+        case 0x16: // LD D,n
+            return load8(Reg::D);
+
+        case 0x1E: // LD E,n
+            return load8(Reg::E);
+
+        case 0x26: // LD H,n
+            return load8(Reg::H);
+
+        case 0x2E: // LD L,n
+            return load8(Reg::L);
+
+        case 0x3E: // LD A,n
+            return load8(Reg::A);
+
         case 0x40: // LD B,B
             return copy8(Reg::B, Reg::B);
         case 0x41: // LD B,C
