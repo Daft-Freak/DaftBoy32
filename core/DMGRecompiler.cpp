@@ -111,12 +111,15 @@ public:
     void add(Reg32 dst, Reg32 src);
     void add(Reg8 dst, Reg8 src);
 
+    void call(Reg64 r);
+
     void lea(Reg32 r, Reg64 base, int disp = 0);
 
     void mov(Reg64 dst, Reg64 src);
     void mov(Reg32 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg16 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg32 r, uint32_t imm);
+    void mov(Reg64 r, uint64_t imm);
 
     void movzxW(Reg32 r, Reg64 base, int disp = 0);
 
@@ -167,6 +170,17 @@ void X86Builder::add(Reg8 dst, Reg8 src)
     write(0x00); // opcode
 
     write(0xC0 | (srcReg & 7) << 3 | (dstReg & 7));
+};
+
+// indirect
+void X86Builder::call(Reg64 r)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+
+    write(0xFF); // opcode
+    write(0xD0 | (reg & 7));
 };
 
 void X86Builder::lea(Reg32 r, Reg64 base, int disp)
@@ -229,6 +243,25 @@ void X86Builder::mov(Reg32 r, uint32_t imm)
     write(imm >> 8);
     write(imm >> 16);
     write(imm >> 24);
+};
+
+void X86Builder::mov(Reg64 r, uint64_t imm)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(true, 0, 0, reg);
+
+    write(0xB8 | (reg & 7)); // opcode
+
+    // immediate
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
+    write(imm >> 32);
+    write(imm >> 40);
+    write(imm >> 48);
+    write(imm >> 56);
 };
 
 // sign extend, mem -> reg, 16 bit
@@ -311,7 +344,6 @@ void X86Builder::encodeREX(bool w, int reg, int index, int base)
                | (base > 7 ? REX_B : 0));
 }
 
-
 DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
 {
     // allocate some memory
@@ -385,7 +417,16 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
     // load cycle count
     builder.mov(Reg32::ESI, Reg64::RDI);
 
-    // TODO: do things
+    // do instructions
+    int numInstructions = 0;
+    
+    while(true)
+    {
+        if(!recompileInstruction(pc, builder))
+            break;
+
+        numInstructions++;
+    }
 
     // store cycle count
     builder.mov(Reg32::ESI, Reg64::RDI, true); // do we need this?
@@ -423,7 +464,7 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
     int len = endPtr - codePtr;
 
     //debug
-    printf("recompile @%04X generated %i bytes\ncode:", pc, len);
+    printf("recompile @%04X generated %i bytes (%i instructions)\ncode:", pc, len, numInstructions);
 
     for(auto p = codePtr; p != endPtr; p++)
         printf(" %02X", *p);
@@ -433,4 +474,64 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
     codePtr = endPtr;
 
     return true;
+}
+
+bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
+{
+    auto &mem = cpu.getMem();
+    uint8_t opcode = mem.read(pc++);
+
+    // AF = EAX
+    // BC = ECX
+    // DE = EDX
+    // HL = EBX
+    // PC = R8D
+    // SP = R9D
+    // cycles = ESI
+
+    // TODO: shared trampolines?
+    auto cycleExecuted = [&builder, this]()
+    {
+        // save
+        builder.push(Reg64::RAX);
+        builder.push(Reg64::RCX);
+        builder.push(Reg64::RDX);
+        builder.push(Reg64::R8);
+        builder.push(Reg64::R9);
+        builder.push(Reg64::RSI);
+        builder.push(Reg64::RDI);
+
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
+        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.call(Reg64::RAX); // do call
+
+        // restore
+        builder.pop(Reg64::RDI);
+        builder.pop(Reg64::RSI);
+        builder.pop(Reg64::R9);
+        builder.pop(Reg64::R8);
+        builder.pop(Reg64::RDX);
+        builder.pop(Reg64::RCX);
+        builder.pop(Reg64::RAX);
+    };
+
+    switch(opcode)
+    {
+        case 0xAF: // XOR A
+            cycleExecuted();
+            builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
+            break;
+
+        default:
+            printf("unhandled op in recompile %02X\n", opcode);
+            return false;
+    }
+
+    return true;
+}
+
+// wrappers around member funcs
+void DMGRecompiler::cycleExecuted(DMGCPU *cpu)
+{
+    cpu->cycleExecuted();
 }

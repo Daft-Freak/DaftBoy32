@@ -3,6 +3,7 @@
 #include <map>
 
 class DMGCPU;
+class X86Builder;
 
 class DMGRecompiler
 {
@@ -15,6 +16,10 @@ private:
     DMGCPU &cpu;
 
     bool compile(uint8_t *&codePtr, uint16_t pc);
+
+    bool recompileInstruction(uint16_t &pc, X86Builder &builder);
+
+    static void cycleExecuted(DMGCPU *cpu);
 
     uint8_t *codeBuf, *curCodePtr;
     unsigned int codeBufSize;
