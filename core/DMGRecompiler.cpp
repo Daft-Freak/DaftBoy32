@@ -568,10 +568,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     // SP = R9D
     // cycles = ESI
 
-    // TODO: shared trampolines?
-    auto cycleExecuted = [&builder, this]()
+    const auto callSave = [&builder]()
     {
-        // save
         builder.push(Reg64::RAX);
         builder.push(Reg64::RCX);
         builder.push(Reg64::RDX);
@@ -579,12 +577,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.push(Reg64::R9);
         builder.push(Reg64::RSI);
         builder.push(Reg64::RDI);
+    };
 
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
-        builder.call(Reg64::RAX); // do call
-
-        // restore
+    const auto callRestore = [&builder]()
+    {
         builder.pop(Reg64::RDI);
         builder.pop(Reg64::RSI);
         builder.pop(Reg64::R9);
@@ -594,23 +590,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.pop(Reg64::RAX);
     };
 
-    auto readMem = [&builder, this](Reg16 addrReg, Reg8 dstReg)
+    const auto callRestoreRet8 = [&builder](Reg8 dstReg)
     {
-        // save
-        builder.push(Reg64::RAX);
-        builder.push(Reg64::RCX);
-        builder.push(Reg64::RDX);
-        builder.push(Reg64::R8);
-        builder.push(Reg64::R9);
-        builder.push(Reg64::RSI);
-        builder.push(Reg64::RDI);
-
-        builder.movzxW(Reg32::ESI, addrReg);
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
-        builder.call(Reg64::RAX); // do call
-
-        // restore
         builder.pop(Reg64::RDI);
         builder.pop(Reg64::RSI);
         builder.pop(Reg64::R9);
@@ -632,6 +613,30 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         }
         else // ... though this is the worst case... (AL == F, so unlikely)
             assert(false); // AX |= R10W & 0xFF00 ?
+    };
+
+    // TODO: shared trampolines?
+    auto cycleExecuted = [&builder, &callSave, &callRestore, this]()
+    {
+        callSave();
+
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
+        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.call(Reg64::RAX); // do call
+
+        callRestore();
+    };
+
+    auto readMem = [&builder, &callSave, &callRestoreRet8, this](Reg16 addrReg, Reg8 dstReg)
+    {
+        callSave();
+
+        builder.movzxW(Reg32::ESI, addrReg);
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
+        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.call(Reg64::RAX); // do call
+
+        callRestoreRet8(dstReg);
     };
 
     using Reg = DMGCPU::Reg;
