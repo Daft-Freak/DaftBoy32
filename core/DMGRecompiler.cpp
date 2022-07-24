@@ -116,6 +116,7 @@ public:
     void lea(Reg32 r, Reg64 base, int disp = 0);
 
     void mov(Reg64 dst, Reg64 src);
+    void mov(Reg8 dst, Reg8 src);
     void mov(Reg32 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg16 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg32 r, uint32_t imm);
@@ -203,6 +204,17 @@ void X86Builder::mov(Reg64 dst, Reg64 src)
 
     encodeREX(true, srcReg, 0, dstReg);
     write(0x89); // opcode, w = 1
+    write(0xC0 | ((srcReg & 7) << 3) | (dstReg & 7)); // mod 3, regs
+};
+
+// reg -> reg, 8bit
+void X86Builder::mov(Reg8 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x88); // opcode, w = 0
     write(0xC0 | ((srcReg & 7) << 3) | (dstReg & 7)); // mod 3, regs
 };
 
@@ -489,6 +501,18 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     // SP = R9D
     // cycles = ESI
 
+    static const Reg8 regMap8[]
+    {
+        Reg8::AH, // A
+        Reg8::AL, // F
+        Reg8::CH, // B
+        Reg8::CL, // C
+        Reg8::DH, // D
+        Reg8::DL, // E
+        Reg8::BH, // H
+        Reg8::BL  // L
+    };
+
     // TODO: shared trampolines?
     auto cycleExecuted = [&builder, this]()
     {
@@ -515,8 +539,124 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.pop(Reg64::RAX);
     };
 
+    using Reg = DMGCPU::Reg;
+
+    const auto copy8 = [&builder, &cycleExecuted](Reg dst, Reg src)
+    {
+        cycleExecuted();
+        builder.mov(regMap8[static_cast<int>(dst)], regMap8[static_cast<int>(src)]);
+        return true;
+    };
+
     switch(opcode)
     {
+        case 0x40: // LD B,B
+            return copy8(Reg::B, Reg::B);
+        case 0x41: // LD B,C
+            return copy8(Reg::B, Reg::C);
+        case 0x42: // LD B,D
+            return copy8(Reg::B, Reg::D);
+        case 0x43: // LD B,E
+            return copy8(Reg::B, Reg::E);
+        case 0x44: // LD B,H
+            return copy8(Reg::B, Reg::H);
+        case 0x45: // LD B,L
+            return copy8(Reg::B, Reg::L);
+
+        case 0x47: // LD B,A
+            return copy8(Reg::B, Reg::A);
+        case 0x48: // LD C,B
+            return copy8(Reg::C, Reg::B);
+        case 0x49: // LD C,C
+            return copy8(Reg::C, Reg::C);
+        case 0x4A: // LD C,D
+            return copy8(Reg::C, Reg::D);
+        case 0x4B: // LD C,E
+            return copy8(Reg::C, Reg::E);
+        case 0x4C: // LD C,H
+            return copy8(Reg::C, Reg::H);
+        case 0x4D: // LD C,L
+            return copy8(Reg::C, Reg::L);
+
+        case 0x4F: // LD C,A
+            return copy8(Reg::C, Reg::A);
+        case 0x50: // LD D,B
+            return copy8(Reg::D, Reg::B);
+        case 0x51: // LD D,C
+            return copy8(Reg::D, Reg::C);
+        case 0x52: // LD D,D
+            return copy8(Reg::D, Reg::D);
+        case 0x53: // LD D,E
+            return copy8(Reg::D, Reg::E);
+        case 0x54: // LD D,H
+            return copy8(Reg::D, Reg::H);
+        case 0x55: // LD D,L
+            return copy8(Reg::D, Reg::L);
+
+        case 0x57: // LD D,A
+            return copy8(Reg::D, Reg::A);
+        case 0x58: // LD E,B
+            return copy8(Reg::E, Reg::B);
+        case 0x59: // LD E,C
+            return copy8(Reg::E, Reg::C);
+        case 0x5A: // LD E,D
+            return copy8(Reg::E, Reg::D);
+        case 0x5B: // LD E,E
+            return copy8(Reg::E, Reg::E);
+        case 0x5C: // LD E,H
+            return copy8(Reg::E, Reg::H);
+        case 0x5D: // LD E,L
+            return copy8(Reg::E, Reg::L);
+
+        case 0x5F: // LD E,A
+            return copy8(Reg::E, Reg::A);
+        case 0x60: // LD H,B
+            return copy8(Reg::H, Reg::B);
+        case 0x61: // LD H,C
+            return copy8(Reg::H, Reg::C);
+        case 0x62: // LD H,D
+            return copy8(Reg::H, Reg::D);
+        case 0x63: // LD H,E
+            return copy8(Reg::H, Reg::E);
+        case 0x64: // LD H,H
+            return copy8(Reg::H, Reg::H);
+        case 0x65: // LD H,L
+            return copy8(Reg::H, Reg::L);
+
+        case 0x67: // LD H,A
+            return copy8(Reg::H, Reg::A);
+        case 0x68: // LD L,B
+            return copy8(Reg::L, Reg::B);
+        case 0x69: // LD L,C
+            return copy8(Reg::L, Reg::C);
+        case 0x6A: // LD L,D
+            return copy8(Reg::L, Reg::D);
+        case 0x6B: // LD L,E
+            return copy8(Reg::L, Reg::E);
+        case 0x6C: // LD L,H
+            return copy8(Reg::L, Reg::H);
+        case 0x6D: // LD L,L
+            return copy8(Reg::L, Reg::L);
+
+        case 0x6F: // LD L,A
+            return copy8(Reg::L, Reg::A);
+
+        case 0x78: // LD A,B
+            return copy8(Reg::A, Reg::B);
+        case 0x79: // LD A,C
+            return copy8(Reg::A, Reg::C);
+        case 0x7A: // LD A,D
+            return copy8(Reg::A, Reg::D);
+        case 0x7B: // LD A,E
+            return copy8(Reg::A, Reg::E);
+        case 0x7C: // LD A,H
+            return copy8(Reg::A, Reg::H);
+        case 0x7D: // LD A,L
+            return copy8(Reg::A, Reg::L);
+
+        case 0x7F: // LD A,A
+            return copy8(Reg::A, Reg::A);
+
         case 0xAF: // XOR A
             cycleExecuted();
             builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
