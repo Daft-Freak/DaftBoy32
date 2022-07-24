@@ -486,6 +486,12 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
         return false;
     }
 
+    if(numInstructions == 0)
+    {
+        printf("recompile @%04X failed to handle any instructions\n", pc);
+        return false;
+    }
+
     auto endPtr = builder.getPtr();
 
     int len = endPtr - codePtr;
