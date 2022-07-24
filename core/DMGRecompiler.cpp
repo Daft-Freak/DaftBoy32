@@ -1,3 +1,4 @@
+#include <cassert>
 #include <cstdio>
 
 #include <sys/mman.h>
@@ -123,6 +124,7 @@ public:
     void mov(Reg32 r, uint32_t imm);
     void mov(Reg8 r, uint8_t imm);
 
+    void movzxW(Reg32 dst, Reg16 src);
     void movzxW(Reg32 r, Reg64 base, int disp = 0);
 
     void pop(Reg64 r);
@@ -291,7 +293,20 @@ void X86Builder::mov(Reg8 r, uint8_t imm)
     write(imm);
 };
 
-// sign extend, mem -> reg, 16 bit
+// zero extend, reg -> reg, 16 bit
+void X86Builder::movzxW(Reg32 dst, Reg16 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, dstReg, 0, srcReg);
+
+    write(0x0F); // two byte opcode
+    write(0xB7); // opcode, w = 1
+    write(0xC0 | ((dstReg & 7) << 3) | (srcReg & 7)); // mod 3, regs
+}
+
+// zero extend, mem -> reg, 16 bit
 void X86Builder::movzxW(Reg32 r, Reg64 base, int disp)
 {
     auto reg = static_cast<int>(r);
@@ -568,6 +583,46 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.pop(Reg64::RAX);
     };
 
+    auto readMem = [&builder, this](Reg16 addrReg, Reg8 dstReg)
+    {
+        // save
+        builder.push(Reg64::RAX);
+        builder.push(Reg64::RCX);
+        builder.push(Reg64::RDX);
+        builder.push(Reg64::R8);
+        builder.push(Reg64::R9);
+        builder.push(Reg64::RSI);
+        builder.push(Reg64::RDI);
+
+        builder.movzxW(Reg32::ESI, addrReg);
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
+        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.call(Reg64::RAX); // do call
+
+        // restore
+        builder.pop(Reg64::RDI);
+        builder.pop(Reg64::RSI);
+        builder.pop(Reg64::R9);
+        builder.pop(Reg64::R8);
+        builder.pop(Reg64::RDX);
+        builder.pop(Reg64::RCX);
+
+        // mov ret val (if not going to RAX)
+        if(dstReg != Reg8::AL && dstReg != Reg8::AH)
+        {
+            builder.mov(dstReg, Reg8::AL);
+            builder.pop(Reg64::RAX);
+        }
+        else if(dstReg == Reg8::AH) // TODO: having a worse case for A is not great
+        {
+            builder.mov(Reg8::AH, Reg8::AL);
+            builder.pop(Reg64::R10);
+            builder.mov(Reg8::AL, Reg8::R10B); // restore low byte
+        }
+        else // ... though this is the worst case... (AL == F, so unlikely)
+            assert(false); // AX |= R10W & 0xFF00 ?
+    };
+
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
@@ -739,6 +794,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return copy8(Reg::A, Reg::H);
         case 0x7D: // LD A,L
             return copy8(Reg::A, Reg::L);
+        case 0x7E: // LD A,(HL)
+            cycleExecuted();
+            readMem(regMap16[static_cast<int>(WReg::HL)], regMap8[static_cast<int>(Reg::A)]);
+            cycleExecuted();
+            break;
 
         case 0x7F: // LD A,A
             return copy8(Reg::A, Reg::A);
@@ -760,4 +820,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 void DMGRecompiler::cycleExecuted(DMGCPU *cpu)
 {
     cpu->cycleExecuted();
+}
+
+uint8_t DMGRecompiler::readMem(DMGCPU *cpu, uint16_t addr)
+{
+    return cpu->readMem(addr);
 }
