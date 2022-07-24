@@ -5,7 +5,7 @@
 #include "DMGAPU.h"
 #include "DMGDisplay.h"
 #include "DMGMemory.h"
-
+#include "DMGRecompiler.h"
 
 enum Interrupts
 {
@@ -155,4 +155,7 @@ private:
     DMGAPU apu;
     DMGDisplay display;
     uint8_t inputs = 0;
+
+    DMGRecompiler compiler;
+    friend class DMGRecompiler; // needs access to internals
 };

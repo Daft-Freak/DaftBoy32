@@ -6,7 +6,7 @@
 #include "DMGRegs.h"
 #include "DMGSaveState.h"
 
-DMGCPU::DMGCPU() : mem(*this), apu(*this), display(*this)
+DMGCPU::DMGCPU() : mem(*this), apu(*this), display(*this), compiler(*this)
 {}
 
 void DMGCPU::reset()
@@ -36,6 +36,7 @@ void DMGCPU::reset()
     // values after boot rom
     pc = 0x100;
     sp = 0xFFFE;
+    compiler.handleBranch();
 
     mem.reset();
 
@@ -1000,6 +1001,7 @@ void DMGCPU::executeInstruction()
         {
             pc = addr;
             cycleExecuted();
+            compiler.handleBranch();
         }
     };
 
@@ -1012,6 +1014,7 @@ void DMGCPU::executeInstruction()
         {
             pc += off;
             cycleExecuted();
+            compiler.handleBranch();
         }
     };
 
@@ -1032,6 +1035,7 @@ void DMGCPU::executeInstruction()
             cycleExecuted();
 
             pc = addr;
+            compiler.handleBranch();
         }
     };
 
@@ -1044,6 +1048,7 @@ void DMGCPU::executeInstruction()
         cycleExecuted();
 
         pc = addr;
+        compiler.handleBranch();
     };
 
     const auto ret = [this](int flag = 0, bool set = true)
@@ -1060,6 +1065,7 @@ void DMGCPU::executeInstruction()
 
             pc = addr;
             cycleExecuted();
+            compiler.handleBranch();
         }
     };
 
@@ -1912,6 +1918,7 @@ void DMGCPU::executeInstruction()
 
         case 0xE9: // JP (HL)
             pc = reg(WReg::HL);
+            compiler.handleBranch();
             break;
 
         case 0xEA: // LD (nn),A
@@ -2906,6 +2913,7 @@ bool DMGCPU::serviceInterrupts()
 
             mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) & ~(1 << i));
             serviceableInterrupts &= ~(1 << i);
+            compiler.handleBranch();
             return true;
         }
     }

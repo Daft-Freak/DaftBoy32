@@ -5,6 +5,7 @@ target_sources(DaftBoyCore INTERFACE
     DMGCPU.cpp
     DMGDisplay.cpp
     DMGMemory.cpp
+    DMGRecompiler.cpp
 )
 
 target_include_directories(DaftBoyCore INTERFACE ${CMAKE_CURRENT_LIST_DIR})
