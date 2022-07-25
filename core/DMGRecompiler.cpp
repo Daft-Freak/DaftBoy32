@@ -127,7 +127,8 @@ public:
     void mov(Reg32 r, uint32_t imm);
     void mov(Reg8 r, uint8_t imm);
 
-    void movzxW(Reg32 dst, Reg16 src);
+    void movzx(Reg32 dst, Reg16 src);
+    void movzx(Reg32 dst, Reg8 src);
     void movzxW(Reg32 r, Reg64 base, int disp = 0);
 
     void pop(Reg64 r);
@@ -323,7 +324,7 @@ void X86Builder::mov(Reg8 r, uint8_t imm)
 };
 
 // zero extend, reg -> reg, 16 bit
-void X86Builder::movzxW(Reg32 dst, Reg16 src)
+void X86Builder::movzx(Reg32 dst, Reg16 src)
 {
     auto dstReg = static_cast<int>(dst);
     auto srcReg = static_cast<int>(src);
@@ -332,6 +333,19 @@ void X86Builder::movzxW(Reg32 dst, Reg16 src)
 
     write(0x0F); // two byte opcode
     write(0xB7); // opcode, w = 1
+    write(0xC0 | ((dstReg & 7) << 3) | (srcReg & 7)); // mod 3, regs
+}
+
+// zero extend, reg -> reg, 8 bit
+void X86Builder::movzx(Reg32 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, dstReg, 0, srcReg);
+
+    write(0x0F); // two byte opcode
+    write(0xB6); // opcode, w = 0
     write(0xC0 | ((dstReg & 7) << 3) | (srcReg & 7)); // mod 3, regs
 }
 
@@ -686,7 +700,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     {
         callSave();
 
-        builder.movzxW(Reg32::ESI, addrReg);
+        builder.movzx(Reg32::ESI, addrReg);
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
@@ -704,6 +718,32 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.call(Reg64::RAX); // do call
 
         callRestoreRet8(dstReg);
+    };
+
+    auto writeMem = [&builder, &callSave, &callRestore, this](Reg16 addrReg, Reg8 dataReg)
+    {
+        callSave();
+
+        builder.movzx(Reg32::ESI, addrReg);
+        builder.movzx(Reg32::EDX, dataReg);
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
+        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.call(Reg64::RAX); // do call
+
+        callRestore();
+    };
+
+    auto writeMemImmAddr = [&builder, &callSave, &callRestore, this](uint16_t addr, Reg8 dataReg)
+    {
+        callSave();
+
+        builder.mov(Reg32::ESI, addr);
+        builder.movzx(Reg32::EDX, dataReg);
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
+        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.call(Reg64::RAX); // do call
+
+        callRestore();
     };
 
     using Reg = DMGCPU::Reg;
@@ -752,6 +792,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     {
         case 0x01: // LD BC,nn
             return load16(WReg::BC);
+        case 0x02: // LD (BC),A
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::BC), reg(Reg::A));
+            cycleExecuted();
+            break;
 
         case 0x06: // LD B,n
             return load8(Reg::B);
@@ -768,6 +814,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
         case 0x11: // LD DE,nn
             return load16(WReg::DE);
+        case 0x12: // LD (DE),A
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::DE), reg(Reg::A));
+            cycleExecuted();
+            break;
 
         case 0x16: // LD D,n
             return load8(Reg::D);
@@ -784,6 +836,13 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
         case 0x21: // LD HL,nn
             return load16(WReg::HL);
+        case 0x22: // LDI (HL),A
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::HL), reg(Reg::A));
+            builder.inc(reg(WReg::HL));
+            cycleExecuted();
+            break;
 
         case 0x26: // LD H,n
             return load8(Reg::H);
@@ -922,7 +981,49 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         case 0x6F: // LD L,A
             return copy8(Reg::L, Reg::A);
+        case 0x70: // LD (HL),B
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::HL), reg(Reg::B));
+            cycleExecuted();
+            break;
+        case 0x71: // LD (HL),C
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::HL), reg(Reg::C));
+            cycleExecuted();
+            break;
+        case 0x72: // LD (HL),D
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::HL), reg(Reg::D));
+            cycleExecuted();
+            break;
+        case 0x73: // LD (HL),E
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::HL), reg(Reg::E));
+            cycleExecuted();
+            break;
+        case 0x74: // LD (HL),H
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::HL), reg(Reg::H));
+            cycleExecuted();
+            break;
+        case 0x75: // LD (HL),L
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::HL), reg(Reg::L));
+            cycleExecuted();
+            break;
 
+        case 0x77: // LD (HL),A
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::HL), reg(Reg::A));
+            cycleExecuted();
+            break;
         case 0x78: // LD A,B
             return copy8(Reg::A, Reg::B);
         case 0x79: // LD A,C
@@ -949,6 +1050,34 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
             break;
+
+        case 0xE0: // LDH (n),A
+        {
+            incPC();
+            cycleExecuted();
+            auto addr = 0xFF00 | cpu.readMem(pc++);
+            incPC();
+            cycleExecuted();
+            writeMemImmAddr(addr, reg(Reg::A));
+            cycleExecuted();
+            break;
+        }
+
+        case 0xEA: // LD (nn),A
+        {
+            incPC();
+            cycleExecuted();
+            uint16_t addr = cpu.readMem(pc++);
+            incPC();
+            cycleExecuted();
+            addr |= (cpu.readMem(pc++) << 8);
+            incPC();
+            cycleExecuted();
+
+            writeMemImmAddr(addr, reg(Reg::A));
+            cycleExecuted();
+            break;
+        }
 
         case 0xF0: // LDH A,(n)
         {
@@ -995,4 +1124,9 @@ void DMGRecompiler::cycleExecuted(DMGCPU *cpu)
 uint8_t DMGRecompiler::readMem(DMGCPU *cpu, uint16_t addr)
 {
     return cpu->readMem(addr);
+}
+
+void DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
+{
+    cpu->writeMem(addr, data);
 }
