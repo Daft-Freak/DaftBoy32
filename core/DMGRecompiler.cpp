@@ -111,6 +111,7 @@ public:
 
     void add(Reg32 dst, Reg32 src);
     void add(Reg8 dst, Reg8 src);
+    void add(Reg64 dst, int8_t src);
 
     void call(Reg64 r);
 
@@ -132,6 +133,8 @@ public:
     void push(Reg64 r);
 
     void ret();
+
+    void sub(Reg64 dst, int8_t src);
 
     uint8_t *getPtr() const {return ptr;}
 
@@ -174,6 +177,20 @@ void X86Builder::add(Reg8 dst, Reg8 src)
     write(0x00); // opcode
 
     write(0xC0 | (srcReg & 7) << 3 | (dstReg & 7));
+};
+
+// imm -> reg, 8 bit sign extended
+void X86Builder::add(Reg64 dst, int8_t src)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(true, 0, 0, dstReg);
+
+    write(0x83); // opcode, w = 1, s = 1
+
+    write(0xC0 | (dstReg & 7));
+
+    write(src);
 };
 
 // indirect
@@ -342,6 +359,20 @@ void X86Builder::push(Reg64 r)
 void X86Builder::ret()
 {
     write(0xC3); // opcode
+};
+
+// imm -> reg, 8 bit sign extended
+void X86Builder::sub(Reg64 dst, int8_t src)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(true, 0, 0, dstReg);
+
+    write(0x83); // opcode, w = 1, s = 1
+
+    write(0xC0 | (5 << 3)| (dstReg & 7)); // sub-opcode + reg
+
+    write(src);
 };
 
 void X86Builder::write(uint8_t b)
@@ -583,10 +614,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.push(Reg64::R9);
         builder.push(Reg64::RSI);
         builder.push(Reg64::RDI);
+        builder.sub(Reg64::RSP, 8); // align stack
     };
 
     const auto callRestore = [&builder]()
     {
+        builder.add(Reg64::RSP, 8); // alignment
         builder.pop(Reg64::RDI);
         builder.pop(Reg64::RSI);
         builder.pop(Reg64::R9);
@@ -598,6 +631,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
     const auto callRestoreRet8 = [&builder](Reg8 dstReg)
     {
+        builder.add(Reg64::RSP, 8); // alignment
         builder.pop(Reg64::RDI);
         builder.pop(Reg64::RSI);
         builder.pop(Reg64::R9);
