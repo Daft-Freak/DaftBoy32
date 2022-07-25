@@ -134,6 +134,7 @@ public:
     void add(Reg64 dst, int8_t src);
 
     void and_(Reg8 dst, Reg8 src);
+    void and_(Reg32 dst, uint32_t imm);
 
     void call(Reg64 r);
 
@@ -216,7 +217,7 @@ void X86Builder::add(Reg64 dst, int8_t src)
     write(src);
 };
 
-// reg -> reg
+// reg -> reg, 8 bit
 void X86Builder::and_(Reg8 dst, Reg8 src)
 {
     auto dstReg = static_cast<int>(dst);
@@ -225,6 +226,22 @@ void X86Builder::and_(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x20); // opcode, w = 0
     encodeModRM(dstReg, srcReg);
+};
+
+// imm -> reg
+void X86Builder::and_(Reg32 dst, uint32_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x81); // opcode, s = 0, w = 1
+    encodeModRM(dstReg, 4);
+
+    // immediate
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
 };
 
 // indirect
@@ -725,7 +742,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             builder.mov(Reg8::AL, Reg8::R10B); // restore low byte
         }
         else // ... though this is the worst case... (AL == F, so unlikely)
-            assert(false); // AX |= R10W & 0xFF00 ?
+        {
+            // EAX = EAX + (R10D & 0xFF00)
+            builder.pop(Reg64::R10);
+            builder.and_(Reg32::R10D, 0xFF00);
+            builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
+        }
     };
 
     // TODO: shared trampolines?
