@@ -135,6 +135,7 @@ public:
 
     void and_(Reg8 dst, Reg8 src);
     void and_(Reg32 dst, uint32_t imm);
+    void and_(Reg8 dst, uint8_t imm);
 
     void call(Reg64 r);
 
@@ -242,6 +243,17 @@ void X86Builder::and_(Reg32 dst, uint32_t imm)
     write(imm >> 8);
     write(imm >> 16);
     write(imm >> 24);
+};
+
+// imm -> reg, 8 bit
+void X86Builder::and_(Reg8 dst, uint8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x80); // opcode, s = 0, w = 0
+    encodeModRM(dstReg, 4);
+    write(imm); // imm
 };
 
 // indirect
@@ -854,6 +866,53 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
+    const auto push = [&builder, &incPC, &cycleExecuted, &writeMem](WReg r)
+    {
+        auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
+        auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
+
+        auto sp = Reg16::R9W;
+
+        incPC();
+        cycleExecuted();
+
+        cycleExecuted(); // delay
+
+        builder.dec(sp);
+        writeMem(sp, highReg);
+        cycleExecuted();
+
+        builder.dec(sp);
+        writeMem(sp, lowReg);
+        cycleExecuted();
+        return true;
+    };
+
+    const auto pop = [&builder, &incPC, &cycleExecuted, &readMem](WReg r)
+    {
+        auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
+        auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
+
+        auto sp = Reg16::R9W;
+
+        incPC();
+        cycleExecuted();
+
+        readMem(sp, lowReg);
+        builder.inc(sp);
+        cycleExecuted();
+
+        readMem(sp, highReg);
+        builder.inc(sp);
+        cycleExecuted();
+
+        // low bits in F can never be set
+        if(r == WReg::AF)
+            builder.and_(reg(Reg::F), 0xF0);
+
+        return true;
+    };
+
     const auto bitAnd = [&builder, &incPC, &cycleExecuted](Reg8 r)
     {
         builder.and_(reg(Reg::A), r);
@@ -1230,6 +1289,18 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
             break;
 
+        case 0xC1: // POP BC
+            return pop(WReg::BC);
+
+        case 0xC5: // PUSH BC
+            return push(WReg::BC);
+
+        case 0xD1: // POP DE
+            return pop(WReg::DE);
+
+        case 0xD5: // PUSH DE
+            return push(WReg::DE);
+
         case 0xE0: // LDH (n),A
         {
             incPC();
@@ -1241,7 +1312,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             break;
         }
+        case 0xE1: // POP HL
+            return pop(WReg::HL);
 
+        case 0xE5: // PUSH HL
+            return push(WReg::HL);
         case 0xE6: // AND n
         {
             // TODO: use AND with immediate?
@@ -1282,6 +1357,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             break;
         }
+        case 0xF1: // POP AF
+            return pop(WReg::AF);
+
+        case 0xF5: // PUSH AF
+            return push(WReg::AF);
 
         case 0xFA: // LD A,(nn)
         {
