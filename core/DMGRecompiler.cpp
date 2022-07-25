@@ -878,6 +878,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             break;
 
+        case 0x36: // LD (HL),n
+        {
+            incPC();
+            cycleExecuted();
+            auto val = cpu.readMem(pc++);
+            incPC();
+            cycleExecuted();
+            builder.mov(Reg8::R10B, val); // TODO: yeah, too lazy to add a third writeMem just for this
+            writeMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            break;
+        }
+
         case 0x3A: // LDD A,(HL)
             incPC();
             cycleExecuted();
