@@ -139,6 +139,8 @@ public:
 
     void call(Reg64 r);
 
+    void cmp(Reg8 dst, int8_t imm);
+
     void dec(Reg16 r);
 
     void inc(Reg16 r);
@@ -159,6 +161,8 @@ public:
     void movzx(Reg32 dst, Reg16 src);
     void movzx(Reg32 dst, Reg8 src);
     void movzxW(Reg32 r, Reg64 base, int disp = 0);
+
+    void or_(Reg8 dst, uint8_t imm);
 
     void pop(Reg64 r);
 
@@ -264,6 +268,17 @@ void X86Builder::call(Reg64 r)
     encodeREX(false, 0, 0, reg);
     write(0xFF); // opcode
     encodeModRM(reg, 2);
+};
+
+// imm -> reg, 8 bit sign extended
+void X86Builder::cmp(Reg8 dst, int8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x80); // opcode, w = 0, s = 0
+    encodeModRM(dstReg, 7);
+    write(imm);
 };
 
 // reg, 16 bit
@@ -435,6 +450,17 @@ void X86Builder::movzxW(Reg32 r, Reg64 base, int disp)
     write(0x0F); // two byte opcode
     write(0xB7); // opcode, w = 1
     encodeModRM(reg, baseReg, disp);
+};
+
+// imm -> reg, 8 bit
+void X86Builder::or_(Reg8 dst, uint8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x80); // opcode, s = 0, w = 0
+    encodeModRM(dstReg, 1);
+    write(imm); // imm
 };
 
 void X86Builder::pop(Reg64 r)
@@ -913,6 +939,64 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
+    const auto add = [&builder, &incPC, &cycleExecuted](Reg8 b)
+    {
+        auto a = reg(Reg::A);
+        auto f = reg(Reg::F);
+
+        // TODO: all of this ...
+
+        // copy src/dst (using flags reg as temp)
+        if(b == Reg8::AH || b == Reg8::CH || b == Reg8::DH || b == Reg8::BH)
+        {
+            // legacy regs, extra copy
+            builder.mov(f, b);
+            builder.mov(Reg8::R10B, f);
+        }
+        else
+            builder.mov(Reg8::R10B, b);
+
+        // F was used as tmp, make a second copy (affects ADD (HL), ADD n)
+        if(b == f)
+            builder.mov(Reg8::R11B, b);
+
+        builder.mov(f, a);
+
+        // mask and do half add
+        builder.and_(f, 0xF);
+        builder.and_(Reg8::R10B, 0xF);
+        builder.add(Reg8::R10B, f);
+
+        // put tmp reg back
+        if(b == f)
+            builder.mov(b, Reg8::R11B);
+
+        // TODO: ... can be avoided if we don't need the H flag
+
+        // do add
+        builder.add(a, b);
+
+        // flags
+        builder.mov(f, 0);
+
+        // carry flag
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        // half carry flag
+        // r10b > 0xF ? H : 0
+        builder.cmp(Reg8::R10B, 0xF);
+        builder.jcc(Condition::BE, 3); // <= 0xF
+        builder.or_(f, DMGCPU::Flag_H); // set H
+
+        // zero flag
+        builder.and_(a, a); // TODO: TEST?
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+
+        return true;
+    };
+
     const auto bitAnd = [&builder, &incPC, &cycleExecuted](Reg8 r)
     {
         builder.and_(reg(Reg::A), r);
@@ -1244,6 +1328,45 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         case 0x7F: // LD A,A
             return copy8(Reg::A, Reg::A);
 
+        case 0x80: // ADD A,B
+            incPC();
+            cycleExecuted();
+            return add(reg(Reg::B));
+        case 0x81: // ADD A,C
+            incPC();
+            cycleExecuted();
+            return add(reg(Reg::C));
+        case 0x82: // ADD A,D
+            incPC();
+            cycleExecuted();
+            return add(reg(Reg::D));
+        case 0x83: // ADD A,E
+            incPC();
+            cycleExecuted();
+            return add(reg(Reg::E));
+        case 0x84: // ADD A,H
+            incPC();
+            cycleExecuted();
+            return add(reg(Reg::H));
+        case 0x85: // ADD A,L
+            incPC();
+            cycleExecuted();
+            return add(reg(Reg::L));
+        case 0x86: // ADD (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            readMem(reg(WReg::HL), tmp);
+            add(tmp);
+            cycleExecuted();
+            break;
+        }
+        case 0x87: // ADD A,A
+            incPC();
+            cycleExecuted();
+            return add(reg(Reg::A));
+
         case 0xA0: // AND B
             incPC();
             cycleExecuted();
@@ -1294,6 +1417,18 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
         case 0xC5: // PUSH BC
             return push(WReg::BC);
+        case 0xC6: // ADD n
+        {
+            // TODO: use imm?
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            builder.mov(tmp, cpu.readMem(pc++));
+            incPC();
+            add(tmp);
+            cycleExecuted();
+            break;
+        }
 
         case 0xD1: // POP DE
             return pop(WReg::DE);
