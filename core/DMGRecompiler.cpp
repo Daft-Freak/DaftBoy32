@@ -508,6 +508,8 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
 {
     X86Builder builder(codePtr, codeBuf + codeBufSize);
 
+    auto startPC = pc;
+
     // prologue
     builder.push(Reg64::RBP);
     builder.mov(Reg64::RBP, Reg64::RSP);
@@ -571,13 +573,13 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
 
     if(builder.getError())
     {
-        printf("recompile @%04X failed due to error (out of space?)\n", pc);
+        printf("recompile @%04X failed due to error (out of space?)\n", startPC);
         return false;
     }
 
     if(numInstructions == 0)
     {
-        printf("recompile @%04X failed to handle any instructions\n", pc);
+        printf("recompile @%04X failed to handle any instructions\n", startPC);
         return false;
     }
 
@@ -586,12 +588,13 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
     int len = endPtr - codePtr;
 
     //debug
-    printf("recompile @%04X generated %i bytes (%i instructions)\ncode:", pc, len, numInstructions);
+    printf("recompile @%04X generated %i bytes (%i instructions)\ncode:", startPC, len, numInstructions);
 
     for(auto p = codePtr; p != endPtr; p++)
         printf(" %02X", *p);
 
     printf("\n");
+    printf("(addr %p->%p)\n", codePtr, endPtr);
 
     codePtr = endPtr;
 
