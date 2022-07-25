@@ -96,6 +96,26 @@ enum class Reg64
     R15
 };
 
+enum class Condition
+{
+    O = 0,
+    NO,
+    B,
+    AE,
+    E,
+    NE,
+    BE,
+    A,
+    S,
+    NS,
+    P,
+    NP,
+    L,
+    GE,
+    LE,
+    G
+};
+
 enum REX
 {
     REX_B = 1 << 0,
@@ -113,11 +133,16 @@ public:
     void add(Reg8 dst, Reg8 src);
     void add(Reg64 dst, int8_t src);
 
+    void and_(Reg8 dst, Reg8 src);
+
     void call(Reg64 r);
 
     void dec(Reg16 r);
 
     void inc(Reg16 r);
+
+    void jcc(Condition cc, int8_t disp);
+    void jmp(int8_t disp);
 
     void lea(Reg32 r, Reg64 base, int disp = 0);
 
@@ -191,6 +216,17 @@ void X86Builder::add(Reg64 dst, int8_t src)
     write(src);
 };
 
+// reg -> reg
+void X86Builder::and_(Reg8 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x20); // opcode, w = 0
+    encodeModRM(dstReg, srcReg);
+};
+
 // indirect
 void X86Builder::call(Reg64 r)
 {
@@ -221,6 +257,18 @@ void X86Builder::inc(Reg16 r)
     encodeREX(false, 0, 0, reg);
     write(0xFF); // opcode, w = 1
     encodeModRM(reg, 0);
+}
+
+void X86Builder::jcc(Condition cc, int8_t disp)
+{
+    write(0x70 | static_cast<int>(cc)); // opcode
+    write(disp);
+}
+
+void X86Builder::jmp(int8_t disp)
+{
+    write(0xEB); // opcode
+    write(disp);
 }
 
 void X86Builder::lea(Reg32 r, Reg64 base, int disp)
@@ -784,6 +832,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
+    const auto bitAnd = [&builder, &incPC, &cycleExecuted](Reg8 r)
+    {
+        builder.and_(reg(Reg::A), r);
+
+        // F = Flag_H | (res == 0 ? Flag_Z : 0)
+        builder.jcc(Condition::E, 2 + 2); // if == 0
+        builder.mov(reg(Reg::F), DMGCPU::Flag_H); // not zero
+        builder.jmp(2);
+        builder.mov(reg(Reg::F), DMGCPU::Flag_H | DMGCPU::Flag_Z); // zero
+
+        return true;
+    };
+
     switch(opcode)
     {
         case 0x01: // LD BC,nn
@@ -1070,6 +1131,45 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         case 0x7F: // LD A,A
             return copy8(Reg::A, Reg::A);
 
+        case 0xA0: // AND B
+            incPC();
+            cycleExecuted();
+            return bitAnd(reg(Reg::B));
+        case 0xA1: // AND C
+            incPC();
+            cycleExecuted();
+            return bitAnd(reg(Reg::C));
+        case 0xA2: // AND D
+            incPC();
+            cycleExecuted();
+            return bitAnd(reg(Reg::D));
+        case 0xA3: // AND E
+            incPC();
+            cycleExecuted();
+            return bitAnd(reg(Reg::E));
+        case 0xA4: // AND H
+            incPC();
+            cycleExecuted();
+            return bitAnd(reg(Reg::H));
+        case 0xA5: // AND L
+            incPC();
+            cycleExecuted();
+            return bitAnd(reg(Reg::L));
+        case 0xA6: // AND (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            readMem(reg(WReg::HL), tmp);
+            bitAnd(tmp);
+            cycleExecuted();
+            break;
+        }
+        case 0xA7: // AND A
+            incPC();
+            cycleExecuted();
+            return bitAnd(reg(Reg::A));
+
         case 0xAF: // XOR A
             incPC();
             cycleExecuted();
@@ -1084,6 +1184,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             incPC();
             cycleExecuted();
             writeMemImmAddr(addr, reg(Reg::A));
+            cycleExecuted();
+            break;
+        }
+
+        case 0xE6: // AND n
+        {
+            // TODO: use AND with immediate?
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            builder.mov(tmp, cpu.readMem(pc++));
+            incPC();
+            bitAnd(tmp);
             cycleExecuted();
             break;
         }
