@@ -845,6 +845,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
+    const auto inc16 = [&builder, &incPC, &cycleExecuted](WReg r)
+    {
+        incPC();
+        cycleExecuted();
+
+        builder.inc(reg(r));
+        cycleExecuted();
+        return true;
+    };
+
+    const auto dec16 = [&builder, &incPC, &cycleExecuted](WReg r)
+    {
+        incPC();
+        cycleExecuted();
+
+        builder.dec(reg(r));
+        cycleExecuted();
+        return true;
+    };
+
     switch(opcode)
     {
         case 0x01: // LD BC,nn
@@ -855,6 +875,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             writeMem(reg(WReg::BC), reg(Reg::A));
             cycleExecuted();
             break;
+        case 0x03: // INC BC
+            return inc16(WReg::BC);
 
         case 0x06: // LD B,n
             return load8(Reg::B);
@@ -865,6 +887,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             readMem(reg(WReg::BC), reg(Reg::A));
             cycleExecuted();
             break;
+        case 0x0B: // DEC BC
+            return dec16(WReg::BC);
 
         case 0x0E: // LD C,n
             return load8(Reg::C);
@@ -877,6 +901,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             writeMem(reg(WReg::DE), reg(Reg::A));
             cycleExecuted();
             break;
+        case 0x13: // INC DE
+            return inc16(WReg::DE);
 
         case 0x16: // LD D,n
             return load8(Reg::D);
@@ -887,6 +913,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             readMem(reg(WReg::DE), reg(Reg::A));
             cycleExecuted();
             break;
+        case 0x1B: // DEC DE
+            return dec16(WReg::DE);
 
         case 0x1E: // LD E,n
             return load8(Reg::E);
@@ -900,6 +928,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             builder.inc(reg(WReg::HL));
             cycleExecuted();
             break;
+        case 0x23: // INC HL
+            return inc16(WReg::HL);
 
         case 0x26: // LD H,n
             return load8(Reg::H);
@@ -911,6 +941,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             builder.inc(reg(WReg::HL));
             cycleExecuted();
             break;
+        case 0x2B: // DEC HL
+            return dec16(WReg::HL);
 
         case 0x2E: // LD L,n
             return load8(Reg::L);
