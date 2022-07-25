@@ -115,6 +115,8 @@ public:
 
     void call(Reg64 r);
 
+    void dec(Reg16 r);
+
     void inc(Reg16 r);
 
     void lea(Reg32 r, Reg64 base, int disp = 0);
@@ -206,6 +208,16 @@ void X86Builder::call(Reg64 r)
     write(0xFF); // opcode
     write(0xD0 | (reg & 7));
 };
+
+// reg, 16 bit
+void X86Builder::dec(Reg16 r)
+{
+    auto reg = static_cast<int>(r);
+    write(0x66); // 16 bit override
+
+    write(0xFF); // opcode, w = 1
+    write(0xC0 | (1 << 3) | (reg & 7)); // mod 3, sub-opcode, reg
+}
 
 // reg, 16 bit
 void X86Builder::inc(Reg16 r)
@@ -857,6 +869,22 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
         case 0x2E: // LD L,n
             return load8(Reg::L);
+
+        case 0x32: // LDD (HL),A
+            incPC();
+            cycleExecuted();
+            writeMem(reg(WReg::HL), reg(Reg::A));
+            builder.dec(reg(WReg::HL));
+            cycleExecuted();
+            break;
+
+        case 0x3A: // LDD A,(HL)
+            incPC();
+            cycleExecuted();
+            readMem(reg(WReg::HL), reg(Reg::A));
+            builder.dec(reg(WReg::HL));
+            cycleExecuted();
+            break;
 
         case 0x3E: // LD A,n
             return load8(Reg::A);
