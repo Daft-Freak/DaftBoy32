@@ -207,6 +207,7 @@ void X86Builder::dec(Reg16 r)
     auto reg = static_cast<int>(r);
 
     write(0x66); // 16 bit override
+    encodeREX(false, 0, 0, reg);
     write(0xFF); // opcode, w = 1
     encodeModRM(reg, 1);
 }
@@ -217,6 +218,7 @@ void X86Builder::inc(Reg16 r)
     auto reg = static_cast<int>(r);
 
     write(0x66); // 16 bit override
+    encodeREX(false, 0, 0, reg);
     write(0xFF); // opcode, w = 1
     encodeModRM(reg, 0);
 }
