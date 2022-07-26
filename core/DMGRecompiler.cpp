@@ -185,6 +185,8 @@ public:
 
     void setcc(Condition cc, Reg8 dst);
 
+    void shr(Reg8 r, uint8_t count);
+
     void sub(Reg8 dst, Reg8 src);
     void sub(Reg64 dst, int8_t src);
 
@@ -638,6 +640,19 @@ void X86Builder::setcc(Condition cc, Reg8 dst)
     write(0x0F); // two byte opcode
     write(0x90 | static_cast<int>(cc)); // opcode
     encodeModRM(dstReg);
+}
+
+// reg, 8 bit
+void X86Builder::shr(Reg8 r, uint8_t count)
+{
+    auto reg = static_cast<int>(r);
+
+    // TODO: 0xD0 for 1
+
+    encodeREX(false, 0, 0, reg);
+    write(0xC0); // opcode, w = 0
+    encodeModRM(reg, 5);
+    write(count);
 }
 
 // reg -> reg, 8bit
@@ -2327,7 +2342,7 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
     using WReg = DMGCPU::WReg;
 
     // early out for unhandled
-    if((opcode >= 0x80 || opcode < 0x40) && (opcode < 0x30 || opcode >= 0x38))
+    if(opcode >= 0x80 || opcode < 0x30)
     {
         printf("unhandled op in recompile CB%02X\n", opcode);
         return false;
@@ -2349,6 +2364,22 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
     // shifts...
+
+    // SRL
+    const auto shiftRight = [&builder](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+
+        builder.shr(r, 1);
+
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        builder.cmp(r, 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        return true;
+    };
 
     const auto testBit = [&builder](Reg8 r, int bit)
     {
@@ -2399,7 +2430,31 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         }
         case 0x37: // SWAP A
             return swap(reg(Reg::A));
+        case 0x38: // SRL B
+            return shiftRight(reg(Reg::B));
+        case 0x39: // SRL C
+            return shiftRight(reg(Reg::C));
+        case 0x3A: // SRL D
+            return shiftRight(reg(Reg::D));
+        case 0x3B: // SRL E
+            return shiftRight(reg(Reg::E));
+        case 0x3C: // SRL H
+            return shiftRight(reg(Reg::H));
+        case 0x3D: // SRL L
+            return shiftRight(reg(Reg::L));
+        case 0x3E: // SRL (HL)
+        {
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
 
+            shiftRight(Reg8::R10B);
+
+            writeMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            break;
+        }
+        case 0x3F: // SRL A
+            return shiftRight(reg(Reg::A));
         case 0x40: // BIT 0,B
             return testBit(reg(Reg::B), 0);
         case 0x41: // BIT 0,C
