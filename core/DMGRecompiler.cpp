@@ -169,6 +169,8 @@ public:
     void movzx(Reg32 dst, Reg8 src);
     void movzxW(Reg32 r, Reg64 base, int disp = 0);
 
+    void not_(Reg8 r);
+
     void or_(Reg8 dst, Reg8 src);
     void or_(Reg32 dst, uint32_t imm);
     void or_(Reg8 dst, uint8_t imm);
@@ -540,6 +542,16 @@ void X86Builder::movzxW(Reg32 r, Reg64 base, int disp)
     write(0x0F); // two byte opcode
     write(0xB7); // opcode, w = 1
     encodeModRM(reg, baseReg, disp);
+}
+
+// reg, 8 bit
+void X86Builder::not_(Reg8 r)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xF6); // opcode, w = 0
+    encodeModRM(reg, 2);
 }
 
 // reg -> reg, 8 bit
@@ -1461,6 +1473,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return dec(reg(Reg::L));
         case 0x2E: // LD L,n
             return load8(Reg::L);
+        case 0x2F: // CPL
+            incPC();
+            cycleExecuted();
+            builder.not_(reg(Reg::A));
+            builder.or_(reg(Reg::F), DMGCPU::Flag_H | DMGCPU::Flag_N);
+            break;
 
         case 0x32: // LDD (HL),A
             incPC();
