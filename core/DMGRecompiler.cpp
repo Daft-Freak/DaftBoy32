@@ -692,14 +692,12 @@ static void callSave(X86Builder &builder)
     builder.push(Reg64::R8);
     builder.push(Reg64::R9);
     builder.push(Reg64::RSI);
-    builder.push(Reg64::RDI);
     builder.sub(Reg64::RSP, 8); // align stack
 }
 
 static void callRestore(X86Builder &builder)
 {
     builder.add(Reg64::RSP, 8); // alignment
-    builder.pop(Reg64::RDI);
     builder.pop(Reg64::RSI);
     builder.pop(Reg64::R9);
     builder.pop(Reg64::R8);
@@ -711,7 +709,6 @@ static void callRestore(X86Builder &builder)
 static void callRestore(X86Builder &builder, Reg8 dstReg)
 {
     builder.add(Reg64::RSP, 8); // alignment
-    builder.pop(Reg64::RDI);
     builder.pop(Reg64::RSI);
     builder.pop(Reg64::R9);
     builder.pop(Reg64::R8);
@@ -799,6 +796,7 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
     builder.push(Reg64::RDX);
     builder.push(Reg64::RCX);
     builder.push(Reg64::RSI);
+    builder.push(Reg64::RDI);
 
     // load emu pc/sp
     // TODO: we know what PC is, dont bother loading/updating/saving it
@@ -826,6 +824,7 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
     }
 
     // store cycle count
+    builder.pop(Reg64::RDI);
     builder.mov(Reg32::ESI, Reg64::RDI, true); // do we need this?
 
     // restore regs ptr
