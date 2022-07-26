@@ -183,6 +183,7 @@ public:
 
     void setcc(Condition cc, Reg8 dst);
 
+    void sub(Reg8 dst, Reg8 src);
     void sub(Reg64 dst, int8_t src);
 
     void test(Reg8 dst, uint8_t imm);
@@ -623,6 +624,17 @@ void X86Builder::setcc(Condition cc, Reg8 dst)
     write(0x90 | static_cast<int>(cc)); // opcode
     encodeModRM(dstReg);
 }
+
+// reg -> reg, 8bit
+void X86Builder::sub(Reg8 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x28); // opcode
+    encodeModRM(dstReg, srcReg);
+};
 
 // imm -> reg, 8 bit sign extended
 void X86Builder::sub(Reg64 dst, int8_t src)
@@ -1138,6 +1150,65 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         // r10b > 0xF ? H : 0
         builder.cmp(Reg8::R10B, 0xF);
         builder.jcc(Condition::BE, 3); // <= 0xF
+        builder.or_(f, DMGCPU::Flag_H); // set H
+
+        // zero flag
+        builder.and_(a, a); // TODO: TEST?
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+
+        return true;
+    };
+
+    const auto sub = [&builder, &incPC, &cycleExecuted](Reg8 b)
+    {
+        auto a = reg(Reg::A);
+        auto f = reg(Reg::F);
+
+        // TODO: all of this ...
+
+        // copy src/dst (using flags reg as temp)
+        if(b == Reg8::AH || b == Reg8::CH || b == Reg8::DH || b == Reg8::BH)
+        {
+            // legacy regs, extra copy
+            builder.mov(f, b);
+            builder.mov(Reg8::R10B, f);
+        }
+        else
+            builder.mov(Reg8::R10B, b);
+
+        // F was used as tmp, make a second copy (affects SUB (HL), SUB n)
+        if(b == f)
+            builder.mov(Reg8::R11B, b);
+
+        builder.mov(f, a);
+
+        // mask and do half sub
+        builder.and_(f, 0xF);
+        builder.and_(Reg8::R10B, 0xF);
+        builder.sub(f, Reg8::R10B);
+        builder.mov(Reg8::R10B, f);
+
+        // put tmp reg back
+        if(b == f)
+            builder.mov(b, Reg8::R11B);
+
+        // TODO: ... can be avoided if we don't need the H flag
+
+        // do sub
+        builder.sub(a, b);
+
+        // flags
+        builder.mov(f, DMGCPU::Flag_N);
+
+        // carry flag
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        // half carry flag
+        // r10b < 0 ? H : 0
+        builder.cmp(Reg8::R10B, 0);
+        builder.jcc(Condition::GE, 3); // >= 0
         builder.or_(f, DMGCPU::Flag_H); // set H
 
         // zero flag
@@ -1789,6 +1860,45 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             return add(reg(Reg::A));
 
+        case 0x90: // SUB B
+            incPC();
+            cycleExecuted();
+            return sub(reg(Reg::B));
+        case 0x91: // SUB C
+            incPC();
+            cycleExecuted();
+            return sub(reg(Reg::C));
+        case 0x92: // SUB D
+            incPC();
+            cycleExecuted();
+            return sub(reg(Reg::D));
+        case 0x93: // SUB E
+            incPC();
+            cycleExecuted();
+            return sub(reg(Reg::E));
+        case 0x94: // SUB H
+            incPC();
+            cycleExecuted();
+            return sub(reg(Reg::H));
+        case 0x95: // SUB L
+            incPC();
+            cycleExecuted();
+            return sub(reg(Reg::L));
+        case 0x96: // SUB (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            readMem(reg(WReg::HL), tmp);
+            sub(tmp);
+            cycleExecuted();
+            break;
+        }
+        case 0x97: // SUB A
+            incPC();
+            cycleExecuted();
+            return sub(reg(Reg::A));
+
         case 0xA0: // AND B
             incPC();
             cycleExecuted();
@@ -1936,6 +2046,18 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
         case 0xD5: // PUSH DE
             return push(WReg::DE);
+        case 0xD6: // SUB n
+        {
+            // TODO: use imm?
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            builder.mov(tmp, cpu.readMem(pc++));
+            incPC();
+            sub(tmp);
+            cycleExecuted();
+            break;
+        }
 
         case 0xE0: // LDH (n),A
         {
