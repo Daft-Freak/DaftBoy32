@@ -190,6 +190,8 @@ public:
 
     void test(Reg8 dst, uint8_t imm);
 
+    void xor_(Reg8 dst, Reg8 src);
+
     uint8_t *getPtr() const {return ptr;}
 
     bool getError() const {return error;}
@@ -669,6 +671,17 @@ void X86Builder::test(Reg8 r, uint8_t imm)
     write(0xF6); // opcode, s = 0, w = 0
     encodeModRM(reg);
     write(imm); // imm
+}
+
+// reg -> reg, 8 bit
+void X86Builder::xor_(Reg8 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x30); // opcode, w = 0
+    encodeModRM(dstReg, srcReg);
 }
 
 void X86Builder::write(uint8_t b)
@@ -1248,6 +1261,17 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     const auto bitOr = [&builder](Reg8 r)
     {
         builder.or_(reg(Reg::A), r);
+
+        builder.mov(reg(Reg::F), 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
+
+        return true;
+    };
+
+    const auto bitXor = [&builder](Reg8 r)
+    {
+        builder.xor_(reg(Reg::A), r);
 
         builder.mov(reg(Reg::F), 0);
         builder.jcc(Condition::NE, 3); // if != 0
@@ -1950,7 +1974,40 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             incPC();
             cycleExecuted();
             return bitAnd(reg(Reg::A));
-
+        case 0xA8: // XOR B
+            incPC();
+            cycleExecuted();
+            return bitXor(reg(Reg::B));
+        case 0xA9: // XOR C
+            incPC();
+            cycleExecuted();
+            return bitXor(reg(Reg::C));
+        case 0xAA: // XOR D
+            incPC();
+            cycleExecuted();
+            return bitXor(reg(Reg::D));
+        case 0xAB: // XOR E
+            incPC();
+            cycleExecuted();
+            return bitXor(reg(Reg::E));
+        case 0xAC: // XOR H
+            incPC();
+            cycleExecuted();
+            return bitXor(reg(Reg::H));
+        case 0xAD: // XOR L
+            incPC();
+            cycleExecuted();
+            return bitXor(reg(Reg::L));
+        case 0xAE: // XOR (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            readMem(reg(WReg::HL), tmp);
+            bitXor(tmp);
+            cycleExecuted();
+            break;
+        }
         case 0xAF: // XOR A
             incPC();
             cycleExecuted();
@@ -2123,6 +2180,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
 
             writeMemImmAddr(addr, reg(Reg::A));
+            cycleExecuted();
+            break;
+        }
+
+        case 0xEE: // XOR n
+        {
+            // TODO: use imm?
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            builder.mov(tmp, cpu.readMem(pc++));
+            incPC();
+            bitXor(tmp);
             cycleExecuted();
             break;
         }
