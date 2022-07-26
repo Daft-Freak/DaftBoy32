@@ -1480,6 +1480,20 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             builder.or_(reg(Reg::F), DMGCPU::Flag_H | DMGCPU::Flag_N);
             break;
 
+        case 0x31: // LD SP,nn
+        {
+            incPC();
+            cycleExecuted();
+            uint16_t sp = cpu.readMem(pc++);
+            incPC();
+            cycleExecuted();
+            sp |= cpu.readMem(pc++) << 8;
+            incPC();
+            cycleExecuted();
+
+            builder.mov(Reg32::R9D, sp);
+            break;
+        }
         case 0x32: // LDD (HL),A
             incPC();
             cycleExecuted();
