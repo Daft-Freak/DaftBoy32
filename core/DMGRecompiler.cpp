@@ -181,6 +181,8 @@ public:
 
     void ret();
 
+    void rol(Reg8 r, uint8_t count);
+
     void setcc(Condition cc, Reg8 dst);
 
     void sub(Reg8 dst, Reg8 src);
@@ -612,6 +614,17 @@ void X86Builder::push(Reg64 r)
 void X86Builder::ret()
 {
     write(0xC3); // opcode
+}
+
+// reg, 8 bit
+void X86Builder::rol(Reg8 r, uint8_t count)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xC0); // opcode, w = 0
+    encodeModRM(reg);
+    write(count);
 }
 
 // -> reg
@@ -2227,16 +2240,44 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         callRestore(builder, dstReg);
     };
 
+    auto writeMem = [&builder, this](Reg16 addrReg, Reg8 dataReg)
+    {
+        callSave(builder);
+
+        builder.movzx(Reg32::ESI, addrReg);
+        builder.movzx(Reg32::EDX, dataReg);
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
+        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.call(Reg64::RAX); // do call
+
+        callRestore(builder);
+    };
+
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
     // early out for unhandled
-    if(opcode >= 0x80 || opcode < 0x40)
+    if((opcode >= 0x80 || opcode < 0x40) && (opcode < 0x30 || opcode >= 0x38))
     {
         printf("unhandled op in recompile CB%02X\n", opcode);
         return false;
     }
 
+    // helpers
+    const auto swap = [&builder](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+
+        builder.rol(r, 4); // v = (v >> 4) | (v << 4);
+
+        // flags
+        builder.mov(f, 0);
+        builder.cmp(r, 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+
+        return true;
+    };
     // shifts...
 
     const auto testBit = [&builder](Reg8 r, int bit)
@@ -2263,6 +2304,32 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
 
     switch(opcode)
     {
+        case 0x30: // SWAP B
+            return swap(reg(Reg::B));
+        case 0x31: // SWAP C
+            return swap(reg(Reg::C));
+        case 0x32: // SWAP D
+            return swap(reg(Reg::D));
+        case 0x33: // SWAP E
+            return swap(reg(Reg::E));
+        case 0x34: // SWAP H
+            return swap(reg(Reg::H));
+        case 0x35: // SWAP L
+            return swap(reg(Reg::L));
+        case 0x36: // SWAP (HL)
+        {
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+
+            swap(Reg8::R10B);
+
+            writeMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            break;
+        }
+        case 0x37: // SWAP A
+            return swap(reg(Reg::A));
+
         case 0x40: // BIT 0,B
             return testBit(reg(Reg::B), 0);
         case 0x41: // BIT 0,C
