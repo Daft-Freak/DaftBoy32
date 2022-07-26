@@ -139,6 +139,7 @@ public:
 
     void call(Reg64 r);
 
+    void cmp(Reg8 dst, Reg8 src);
     void cmp(Reg8 dst, int8_t imm);
 
     void dec(Reg16 r);
@@ -169,6 +170,8 @@ public:
     void push(Reg64 r);
 
     void ret();
+
+    void setcc(Condition cc, Reg8 dst);
 
     void sub(Reg64 dst, int8_t src);
 
@@ -270,7 +273,18 @@ void X86Builder::call(Reg64 r)
     encodeModRM(reg, 2);
 };
 
-// imm -> reg, 8 bit sign extended
+// reg -> reg, 8 bit
+void X86Builder::cmp(Reg8 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x38); // opcode, w = 0
+    encodeModRM(dstReg, srcReg);
+}
+
+// imm -> reg, 8 bit
 void X86Builder::cmp(Reg8 dst, int8_t imm)
 {
     auto dstReg = static_cast<int>(dst);
@@ -479,6 +493,16 @@ void X86Builder::push(Reg64 r)
     write(0x50 | (reg & 0x7)); // opcode
 };
 
+// -> reg
+void X86Builder::setcc(Condition cc, Reg8 dst)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x0F); // two byte opcode
+    write(0x90 | static_cast<int>(cc)); // opcode
+    encodeModRM(dstReg);
+}
 void X86Builder::ret()
 {
     write(0xC3); // opcode
@@ -1010,6 +1034,66 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
+    const auto cmp = [&builder, &incPC, &cycleExecuted](Reg8 b)
+    {
+        auto a = reg(Reg::A);
+        auto f = reg(Reg::F);
+
+        // TODO: all of this ...
+
+        // copy src/dst (using flags reg as temp)
+        if(b == Reg8::AH || b == Reg8::CH || b == Reg8::DH || b == Reg8::BH)
+        {
+            // legacy regs, extra copy
+            builder.mov(f, b);
+            builder.mov(Reg8::R10B, f);
+        }
+        else
+            builder.mov(Reg8::R10B, b);
+
+        // F was used as tmp, make a second copy (affects ADD (HL), ADD n)
+        if(b == f)
+            builder.mov(Reg8::R11B, b);
+
+        builder.mov(f, a);
+
+        // mask and do half cmp
+        builder.and_(f, 0xF);
+        builder.and_(Reg8::R10B, 0xF);
+        builder.cmp(f, Reg8::R10B);
+        builder.setcc(Condition::B, Reg8::R10B); // save carry
+
+        // put tmp reg back
+        if(b == f)
+            builder.mov(b, Reg8::R11B);
+
+        // TODO: ... can be avoided if we don't need the H flag
+
+        // do cmp
+        builder.cmp(a, b);
+
+        // flags
+        builder.mov(f, DMGCPU::Flag_N);
+
+        builder.setcc(Condition::E, Reg8::R11B); // save zero
+
+        // carry flag
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        // half carry flag
+        builder.and_(Reg8::R10B, Reg8::R10B); // TODO: TEST?
+        builder.jcc(Condition::E, 3); // carry not set
+        builder.or_(f, DMGCPU::Flag_H); // set H
+
+        // zero flag
+        builder.and_(Reg8::R11B, Reg8::R11B); // TODO: TEST?
+        builder.jcc(Condition::E, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+
+        return true;
+    };
+
     const auto inc16 = [&builder, &incPC, &cycleExecuted](WReg r)
     {
         incPC();
@@ -1412,6 +1496,45 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
             break;
 
+        case 0xB8: // CP B
+            incPC();
+            cycleExecuted();
+            return cmp(reg(Reg::B));
+        case 0xB9: // CP C
+            incPC();
+            cycleExecuted();
+            return cmp(reg(Reg::C));
+        case 0xBA: // CP D
+            incPC();
+            cycleExecuted();
+            return cmp(reg(Reg::D));
+        case 0xBB: // CP E
+            incPC();
+            cycleExecuted();
+            return cmp(reg(Reg::E));
+        case 0xBC: // CP H
+            incPC();
+            cycleExecuted();
+            return cmp(reg(Reg::H));
+        case 0xBD: // CP L
+            incPC();
+            cycleExecuted();
+            return cmp(reg(Reg::L));
+        case 0xBE: // CP (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            readMem(reg(WReg::HL), tmp);
+            cmp(tmp);
+            cycleExecuted();
+            break;
+        }
+        case 0xBF: // CP A
+            incPC();
+            cycleExecuted();
+            return cmp(reg(Reg::A));
+
         case 0xC1: // POP BC
             return pop(WReg::BC);
 
@@ -1510,6 +1633,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
 
             readMemImmAddr(addr, reg(Reg::A));
+            cycleExecuted();
+            break;
+        }
+
+        case 0xFE: // CP n
+        {
+            // TODO: use imm?
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            builder.mov(tmp, cpu.readMem(pc++));
+            incPC();
+            cmp(tmp);
             cycleExecuted();
             break;
         }
