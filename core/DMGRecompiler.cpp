@@ -639,7 +639,7 @@ void X86Builder::encodeREX(bool w, int reg, int index, int base)
                | (base > 7 ? REX_B : 0));
 }
 
-// helpers
+// reg helpers
 static const Reg8 regMap8[]
 {
     Reg8::AH, // A
@@ -669,6 +669,62 @@ inline Reg16 reg(DMGCPU::WReg r)
 {
     return regMap16[static_cast<int>(r)];
 };
+
+// call helpers
+static void callSave(X86Builder &builder)
+{
+    builder.push(Reg64::RAX);
+    builder.push(Reg64::RCX);
+    builder.push(Reg64::RDX);
+    builder.push(Reg64::R8);
+    builder.push(Reg64::R9);
+    builder.push(Reg64::RSI);
+    builder.push(Reg64::RDI);
+    builder.sub(Reg64::RSP, 8); // align stack
+}
+
+static void callRestore(X86Builder &builder)
+{
+    builder.add(Reg64::RSP, 8); // alignment
+    builder.pop(Reg64::RDI);
+    builder.pop(Reg64::RSI);
+    builder.pop(Reg64::R9);
+    builder.pop(Reg64::R8);
+    builder.pop(Reg64::RDX);
+    builder.pop(Reg64::RCX);
+    builder.pop(Reg64::RAX);
+}
+
+static void callRestore(X86Builder &builder, Reg8 dstReg)
+{
+    builder.add(Reg64::RSP, 8); // alignment
+    builder.pop(Reg64::RDI);
+    builder.pop(Reg64::RSI);
+    builder.pop(Reg64::R9);
+    builder.pop(Reg64::R8);
+    builder.pop(Reg64::RDX);
+    builder.pop(Reg64::RCX);
+
+    // mov ret val (if not going to RAX)
+    if(dstReg != Reg8::AL && dstReg != Reg8::AH)
+    {
+        builder.mov(dstReg, Reg8::AL);
+        builder.pop(Reg64::RAX);
+    }
+    else if(dstReg == Reg8::AH) // TODO: having a worse case for A is not great
+    {
+        builder.mov(Reg8::AH, Reg8::AL);
+        builder.pop(Reg64::R10);
+        builder.mov(Reg8::AL, Reg8::R10B); // restore low byte
+    }
+    else // ... though this is the worst case... (AL == F, so unlikely)
+    {
+        // EAX = EAX + (R10D & 0xFF00)
+        builder.pop(Reg64::R10);
+        builder.and_(Reg32::R10D, 0xFF00);
+        builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
+    }
+}
 
 DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
 {
@@ -830,100 +886,45 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.lea(Reg32::R8D, Reg64::R8, 1);
     };
 
-    const auto callSave = [&builder]()
-    {
-        builder.push(Reg64::RAX);
-        builder.push(Reg64::RCX);
-        builder.push(Reg64::RDX);
-        builder.push(Reg64::R8);
-        builder.push(Reg64::R9);
-        builder.push(Reg64::RSI);
-        builder.push(Reg64::RDI);
-        builder.sub(Reg64::RSP, 8); // align stack
-    };
-
-    const auto callRestore = [&builder]()
-    {
-        builder.add(Reg64::RSP, 8); // alignment
-        builder.pop(Reg64::RDI);
-        builder.pop(Reg64::RSI);
-        builder.pop(Reg64::R9);
-        builder.pop(Reg64::R8);
-        builder.pop(Reg64::RDX);
-        builder.pop(Reg64::RCX);
-        builder.pop(Reg64::RAX);
-    };
-
-    const auto callRestoreRet8 = [&builder](Reg8 dstReg)
-    {
-        builder.add(Reg64::RSP, 8); // alignment
-        builder.pop(Reg64::RDI);
-        builder.pop(Reg64::RSI);
-        builder.pop(Reg64::R9);
-        builder.pop(Reg64::R8);
-        builder.pop(Reg64::RDX);
-        builder.pop(Reg64::RCX);
-
-        // mov ret val (if not going to RAX)
-        if(dstReg != Reg8::AL && dstReg != Reg8::AH)
-        {
-            builder.mov(dstReg, Reg8::AL);
-            builder.pop(Reg64::RAX);
-        }
-        else if(dstReg == Reg8::AH) // TODO: having a worse case for A is not great
-        {
-            builder.mov(Reg8::AH, Reg8::AL);
-            builder.pop(Reg64::R10);
-            builder.mov(Reg8::AL, Reg8::R10B); // restore low byte
-        }
-        else // ... though this is the worst case... (AL == F, so unlikely)
-        {
-            // EAX = EAX + (R10D & 0xFF00)
-            builder.pop(Reg64::R10);
-            builder.and_(Reg32::R10D, 0xFF00);
-            builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
-        }
-    };
-
     // TODO: shared trampolines?
-    auto cycleExecuted = [&builder, &callSave, &callRestore, this]()
+    auto cycleExecuted = [&builder, this]()
     {
-        callSave();
+        callSave(builder);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestore();
+        callRestore(builder);
     };
 
-    auto readMem = [&builder, &callSave, &callRestoreRet8, this](Reg16 addrReg, Reg8 dstReg)
+    auto readMem = [&builder, this](Reg16 addrReg, Reg8 dstReg)
     {
-        callSave();
+        callSave(builder);
 
         builder.movzx(Reg32::ESI, addrReg);
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestoreRet8(dstReg);
+        callRestore(builder, dstReg);
     };
 
-    auto readMemImmAddr = [&builder, &callSave, &callRestoreRet8, this](uint16_t addr, Reg8 dstReg)
+    auto readMemImmAddr = [&builder, this](uint16_t addr, Reg8 dstReg)
     {
-        callSave();
+        callSave(builder);
 
         builder.mov(Reg32::ESI, addr);
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestoreRet8(dstReg);
+        callRestore(builder, dstReg);
     };
 
-    auto writeMem = [&builder, &callSave, &callRestore, this](Reg16 addrReg, Reg8 dataReg)
+    auto writeMem = [&builder, this](Reg16 addrReg, Reg8 dataReg)
     {
-        callSave();
+        callSave(builder);
 
         builder.movzx(Reg32::ESI, addrReg);
         builder.movzx(Reg32::EDX, dataReg);
@@ -931,12 +932,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestore();
+        callRestore(builder);
     };
 
-    auto writeMemImmAddr = [&builder, &callSave, &callRestore, this](uint16_t addr, Reg8 dataReg)
+    auto writeMemImmAddr = [&builder, this](uint16_t addr, Reg8 dataReg)
     {
-        callSave();
+        callSave(builder);
 
         builder.mov(Reg32::ESI, addr);
         builder.movzx(Reg32::EDX, dataReg);
@@ -944,7 +945,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestore();
+        callRestore(builder);
     };
 
     using Reg = DMGCPU::Reg;
