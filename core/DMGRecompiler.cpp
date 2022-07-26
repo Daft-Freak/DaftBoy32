@@ -170,6 +170,7 @@ public:
     void movzxW(Reg32 r, Reg64 base, int disp = 0);
 
     void or_(Reg8 dst, Reg8 src);
+    void or_(Reg32 dst, uint32_t imm);
     void or_(Reg8 dst, uint8_t imm);
 
     void pop(Reg64 r);
@@ -539,7 +540,7 @@ void X86Builder::movzxW(Reg32 r, Reg64 base, int disp)
     write(0x0F); // two byte opcode
     write(0xB7); // opcode, w = 1
     encodeModRM(reg, baseReg, disp);
-};
+}
 
 // reg -> reg, 8 bit
 void X86Builder::or_(Reg8 dst, Reg8 src)
@@ -550,7 +551,23 @@ void X86Builder::or_(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x08); // opcode, w = 0
     encodeModRM(dstReg, srcReg);
-};
+}
+
+// imm -> reg
+void X86Builder::or_(Reg32 dst, uint32_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x81); // opcode, s = 0, w = 1
+    encodeModRM(dstReg, 1);
+
+    // immediate
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
+}
 
 // imm -> reg, 8 bit
 void X86Builder::or_(Reg8 dst, uint8_t imm)
@@ -561,7 +578,7 @@ void X86Builder::or_(Reg8 dst, uint8_t imm)
     write(0x80); // opcode, s = 0, w = 0
     encodeModRM(dstReg, 1);
     write(imm); // imm
-};
+}
 
 void X86Builder::pop(Reg64 r)
 {
@@ -569,7 +586,7 @@ void X86Builder::pop(Reg64 r)
 
     encodeREX(false, 0, 0, reg);
     write(0x58 | (reg & 0x7)); // opcode
-};
+}
 
 void X86Builder::push(Reg64 r)
 {
@@ -1901,6 +1918,16 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         }
         case 0xE1: // POP HL
             return pop(WReg::HL);
+        case 0xE2: // LDH (C),A
+        {
+            incPC();
+            cycleExecuted();
+            builder.movzx(Reg32::R10D, reg(Reg::C));
+            builder.or_(Reg32::R10D, 0xFF00);
+            writeMem(Reg16::R10W, reg(Reg::A));
+            cycleExecuted();
+            break;
+        }
 
         case 0xE5: // PUSH HL
             return push(WReg::HL);
@@ -1946,6 +1973,16 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         }
         case 0xF1: // POP AF
             return pop(WReg::AF);
+        case 0xF2: // LDH A,(C)
+        {
+            incPC();
+            cycleExecuted();
+            builder.movzx(Reg32::R10D, reg(Reg::C));
+            builder.or_(Reg32::R10D, 0xFF00);
+            readMem(Reg16::R10W, reg(Reg::A));
+            cycleExecuted();
+            break;
+        }
 
         case 0xF5: // PUSH AF
             return push(WReg::AF);
