@@ -169,6 +169,7 @@ public:
     void movzx(Reg32 dst, Reg8 src);
     void movzxW(Reg32 r, Reg64 base, int disp = 0);
 
+    void or_(Reg8 dst, Reg8 src);
     void or_(Reg8 dst, uint8_t imm);
 
     void pop(Reg64 r);
@@ -538,6 +539,17 @@ void X86Builder::movzxW(Reg32 r, Reg64 base, int disp)
     write(0x0F); // two byte opcode
     write(0xB7); // opcode, w = 1
     encodeModRM(reg, baseReg, disp);
+};
+
+// reg -> reg, 8 bit
+void X86Builder::or_(Reg8 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x08); // opcode, w = 0
+    encodeModRM(dstReg, srcReg);
 };
 
 // imm -> reg, 8 bit
@@ -1116,6 +1128,17 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.mov(reg(Reg::F), DMGCPU::Flag_H); // not zero
         builder.jmp(2);
         builder.mov(reg(Reg::F), DMGCPU::Flag_H | DMGCPU::Flag_Z); // zero
+
+        return true;
+    };
+
+    const auto bitOr = [&builder](Reg8 r)
+    {
+        builder.or_(reg(Reg::A), r);
+
+        builder.mov(reg(Reg::F), 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
 
         return true;
     };
@@ -1761,7 +1784,44 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
             break;
-
+        case 0xB0: // OR B
+            incPC();
+            cycleExecuted();
+            return bitOr(reg(Reg::B));
+        case 0xB1: // OR C
+            incPC();
+            cycleExecuted();
+            return bitOr(reg(Reg::C));
+        case 0xB2: // OR D
+            incPC();
+            cycleExecuted();
+            return bitOr(reg(Reg::D));
+        case 0xB3: // OR E
+            incPC();
+            cycleExecuted();
+            return bitOr(reg(Reg::E));
+        case 0xB4: // OR H
+            incPC();
+            cycleExecuted();
+            return bitOr(reg(Reg::H));
+        case 0xB5: // OR L
+            incPC();
+            cycleExecuted();
+            return bitOr(reg(Reg::L));
+        case 0xB6: // OR (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            readMem(reg(WReg::HL), tmp);
+            bitOr(tmp);
+            cycleExecuted();
+            break;
+        }
+        case 0xB7: // OR A
+            incPC();
+            cycleExecuted();
+            return bitOr(reg(Reg::A));
         case 0xB8: // CP B
             incPC();
             cycleExecuted();
@@ -1889,6 +1949,18 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
         case 0xF5: // PUSH AF
             return push(WReg::AF);
+        case 0xF6: // OR n
+        {
+            // TODO: use imm?
+            incPC();
+            cycleExecuted();
+            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
+            builder.mov(tmp, cpu.readMem(pc++));
+            incPC();
+            bitOr(tmp);
+            cycleExecuted();
+            break;
+        }
 
         case 0xFA: // LD A,(nn)
         {
