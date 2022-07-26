@@ -143,8 +143,10 @@ public:
     void cmp(Reg8 dst, int8_t imm);
 
     void dec(Reg16 r);
+    void dec(Reg8 r);
 
     void inc(Reg16 r);
+    void inc(Reg8 r);
 
     void jcc(Condition cc, int8_t disp);
     void jmp(int8_t disp);
@@ -306,6 +308,16 @@ void X86Builder::dec(Reg16 r)
     encodeModRM(reg, 1);
 }
 
+// reg, 8 bit
+void X86Builder::dec(Reg8 r)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xFE); // opcode, w = 0
+    encodeModRM(reg, 1);
+}
+
 // reg, 16 bit
 void X86Builder::inc(Reg16 r)
 {
@@ -314,6 +326,16 @@ void X86Builder::inc(Reg16 r)
     write(0x66); // 16 bit override
     encodeREX(false, 0, 0, reg);
     write(0xFF); // opcode, w = 1
+    encodeModRM(reg, 0);
+}
+
+// reg, 8 bit
+void X86Builder::inc(Reg8 r)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xFE); // opcode, w = 0
     encodeModRM(reg, 0);
 }
 
@@ -503,6 +525,7 @@ void X86Builder::setcc(Condition cc, Reg8 dst)
     write(0x90 | static_cast<int>(cc)); // opcode
     encodeModRM(dstReg);
 }
+
 void X86Builder::ret()
 {
     write(0xC3); // opcode
@@ -1094,6 +1117,53 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
+    const auto inc = [&builder, &incPC, &cycleExecuted](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+        builder.and_(f, DMGCPU::Flag_C); // preserve C
+
+        // H flag
+        builder.mov(Reg8::R10B, f); // save F
+
+        builder.mov(f, r); // & 0xF == 0xF (use F as tmp)
+        builder.and_(f, 0xF);
+        builder.cmp(f, 0xF);
+        builder.mov(f, Reg8::R10B); // restore F
+        builder.jcc(Condition::NE, 3); // != 0xF
+        builder.or_(f, DMGCPU::Flag_H); // set H
+
+        // do inc and set Z
+        builder.inc(r);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+
+        return true;
+    };
+
+    const auto dec = [&builder, &incPC, &cycleExecuted](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+        builder.and_(f, DMGCPU::Flag_C); // preserve C
+
+        // H flag
+        builder.mov(Reg8::R10B, f); // save F
+
+        builder.mov(f, r); // & 0xF == 0 (use F as tmp)
+        builder.and_(f, 0xF);
+        builder.mov(f, Reg8::R10B); // restore F
+        builder.jcc(Condition::NE, 3); // != 0x0
+        builder.or_(f, DMGCPU::Flag_H); // set H
+
+        builder.or_(f, DMGCPU::Flag_N); // set N
+
+        // do dec and set Z
+        builder.dec(r);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+
+        return true;
+    };
+
     const auto inc16 = [&builder, &incPC, &cycleExecuted](WReg r)
     {
         incPC();
@@ -1126,7 +1196,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         case 0x03: // INC BC
             return inc16(WReg::BC);
-
+        case 0x04: // INC B
+            incPC();
+            cycleExecuted();
+            return inc(reg(Reg::B));
+        case 0x05: // DEC B
+            incPC();
+            cycleExecuted();
+            return dec(reg(Reg::B));
         case 0x06: // LD B,n
             return load8(Reg::B);
 
@@ -1138,7 +1215,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         case 0x0B: // DEC BC
             return dec16(WReg::BC);
-
+        case 0x0C: // INC C
+            incPC();
+            cycleExecuted();
+            return inc(reg(Reg::C));
+        case 0x0D: // DEC C
+            incPC();
+            cycleExecuted();
+            return dec(reg(Reg::C));
         case 0x0E: // LD C,n
             return load8(Reg::C);
 
@@ -1152,7 +1236,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         case 0x13: // INC DE
             return inc16(WReg::DE);
-
+        case 0x14: // INC D
+            incPC();
+            cycleExecuted();
+            return inc(reg(Reg::D));
+        case 0x15: // DEC D
+            incPC();
+            cycleExecuted();
+            return dec(reg(Reg::D));
         case 0x16: // LD D,n
             return load8(Reg::D);
 
@@ -1164,7 +1255,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         case 0x1B: // DEC DE
             return dec16(WReg::DE);
-
+        case 0x1C: // INC E
+            incPC();
+            cycleExecuted();
+            return inc(reg(Reg::E));
+        case 0x1D: // DEC E
+            incPC();
+            cycleExecuted();
+            return dec(reg(Reg::E));
         case 0x1E: // LD E,n
             return load8(Reg::E);
 
@@ -1179,7 +1277,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         case 0x23: // INC HL
             return inc16(WReg::HL);
-
+        case 0x24: // INC H
+            incPC();
+            cycleExecuted();
+            return inc(reg(Reg::H));
+        case 0x25: // DEC H
+            incPC();
+            cycleExecuted();
+            return dec(reg(Reg::H));
         case 0x26: // LD H,n
             return load8(Reg::H);
 
@@ -1192,7 +1297,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         case 0x2B: // DEC HL
             return dec16(WReg::HL);
-
+        case 0x2C: // INC L
+            incPC();
+            cycleExecuted();
+            return inc(reg(Reg::L));
+        case 0x2D: // DEC L
+            incPC();
+            cycleExecuted();
+            return dec(reg(Reg::L));
         case 0x2E: // LD L,n
             return load8(Reg::L);
 
@@ -1204,6 +1316,38 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             break;
 
+        case 0x34: // INC (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = Reg8::R11B;
+
+            readMem(reg(WReg::HL), tmp);
+            cycleExecuted();
+
+            inc(tmp);
+
+            writeMem(reg(WReg::HL), tmp);
+            cycleExecuted();            
+
+            break;
+        }
+        case 0x35: // DEC (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = Reg8::R11B;
+
+            readMem(reg(WReg::HL), tmp);
+            cycleExecuted();
+
+            dec(tmp);
+
+            writeMem(reg(WReg::HL), tmp);
+            cycleExecuted();            
+
+            break;
+        }
         case 0x36: // LD (HL),n
         {
             incPC();
@@ -1225,6 +1369,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             break;
 
+        case 0x3C: // INC A
+            incPC();
+            cycleExecuted();
+            return inc(reg(Reg::A));
+        case 0x3D: // DEC A
+            incPC();
+            cycleExecuted();
+            return dec(reg(Reg::A));
         case 0x3E: // LD A,n
             return load8(Reg::A);
 
