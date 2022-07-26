@@ -130,16 +130,19 @@ public:
     X86Builder(uint8_t *ptr, uint8_t *endPtr) : ptr(ptr), endPtr(endPtr){}
 
     void add(Reg32 dst, Reg32 src);
+    void add(Reg16 dst, Reg16 src);
     void add(Reg8 dst, Reg8 src);
     void add(Reg64 dst, int8_t src);
 
     void and_(Reg8 dst, Reg8 src);
+    void and_(Reg16 dst, Reg16 src);
     void and_(Reg32 dst, uint32_t imm);
     void and_(Reg8 dst, uint8_t imm);
 
     void call(Reg64 r);
 
     void cmp(Reg8 dst, Reg8 src);
+    void cmp(Reg32 dst, uint32_t imm);
     void cmp(Reg8 dst, int8_t imm);
 
     void dec(Reg16 r);
@@ -154,6 +157,7 @@ public:
     void lea(Reg32 r, Reg64 base, int disp = 0);
 
     void mov(Reg64 dst, Reg64 src);
+    void mov(Reg32 dst, Reg32 src);
     void mov(Reg8 dst, Reg8 src);
     void mov(Reg32 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg16 r, Reg64 base, bool isStore = false, int disp = 0);
@@ -200,8 +204,15 @@ void X86Builder::add(Reg32 dst, Reg32 src)
     auto srcReg = static_cast<int>(src);
 
     encodeREX(false, srcReg, 0, dstReg);
-    write(0x01); // opcode
+    write(0x01); // opcode, w = 1
     encodeModRM(dstReg, srcReg);
+};
+
+// reg -> reg, 16 bit
+void X86Builder::add(Reg16 dst, Reg16 src)
+{
+    write(0x66); // 16 bit override
+    add(static_cast<Reg32>(dst), static_cast<Reg32>(src));
 };
 
 // reg -> reg, 8bit
@@ -235,6 +246,19 @@ void X86Builder::and_(Reg8 dst, Reg8 src)
 
     encodeREX(false, srcReg, 0, dstReg);
     write(0x20); // opcode, w = 0
+    encodeModRM(dstReg, srcReg);
+};
+
+// reg -> reg, 16 bit
+void X86Builder::and_(Reg16 dst, Reg16 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    write(0x66); // 16 bit override
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x21); // opcode, w = 1
     encodeModRM(dstReg, srcReg);
 };
 
@@ -285,6 +309,21 @@ void X86Builder::cmp(Reg8 dst, Reg8 src)
     write(0x38); // opcode, w = 0
     encodeModRM(dstReg, srcReg);
 }
+
+// imm -> reg
+void X86Builder::cmp(Reg32 dst, uint32_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x81); // opcode, w = 0, s = 0
+    encodeModRM(dstReg, 7);
+
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
+};
 
 // imm -> reg, 8 bit
 void X86Builder::cmp(Reg8 dst, int8_t imm)
@@ -359,9 +398,9 @@ void X86Builder::lea(Reg32 r, Reg64 base, int disp)
     encodeREX(false, reg, 0, baseReg);
     write(0x8D); // opcode
     encodeModRM(reg, baseReg, disp);
-};
+}
 
-// reg -> reg
+// reg -> reg, 64 bit
 void X86Builder::mov(Reg64 dst, Reg64 src)
 {
     auto dstReg = static_cast<int>(dst);
@@ -370,7 +409,18 @@ void X86Builder::mov(Reg64 dst, Reg64 src)
     encodeREX(true, srcReg, 0, dstReg);
     write(0x89); // opcode, w = 1
     encodeModRM(dstReg, srcReg);
-};
+}
+
+// reg -> reg
+void X86Builder::mov(Reg32 dst, Reg32 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x89); // opcode, w = 1
+    encodeModRM(dstReg, srcReg);
+}
 
 // reg -> reg, 8bit
 void X86Builder::mov(Reg8 dst, Reg8 src)
@@ -381,7 +431,7 @@ void X86Builder::mov(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x88); // opcode, w = 0
     encodeModRM(dstReg, srcReg);
-};
+}
 
 // reg <-> mem
 void X86Builder::mov(Reg32 r, Reg64 base, bool isStore, int disp)
@@ -397,7 +447,7 @@ void X86Builder::mov(Reg32 r, Reg64 base, bool isStore, int disp)
         write(0x8B); // opcode, w = 1
 
     encodeModRM(reg, baseReg, disp);
-};
+}
 
 // reg <-> mem, 16 bit
 void X86Builder::mov(Reg16 r, Reg64 base, bool isStore, int disp)
@@ -1164,6 +1214,45 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
+    const auto add16 = [&builder, &incPC, &cycleExecuted](Reg16 b)
+    {
+        auto a = reg(WReg::HL);
+        auto f = reg(Reg::F);
+
+        // TODO: all of this ...
+
+        // copy src/dst
+        builder.mov(Reg32::R10D, static_cast<Reg32>(a));
+        builder.mov(Reg32::R11D, static_cast<Reg32>(b));
+
+        // mask and do "half"(3/4?) add
+        builder.and_(Reg32::R10D, 0xFFF);
+        builder.and_(Reg32::R11D, 0xFFF);
+        builder.add(Reg32::R10D, Reg32::R11D);
+
+        // TODO: ... can be avoided if we don't need the H flag
+
+        // preserve Z flag
+        builder.and_(f, DMGCPU::Flag_Z);
+
+        // do add
+        builder.add(a, b);
+
+        // carry flag
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        // half carry flag
+        // r10d > 0xFFF ? H : 0
+        builder.cmp(Reg32::R10D, 0xFFF);
+        builder.jcc(Condition::BE, 3); // <= 0xFFF
+        builder.or_(f, DMGCPU::Flag_H); // set H
+
+        cycleExecuted();
+
+        return true;
+    };
+
     const auto inc16 = [&builder, &incPC, &cycleExecuted](WReg r)
     {
         incPC();
@@ -1207,6 +1296,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         case 0x06: // LD B,n
             return load8(Reg::B);
 
+        case 0x09: // ADD HL,BC
+            incPC();
+            cycleExecuted();
+            return add16(reg(WReg::BC));
         case 0x0A: // LD A,(BC)
             incPC();
             cycleExecuted();
@@ -1247,6 +1340,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         case 0x16: // LD D,n
             return load8(Reg::D);
 
+        case 0x19: // ADD HL,DE
+            incPC();
+            cycleExecuted();
+            return add16(reg(WReg::DE));
         case 0x1A: // LD A,(DE)
             incPC();
             cycleExecuted();
@@ -1288,6 +1385,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         case 0x26: // LD H,n
             return load8(Reg::H);
 
+        case 0x29: // ADD HL,HL
+            incPC();
+            cycleExecuted();
+            return add16(reg(WReg::HL));
         case 0x2A: // LDI A,(HL)
             incPC();
             cycleExecuted();
