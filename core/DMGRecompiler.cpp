@@ -181,6 +181,8 @@ public:
 
     void sub(Reg64 dst, int8_t src);
 
+    void test(Reg8 dst, uint8_t imm);
+
     uint8_t *getPtr() const {return ptr;}
 
     bool getError() const {return error;}
@@ -563,7 +565,12 @@ void X86Builder::push(Reg64 r)
 
     encodeREX(false, 0, 0, reg);
     write(0x50 | (reg & 0x7)); // opcode
-};
+}
+
+void X86Builder::ret()
+{
+    write(0xC3); // opcode
+}
 
 // -> reg
 void X86Builder::setcc(Condition cc, Reg8 dst)
@@ -576,11 +583,6 @@ void X86Builder::setcc(Condition cc, Reg8 dst)
     encodeModRM(dstReg);
 }
 
-void X86Builder::ret()
-{
-    write(0xC3); // opcode
-};
-
 // imm -> reg, 8 bit sign extended
 void X86Builder::sub(Reg64 dst, int8_t src)
 {
@@ -590,7 +592,18 @@ void X86Builder::sub(Reg64 dst, int8_t src)
     write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dstReg, 5);
     write(src);
-};
+}
+
+// imm -> reg, 8 bit
+void X86Builder::test(Reg8 r, uint8_t imm)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xF6); // opcode, s = 0, w = 0
+    encodeModRM(reg);
+    write(imm); // imm
+}
 
 void X86Builder::write(uint8_t b)
 {
@@ -1807,6 +1820,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         }
 
+        case 0xCB:
+            return recompileExInstruction(pc, builder);
+
         case 0xD1: // POP DE
             return pop(WReg::DE);
 
@@ -1907,6 +1923,228 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         default:
             printf("unhandled op in recompile %02X\n", opcode);
             return false;
+    }
+
+    return true;
+}
+
+bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
+{
+    auto &mem = cpu.getMem();
+    uint8_t opcode = mem.read(pc++);
+
+    // FIXME: copy/paste
+
+    // TODO: should be able to avoid this
+    const auto incPC = [&builder]()
+    {
+        builder.lea(Reg32::R8D, Reg64::R8, 1);
+    };
+
+    // TODO: shared trampolines?
+    auto cycleExecuted = [&builder, this]()
+    {
+        callSave(builder);
+
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
+        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.call(Reg64::RAX); // do call
+
+        callRestore(builder);
+    };
+
+    auto readMem = [&builder, this](Reg16 addrReg, Reg8 dstReg)
+    {
+        callSave(builder);
+
+        builder.movzx(Reg32::ESI, addrReg);
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
+        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.call(Reg64::RAX); // do call
+
+        callRestore(builder, dstReg);
+    };
+
+    using Reg = DMGCPU::Reg;
+    using WReg = DMGCPU::WReg;
+
+    // early out for unhandled
+    if(opcode >= 0x80 || opcode < 0x40)
+    {
+        printf("unhandled op in recompile CB%02X\n", opcode);
+        return false;
+    }
+
+    // shifts...
+
+    const auto testBit = [&builder](Reg8 r, int bit)
+    {
+        auto f = reg(Reg::F);
+
+        builder.and_(f, DMGCPU::Flag_C); // preserve C
+        builder.or_(f, DMGCPU::Flag_H); // set H
+
+        builder.test(r, 1 << bit);
+
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+
+        return true;
+    };
+
+    // set/reset
+
+    incPC();
+    cycleExecuted();
+    incPC();
+    cycleExecuted();
+
+    switch(opcode)
+    {
+        case 0x40: // BIT 0,B
+            return testBit(reg(Reg::B), 0);
+        case 0x41: // BIT 0,C
+            return testBit(reg(Reg::C), 0);
+        case 0x42: // BIT 0,D
+            return testBit(reg(Reg::D), 0);
+        case 0x43: // BIT 0,E
+            return testBit(reg(Reg::E), 0);
+        case 0x44: // BIT 0,H
+            return testBit(reg(Reg::H), 0);
+        case 0x45: // BIT 0,L
+            return testBit(reg(Reg::L), 0);
+        case 0x46: // BIT 0,(HL)
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            return testBit(Reg8::R10B, 0);
+        case 0x47: // BIT 0,A
+            return testBit(reg(Reg::A), 0);
+        case 0x48: // BIT 1,B
+            return testBit(reg(Reg::B), 1);
+        case 0x49: // BIT 1,C
+            return testBit(reg(Reg::C), 1);
+        case 0x4A: // BIT 1,D
+            return testBit(reg(Reg::D), 1);
+        case 0x4B: // BIT 1,E
+            return testBit(reg(Reg::E), 1);
+        case 0x4C: // BIT 1,H
+            return testBit(reg(Reg::H), 1);
+        case 0x4D: // BIT 1,L
+            return testBit(reg(Reg::L), 1);
+        case 0x4E: // BIT 1,(HL)
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            return testBit(Reg8::R10B, 1);
+        case 0x4F: // BIT 1,A
+            return testBit(reg(Reg::A), 1);
+        case 0x50: // BIT 2,B
+            return testBit(reg(Reg::B), 2);
+        case 0x51: // BIT 2,C
+            return testBit(reg(Reg::C), 2);
+        case 0x52: // BIT 2,D
+            return testBit(reg(Reg::D), 2);
+        case 0x53: // BIT 2,E
+            return testBit(reg(Reg::E), 2);
+        case 0x54: // BIT 2,H
+            return testBit(reg(Reg::H), 2);
+        case 0x55: // BIT 2,L
+            return testBit(reg(Reg::L), 2);
+        case 0x56: // BIT 2,(HL)
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            return testBit(Reg8::R10B, 2);
+        case 0x57: // BIT 2,A
+            return testBit(reg(Reg::A), 2);
+        case 0x58: // BIT 3,B
+            return testBit(reg(Reg::B), 3);
+        case 0x59: // BIT 3,C
+            return testBit(reg(Reg::C), 3);
+        case 0x5A: // BIT 3,D
+            return testBit(reg(Reg::D), 3);
+        case 0x5B: // BIT 3,E
+            return testBit(reg(Reg::E), 3);
+        case 0x5C: // BIT 3,H
+            return testBit(reg(Reg::H), 3);
+        case 0x5D: // BIT 3,L
+            return testBit(reg(Reg::L), 3);
+        case 0x5E: // BIT 3,(HL)
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            return testBit(Reg8::R10B, 3);
+        case 0x5F: // BIT 3,A
+            return testBit(reg(Reg::A), 3);
+        case 0x60: // BIT 4,B
+            return testBit(reg(Reg::B), 4);
+        case 0x61: // BIT 4,C
+            return testBit(reg(Reg::C), 4);
+        case 0x62: // BIT 4,D
+            return testBit(reg(Reg::D), 4);
+        case 0x63: // BIT 4,E
+            return testBit(reg(Reg::E), 4);
+        case 0x64: // BIT 4,H
+            return testBit(reg(Reg::H), 4);
+        case 0x65: // BIT 4,L
+            return testBit(reg(Reg::L), 4);
+        case 0x66: // BIT 4,(HL)
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            return testBit(Reg8::R10B, 4);
+        case 0x67: // BIT 4,A
+            return testBit(reg(Reg::A), 4);
+        case 0x68: // BIT 5,B
+            return testBit(reg(Reg::B), 5);
+        case 0x69: // BIT 5,C
+            return testBit(reg(Reg::C), 5);
+        case 0x6A: // BIT 5,D
+            return testBit(reg(Reg::D), 5);
+        case 0x6B: // BIT 5,E
+            return testBit(reg(Reg::E), 5);
+        case 0x6C: // BIT 5,H
+            return testBit(reg(Reg::H), 5);
+        case 0x6D: // BIT 5,L
+            return testBit(reg(Reg::L), 5);
+        case 0x6E: // BIT 5,(HL)
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            return testBit(Reg8::R10B, 5);
+        case 0x6F: // BIT 5,A
+            return testBit(reg(Reg::A), 5);
+        case 0x70: // BIT 6,B
+            return testBit(reg(Reg::B), 6);
+        case 0x71: // BIT 6,C
+            return testBit(reg(Reg::C), 6);
+        case 0x72: // BIT 6,D
+            return testBit(reg(Reg::D), 6);
+        case 0x73: // BIT 6,E
+            return testBit(reg(Reg::E), 6);
+        case 0x74: // BIT 6,H
+            return testBit(reg(Reg::H), 6);
+        case 0x75: // BIT 6,L
+            return testBit(reg(Reg::L), 6);
+        case 0x76: // BIT 6,(HL)
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            return testBit(Reg8::R10B, 6);
+        case 0x77: // BIT 6,A
+            return testBit(reg(Reg::A), 6);
+        case 0x78: // BIT 7,B
+            return testBit(reg(Reg::B), 7);
+        case 0x79: // BIT 7,C
+            return testBit(reg(Reg::C), 7);
+        case 0x7A: // BIT 7,D
+            return testBit(reg(Reg::D), 7);
+        case 0x7B: // BIT 7,E
+            return testBit(reg(Reg::E), 7);
+        case 0x7C: // BIT 7,H
+            return testBit(reg(Reg::H), 7);
+        case 0x7D: // BIT 7,L
+            return testBit(reg(Reg::L), 7);
+        case 0x7E: // BIT 7,(HL)
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            return testBit(Reg8::R10B, 7);
+        case 0x7F: // BIT 7,A
+            return testBit(reg(Reg::A), 7);
     }
 
     return true;
