@@ -1875,7 +1875,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             builder.dec(reg(WReg::HL));
             cycleExecuted();
             break;
-
+        case 0x33: // INC SP
+            incPC();
+            cycleExecuted();
+            builder.inc(Reg16::R9W);
+            cycleExecuted();
+            break;
         case 0x34: // INC (HL)
         {
             incPC();
@@ -1930,6 +1935,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         }
 
+        case 0x39: // ADD HL,SP
+            incPC();
+            cycleExecuted();
+            return add16(Reg16::R9W);
         case 0x3A: // LDD A,(HL)
             incPC();
             cycleExecuted();
@@ -1937,7 +1946,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             builder.dec(reg(WReg::HL));
             cycleExecuted();
             break;
-
+        case 0x3B: // DEC SP
+            incPC();
+            cycleExecuted();
+            builder.dec(Reg16::R9W);
+            cycleExecuted();
+            break;
         case 0x3C: // INC A
             incPC();
             cycleExecuted();
@@ -2620,6 +2634,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         }
 
+        case 0xF9: // LD SP,HL
+            incPC();
+            cycleExecuted();
+            builder.mov(Reg32::R9D, static_cast<Reg32>(reg(WReg::HL)));
+            cycleExecuted();
+            break;
         case 0xFA: // LD A,(nn)
         {
             incPC();
