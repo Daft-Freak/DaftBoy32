@@ -2402,6 +2402,7 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
 
         builder.shl(r, 1);
 
+        builder.mov(f, 0);
         builder.jcc(Condition::AE, 3); // if !carry
         builder.or_(f, DMGCPU::Flag_C); // set C
 
@@ -2418,6 +2419,7 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
 
         builder.sar(r, 1);
 
+        builder.mov(f, 0);
         builder.jcc(Condition::AE, 3); // if !carry
         builder.or_(f, DMGCPU::Flag_C); // set C
 
@@ -2434,6 +2436,7 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
 
         builder.shr(r, 1);
 
+        builder.mov(f, 0);
         builder.jcc(Condition::AE, 3); // if !carry
         builder.or_(f, DMGCPU::Flag_C); // set C
 
