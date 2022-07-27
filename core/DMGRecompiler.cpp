@@ -1539,6 +1539,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
     switch(opcode)
     {
+        case 0x00: // NOP
+            incPC();
+            cycleExecuted();
+            break;
         case 0x01: // LD BC,nn
             return load16(WReg::BC);
         case 0x02: // LD (BC),A
