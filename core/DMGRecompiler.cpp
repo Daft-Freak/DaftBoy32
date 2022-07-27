@@ -138,7 +138,9 @@ public:
     void add(Reg32 dst, Reg32 src);
     void add(Reg16 dst, Reg16 src);
     void add(Reg8 dst, Reg8 src);
-    void add(Reg64 dst, int8_t src);
+    void add(Reg8 dst, uint8_t imm);
+    void add(Reg64 dst, int8_t imm);
+    void add(Reg16 dst, int8_t imm);
 
     void adc(Reg8 dst, Reg8 src);
 
@@ -263,15 +265,39 @@ void X86Builder::add(Reg8 dst, Reg8 src)
     encodeModRM(dstReg, srcReg);
 };
 
+// imm -> reg, 8 bit
+void X86Builder::add(Reg8 dst, uint8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x80); // opcode, w = 0, s = 0
+    encodeModRM(dstReg);
+    write(imm);
+};
+
 // imm -> reg, 8 bit sign extended
-void X86Builder::add(Reg64 dst, int8_t src)
+void X86Builder::add(Reg64 dst, int8_t imm)
 {
     auto dstReg = static_cast<int>(dst);
 
     encodeREX(true, 0, 0, dstReg);
     write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dstReg);
-    write(src);
+    write(imm);
+};
+
+// imm -> reg, 8 bit sign extended
+void X86Builder::add(Reg16 dst, int8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    write(0x66); // 16 bit override
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x83); // opcode, w = 1, s = 1
+    encodeModRM(dstReg);
+    write(imm);
 };
 
 // reg -> reg, 8bit
@@ -2566,6 +2592,48 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         }
 
+        case 0xE8: // ADD SP,n
+        {
+            incPC();
+            cycleExecuted();
+
+            auto f = reg(Reg::F);
+
+            auto b = cpu.readMem(pc++);
+            incPC();
+            cycleExecuted();
+
+            // flags are set as if this is an 8 bit op
+            builder.mov(f, 0);
+
+            // 8 bit add
+            builder.mov(Reg8::R10B, Reg8::R9B);
+            builder.add(Reg8::R10B, b);
+
+            // carry flag
+            builder.jcc(Condition::AE, 3); // if !carry
+            builder.or_(f, DMGCPU::Flag_C); // set C
+
+            // half add
+            builder.mov(Reg8::R10B, Reg8::R9B);
+            builder.and_(Reg8::R10B, 0xF);
+            builder.add(Reg8::R10B, b & 0xF);
+
+            // half carry flag if > 0xF
+            builder.cmp(Reg8::R10B, 0xF);
+            builder.jcc(Condition::BE, 3); // <= 0xF
+            builder.or_(f, DMGCPU::Flag_H); // set H
+
+            // real add
+            builder.add(Reg16::R9W, static_cast<int8_t>(b));
+
+            // 2x delay
+            cycleExecuted();
+            cycleExecuted();
+
+            break;
+        }
+
         case 0xEA: // LD (nn),A
         {
             incPC();
@@ -2634,6 +2702,46 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         }
 
+        case 0xF8: // LDHL SP,n
+        {
+            incPC();
+            cycleExecuted();
+
+            auto f = reg(Reg::F);
+
+            auto b = cpu.readMem(pc++);
+            incPC();
+            cycleExecuted();
+
+            // flags are set as if this is an 8 bit op
+            builder.mov(f, 0);
+
+            // 8 bit add
+            builder.mov(Reg8::R10B, Reg8::R9B);
+            builder.add(Reg8::R10B, b);
+
+            // carry flag
+            builder.jcc(Condition::AE, 3); // if !carry
+            builder.or_(f, DMGCPU::Flag_C); // set C
+
+            // half add
+            builder.mov(Reg8::R10B, Reg8::R9B);
+            builder.and_(Reg8::R10B, 0xF);
+            builder.add(Reg8::R10B, b & 0xF);
+
+            // half carry flag if > 0xF
+            builder.cmp(Reg8::R10B, 0xF);
+            builder.jcc(Condition::BE, 3); // <= 0xF
+            builder.or_(f, DMGCPU::Flag_H); // set H
+
+            // real add
+            builder.mov(static_cast<Reg32>(reg(WReg::HL)), Reg32::R9D);
+            builder.add(reg(WReg::HL), static_cast<int8_t>(b));
+
+            cycleExecuted();
+
+            break;
+        }
         case 0xF9: // LD SP,HL
             incPC();
             cycleExecuted();
