@@ -199,6 +199,8 @@ public:
 
     void sar(Reg8 r, uint8_t count);
 
+    void sbb(Reg8 dst, Reg8 src);
+
     void setcc(Condition cc, Reg8 dst);
 
     void shr(Reg8 r, uint8_t count);
@@ -708,6 +710,17 @@ void X86Builder::sar(Reg8 r, uint8_t count)
     encodeModRM(reg, 7);
     write(count);
 }
+
+// reg -> reg, 8bit
+void X86Builder::sbb(Reg8 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x18); // opcode
+    encodeModRM(dstReg, srcReg);
+};
 
 // -> reg
 void X86Builder::setcc(Condition cc, Reg8 dst)
@@ -1338,12 +1351,17 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return add(b, true);
     };
 
-    const auto sub = [&builder, &incPC, &cycleExecuted](Reg8 b)
+    const auto sub = [&builder, &incPC, &cycleExecuted](Reg8 b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
 
         // TODO: all of this ...
+
+        // F was used as tmp, make a second copy (affects SUB (HL), SUB n)
+        // also preserve F for SBC
+        if(b == f || withCarry)
+            builder.mov(Reg8::R11B, f);
 
         // copy src/dst (using flags reg as temp)
         if(b == Reg8::AH || b == Reg8::CH || b == Reg8::DH || b == Reg8::BH)
@@ -1355,10 +1373,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         else
             builder.mov(Reg8::R10B, b);
 
-        // F was used as tmp, make a second copy (affects SUB (HL), SUB n)
-        if(b == f)
-            builder.mov(Reg8::R11B, b);
-
         builder.mov(f, a);
 
         // mask and do half sub
@@ -1367,14 +1381,38 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.sub(f, Reg8::R10B);
         builder.mov(Reg8::R10B, f);
 
-        // put tmp reg back
-        if(b == f)
-            builder.mov(b, Reg8::R11B);
+        // put tmp/flags reg back
+        if(b == f || withCarry)
+            builder.mov(f, Reg8::R11B);
+
+        if(withCarry)
+        {
+            // sub carry from half sub
+            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+            builder.jcc(Condition::E, 3); // not set
+            builder.dec(Reg8::R10B);
+        }
 
         // TODO: ... can be avoided if we don't need the H flag
 
-        // do sub
-        builder.sub(a, b);
+        if(withCarry)
+        {
+            // copy carry flag
+            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+            builder.jcc(Condition::E, 1); // not set
+            builder.stc(); // CF = 1
+
+            if(b == Reg8::DIL) // SBC (HL), SBC n
+            {
+                // more reg shuffling...
+                builder.mov(f, b);
+                builder.sbb(a, f);
+            }
+            else
+                builder.sbb(a, b);
+        }
+        else // do sub
+            builder.sub(a, b);
 
         // flags
         builder.mov(f, DMGCPU::Flag_N);
@@ -1395,6 +1433,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.or_(f, DMGCPU::Flag_Z); // set Z
 
         return true;
+    };
+
+    const auto subWithCarry = [&sub](Reg8 b)
+    {
+        return sub(b, true);
     };
 
     const auto bitAnd = [&builder, &incPC, &cycleExecuted](Reg8 r)
@@ -2212,7 +2255,44 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             incPC();
             cycleExecuted();
             return sub(reg(Reg::A));
-
+        case 0x98: // SBC B
+            incPC();
+            cycleExecuted();
+            return subWithCarry(reg(Reg::B));
+        case 0x99: // SBC C
+            incPC();
+            cycleExecuted();
+            return subWithCarry(reg(Reg::C));
+        case 0x9A: // SBC D
+            incPC();
+            cycleExecuted();
+            return subWithCarry(reg(Reg::D));
+        case 0x9B: // SBC E
+            incPC();
+            cycleExecuted();
+            return subWithCarry(reg(Reg::E));
+        case 0x9C: // SBC H
+            incPC();
+            cycleExecuted();
+            return subWithCarry(reg(Reg::H));
+        case 0x9D: // SBC L
+            incPC();
+            cycleExecuted();
+            return subWithCarry(reg(Reg::L));
+        case 0x9E: // SBC (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = Reg8::DIL; // can't use F here so use something wierd
+            readMem(reg(WReg::HL), tmp);
+            subWithCarry(tmp);
+            cycleExecuted();
+            break;
+        }
+        case 0x9F: // SBC A
+            incPC();
+            cycleExecuted();
+            return subWithCarry(reg(Reg::A));
         case 0xA0: // AND B
             incPC();
             cycleExecuted();
@@ -2416,6 +2496,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             builder.mov(tmp, cpu.readMem(pc++));
             incPC();
             sub(tmp);
+            cycleExecuted();
+            break;
+        }
+
+        case 0xDE: // SBC n
+        {
+            // TODO: use imm?
+            incPC();
+            cycleExecuted();
+            auto tmp = Reg8::DIL; // can't use F here so use something wierd
+            builder.mov(tmp, cpu.readMem(pc++));
+            incPC();
+            subWithCarry(tmp);
             cycleExecuted();
             break;
         }
