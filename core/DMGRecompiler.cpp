@@ -183,6 +183,8 @@ public:
 
     void rol(Reg8 r, uint8_t count);
 
+    void ror(Reg8 r, uint8_t count);
+
     void sar(Reg8 r, uint8_t count);
 
     void setcc(Condition cc, Reg8 dst);
@@ -632,6 +634,17 @@ void X86Builder::rol(Reg8 r, uint8_t count)
     encodeREX(false, 0, 0, reg);
     write(0xC0); // opcode, w = 0
     encodeModRM(reg);
+    write(count);
+}
+
+// reg, 8 bit
+void X86Builder::ror(Reg8 r, uint8_t count)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xC0); // opcode, w = 0
+    encodeModRM(reg, 1);
     write(count);
 }
 
@@ -2372,7 +2385,7 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
     using WReg = DMGCPU::WReg;
 
     // early out for unhandled
-    if(opcode < 0x20)
+    if(opcode < 0x20 && opcode >= 0x10)
     {
         printf("unhandled op in recompile CB%02X\n", opcode);
         return false;
@@ -2393,6 +2406,41 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
 
         return true;
     };
+
+    // RLC
+    const auto rotLeftNoCarry = [&builder](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+
+        builder.rol(r, 1);
+
+        builder.mov(f, 0);
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        builder.cmp(r, 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        return true;
+    };
+
+    // RRC
+    const auto rotRightNoCarry = [&builder](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+
+        builder.ror(r, 1);
+
+        builder.mov(f, 0);
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        builder.cmp(r, 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        return true;
+    };
+
     // shifts...
 
     // SLA
@@ -2504,6 +2552,58 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
 
     switch(opcode)
     {
+        case 0x00: // RLC B
+            return rotLeftNoCarry(reg(Reg::B));
+        case 0x01: // RLC C
+            return rotLeftNoCarry(reg(Reg::C));
+        case 0x02: // RLC D
+            return rotLeftNoCarry(reg(Reg::D));
+        case 0x03: // RLC E
+            return rotLeftNoCarry(reg(Reg::E));
+        case 0x04: // RLC H
+            return rotLeftNoCarry(reg(Reg::H));
+        case 0x05: // RLC L
+            return rotLeftNoCarry(reg(Reg::L));
+        case 0x06: // RLC (HL)
+        {
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+
+            rotLeftNoCarry(Reg8::R10B);
+
+            writeMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            break;
+        }
+        case 0x07: // RLC A
+            return rotLeftNoCarry(reg(Reg::A));
+
+        case 0x08: // RRC B
+            return rotRightNoCarry(reg(Reg::B));
+        case 0x09: // RRC C
+            return rotRightNoCarry(reg(Reg::C));
+        case 0x0A: // RRC D
+            return rotRightNoCarry(reg(Reg::D));
+        case 0x0B: // RRC E
+            return rotRightNoCarry(reg(Reg::E));
+        case 0x0C: // RRC H
+            return rotRightNoCarry(reg(Reg::H));
+        case 0x0D: // RRC L
+            return rotRightNoCarry(reg(Reg::L));
+        case 0x0E: // RRC (HL)
+        {
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+
+            rotRightNoCarry(Reg8::R10B);
+
+            writeMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            break;
+        }
+        case 0x0F: // RRC A
+            return rotRightNoCarry(reg(Reg::A));
+
         case 0x20: // SLA B
             return shiftLeft(reg(Reg::B));
         case 0x21: // SLA C
