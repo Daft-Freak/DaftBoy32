@@ -2200,7 +2200,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         }
 
         case 0xCB:
-            return recompileExInstruction(pc, builder);
+            recompileExInstruction(pc, builder);
+            break;
 
         case 0xD1: // POP DE
             return pop(WReg::DE);
@@ -2364,7 +2365,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
     return true;
 }
 
-bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
+void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
 {
     auto &mem = cpu.getMem();
     uint8_t opcode = mem.read(pc++);
@@ -2429,8 +2430,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         builder.cmp(r, 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-
-        return true;
     };
 
     // RLC
@@ -2447,7 +2446,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         builder.cmp(r, 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-        return true;
     };
 
     // RRC
@@ -2464,7 +2462,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         builder.cmp(r, 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-        return true;
     };
 
     // RL
@@ -2486,7 +2483,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         builder.cmp(r, 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-        return true;
     };
 
     // RR
@@ -2508,7 +2504,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         builder.cmp(r, 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-        return true;
     };
 
     // SLA
@@ -2525,7 +2520,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         builder.cmp(r, 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-        return true;
     };
 
     // SRA
@@ -2542,7 +2536,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         builder.cmp(r, 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-        return true;
     };
 
     // SRL
@@ -2559,7 +2552,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         builder.cmp(r, 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-        return true;
     };
 
     const auto testBit = [&builder](Reg8 r, int bit)
@@ -2573,14 +2565,11 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
 
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-
-        return true;
     };
 
     const auto set = [&builder](Reg8 r, int bit)
     {
         builder.or_(r, 1 << bit);
-        return true;
     };
 
     const auto setHL = [&builder, &set, &cycleExecuted, &readMem, &writeMem](int bit)
@@ -2592,13 +2581,11 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         
         writeMem(reg(WReg::HL), Reg8::R10B);
         cycleExecuted();
-        return true;
     };
 
     const auto reset = [&builder](Reg8 r, int bit)
     {
         builder.and_(r, ~(1 << bit));
-        return true;
     };
 
     const auto resetHL = [&builder, &reset, &cycleExecuted, &readMem, &writeMem](int bit)
@@ -2610,7 +2597,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         
         writeMem(reg(WReg::HL), Reg8::R10B);
         cycleExecuted();
-        return true;
     };
 
     incPC();
@@ -3231,8 +3217,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         case 0xFF: // SET 7,A
             return set(reg(Reg::A), 7);
     }
-
-    return true;
 }
 
 // wrappers around member funcs

@@ -18,7 +18,7 @@ private:
     bool compile(uint8_t *&codePtr, uint16_t pc);
 
     bool recompileInstruction(uint16_t &pc, X86Builder &builder);
-    bool recompileExInstruction(uint16_t &pc, X86Builder &builder);
+    void recompileExInstruction(uint16_t &pc, X86Builder &builder);
 
     static void cycleExecuted(DMGCPU *cpu);
     static uint8_t readMem(DMGCPU *cpu, uint16_t addr);
