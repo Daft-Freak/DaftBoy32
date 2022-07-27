@@ -1559,6 +1559,21 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return dec(reg(Reg::B));
         case 0x06: // LD B,n
             return load8(Reg::B);
+        case 0x07: // RLCA
+        {
+            incPC();
+            cycleExecuted();
+            auto f = reg(Reg::F);
+
+            builder.rol(reg(Reg::A), 1);
+
+            // copy carry out
+            // (shortcut as this is the only flag)
+            builder.setcc(Condition::B, f);
+            builder.shl(f, 4); // C is bit 4
+
+            break;
+        }
 
         case 0x09: // ADD HL,BC
             incPC();
@@ -1582,6 +1597,20 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return dec(reg(Reg::C));
         case 0x0E: // LD C,n
             return load8(Reg::C);
+        case 0x0F: // RRCA
+        {
+            incPC();
+            cycleExecuted();
+            auto f = reg(Reg::F);
+
+            builder.ror(reg(Reg::A), 1);
+
+            // copy carry out
+            builder.setcc(Condition::B, f);
+            builder.shl(f, 4); // C is bit 4
+
+            break;
+        }
 
         case 0x11: // LD DE,nn
             return load16(WReg::DE);
@@ -1603,6 +1632,25 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return dec(reg(Reg::D));
         case 0x16: // LD D,n
             return load8(Reg::D);
+        case 0x17: // RLA
+        {
+            incPC();
+            cycleExecuted();
+            auto f = reg(Reg::F);
+
+            // copy carry flag
+            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+            builder.jcc(Condition::E, 1); // not set
+            builder.stc(); // CF = 1
+
+            builder.rcl(reg(Reg::A), 1);
+
+            // copy carry out
+            builder.setcc(Condition::B, f);
+            builder.shl(f, 4); // C is bit 4
+
+            break;
+        }
 
         case 0x19: // ADD HL,DE
             incPC();
@@ -1626,6 +1674,25 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return dec(reg(Reg::E));
         case 0x1E: // LD E,n
             return load8(Reg::E);
+        case 0x1F: // RRA
+        {
+            incPC();
+            cycleExecuted();
+            auto f = reg(Reg::F);
+
+            // copy carry flag
+            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+            builder.jcc(Condition::E, 1); // not set
+            builder.stc(); // CF = 1
+
+            builder.rcr(reg(Reg::A), 1);
+
+            // copy carry out
+            builder.setcc(Condition::B, f);
+            builder.shl(f, 4); // C is bit 4
+
+            break;
+        }
 
         case 0x21: // LD HL,nn
             return load16(WReg::HL);
