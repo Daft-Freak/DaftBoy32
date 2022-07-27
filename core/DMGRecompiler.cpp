@@ -179,6 +179,10 @@ public:
 
     void push(Reg64 r);
 
+    void rcl(Reg8 r, uint8_t count);
+
+    void rcr(Reg8 r, uint8_t count);
+
     void ret();
 
     void rol(Reg8 r, uint8_t count);
@@ -192,6 +196,8 @@ public:
     void shr(Reg8 r, uint8_t count);
 
     void shl(Reg8 r, uint8_t count);
+
+    void stc();
 
     void sub(Reg8 dst, Reg8 src);
     void sub(Reg64 dst, int8_t src);
@@ -621,6 +627,28 @@ void X86Builder::push(Reg64 r)
     write(0x50 | (reg & 0x7)); // opcode
 }
 
+// reg, 8 bit
+void X86Builder::rcl(Reg8 r, uint8_t count)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xC0); // opcode, w = 0
+    encodeModRM(reg, 2);
+    write(count);
+}
+
+// reg, 8 bit
+void X86Builder::rcr(Reg8 r, uint8_t count)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xC0); // opcode, w = 0
+    encodeModRM(reg, 3);
+    write(count);
+}
+
 void X86Builder::ret()
 {
     write(0xC3); // opcode
@@ -696,6 +724,11 @@ void X86Builder::shl(Reg8 r, uint8_t count)
     write(0xC0); // opcode, w = 0
     encodeModRM(reg, 4);
     write(count);
+}
+
+void X86Builder::stc()
+{
+    write(0xF9); // opcode
 }
 
 // reg -> reg, 8bit
@@ -2384,13 +2417,6 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
-    // early out for unhandled
-    if(opcode < 0x20 && opcode >= 0x10)
-    {
-        printf("unhandled op in recompile CB%02X\n", opcode);
-        return false;
-    }
-
     // helpers
     const auto swap = [&builder](Reg8 r)
     {
@@ -2441,7 +2467,49 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
-    // shifts...
+    // RL
+    const auto rotLeft = [&builder](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+
+        // copy carry flag
+        builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+        builder.jcc(Condition::E, 1); // not set
+        builder.stc(); // CF = 1
+
+        builder.rcl(r, 1);
+
+        builder.mov(f, 0);
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        builder.cmp(r, 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        return true;
+    };
+
+    // RR
+    const auto rotRight = [&builder](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+
+        // copy carry flag
+        builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+        builder.jcc(Condition::E, 1); // not set
+        builder.stc(); // CF = 1
+
+        builder.rcr(r, 1);
+
+        builder.mov(f, 0);
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        builder.cmp(r, 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        return true;
+    };
 
     // SLA
     const auto shiftLeft = [&builder](Reg8 r)
@@ -2603,6 +2671,58 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         }
         case 0x0F: // RRC A
             return rotRightNoCarry(reg(Reg::A));
+
+        case 0x10: // RL B
+            return rotLeft(reg(Reg::B));
+        case 0x11: // RL C
+            return rotLeft(reg(Reg::C));
+        case 0x12: // RL D
+            return rotLeft(reg(Reg::D));
+        case 0x13: // RL E
+            return rotLeft(reg(Reg::E));
+        case 0x14: // RL H
+            return rotLeft(reg(Reg::H));
+        case 0x15: // RL L
+            return rotLeft(reg(Reg::L));
+        case 0x16: // RL (HL)
+        {
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+
+            rotLeft(Reg8::R10B);
+
+            writeMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            break;
+        }
+        case 0x17: // RL A
+            return rotLeft(reg(Reg::A));
+
+        case 0x18: // RR B
+            return rotRight(reg(Reg::B));
+        case 0x19: // RR C
+            return rotRight(reg(Reg::C));
+        case 0x1A: // RR D
+            return rotRight(reg(Reg::D));
+        case 0x1B: // RR E
+            return rotRight(reg(Reg::E));
+        case 0x1C: // RR H
+            return rotRight(reg(Reg::H));
+        case 0x1D: // RR L
+            return rotRight(reg(Reg::L));
+        case 0x1E: // RR (HL)
+        {
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+
+            rotRight(Reg8::R10B);
+
+            writeMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            break;
+        }
+        case 0x1F: // RR A
+            return rotRight(reg(Reg::A));
 
         case 0x20: // SLA B
             return shiftLeft(reg(Reg::B));
