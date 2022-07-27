@@ -140,6 +140,8 @@ public:
     void add(Reg8 dst, Reg8 src);
     void add(Reg64 dst, int8_t src);
 
+    void adc(Reg8 dst, Reg8 src);
+
     void and_(Reg8 dst, Reg8 src);
     void and_(Reg16 dst, Reg16 src);
     void and_(Reg32 dst, uint32_t imm);
@@ -268,6 +270,17 @@ void X86Builder::add(Reg64 dst, int8_t src)
     write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dstReg);
     write(src);
+};
+
+// reg -> reg, 8bit
+void X86Builder::adc(Reg8 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x10); // opcode
+    encodeModRM(dstReg, srcReg);
 };
 
 // reg -> reg, 8 bit
@@ -1237,12 +1250,17 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
 
-    const auto add = [&builder, &incPC, &cycleExecuted](Reg8 b)
+    const auto add = [&builder, &incPC, &cycleExecuted](Reg8 b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
 
         // TODO: all of this ...
+
+        // F was used as tmp, make a second copy (affects ADD (HL), ADD n)
+        // also preserve F for ADC
+        if(b == f || withCarry)
+            builder.mov(Reg8::R11B, f);
 
         // copy src/dst (using flags reg as temp)
         if(b == Reg8::AH || b == Reg8::CH || b == Reg8::DH || b == Reg8::BH)
@@ -1254,10 +1272,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         else
             builder.mov(Reg8::R10B, b);
 
-        // F was used as tmp, make a second copy (affects ADD (HL), ADD n)
-        if(b == f)
-            builder.mov(Reg8::R11B, b);
-
         builder.mov(f, a);
 
         // mask and do half add
@@ -1265,14 +1279,38 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.and_(Reg8::R10B, 0xF);
         builder.add(Reg8::R10B, f);
 
-        // put tmp reg back
-        if(b == f)
-            builder.mov(b, Reg8::R11B);
+        // put tmp/flags reg back
+        if(b == f || withCarry)
+            builder.mov(f, Reg8::R11B);
+
+        if(withCarry)
+        {
+            // add carry to half add
+            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+            builder.jcc(Condition::E, 3); // not set
+            builder.inc(Reg8::R10B);
+        }
 
         // TODO: ... can be avoided if we don't need the H flag
 
-        // do add
-        builder.add(a, b);
+        if(withCarry)
+        {
+            // copy carry flag
+            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+            builder.jcc(Condition::E, 1); // not set
+            builder.stc(); // CF = 1
+
+            if(b == Reg8::DIL) // ADC (HL), ADC n
+            {
+                // more reg shuffling...
+                builder.mov(f, b);
+                builder.adc(a, f);
+            }
+            else
+                builder.adc(a, b);
+        }
+        else // do add
+            builder.add(a, b);
 
         // flags
         builder.mov(f, 0);
@@ -1293,6 +1331,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         builder.or_(f, DMGCPU::Flag_Z); // set Z
 
         return true;
+    };
+
+    const auto addWithCarry = [&add](Reg8 b)
+    {
+        return add(b, true);
     };
 
     const auto sub = [&builder, &incPC, &cycleExecuted](Reg8 b)
@@ -2093,7 +2136,44 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             incPC();
             cycleExecuted();
             return add(reg(Reg::A));
-
+        case 0x88: // ADC A,B
+            incPC();
+            cycleExecuted();
+            return addWithCarry(reg(Reg::B));
+        case 0x89: // ADC A,C
+            incPC();
+            cycleExecuted();
+            return addWithCarry(reg(Reg::C));
+        case 0x8A: // ADC A,D
+            incPC();
+            cycleExecuted();
+            return addWithCarry(reg(Reg::D));
+        case 0x8B: // ADC A,E
+            incPC();
+            cycleExecuted();
+            return addWithCarry(reg(Reg::E));
+        case 0x8C: // ADC A,F
+            incPC();
+            cycleExecuted();
+            return addWithCarry(reg(Reg::H));
+        case 0x8D: // ADC A,H
+            incPC();
+            cycleExecuted();
+            return addWithCarry(reg(Reg::L));
+        case 0x8E: // ADC (HL)
+        {
+            incPC();
+            cycleExecuted();
+            auto tmp = Reg8::DIL; // can't use F here so use something wierd
+            readMem(reg(WReg::HL), tmp);
+            addWithCarry(tmp);
+            cycleExecuted();
+            break;
+        }
+        case 0x8F: // ADC A,A
+            incPC();
+            cycleExecuted();
+            return addWithCarry(reg(Reg::A));
         case 0x90: // SUB B
             incPC();
             cycleExecuted();
@@ -2308,6 +2388,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
         case 0xCB:
             recompileExInstruction(pc, builder);
             break;
+
+        case 0xCE: // ADC n
+        {
+            // TODO: use imm?
+            incPC();
+            cycleExecuted();
+            auto tmp = Reg8::DIL; // can't use F here so use something wierd
+            builder.mov(tmp, cpu.readMem(pc++));
+            incPC();
+            addWithCarry(tmp);
+            cycleExecuted();
+            break;
+        }
 
         case 0xD1: // POP DE
             return pop(WReg::DE);
