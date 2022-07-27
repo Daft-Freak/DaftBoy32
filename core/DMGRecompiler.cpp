@@ -183,9 +183,13 @@ public:
 
     void rol(Reg8 r, uint8_t count);
 
+    void sar(Reg8 r, uint8_t count);
+
     void setcc(Condition cc, Reg8 dst);
 
     void shr(Reg8 r, uint8_t count);
+
+    void shl(Reg8 r, uint8_t count);
 
     void sub(Reg8 dst, Reg8 src);
     void sub(Reg64 dst, int8_t src);
@@ -631,6 +635,19 @@ void X86Builder::rol(Reg8 r, uint8_t count)
     write(count);
 }
 
+// reg, 8 bit
+void X86Builder::sar(Reg8 r, uint8_t count)
+{
+    auto reg = static_cast<int>(r);
+
+    // TODO: 0xD0 for 1
+
+    encodeREX(false, 0, 0, reg);
+    write(0xC0); // opcode, w = 0
+    encodeModRM(reg, 7);
+    write(count);
+}
+
 // -> reg
 void X86Builder::setcc(Condition cc, Reg8 dst)
 {
@@ -652,6 +669,19 @@ void X86Builder::shr(Reg8 r, uint8_t count)
     encodeREX(false, 0, 0, reg);
     write(0xC0); // opcode, w = 0
     encodeModRM(reg, 5);
+    write(count);
+}
+
+// reg, 8 bit
+void X86Builder::shl(Reg8 r, uint8_t count)
+{
+    auto reg = static_cast<int>(r);
+
+    // TODO: 0xD0 for 1
+
+    encodeREX(false, 0, 0, reg);
+    write(0xC0); // opcode, w = 0
+    encodeModRM(reg, 4);
     write(count);
 }
 
@@ -2342,7 +2372,7 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
     using WReg = DMGCPU::WReg;
 
     // early out for unhandled
-    if(opcode < 0x30)
+    if(opcode < 0x20)
     {
         printf("unhandled op in recompile CB%02X\n", opcode);
         return false;
@@ -2364,6 +2394,38 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
         return true;
     };
     // shifts...
+
+    // SLA
+    const auto shiftLeft = [&builder](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+
+        builder.shl(r, 1);
+
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        builder.cmp(r, 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        return true;
+    };
+
+    // SRA
+    const auto shiftRightArith = [&builder](Reg8 r)
+    {
+        auto f = reg(Reg::F);
+
+        builder.sar(r, 1);
+
+        builder.jcc(Condition::AE, 3); // if !carry
+        builder.or_(f, DMGCPU::Flag_C); // set C
+
+        builder.cmp(r, 0);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        return true;
+    };
 
     // SRL
     const auto shiftRight = [&builder](Reg8 r)
@@ -2439,6 +2501,58 @@ bool DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
 
     switch(opcode)
     {
+        case 0x20: // SLA B
+            return shiftLeft(reg(Reg::B));
+        case 0x21: // SLA C
+            return shiftLeft(reg(Reg::C));
+        case 0x22: // SLA D
+            return shiftLeft(reg(Reg::D));
+        case 0x23: // SLA E
+            return shiftLeft(reg(Reg::E));
+        case 0x24: // SLA H
+            return shiftLeft(reg(Reg::H));
+        case 0x25: // SLA L
+            return shiftLeft(reg(Reg::L));
+        case 0x26: // SLA (HL)
+        {
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+
+            shiftLeft(Reg8::R10B);
+
+            writeMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            break;
+        }
+        case 0x27: // SLA A
+            return shiftLeft(reg(Reg::A));
+
+        case 0x28: // SRA B
+            return shiftRightArith(reg(Reg::B));
+        case 0x29: // SRA C
+            return shiftRightArith(reg(Reg::C));
+        case 0x2A: // SRA D
+            return shiftRightArith(reg(Reg::D));
+        case 0x2B: // SRA E
+            return shiftRightArith(reg(Reg::E));
+        case 0x2C: // SRA H
+            return shiftRightArith(reg(Reg::H));
+        case 0x2D: // SRA L
+            return shiftRightArith(reg(Reg::L));
+        case 0x2E: // SRA (HL)
+        {
+            readMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+
+            shiftRightArith(Reg8::R10B);
+
+            writeMem(reg(WReg::HL), Reg8::R10B);
+            cycleExecuted();
+            break;
+        }
+        case 0x2F: // SRA A
+            return shiftRightArith(reg(Reg::A));
+
         case 0x30: // SWAP B
             return swap(reg(Reg::B));
         case 0x31: // SWAP C
