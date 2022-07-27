@@ -205,6 +205,7 @@ public:
     void test(Reg8 dst, uint8_t imm);
 
     void xor_(Reg8 dst, Reg8 src);
+    void xor_(Reg8 dst, uint8_t imm);
 
     uint8_t *getPtr() const {return ptr;}
 
@@ -773,6 +774,17 @@ void X86Builder::xor_(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x30); // opcode, w = 0
     encodeModRM(dstReg, srcReg);
+}
+
+// imm -> reg, 8 bit
+void X86Builder::xor_(Reg8 dst, uint8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x80); // opcode, s = 0, w = 0
+    encodeModRM(dstReg, 6);
+    write(imm); // imm
 }
 
 void X86Builder::write(uint8_t b)
@@ -1816,6 +1828,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             break;
         }
+        case 0x37: // SCF
+        {
+            incPC();
+            cycleExecuted();
+
+            builder.and_(reg(Reg::F), DMGCPU::Flag_Z); // H/N are cleared
+            builder.or_(reg(Reg::F), DMGCPU::Flag_C);
+            break;
+        }
 
         case 0x3A: // LDD A,(HL)
             incPC();
@@ -1835,7 +1856,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return dec(reg(Reg::A));
         case 0x3E: // LD A,n
             return load8(Reg::A);
+        case 0x3F: // CCF
+        {
+            incPC();
+            cycleExecuted();
 
+            builder.and_(reg(Reg::F), DMGCPU::Flag_C | DMGCPU::Flag_Z); // H/N are cleared
+            builder.xor_(reg(Reg::F), DMGCPU::Flag_C);
+            break;
+        }
         case 0x40: // LD B,B
             return copy8(Reg::B, Reg::B);
         case 0x41: // LD B,C
