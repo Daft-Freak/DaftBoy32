@@ -30,7 +30,13 @@ enum class Reg8
     R12B,
     R13B,
     R14B,
-    R15B
+    R15B,
+
+    // these replace AH-DH with a REX prefix
+    SPL = 4 | 0x10,
+    BPL,
+    SIL,
+    DIL
 };
 
 enum class Reg16
@@ -829,9 +835,9 @@ void X86Builder::encodeREX(bool w, int reg, int index, int base)
         return;
 
     write(0x40 | (w ? REX_W : 0)
-               | (reg > 7 ? REX_R : 0)
-               | (index > 7 ? REX_X : 0)
-               | (base > 7 ? REX_B : 0));
+               | (reg & 8 ? REX_R : 0)
+               | (index & 8 ? REX_X : 0)
+               | (base & 8 ? REX_B : 0));
 }
 
 // reg helpers
