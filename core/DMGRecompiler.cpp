@@ -212,7 +212,8 @@ public:
     void stc();
 
     void sub(Reg8 dst, Reg8 src);
-    void sub(Reg64 dst, int8_t src);
+    void sub(Reg8 dst, uint8_t imm);
+    void sub(Reg64 dst, int8_t imm);
 
     void test(Reg8 dst, uint8_t imm);
 
@@ -801,15 +802,26 @@ void X86Builder::sub(Reg8 dst, Reg8 src)
     encodeModRM(dstReg, srcReg);
 };
 
+// imm -> reg, 8 bit
+void X86Builder::sub(Reg8 dst, uint8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x80); // opcode, w = 0, s = 0
+    encodeModRM(dstReg, 5);
+    write(imm);
+}
+
 // imm -> reg, 8 bit sign extended
-void X86Builder::sub(Reg64 dst, int8_t src)
+void X86Builder::sub(Reg64 dst, int8_t imm)
 {
     auto dstReg = static_cast<int>(dst);
 
     encodeREX(true, 0, 0, dstReg);
     write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dstReg, 5);
-    write(src);
+    write(imm);
 }
 
 // imm -> reg, 8 bit
@@ -1849,6 +1861,67 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             return dec(reg(Reg::H));
         case 0x26: // LD H,n
             return load8(Reg::H);
+        case 0x27: // DAA
+        {
+            incPC();
+            cycleExecuted();
+
+            auto f = reg(Reg::F);
+            auto a = reg(Reg::A);
+
+            // clear Z flag (will add back later)
+            builder.and_(f, DMGCPU::Flag_Z ^ 0xFF);
+
+            builder.test(f, DMGCPU::Flag_N);
+            builder.jcc(Condition::E, 18); // N not set
+
+            // negative
+
+            // if (Flag_C) A -= 0x60
+            builder.test(f, DMGCPU::Flag_C);
+            builder.jcc(Condition::E, 03); // C not set
+            builder.sub(a, 0x60);
+
+            // if (Flag_H) A -= 0x06
+            builder.test(f, DMGCPU::Flag_H);
+            builder.jcc(Condition::E, 3); // C not set
+            builder.sub(a, 0x06);
+    
+            builder.jmp(43); // skip
+
+            // positive
+
+            // if (Flag_C ...
+            builder.test(f, DMGCPU::Flag_C);
+            builder.jcc(Condition::NE, 5); // C set
+            // ... || A > 0x99) ...
+            builder.cmp(a, 0x99);
+            builder.jcc(Condition::BE, 6);
+            // ... A += 0x60
+            builder.add(a, 0x60);
+            builder.or_(f, DMGCPU::Flag_C); // set C flag
+
+            // if (Flag_H ...
+            builder.test(f, DMGCPU::Flag_H);
+            builder.jcc(Condition::NE, 19); // H set
+            // ... || A & (0x0F) > 0x09) ...
+            builder.mov(Reg32::R10D, static_cast<Reg32>(reg(WReg::AF))); // move the whole thing as we can't easily mov just the high byte
+            builder.and_(Reg32::R10D, 0xF00);
+            builder.cmp(Reg32::R10D, 0x0900);
+            builder.jcc(Condition::BE, 3);
+            // .. A += 0x06
+            builder.add(a, 0x06);
+
+            // Z flag
+            builder.and_(a, a);
+            builder.jcc(Condition::NE, 3);
+            builder.or_(f, DMGCPU::Flag_Z);
+
+            // clear H flag
+            builder.and_(f, ~DMGCPU::Flag_H);
+
+            break;
+        }
 
         case 0x29: // ADD HL,HL
             incPC();
