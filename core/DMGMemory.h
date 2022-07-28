@@ -30,6 +30,8 @@ public:
 
     const uint8_t *mapAddress(uint16_t addr) const;
 
+    uint32_t makeBankedAddress(uint16_t addr) const;
+
     // fast access to IO regs
     uint8_t readIOReg(uint8_t addr) const {return iohram[addr];}
     uint8_t &getIOReg(uint8_t addr) {return iohram[addr];}

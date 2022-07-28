@@ -397,6 +397,64 @@ const uint8_t *DMGMemory::mapAddress(uint16_t addr) const
     return iohram + (addr & 0xFF);
 }
 
+uint32_t DMGMemory::makeBankedAddress(uint16_t addr) const
+{
+    // creates a wider address that includes banking (so can address ALL memory)
+    // also avoids mirrors
+
+    // 4xxx-7xxx, Dxxx and Exxx are unused
+
+    switch(addr >> 12)
+    {
+        case 0x0: // first ROM bank
+        case 0x1: // banked if MBC1 sometimes
+        case 0x2:
+        case 0x3:
+            if(mbcRAMBankMode)
+                return addr | (mbcROMBank & 0x60) << 16;
+            return addr;
+
+        case 0x4: // second ROM bank
+        case 0x5:
+        case 0x6:
+        case 0x7:
+            return (addr & 0x3FFF) | mbcROMBank << 16;
+
+        case 0x8: // VRAM
+        case 0x9:
+        {
+            auto bank = (regions[0x8] + 0x8000 - vram) / 0x2000;
+            return addr | bank << 16;
+        }
+
+        case 0xA: // cart RAM
+        case 0xB:
+            return addr | mbcRAMBank << 16;
+        
+        case 0xC: // WRAM
+            return addr;
+        case 0xD: // WRAM 2: the banked bit
+        {
+            auto bank = (regions[0xD] + 0xD000 - wram) / 0x1000;
+            return (addr & 0xCFFF) | bank << 16;
+        }
+
+        case 0xE:
+            return addr & 0xCFFF; // map -> C
+
+        case 0xF:
+            if(addr < 0xFE00) // mirror of D
+            {
+                auto bank = (regions[0xD] + 0xD000 - wram) / 0x1000;
+                return (addr & 0xCFFF) | bank << 16;
+            }
+
+            return addr;
+    }
+
+    return addr;
+}
+
 void DMGMemory::write(uint16_t addr, uint8_t data)
 {
     int region = addr >> 12;
