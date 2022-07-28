@@ -161,7 +161,7 @@ public:
     void inc(Reg16 r);
     void inc(Reg8 r);
 
-    void jcc(Condition cc, int8_t disp);
+    void jcc(Condition cc, int disp);
     void jmp(int8_t disp);
 
     void lea(Reg32 r, Reg64 base, int disp = 0);
@@ -452,14 +452,28 @@ void X86Builder::inc(Reg8 r)
     encodeModRM(reg, 0);
 }
 
-void X86Builder::jcc(Condition cc, int8_t disp)
+void X86Builder::jcc(Condition cc, int disp)
 {
-    write(0x70 | static_cast<int>(cc)); // opcode
-    write(disp);
+    if(disp < 128 && disp >= -128) // 8 bit disp
+    {
+        write(0x70 | static_cast<int>(cc)); // opcode
+        write(disp);
+    }
+    else
+    {
+        write(0x0F); // two byte opcode
+        write(0x80 | static_cast<int>(cc)); // opcode
+
+        write(disp);
+        write(disp >> 8);
+        write(disp >> 16);
+        write(disp >> 24);
+    }
 }
 
 void X86Builder::jmp(int8_t disp)
 {
+    // TODO: full disp
     write(0xEB); // opcode
     write(disp);
 }
