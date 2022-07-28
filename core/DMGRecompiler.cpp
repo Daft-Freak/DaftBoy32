@@ -1777,6 +1777,45 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         return true;
     };
 
+    const auto call = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
+    {
+        incPC();
+        cycleExecuted();
+
+        uint16_t addr = cpu.readMem(pc++);
+        incPC();
+        cycleExecuted();
+        addr |= cpu.readMem(pc++) << 8;
+        incPC();
+        cycleExecuted();
+
+        // condition
+        if(flag)
+        {
+            builder.test(reg(Reg::F), flag);
+            builder.jcc(set ? Condition::E : Condition::NE, 17 + 46 * 3/*cycleExecuted*/ + 54 * 2 /*writeMem*/);
+        }
+
+        cycleExecuted(); // delay
+
+        auto sp = Reg16::R9W;
+
+        // TODO: we know what PC is, but there's no writeMemImmData
+        builder.dec(sp);
+        builder.mov(Reg8::R10B, pc >> 8);
+        writeMem(sp, Reg8::R10B);
+        cycleExecuted();
+        builder.dec(sp);
+        writeMem(sp, Reg8::R8B); // low byte
+        cycleExecuted();
+
+        builder.mov(Reg32::R8D, addr);
+        
+        exited = true;
+
+        return true;
+    };
+
     switch(opcode)
     {
         case 0x00: // NOP
@@ -2670,7 +2709,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             return jump(DMGCPU::Flag_Z, false);
         case 0xC3: // JP nn
             return jump();
-
+        case 0xC4: // CALL NZ,nn
+            return call(DMGCPU::Flag_Z, false);
         case 0xC5: // PUSH BC
             return push(WReg::BC);
         case 0xC6: // ADD n
@@ -2691,7 +2731,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xCB:
             recompileExInstruction(pc, builder);
             break;
-
+        case 0xCC: // CALL Z,nn
+            return call(DMGCPU::Flag_Z);
+        case 0xCD: // CALL nn
+            return call();
         case 0xCE: // ADC n
         {
             // TODO: use imm?
@@ -2710,7 +2753,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xD2: // JP NC,nn
             return jump(DMGCPU::Flag_C, false);
 
-
+        case 0xD4: // CALL NC,nn
+            return call(DMGCPU::Flag_C, false);
         case 0xD5: // PUSH DE
             return push(WReg::DE);
         case 0xD6: // SUB n
@@ -2728,6 +2772,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         case 0xDA: // JP C,nn
             return jump(DMGCPU::Flag_C);
+
+        case 0xDC: // CALL C,nn
+            return call(DMGCPU::Flag_C);
 
         case 0xDE: // SBC n
         {
