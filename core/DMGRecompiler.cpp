@@ -1740,6 +1740,29 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         return true;
     };
 
+    const auto jumpRel = [this, &pc, &exited, &builder, &incPC, &cycleExecuted](int flag = 0, bool set = true)
+    {
+        incPC();
+        cycleExecuted();
+
+        int8_t off = cpu.readMem(pc++);
+        incPC();
+        cycleExecuted();
+
+        // condition
+        if(flag)
+        {
+            builder.test(reg(Reg::F), flag);
+            builder.jcc(set ? Condition::E : Condition::NE, 5 + 46/*cycleExecuted*/);
+        }
+
+        builder.add(Reg16::R8W, off);
+        cycleExecuted();
+        exited = true;
+
+        return true;
+    };
+
     switch(opcode)
     {
         case 0x00: // NOP
@@ -1859,6 +1882,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
 
+        case 0x18: // JR m
+            return jumpRel();
         case 0x19: // ADD HL,DE
             incPC();
             cycleExecuted();
@@ -1900,7 +1925,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
             break;
         }
-
+        case 0x20: // JR NZ,n
+            return jumpRel(DMGCPU::Flag_Z, false);
         case 0x21: // LD HL,nn
             return load16(WReg::HL);
         case 0x22: // LDI (HL),A
@@ -1983,7 +2009,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
             break;
         }
-
+        case 0x28: // JR Z,n
+            return jumpRel(DMGCPU::Flag_Z);
         case 0x29: // ADD HL,HL
             incPC();
             cycleExecuted();
@@ -2013,7 +2040,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.not_(reg(Reg::A));
             builder.or_(reg(Reg::F), DMGCPU::Flag_H | DMGCPU::Flag_N);
             break;
-
+        case 0x30: // JR NC,n
+            return jumpRel(DMGCPU::Flag_C, false);
         case 0x31: // LD SP,nn
         {
             incPC();
@@ -2094,7 +2122,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.or_(reg(Reg::F), DMGCPU::Flag_C);
             break;
         }
-
+        case 0x38: // JR C,n
+            return jumpRel(DMGCPU::Flag_C);
         case 0x39: // ADD HL,SP
             incPC();
             cycleExecuted();
