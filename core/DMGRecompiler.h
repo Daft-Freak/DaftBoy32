@@ -34,8 +34,8 @@ private:
     {
         CompiledFunc func;
         uint8_t *endPtr;
-        uint16_t endPC;
+        uint32_t endPC;
     };
 
-    std::map<uint16_t, FuncInfo> compiled;
+    std::map<uint32_t, FuncInfo> compiled;
 };

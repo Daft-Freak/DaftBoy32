@@ -1009,7 +1009,9 @@ void DMGRecompiler::handleBranch()
     if(!codeBuf)
         return;
 
-    auto it = compiled.find(cpu.pc);
+    auto mappedAddr = cpu.mem.makeBankedAddress(cpu.pc);
+
+    auto it = compiled.find(mappedAddr);
 
     if(it == compiled.end())
     {
@@ -1023,10 +1025,10 @@ void DMGRecompiler::handleBranch()
         {
             info.func = reinterpret_cast<CompiledFunc>(startPtr);
             info.endPtr = curCodePtr = ptr;
-            info.endPC = pc;
+            info.endPC = cpu.mem.makeBankedAddress(pc);
         }
         
-        it = compiled.emplace(cpu.pc, info).first;
+        it = compiled.emplace(mappedAddr, info).first;
     }
 
     if(it->second.func)
@@ -3734,11 +3736,13 @@ void DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
     {
         auto &compiler = cpu->compiler; // oh right, this is a static func
 
+        auto mappedAddr = cpu->mem.makeBankedAddress(addr);
+
         for(auto it = compiler.compiled.begin(); it != compiler.compiled.end();)
         {
-            if(addr >= it->first && addr < it->second.endPC)
+            if(mappedAddr >= it->first && mappedAddr < it->second.endPC)
             {
-                printf("invalidate compiled code @%04X in %04X-%04X\n", addr, it->first, it->second.endPC);
+                printf("invalidate compiled code @%07X(%04X) in %04X-%04X\n", mappedAddr, addr, it->first, it->second.endPC);
 
                 // rewind if last code compiled
                 // TODO: reclaim memory in other cases
