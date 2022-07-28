@@ -1844,6 +1844,31 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         return true;
     };
 
+    const auto reset = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &writeMem](int addr)
+    {
+        incPC();
+        cycleExecuted();
+
+        cycleExecuted(); // delay
+
+        auto sp = Reg16::R9W;
+
+        // TODO: we know what PC is, but there's no writeMemImmData
+        builder.dec(sp);
+        builder.mov(Reg8::R10B, pc >> 8);
+        writeMem(sp, Reg8::R10B);
+        cycleExecuted();
+        builder.dec(sp);
+        writeMem(sp, Reg8::R8B); // low byte
+        cycleExecuted();
+
+        builder.mov(Reg32::R8D, addr);
+        
+        exited = true;
+
+        return true;
+    };
+
     const auto ret = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &readMem](int flag = 0, bool set = true)
     {
         incPC();
@@ -2788,7 +2813,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
-
+        case 0xC7: // RST 0
+            return reset(0x00);
         case 0xC8: // RET Z
             return ret(DMGCPU::Flag_Z);
         case 0xC9: // RET
@@ -2814,7 +2840,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
-
+        case 0xCF: // RST 08
+            return reset(0x08);
         case 0xD0: // RET NC
             return ret(DMGCPU::Flag_C, false);
         case 0xD1: // POP DE
@@ -2838,7 +2865,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
-
+        case 0xD7: // RST 10
+            return reset(0x10);
         case 0xD8: // RET C
             return ret(DMGCPU::Flag_C);
 
@@ -2860,7 +2888,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
-
+        case 0xDF: // RST 18
+            return reset(0x18);
         case 0xE0: // LDH (n),A
         {
             incPC();
@@ -2899,7 +2928,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
-
+        case 0xE7: // RST 20
+            return reset(0x20);
         case 0xE8: // ADD SP,n
         {
             incPC();
@@ -2970,7 +3000,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
-
+        case 0xEF: // RST 28
+            return reset(0x28);
         case 0xF0: // LDH A,(n)
         {
             incPC();
@@ -3009,7 +3040,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
-
+        case 0xF7: // RST 30
+            return reset(0x30);
         case 0xF8: // LDHL SP,n
         {
             incPC();
@@ -3084,6 +3116,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
+        case 0xFF: // RST 38
+            return reset(0x38);
 
         default:
             printf("unhandled op in recompile %02X\n", opcode);
