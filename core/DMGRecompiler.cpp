@@ -1015,24 +1015,28 @@ void DMGRecompiler::handleBranch()
     {
         auto ptr = curCodePtr;
         auto startPtr = ptr;
+        auto pc = cpu.pc;
 
-        if(compile(ptr, cpu.pc))
+        FuncInfo info{};
+
+        if(compile(ptr, pc))
         {
-            it = compiled.emplace(cpu.pc, reinterpret_cast<CompiledFunc>(startPtr)).first;
-            curCodePtr = ptr;
+            info.func = reinterpret_cast<CompiledFunc>(startPtr);
+            info.endPtr = curCodePtr = ptr;
+            info.endPC = pc;
         }
-        else
-            it = compiled.emplace(cpu.pc, nullptr).first;
+        
+        it = compiled.emplace(cpu.pc, info).first;
     }
 
-    if(it->second)
+    if(it->second.func)
     {
         int cycles = cpu.cyclesToRun; // FIXME: min interrupts
-        it->second(cycles, cpu.regs, cpu.pc, cpu.sp);
+        it->second.func(cycles, cpu.regs, cpu.pc, cpu.sp);
     }
 }
 
-bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc)
+bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
 {
     X86Builder builder(codePtr, codeBuf + codeBufSize);
 
