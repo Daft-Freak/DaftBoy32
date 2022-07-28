@@ -144,8 +144,8 @@ public:
 
     void adc(Reg8 dst, Reg8 src);
 
-    void and_(Reg8 dst, Reg8 src);
     void and_(Reg16 dst, Reg16 src);
+    void and_(Reg8 dst, Reg8 src);
     void and_(Reg32 dst, uint32_t imm);
     void and_(Reg8 dst, uint8_t imm);
 
@@ -245,14 +245,14 @@ void X86Builder::add(Reg32 dst, Reg32 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x01); // opcode, w = 1
     encodeModRM(dstReg, srcReg);
-};
+}
 
 // reg -> reg, 16 bit
 void X86Builder::add(Reg16 dst, Reg16 src)
 {
     write(0x66); // 16 bit override
     add(static_cast<Reg32>(dst), static_cast<Reg32>(src));
-};
+}
 
 // reg -> reg, 8bit
 void X86Builder::add(Reg8 dst, Reg8 src)
@@ -264,7 +264,7 @@ void X86Builder::add(Reg8 dst, Reg8 src)
     // FIXME: check no xH reg with REX (low byte of BP, SP, DI, SI instead )
     write(0x00); // opcode
     encodeModRM(dstReg, srcReg);
-};
+}
 
 // imm -> reg, 8 bit
 void X86Builder::add(Reg8 dst, uint8_t imm)
@@ -275,7 +275,7 @@ void X86Builder::add(Reg8 dst, uint8_t imm)
     write(0x80); // opcode, w = 0, s = 0
     encodeModRM(dstReg);
     write(imm);
-};
+}
 
 // imm -> reg, 8 bit sign extended
 void X86Builder::add(Reg64 dst, int8_t imm)
@@ -286,7 +286,7 @@ void X86Builder::add(Reg64 dst, int8_t imm)
     write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dstReg);
     write(imm);
-};
+}
 
 // imm -> reg, 8 bit sign extended
 void X86Builder::add(Reg16 dst, int8_t imm)
@@ -299,7 +299,7 @@ void X86Builder::add(Reg16 dst, int8_t imm)
     write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dstReg);
     write(imm);
-};
+}
 
 // reg -> reg, 8bit
 void X86Builder::adc(Reg8 dst, Reg8 src)
@@ -310,18 +310,7 @@ void X86Builder::adc(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x10); // opcode
     encodeModRM(dstReg, srcReg);
-};
-
-// reg -> reg, 8 bit
-void X86Builder::and_(Reg8 dst, Reg8 src)
-{
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x20); // opcode, w = 0
-    encodeModRM(dstReg, srcReg);
-};
+}
 
 // reg -> reg, 16 bit
 void X86Builder::and_(Reg16 dst, Reg16 src)
@@ -334,7 +323,18 @@ void X86Builder::and_(Reg16 dst, Reg16 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x21); // opcode, w = 1
     encodeModRM(dstReg, srcReg);
-};
+}
+
+// reg -> reg, 8 bit
+void X86Builder::and_(Reg8 dst, Reg8 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x20); // opcode, w = 0
+    encodeModRM(dstReg, srcReg);
+}
 
 // imm -> reg
 void X86Builder::and_(Reg32 dst, uint32_t imm)
@@ -361,7 +361,7 @@ void X86Builder::and_(Reg8 dst, uint8_t imm)
     write(0x80); // opcode, s = 0, w = 0
     encodeModRM(dstReg, 4);
     write(imm); // imm
-};
+}
 
 // indirect
 void X86Builder::call(Reg64 r)
@@ -371,7 +371,7 @@ void X86Builder::call(Reg64 r)
     encodeREX(false, 0, 0, reg);
     write(0xFF); // opcode
     encodeModRM(reg, 2);
-};
+}
 
 // reg -> reg, 8 bit
 void X86Builder::cmp(Reg8 dst, Reg8 src)
@@ -761,7 +761,7 @@ void X86Builder::sbb(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x18); // opcode
     encodeModRM(dstReg, srcReg);
-};
+}
 
 // -> reg
 void X86Builder::setcc(Condition cc, Reg8 dst)
@@ -814,7 +814,7 @@ void X86Builder::sub(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x28); // opcode
     encodeModRM(dstReg, srcReg);
-};
+}
 
 // imm -> reg, 8 bit
 void X86Builder::sub(Reg8 dst, uint8_t imm)
