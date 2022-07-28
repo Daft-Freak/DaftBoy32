@@ -3729,5 +3729,29 @@ uint8_t DMGRecompiler::readMem(DMGCPU *cpu, uint16_t addr)
 
 void DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
 {
+    // invalidate code on mem write
+    if(addr & 0x8000)
+    {
+        auto &compiler = cpu->compiler; // oh right, this is a static func
+
+        for(auto it = compiler.compiled.begin(); it != compiler.compiled.end();)
+        {
+            if(addr >= it->first && addr < it->second.endPC)
+            {
+                printf("invalidate compiled code @%04X in %04X-%04X\n", addr, it->first, it->second.endPC);
+
+                // rewind if last code compiled
+                // TODO: reclaim memory in other cases
+                if(it->second.endPtr == compiler.curCodePtr)
+                    compiler.curCodePtr = reinterpret_cast<uint8_t *>(it->second.func);
+
+                it = compiler.compiled.erase(it);
+
+                continue; // might have compiled the same code more than once
+            }
+            ++it;
+        }
+    }
+
     cpu->writeMem(addr, data);
 }
