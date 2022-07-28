@@ -207,6 +207,7 @@ public:
 
     void setcc(Condition cc, Reg8 dst);
 
+    void shr(Reg32 r, uint8_t count);
     void shr(Reg8 r, uint8_t count);
 
     void shl(Reg32 r, uint8_t count);
@@ -803,6 +804,19 @@ void X86Builder::setcc(Condition cc, Reg8 dst)
     write(0x0F); // two byte opcode
     write(0x90 | static_cast<int>(cc)); // opcode
     encodeModRM(dstReg);
+}
+
+// reg
+void X86Builder::shr(Reg32 r, uint8_t count)
+{
+    auto reg = static_cast<int>(r);
+
+    // TODO: 0xD0 for 1
+
+    encodeREX(false, 0, 0, reg);
+    write(0xC1); // opcode, w = 1
+    encodeModRM(reg, 5);
+    write(count);
 }
 
 // reg, 8 bit
@@ -1960,7 +1974,28 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
             break;
         }
+        case 0x08: // LD (nn),SP
+        {
+            incPC();
+            cycleExecuted();
+            uint16_t addr = cpu.readMem(pc++);
+            incPC();
+            cycleExecuted();
+            addr |= (cpu.readMem(pc++) << 8);
+            incPC();
+            cycleExecuted();
 
+            writeMemImmAddr(addr++, Reg8::R9B); // low byte
+            cycleExecuted();
+
+            // SP >> 8
+            builder.mov(Reg32::R10D, Reg32::R9D);
+            builder.shr(Reg32::R10D, 8);
+
+            writeMemImmAddr(addr, Reg8::R10B); // low byte
+            cycleExecuted();
+            break;
+        }
         case 0x09: // ADD HL,BC
             incPC();
             cycleExecuted();
