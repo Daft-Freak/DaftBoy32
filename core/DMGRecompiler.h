@@ -15,7 +15,7 @@ public:
 private:
     DMGCPU &cpu;
 
-    bool compile(uint8_t *&codePtr, uint16_t pc);
+    bool compile(uint8_t *&codePtr, uint16_t &pc);
 
     bool recompileInstruction(uint16_t &pc, X86Builder &builder);
     void recompileExInstruction(uint16_t &pc, X86Builder &builder);
@@ -30,5 +30,12 @@ private:
     // cycles, regs[4], pc, sp
     using CompiledFunc = void(*)(int &, uint16_t *, uint16_t &, uint16_t &);
 
-    std::map<uint16_t, CompiledFunc> compiled;
+    struct FuncInfo
+    {
+        CompiledFunc func;
+        uint8_t *endPtr;
+        uint16_t endPC;
+    };
+
+    std::map<uint16_t, FuncInfo> compiled;
 };
