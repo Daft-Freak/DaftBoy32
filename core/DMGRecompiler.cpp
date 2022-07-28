@@ -181,6 +181,7 @@ public:
 
     void not_(Reg8 r);
 
+    void or_(Reg16 dst, Reg16 src);
     void or_(Reg8 dst, Reg8 src);
     void or_(Reg32 dst, uint32_t imm);
     void or_(Reg8 dst, uint8_t imm);
@@ -207,6 +208,7 @@ public:
 
     void shr(Reg8 r, uint8_t count);
 
+    void shl(Reg32 r, uint8_t count);
     void shl(Reg8 r, uint8_t count);
 
     void stc();
@@ -636,6 +638,19 @@ void X86Builder::not_(Reg8 r)
     encodeModRM(reg, 2);
 }
 
+// reg -> reg, 16 bit
+void X86Builder::or_(Reg16 dst, Reg16 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    write(0x66); // 16 bit override
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x09); // opcode, w = 1
+    encodeModRM(dstReg, srcReg);
+}
+
 // reg -> reg, 8 bit
 void X86Builder::or_(Reg8 dst, Reg8 src)
 {
@@ -784,6 +799,19 @@ void X86Builder::shr(Reg8 r, uint8_t count)
     encodeREX(false, 0, 0, reg);
     write(0xC0); // opcode, w = 0
     encodeModRM(reg, 5);
+    write(count);
+}
+
+// reg
+void X86Builder::shl(Reg32 r, uint8_t count)
+{
+    auto reg = static_cast<int>(r);
+
+    // TODO: 0xD0 for 1
+
+    encodeREX(false, 0, 0, reg);
+    write(0xC1); // opcode, w = 1
+    encodeModRM(reg, 4);
     write(count);
 }
 
@@ -1816,6 +1844,40 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         return true;
     };
 
+    const auto ret = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &readMem](int flag = 0, bool set = true)
+    {
+        incPC();
+        cycleExecuted();
+
+        // condition
+        if(flag)
+        {
+            cycleExecuted(); // delay
+
+            builder.test(reg(Reg::F), flag);
+            builder.jcc(set ? Condition::E : Condition::NE, 22 + 46 * 3/*cycleExecuted*/ + 53 * 2 /*readMem*/);
+        }
+
+        auto sp = Reg16::R9W;
+
+        builder.mov(Reg32::R8D, 0);
+        readMem(sp, Reg8::R8B);
+        builder.inc(sp);
+        cycleExecuted();
+
+        readMem(sp, Reg8::R10B);
+        builder.inc(sp);
+        cycleExecuted();
+
+        builder.shl(Reg32::R10D, 8);
+        builder.or_(Reg16::R8W, Reg16::R10W);
+        cycleExecuted();
+        
+        exited = true;
+
+        return true;
+    };
+
     switch(opcode)
     {
         case 0x00: // NOP
@@ -2702,7 +2764,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             incPC();
             cycleExecuted();
             return cmp(reg(Reg::A));
-
+        case 0xC0: // RET NZ
+            return ret(DMGCPU::Flag_Z, false);
         case 0xC1: // POP BC
             return pop(WReg::BC);
         case 0xC2: // JP NZ,nn
@@ -2726,6 +2789,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
 
+        case 0xC8: // RET Z
+            return ret(DMGCPU::Flag_Z);
+        case 0xC9: // RET
+            return ret();
         case 0xCA: // JP Z,nn
             return jump(DMGCPU::Flag_Z);
         case 0xCB:
@@ -2748,6 +2815,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
 
+        case 0xD0: // RET NC
+            return ret(DMGCPU::Flag_C, false);
         case 0xD1: // POP DE
             return pop(WReg::DE);
         case 0xD2: // JP NC,nn
@@ -2769,6 +2838,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
+
+        case 0xD8: // RET C
+            return ret(DMGCPU::Flag_C);
 
         case 0xDA: // JP C,nn
             return jump(DMGCPU::Flag_C);
