@@ -36,7 +36,6 @@ void DMGCPU::reset()
     // values after boot rom
     pc = 0x100;
     sp = 0xFFFE;
-    compiler.handleBranch();
 
     mem.reset();
 
@@ -2913,7 +2912,6 @@ bool DMGCPU::serviceInterrupts()
 
             mem.writeIOReg(IO_IF, mem.readIOReg(IO_IF) & ~(1 << i));
             serviceableInterrupts &= ~(1 << i);
-            compiler.handleBranch();
             return true;
         }
     }

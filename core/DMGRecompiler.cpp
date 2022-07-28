@@ -1009,32 +1009,59 @@ void DMGRecompiler::handleBranch()
     if(!codeBuf)
         return;
 
-    auto mappedAddr = cpu.mem.makeBankedAddress(cpu.pc);
-
-    auto it = compiled.find(mappedAddr);
-
-    if(it == compiled.end())
-    {
-        auto ptr = curCodePtr;
-        auto startPtr = ptr;
-        auto pc = cpu.pc;
-
-        FuncInfo info{};
-
-        if(compile(ptr, pc))
-        {
-            info.func = reinterpret_cast<CompiledFunc>(startPtr);
-            info.endPtr = curCodePtr = ptr;
-            info.endPC = cpu.mem.makeBankedAddress(pc);
-        }
-        
-        it = compiled.emplace(mappedAddr, info).first;
-    }
-
-    if(it->second.func)
+    while(true)
     {
         int cycles = cpu.cyclesToRun; // FIXME: min interrupts
-        it->second.func(cycles, cpu.regs, cpu.pc, cpu.sp);
+
+        if(cycles <= 0)
+            break;
+
+        // lookup compiled code
+        auto mappedAddr = cpu.mem.makeBankedAddress(cpu.pc);
+
+        auto it = compiled.find(mappedAddr);
+
+        if(it == compiled.end())
+        {
+            // attempt compile
+            auto ptr = curCodePtr;
+            auto startPtr = ptr;
+            auto pc = cpu.pc;
+
+            FuncInfo info{};
+
+            if(compile(ptr, pc))
+            {
+                info.func = reinterpret_cast<CompiledFunc>(startPtr);
+                info.endPtr = curCodePtr = ptr;
+                info.endPC = cpu.mem.makeBankedAddress(pc);
+            }
+            
+            it = compiled.emplace(mappedAddr, info).first;
+        }
+
+        // run the code if valid, or stop
+        if(it->second.func)
+            it->second.func(cycles, cpu.regs, cpu.pc, cpu.sp);
+        else
+            break;
+
+        // CPU not running, stop
+        if(cpu.halted || cpu.stopped || cpu.gdmaTriggered)
+            break;
+
+        // we ran something, do the usual CPU update stuff
+        // TODO: duplicated from CPU
+
+        // sync timer if interrupts enabled
+        if(cpu.nextTimerInterrupt)
+            cpu.updateTimer();
+
+        // sync display if interrupts enabled
+        cpu.display.updateForInterrupts();
+
+        if(cpu.serviceableInterrupts)
+            cpu.serviceInterrupts();
     }
 }
 
