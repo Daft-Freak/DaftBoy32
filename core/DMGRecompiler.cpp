@@ -2992,7 +2992,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
             break;
         }
-
+        case 0xE9: // JP (HL)
+            incPC();
+            cycleExecuted();
+            builder.movzx(Reg32::R8D, reg(WReg::HL)); // PC = HL
+            exited = true;
+            break;
         case 0xEA: // LD (nn),A
         {
             incPC();
