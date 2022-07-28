@@ -174,6 +174,7 @@ public:
     void mov(Reg64 r, uint64_t imm);
     void mov(Reg32 r, uint32_t imm);
     void mov(Reg8 r, uint8_t imm);
+    void mov(uint8_t imm, Reg64 base, int disp = 0);
 
     void movzx(Reg32 dst, Reg16 src);
     void movzx(Reg32 dst, Reg8 src);
@@ -590,7 +591,22 @@ void X86Builder::mov(Reg8 r, uint8_t imm)
 
     // immediate
     write(imm);
-};
+}
+
+// imm -> mem, 8 bit
+void X86Builder::mov(uint8_t imm, Reg64 base, int disp)
+{
+    auto baseReg = static_cast<int>(base);
+
+    encodeREX(false, 0, 0, baseReg);
+
+    write(0xC6); // opcode, w = 0
+
+    encodeModRM(0, baseReg, disp);
+
+    // immediate
+    write(imm);
+}
 
 // zero extend, reg -> reg, 16 bit
 void X86Builder::movzx(Reg32 dst, Reg16 src)
@@ -2869,7 +2885,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             return reset(0x10);
         case 0xD8: // RET C
             return ret(DMGCPU::Flag_C);
-
+        case 0xD9: // RETI
+            // masterInterruptEnable = true
+            // TODO: if we store the CPU ptr then we can use a disp here
+            builder.mov(Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable));
+            builder.mov(1, Reg64::R10);
+            return ret();
         case 0xDA: // JP C,nn
             return jump(DMGCPU::Flag_C);
 
