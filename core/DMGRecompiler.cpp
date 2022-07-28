@@ -1099,10 +1099,12 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
 
     // do instructions
     int numInstructions = 0;
+
+    bool exited = false;
     
-    while(true)
+    while(!exited)
     {
-        if(!recompileInstruction(pc, builder))
+        if(!recompileInstruction(pc, builder, exited))
             break;
 
         numInstructions++;
@@ -1164,7 +1166,7 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
     return true;
 }
 
-bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
+bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool &exited)
 {
     auto &mem = cpu.getMem();
     uint8_t opcode = mem.read(pc++);
@@ -1709,6 +1711,32 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
         builder.dec(reg(r));
         cycleExecuted();
+        return true;
+    };
+
+    const auto jump = [this, &pc, &exited, &builder, &incPC, &cycleExecuted](int flag = 0, bool set = true)
+    {
+        incPC();
+        cycleExecuted();
+
+        uint16_t addr = cpu.readMem(pc++);
+        incPC();
+        cycleExecuted();
+        addr |= cpu.readMem(pc++) << 8;
+        incPC();
+        cycleExecuted();
+
+        // condition
+        if(flag)
+        {
+            builder.test(reg(Reg::F), flag);
+            builder.jcc(set ? Condition::E : Condition::NE, 6 + 46/*cycleExecuted*/);
+        }
+
+        builder.mov(Reg32::R8D, addr);
+        cycleExecuted();
+        exited = true;
+
         return true;
     };
 
@@ -2595,6 +2623,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
         case 0xC1: // POP BC
             return pop(WReg::BC);
+        case 0xC2: // JP NZ,nn
+            return jump(DMGCPU::Flag_Z, false);
+        case 0xC3: // JP nn
+            return jump();
 
         case 0xC5: // PUSH BC
             return push(WReg::BC);
@@ -2611,6 +2643,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             break;
         }
 
+        case 0xCA: // JP Z,nn
+            return jump(DMGCPU::Flag_Z);
         case 0xCB:
             recompileExInstruction(pc, builder);
             break;
@@ -2630,6 +2664,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
 
         case 0xD1: // POP DE
             return pop(WReg::DE);
+        case 0xD2: // JP NC,nn
+            return jump(DMGCPU::Flag_C, false);
+
 
         case 0xD5: // PUSH DE
             return push(WReg::DE);
@@ -2645,6 +2682,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder)
             cycleExecuted();
             break;
         }
+
+        case 0xDA: // JP C,nn
+            return jump(DMGCPU::Flag_C);
 
         case 0xDE: // SBC n
         {

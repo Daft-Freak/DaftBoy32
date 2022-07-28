@@ -17,7 +17,7 @@ private:
 
     bool compile(uint8_t *&codePtr, uint16_t &pc);
 
-    bool recompileInstruction(uint16_t &pc, X86Builder &builder);
+    bool recompileInstruction(uint16_t &pc, X86Builder &builder, bool &exited);
     void recompileExInstruction(uint16_t &pc, X86Builder &builder);
 
     static void cycleExecuted(DMGCPU *cpu);
