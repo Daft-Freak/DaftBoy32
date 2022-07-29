@@ -1106,6 +1106,11 @@ void X86Builder::encodeREX(bool w, int reg, int index, int base)
                | (base & 8 ? REX_B : 0));
 }
 
+// size of the code to call these functions
+static const int cycleExecutedCallSize = 38;
+static const int readMemRegCallSize = 45;
+static const int writeMemRegImmCallSize = 49;
+
 // reg helpers
 static const Reg8 regMap8[]
 {
@@ -1953,7 +1958,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         if(flag)
         {
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 6 + 38/*cycleExecuted*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 6 + cycleExecutedCallSize);
         }
 
         builder.mov(Reg32::R8D, addr);
@@ -1971,7 +1976,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         if(flag)
         {
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 5 + 38/*cycleExecuted*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 5 + cycleExecutedCallSize);
         }
 
         builder.add(Reg16::R8W, off);
@@ -1992,7 +1997,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         if(flag)
         {
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 12 + 38 * 3/*cycleExecuted*/ + 50 * 2 /*writeMem*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 14 + cycleExecutedCallSize * 3 + writeMemRegImmCallSize * 2);
         }
 
         cycleExecuted(); // delay
@@ -2037,7 +2042,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted(); // delay
 
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 22 + 38 * 3/*cycleExecuted*/ + 45 * 2 /*readMem*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 22 + cycleExecutedCallSize * 3 + readMemRegCallSize * 2);
         }
 
         auto sp = Reg16::R9W;
