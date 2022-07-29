@@ -1219,18 +1219,10 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
     // load cycle count
     builder.mov(Reg32::ESI, Reg64::RDI);
 
-    // do instructions
-    int numInstructions = 0;
+    // jump over exit code
+    builder.jmp(32); // size of code below
 
-    bool exited = false;
-    
-    while(!exited)
-    {
-        if(!recompileInstruction(pc, builder, exited))
-            break;
-
-        numInstructions++;
-    }
+    auto exitPtr = builder.getPtr();
 
     // store cycle count
     builder.pop(Reg64::RDI);
@@ -1257,6 +1249,22 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
     // epilogue
     builder.pop(Reg64::RBP);
     builder.ret();
+
+    // do instructions
+    int numInstructions = 0;
+
+    bool exited = false;
+    
+    while(!exited)
+    {
+        if(!recompileInstruction(pc, builder, exited))
+            break;
+
+        numInstructions++;
+    }
+
+    // jump to exit code
+    builder.jmp(exitPtr - builder.getPtr());
 
     if(builder.getError())
     {
