@@ -455,7 +455,8 @@ void DMGCPU::run(int ms)
 
     cyclesToRun += cycles;
 
-    compiler.handleBranch();
+    if(!halted)
+        compiler.handleBranch();
 
     while(!stopped && cyclesToRun > 0)
     {
@@ -501,7 +502,12 @@ void DMGCPU::run(int ms)
             display.updateForInterrupts();
 
             if(serviceableInterrupts)
+            {
                 serviceInterrupts();
+
+                if(!haltBug)
+                    compiler.handleBranch(); // un-halted
+            }
 
         } while(halted && cyclesToRun > 0); // wait until not halted
     }
