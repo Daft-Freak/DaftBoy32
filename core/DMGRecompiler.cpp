@@ -1355,13 +1355,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(reg(r), v);
         incPC();
         cycleExecuted();
-        return true;
     };
 
     const auto copy8 = [&builder, &incPC, &cycleExecuted](Reg dst, Reg src)
     {
         builder.mov(reg(dst), reg(src));
-        return true;
     };
 
     const auto load16 = [this, &pc, &builder, &incPC, &cycleExecuted](WReg r)
@@ -1378,7 +1376,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(highReg, v);
         incPC();
         cycleExecuted();
-        return true;
     };
 
     const auto push = [&builder, &incPC, &cycleExecuted, &writeMem](WReg r)
@@ -1397,7 +1394,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.dec(sp);
         writeMem(sp, lowReg);
         cycleExecuted();
-        return true;
     };
 
     const auto pop = [&builder, &incPC, &cycleExecuted, &readMem](WReg r)
@@ -1418,8 +1414,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         // low bits in F can never be set
         if(r == WReg::AF)
             builder.and_(reg(Reg::F), 0xF0);
-
-        return true;
     };
 
     const auto add = [&builder, &incPC, &cycleExecuted](Reg8 b, bool withCarry = false)
@@ -1590,8 +1584,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.and_(a, a); // TODO: TEST?
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-
-        return true;
     };
 
     const auto subWithCarry = [&sub](Reg8 b)
@@ -1608,8 +1600,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(reg(Reg::F), DMGCPU::Flag_H); // not zero
         builder.jmp(2);
         builder.mov(reg(Reg::F), DMGCPU::Flag_H | DMGCPU::Flag_Z); // zero
-
-        return true;
     };
 
     const auto bitOr = [&builder](Reg8 r)
@@ -1619,8 +1609,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(reg(Reg::F), 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
-
-        return true;
     };
 
     const auto bitXor = [&builder](Reg8 r)
@@ -1630,8 +1618,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(reg(Reg::F), 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
-
-        return true;
     };
 
     const auto cmp = [&builder, &incPC, &cycleExecuted](Reg8 b)
@@ -1690,8 +1676,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.and_(Reg8::R11B, Reg8::R11B); // TODO: TEST?
         builder.jcc(Condition::E, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-
-        return true;
     };
 
     const auto inc = [&builder, &incPC, &cycleExecuted](Reg8 r)
@@ -1713,8 +1697,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.inc(r);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-
-        return true;
     };
 
     const auto dec = [&builder, &incPC, &cycleExecuted](Reg8 r)
@@ -1737,8 +1719,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.dec(r);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(f, DMGCPU::Flag_Z); // set Z
-
-        return true;
     };
 
     const auto add16 = [&builder, &incPC, &cycleExecuted](Reg16 b)
@@ -1776,22 +1756,18 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.or_(f, DMGCPU::Flag_H); // set H
 
         cycleExecuted();
-
-        return true;
     };
 
     const auto inc16 = [&builder, &incPC, &cycleExecuted](WReg r)
     {
         builder.inc(reg(r));
         cycleExecuted();
-        return true;
     };
 
     const auto dec16 = [&builder, &incPC, &cycleExecuted](WReg r)
     {
         builder.dec(reg(r));
         cycleExecuted();
-        return true;
     };
 
     const auto jump = [this, &pc, &exited, &builder, &incPC, &cycleExecuted](int flag = 0, bool set = true)
@@ -1813,8 +1789,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(Reg32::R8D, addr);
         cycleExecuted();
         exited = true;
-
-        return true;
     };
 
     const auto jumpRel = [this, &pc, &exited, &builder, &incPC, &cycleExecuted](int flag = 0, bool set = true)
@@ -1833,8 +1807,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.add(Reg16::R8W, off);
         cycleExecuted();
         exited = true;
-
-        return true;
     };
 
     const auto call = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
@@ -1869,8 +1841,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(Reg32::R8D, addr);
         
         exited = true;
-
-        return true;
     };
 
     const auto reset = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &writeMem](int addr)
@@ -1891,8 +1861,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(Reg32::R8D, addr);
         
         exited = true;
-
-        return true;
     };
 
     const auto ret = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &readMem](int flag = 0, bool set = true)
@@ -1922,8 +1890,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         cycleExecuted();
         
         exited = true;
-
-        return true;
     };
 
     switch(opcode)
@@ -1931,19 +1897,24 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0x00: // NOP
             break;
         case 0x01: // LD BC,nn
-            return load16(WReg::BC);
+            load16(WReg::BC);
+            break;
         case 0x02: // LD (BC),A
             writeMem(reg(WReg::BC), reg(Reg::A));
             cycleExecuted();
             break;
         case 0x03: // INC BC
-            return inc16(WReg::BC);
+            inc16(WReg::BC);
+            break;
         case 0x04: // INC B
-            return inc(reg(Reg::B));
+            inc(reg(Reg::B));
+            break;
         case 0x05: // DEC B
-            return dec(reg(Reg::B));
+            dec(reg(Reg::B));
+            break;
         case 0x06: // LD B,n
-            return load8(Reg::B);
+            load8(Reg::B);
+            break;
         case 0x07: // RLCA
         {
             auto f = reg(Reg::F);
@@ -1978,19 +1949,24 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0x09: // ADD HL,BC
-            return add16(reg(WReg::BC));
+            add16(reg(WReg::BC));
+            break;
         case 0x0A: // LD A,(BC)
             readMem(reg(WReg::BC), reg(Reg::A));
             cycleExecuted();
             break;
         case 0x0B: // DEC BC
-            return dec16(WReg::BC);
+            dec16(WReg::BC);
+            break;
         case 0x0C: // INC C
-            return inc(reg(Reg::C));
+            inc(reg(Reg::C));
+            break;
         case 0x0D: // DEC C
-            return dec(reg(Reg::C));
+            dec(reg(Reg::C));
+            break;
         case 0x0E: // LD C,n
-            return load8(Reg::C);
+            load8(Reg::C);
+            break;
         case 0x0F: // RRCA
         {
             auto f = reg(Reg::F);
@@ -2005,19 +1981,24 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         }
 
         case 0x11: // LD DE,nn
-            return load16(WReg::DE);
+            load16(WReg::DE);
+            break;
         case 0x12: // LD (DE),A
             writeMem(reg(WReg::DE), reg(Reg::A));
             cycleExecuted();
             break;
         case 0x13: // INC DE
-            return inc16(WReg::DE);
+            inc16(WReg::DE);
+            break;
         case 0x14: // INC D
-            return inc(reg(Reg::D));
+            inc(reg(Reg::D));
+            break;
         case 0x15: // DEC D
-            return dec(reg(Reg::D));
+            dec(reg(Reg::D));
+            break;
         case 0x16: // LD D,n
-            return load8(Reg::D);
+            load8(Reg::D);
+            break;
         case 0x17: // RLA
         {
             auto f = reg(Reg::F);
@@ -2037,21 +2018,27 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         }
 
         case 0x18: // JR m
-            return jumpRel();
+            jumpRel();
+            break;
         case 0x19: // ADD HL,DE
-            return add16(reg(WReg::DE));
+            add16(reg(WReg::DE));
+            break;
         case 0x1A: // LD A,(DE)
             readMem(reg(WReg::DE), reg(Reg::A));
             cycleExecuted();
             break;
         case 0x1B: // DEC DE
-            return dec16(WReg::DE);
+            dec16(WReg::DE);
+            break;
         case 0x1C: // INC E
-            return inc(reg(Reg::E));
+            inc(reg(Reg::E));
+            break;
         case 0x1D: // DEC E
-            return dec(reg(Reg::E));
+            dec(reg(Reg::E));
+            break;
         case 0x1E: // LD E,n
-            return load8(Reg::E);
+            load8(Reg::E);
+            break;
         case 0x1F: // RRA
         {
             auto f = reg(Reg::F);
@@ -2070,22 +2057,28 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0x20: // JR NZ,n
-            return jumpRel(DMGCPU::Flag_Z, false);
+            jumpRel(DMGCPU::Flag_Z, false);
+            break;
         case 0x21: // LD HL,nn
-            return load16(WReg::HL);
+            load16(WReg::HL);
+            break;
         case 0x22: // LDI (HL),A
             writeMem(reg(WReg::HL), reg(Reg::A));
             builder.inc(reg(WReg::HL));
             cycleExecuted();
             break;
         case 0x23: // INC HL
-            return inc16(WReg::HL);
+            inc16(WReg::HL);
+            break;
         case 0x24: // INC H
-            return inc(reg(Reg::H));
+            inc(reg(Reg::H));
+            break;
         case 0x25: // DEC H
-            return dec(reg(Reg::H));
+            dec(reg(Reg::H));
+            break;
         case 0x26: // LD H,n
-            return load8(Reg::H);
+            load8(Reg::H);
+            break;
         case 0x27: // DAA
         {
             auto f = reg(Reg::F);
@@ -2145,28 +2138,35 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0x28: // JR Z,n
-            return jumpRel(DMGCPU::Flag_Z);
+            jumpRel(DMGCPU::Flag_Z);
+            break;
         case 0x29: // ADD HL,HL
-            return add16(reg(WReg::HL));
+            add16(reg(WReg::HL));
+            break;
         case 0x2A: // LDI A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
             builder.inc(reg(WReg::HL));
             cycleExecuted();
             break;
         case 0x2B: // DEC HL
-            return dec16(WReg::HL);
+            dec16(WReg::HL);
+            break;
         case 0x2C: // INC L
-            return inc(reg(Reg::L));
+            inc(reg(Reg::L));
+            break;
         case 0x2D: // DEC L
-            return dec(reg(Reg::L));
+            dec(reg(Reg::L));
+            break;
         case 0x2E: // LD L,n
-            return load8(Reg::L);
+            load8(Reg::L);
+            break;
         case 0x2F: // CPL
             builder.not_(reg(Reg::A));
             builder.or_(reg(Reg::F), DMGCPU::Flag_H | DMGCPU::Flag_N);
             break;
         case 0x30: // JR NC,n
-            return jumpRel(DMGCPU::Flag_C, false);
+            jumpRel(DMGCPU::Flag_C, false);
+            break;
         case 0x31: // LD SP,nn
         {
             uint16_t sp = cpu.readMem(pc++);
@@ -2233,9 +2233,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0x38: // JR C,n
-            return jumpRel(DMGCPU::Flag_C);
+            jumpRel(DMGCPU::Flag_C);
+            break;
         case 0x39: // ADD HL,SP
-            return add16(Reg16::R9W);
+            add16(Reg16::R9W);
+            break;
         case 0x3A: // LDD A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
             builder.dec(reg(WReg::HL));
@@ -2246,11 +2248,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         case 0x3C: // INC A
-            return inc(reg(Reg::A));
+            inc(reg(Reg::A));
+            break;
         case 0x3D: // DEC A
-            return dec(reg(Reg::A));
+            dec(reg(Reg::A));
+            break;
         case 0x3E: // LD A,n
-            return load8(Reg::A);
+            load8(Reg::A);
+            break;
         case 0x3F: // CCF
         {
             builder.and_(reg(Reg::F), DMGCPU::Flag_C | DMGCPU::Flag_Z); // H/N are cleared
@@ -2258,113 +2263,155 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0x40: // LD B,B
-            return copy8(Reg::B, Reg::B);
+            copy8(Reg::B, Reg::B);
+            break;
         case 0x41: // LD B,C
-            return copy8(Reg::B, Reg::C);
+            copy8(Reg::B, Reg::C);
+            break;
         case 0x42: // LD B,D
-            return copy8(Reg::B, Reg::D);
+            copy8(Reg::B, Reg::D);
+            break;
         case 0x43: // LD B,E
-            return copy8(Reg::B, Reg::E);
+            copy8(Reg::B, Reg::E);
+            break;
         case 0x44: // LD B,H
-            return copy8(Reg::B, Reg::H);
+            copy8(Reg::B, Reg::H);
+            break;
         case 0x45: // LD B,L
-            return copy8(Reg::B, Reg::L);
+            copy8(Reg::B, Reg::L);
+            break;
         case 0x46: // LD B,(HL)
             readMem(reg(WReg::HL), reg(Reg::B));
             cycleExecuted();
             break;
         case 0x47: // LD B,A
-            return copy8(Reg::B, Reg::A);
+            copy8(Reg::B, Reg::A);
+            break;
         case 0x48: // LD C,B
-            return copy8(Reg::C, Reg::B);
+            copy8(Reg::C, Reg::B);
+            break;
         case 0x49: // LD C,C
-            return copy8(Reg::C, Reg::C);
+            copy8(Reg::C, Reg::C);
+            break;
         case 0x4A: // LD C,D
-            return copy8(Reg::C, Reg::D);
+            copy8(Reg::C, Reg::D);
+            break;
         case 0x4B: // LD C,E
-            return copy8(Reg::C, Reg::E);
+            copy8(Reg::C, Reg::E);
+            break;
         case 0x4C: // LD C,H
-            return copy8(Reg::C, Reg::H);
+            copy8(Reg::C, Reg::H);
+            break;
         case 0x4D: // LD C,L
-            return copy8(Reg::C, Reg::L);
+            copy8(Reg::C, Reg::L);
+            break;
         case 0x4E: // LD C,(HL)
             readMem(reg(WReg::HL), reg(Reg::C));
             cycleExecuted();
             break;
         case 0x4F: // LD C,A
-            return copy8(Reg::C, Reg::A);
+            copy8(Reg::C, Reg::A);
+            break;
         case 0x50: // LD D,B
-            return copy8(Reg::D, Reg::B);
+            copy8(Reg::D, Reg::B);
+            break;
         case 0x51: // LD D,C
-            return copy8(Reg::D, Reg::C);
+            copy8(Reg::D, Reg::C);
+            break;
         case 0x52: // LD D,D
-            return copy8(Reg::D, Reg::D);
+            copy8(Reg::D, Reg::D);
+            break;
         case 0x53: // LD D,E
-            return copy8(Reg::D, Reg::E);
+            copy8(Reg::D, Reg::E);
+            break;
         case 0x54: // LD D,H
-            return copy8(Reg::D, Reg::H);
+            copy8(Reg::D, Reg::H);
+            break;
         case 0x55: // LD D,L
-            return copy8(Reg::D, Reg::L);
+            copy8(Reg::D, Reg::L);
+            break;
         case 0x56: // LD D,(HL)
             readMem(reg(WReg::HL), reg(Reg::D));
             cycleExecuted();
             break;
         case 0x57: // LD D,A
-            return copy8(Reg::D, Reg::A);
+            copy8(Reg::D, Reg::A);
+            break;
         case 0x58: // LD E,B
-            return copy8(Reg::E, Reg::B);
+            copy8(Reg::E, Reg::B);
+            break;
         case 0x59: // LD E,C
-            return copy8(Reg::E, Reg::C);
+            copy8(Reg::E, Reg::C);
+            break;
         case 0x5A: // LD E,D
-            return copy8(Reg::E, Reg::D);
+            copy8(Reg::E, Reg::D);
+            break;
         case 0x5B: // LD E,E
-            return copy8(Reg::E, Reg::E);
+            copy8(Reg::E, Reg::E);
+            break;
         case 0x5C: // LD E,H
-            return copy8(Reg::E, Reg::H);
+            copy8(Reg::E, Reg::H);
+            break;
         case 0x5D: // LD E,L
-            return copy8(Reg::E, Reg::L);
+            copy8(Reg::E, Reg::L);
+            break;
         case 0x5E: // LD E,(HL)
             readMem(reg(WReg::HL), reg(Reg::E));
             cycleExecuted();
             break;
         case 0x5F: // LD E,A
-            return copy8(Reg::E, Reg::A);
+            copy8(Reg::E, Reg::A);
+            break;
         case 0x60: // LD H,B
-            return copy8(Reg::H, Reg::B);
+            copy8(Reg::H, Reg::B);
+            break;
         case 0x61: // LD H,C
-            return copy8(Reg::H, Reg::C);
+            copy8(Reg::H, Reg::C);
+            break;
         case 0x62: // LD H,D
-            return copy8(Reg::H, Reg::D);
+            copy8(Reg::H, Reg::D);
+            break;
         case 0x63: // LD H,E
-            return copy8(Reg::H, Reg::E);
+            copy8(Reg::H, Reg::E);
+            break;
         case 0x64: // LD H,H
-            return copy8(Reg::H, Reg::H);
+            copy8(Reg::H, Reg::H);
+            break;
         case 0x65: // LD H,L
-            return copy8(Reg::H, Reg::L);
+            copy8(Reg::H, Reg::L);
+            break;
         case 0x66: // LD H,(HL)
             readMem(reg(WReg::HL), reg(Reg::H));
             cycleExecuted();
             break;
         case 0x67: // LD H,A
-            return copy8(Reg::H, Reg::A);
+            copy8(Reg::H, Reg::A);
+            break;
         case 0x68: // LD L,B
-            return copy8(Reg::L, Reg::B);
+            copy8(Reg::L, Reg::B);
+            break;
         case 0x69: // LD L,C
-            return copy8(Reg::L, Reg::C);
+            copy8(Reg::L, Reg::C);
+            break;
         case 0x6A: // LD L,D
-            return copy8(Reg::L, Reg::D);
+            copy8(Reg::L, Reg::D);
+            break;
         case 0x6B: // LD L,E
-            return copy8(Reg::L, Reg::E);
+            copy8(Reg::L, Reg::E);
+            break;
         case 0x6C: // LD L,H
-            return copy8(Reg::L, Reg::H);
+            copy8(Reg::L, Reg::H);
+            break;
         case 0x6D: // LD L,L
-            return copy8(Reg::L, Reg::L);
+            copy8(Reg::L, Reg::L);
+            break;
         case 0x6E: // LD L,(HL)
             readMem(reg(WReg::HL), reg(Reg::L));
             cycleExecuted();
             break;
         case 0x6F: // LD L,A
-            return copy8(Reg::L, Reg::A);
+            copy8(Reg::L, Reg::A);
+            break;
         case 0x70: // LD (HL),B
             writeMem(reg(WReg::HL), reg(Reg::B));
             cycleExecuted();
@@ -2412,36 +2459,49 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         case 0x78: // LD A,B
-            return copy8(Reg::A, Reg::B);
+            copy8(Reg::A, Reg::B);
+            break;
         case 0x79: // LD A,C
-            return copy8(Reg::A, Reg::C);
+            copy8(Reg::A, Reg::C);
+            break;
         case 0x7A: // LD A,D
-            return copy8(Reg::A, Reg::D);
+            copy8(Reg::A, Reg::D);
+            break;
         case 0x7B: // LD A,E
-            return copy8(Reg::A, Reg::E);
+            copy8(Reg::A, Reg::E);
+            break;
         case 0x7C: // LD A,H
-            return copy8(Reg::A, Reg::H);
+            copy8(Reg::A, Reg::H);
+            break;
         case 0x7D: // LD A,L
-            return copy8(Reg::A, Reg::L);
+            copy8(Reg::A, Reg::L);
+            break;
         case 0x7E: // LD A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
             cycleExecuted();
             break;
         case 0x7F: // LD A,A
-            return copy8(Reg::A, Reg::A);
+            copy8(Reg::A, Reg::A);
+            break;
 
         case 0x80: // ADD A,B
-            return add(reg(Reg::B));
+            add(reg(Reg::B));
+            break;
         case 0x81: // ADD A,C
-            return add(reg(Reg::C));
+            add(reg(Reg::C));
+            break;
         case 0x82: // ADD A,D
-            return add(reg(Reg::D));
+            add(reg(Reg::D));
+            break;
         case 0x83: // ADD A,E
-            return add(reg(Reg::E));
+            add(reg(Reg::E));
+            break;
         case 0x84: // ADD A,H
-            return add(reg(Reg::H));
+            add(reg(Reg::H));
+            break;
         case 0x85: // ADD A,L
-            return add(reg(Reg::L));
+            add(reg(Reg::L));
+            break;
         case 0x86: // ADD (HL)
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
@@ -2451,19 +2511,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0x87: // ADD A,A
-            return add(reg(Reg::A));
+            add(reg(Reg::A));
+            break;
         case 0x88: // ADC A,B
-            return addWithCarry(reg(Reg::B));
+            addWithCarry(reg(Reg::B));
+            break;
         case 0x89: // ADC A,C
-            return addWithCarry(reg(Reg::C));
+            addWithCarry(reg(Reg::C));
+            break;
         case 0x8A: // ADC A,D
-            return addWithCarry(reg(Reg::D));
+            addWithCarry(reg(Reg::D));
+            break;
         case 0x8B: // ADC A,E
-            return addWithCarry(reg(Reg::E));
+            addWithCarry(reg(Reg::E));
+            break;
         case 0x8C: // ADC A,F
-            return addWithCarry(reg(Reg::H));
+            addWithCarry(reg(Reg::H));
+            break;
         case 0x8D: // ADC A,H
-            return addWithCarry(reg(Reg::L));
+            addWithCarry(reg(Reg::L));
+            break;
         case 0x8E: // ADC (HL)
         {
             auto tmp = Reg8::DIL; // can't use F here so use something wierd
@@ -2473,19 +2540,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0x8F: // ADC A,A
-            return addWithCarry(reg(Reg::A));
+            addWithCarry(reg(Reg::A));
+            break;
         case 0x90: // SUB B
-            return sub(reg(Reg::B));
+            sub(reg(Reg::B));
+            break;
         case 0x91: // SUB C
-            return sub(reg(Reg::C));
+            sub(reg(Reg::C));
+            break;
         case 0x92: // SUB D
-            return sub(reg(Reg::D));
+            sub(reg(Reg::D));
+            break;
         case 0x93: // SUB E
-            return sub(reg(Reg::E));
+            sub(reg(Reg::E));
+            break;
         case 0x94: // SUB H
-            return sub(reg(Reg::H));
+            sub(reg(Reg::H));
+            break;
         case 0x95: // SUB L
-            return sub(reg(Reg::L));
+            sub(reg(Reg::L));
+            break;
         case 0x96: // SUB (HL)
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
@@ -2495,19 +2569,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0x97: // SUB A
-            return sub(reg(Reg::A));
+            sub(reg(Reg::A));
+            break;
         case 0x98: // SBC B
-            return subWithCarry(reg(Reg::B));
+            subWithCarry(reg(Reg::B));
+            break;
         case 0x99: // SBC C
-            return subWithCarry(reg(Reg::C));
+            subWithCarry(reg(Reg::C));
+            break;
         case 0x9A: // SBC D
-            return subWithCarry(reg(Reg::D));
+            subWithCarry(reg(Reg::D));
+            break;
         case 0x9B: // SBC E
-            return subWithCarry(reg(Reg::E));
+            subWithCarry(reg(Reg::E));
+            break;
         case 0x9C: // SBC H
-            return subWithCarry(reg(Reg::H));
+            subWithCarry(reg(Reg::H));
+            break;
         case 0x9D: // SBC L
-            return subWithCarry(reg(Reg::L));
+            subWithCarry(reg(Reg::L));
+            break;
         case 0x9E: // SBC (HL)
         {
             auto tmp = Reg8::DIL; // can't use F here so use something wierd
@@ -2517,19 +2598,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0x9F: // SBC A
-            return subWithCarry(reg(Reg::A));
+            subWithCarry(reg(Reg::A));
+            break;
         case 0xA0: // AND B
-            return bitAnd(reg(Reg::B));
+            bitAnd(reg(Reg::B));
+            break;
         case 0xA1: // AND C
-            return bitAnd(reg(Reg::C));
+            bitAnd(reg(Reg::C));
+            break;
         case 0xA2: // AND D
-            return bitAnd(reg(Reg::D));
+            bitAnd(reg(Reg::D));
+            break;
         case 0xA3: // AND E
-            return bitAnd(reg(Reg::E));
+            bitAnd(reg(Reg::E));
+            break;
         case 0xA4: // AND H
-            return bitAnd(reg(Reg::H));
+            bitAnd(reg(Reg::H));
+            break;
         case 0xA5: // AND L
-            return bitAnd(reg(Reg::L));
+            bitAnd(reg(Reg::L));
+            break;
         case 0xA6: // AND (HL)
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
@@ -2539,19 +2627,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xA7: // AND A
-            return bitAnd(reg(Reg::A));
+            bitAnd(reg(Reg::A));
+            break;
         case 0xA8: // XOR B
-            return bitXor(reg(Reg::B));
+            bitXor(reg(Reg::B));
+            break;
         case 0xA9: // XOR C
-            return bitXor(reg(Reg::C));
+            bitXor(reg(Reg::C));
+            break;
         case 0xAA: // XOR D
-            return bitXor(reg(Reg::D));
+            bitXor(reg(Reg::D));
+            break;
         case 0xAB: // XOR E
-            return bitXor(reg(Reg::E));
+            bitXor(reg(Reg::E));
+            break;
         case 0xAC: // XOR H
-            return bitXor(reg(Reg::H));
+            bitXor(reg(Reg::H));
+            break;
         case 0xAD: // XOR L
-            return bitXor(reg(Reg::L));
+            bitXor(reg(Reg::L));
+            break;
         case 0xAE: // XOR (HL)
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
@@ -2564,17 +2659,23 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
             break;
         case 0xB0: // OR B
-            return bitOr(reg(Reg::B));
+            bitOr(reg(Reg::B));
+            break;
         case 0xB1: // OR C
-            return bitOr(reg(Reg::C));
+            bitOr(reg(Reg::C));
+            break;
         case 0xB2: // OR D
-            return bitOr(reg(Reg::D));
+            bitOr(reg(Reg::D));
+            break;
         case 0xB3: // OR E
-            return bitOr(reg(Reg::E));
+            bitOr(reg(Reg::E));
+            break;
         case 0xB4: // OR H
-            return bitOr(reg(Reg::H));
+            bitOr(reg(Reg::H));
+            break;
         case 0xB5: // OR L
-            return bitOr(reg(Reg::L));
+            bitOr(reg(Reg::L));
+            break;
         case 0xB6: // OR (HL)
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
@@ -2584,19 +2685,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xB7: // OR A
-            return bitOr(reg(Reg::A));
+            bitOr(reg(Reg::A));
+            break;
         case 0xB8: // CP B
-            return cmp(reg(Reg::B));
+            cmp(reg(Reg::B));
+            break;
         case 0xB9: // CP C
-            return cmp(reg(Reg::C));
+            cmp(reg(Reg::C));
+            break;
         case 0xBA: // CP D
-            return cmp(reg(Reg::D));
+            cmp(reg(Reg::D));
+            break;
         case 0xBB: // CP E
-            return cmp(reg(Reg::E));
+            cmp(reg(Reg::E));
+            break;
         case 0xBC: // CP H
-            return cmp(reg(Reg::H));
+            cmp(reg(Reg::H));
+            break;
         case 0xBD: // CP L
-            return cmp(reg(Reg::L));
+            cmp(reg(Reg::L));
+            break;
         case 0xBE: // CP (HL)
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
@@ -2606,19 +2714,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xBF: // CP A
-            return cmp(reg(Reg::A));
+            cmp(reg(Reg::A));
+            break;
         case 0xC0: // RET NZ
-            return ret(DMGCPU::Flag_Z, false);
+            ret(DMGCPU::Flag_Z, false);
+            break;
         case 0xC1: // POP BC
-            return pop(WReg::BC);
+            pop(WReg::BC);
+            break;
         case 0xC2: // JP NZ,nn
-            return jump(DMGCPU::Flag_Z, false);
+            jump(DMGCPU::Flag_Z, false);
+            break;
         case 0xC3: // JP nn
-            return jump();
+            jump();
+            break;
         case 0xC4: // CALL NZ,nn
-            return call(DMGCPU::Flag_Z, false);
+            call(DMGCPU::Flag_Z, false);
+            break;
         case 0xC5: // PUSH BC
-            return push(WReg::BC);
+            push(WReg::BC);
+            break;
         case 0xC6: // ADD n
         {
             // TODO: use imm?
@@ -2630,20 +2745,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xC7: // RST 0
-            return reset(0x00);
+            reset(0x00);
+            break;
         case 0xC8: // RET Z
-            return ret(DMGCPU::Flag_Z);
+            ret(DMGCPU::Flag_Z);
+            break;
         case 0xC9: // RET
-            return ret();
+            ret();
+            break;
         case 0xCA: // JP Z,nn
-            return jump(DMGCPU::Flag_Z);
+            jump(DMGCPU::Flag_Z);
+            break;
         case 0xCB:
             recompileExInstruction(pc, builder);
             break;
         case 0xCC: // CALL Z,nn
-            return call(DMGCPU::Flag_Z);
+            call(DMGCPU::Flag_Z);
+            break;
         case 0xCD: // CALL nn
-            return call();
+            call();
+            break;
         case 0xCE: // ADC n
         {
             // TODO: use imm?
@@ -2655,18 +2776,24 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xCF: // RST 08
-            return reset(0x08);
+            reset(0x08);
+            break;
         case 0xD0: // RET NC
-            return ret(DMGCPU::Flag_C, false);
+            ret(DMGCPU::Flag_C, false);
+            break;
         case 0xD1: // POP DE
-            return pop(WReg::DE);
+            pop(WReg::DE);
+            break;
         case 0xD2: // JP NC,nn
-            return jump(DMGCPU::Flag_C, false);
+            jump(DMGCPU::Flag_C, false);
+            break;
 
         case 0xD4: // CALL NC,nn
-            return call(DMGCPU::Flag_C, false);
+            call(DMGCPU::Flag_C, false);
+            break;
         case 0xD5: // PUSH DE
-            return push(WReg::DE);
+            push(WReg::DE);
+            break;
         case 0xD6: // SUB n
         {
             // TODO: use imm?
@@ -2678,20 +2805,25 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xD7: // RST 10
-            return reset(0x10);
+            reset(0x10);
+            break;
         case 0xD8: // RET C
-            return ret(DMGCPU::Flag_C);
+            ret(DMGCPU::Flag_C);
+            break;
         case 0xD9: // RETI
             // masterInterruptEnable = true
             // TODO: if we store the CPU ptr then we can use a disp here
             builder.mov(Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable));
             builder.mov(1, Reg64::R10);
-            return ret();
+            ret();
+            break;
         case 0xDA: // JP C,nn
-            return jump(DMGCPU::Flag_C);
+            jump(DMGCPU::Flag_C);
+            break;
 
         case 0xDC: // CALL C,nn
-            return call(DMGCPU::Flag_C);
+            call(DMGCPU::Flag_C);
+            break;
 
         case 0xDE: // SBC n
         {
@@ -2704,7 +2836,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xDF: // RST 18
-            return reset(0x18);
+            reset(0x18);
+            break;
         case 0xE0: // LDH (n),A
         {
             auto addr = 0xFF00 | cpu.readMem(pc++);
@@ -2715,7 +2848,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xE1: // POP HL
-            return pop(WReg::HL);
+            pop(WReg::HL);
+            break;
         case 0xE2: // LDH (C),A
         {
             builder.movzx(Reg32::R10D, reg(Reg::C));
@@ -2726,7 +2860,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         }
 
         case 0xE5: // PUSH HL
-            return push(WReg::HL);
+            push(WReg::HL);
+            break;
         case 0xE6: // AND n
         {
             // TODO: use AND with immediate?
@@ -2738,7 +2873,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xE7: // RST 20
-            return reset(0x20);
+            reset(0x20);
+            break;
         case 0xE8: // ADD SP,n
         {
             auto f = reg(Reg::F);
@@ -2806,7 +2942,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xEF: // RST 28
-            return reset(0x28);
+            reset(0x28);
+            break;
         case 0xF0: // LDH A,(n)
         {
             uint16_t addr = 0xFF00 | cpu.readMem(pc++);
@@ -2817,7 +2954,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xF1: // POP AF
-            return pop(WReg::AF);
+            pop(WReg::AF);
+            break;
         case 0xF2: // LDH A,(C)
         {
             builder.movzx(Reg32::R10D, reg(Reg::C));
@@ -2828,7 +2966,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         }
 
         case 0xF5: // PUSH AF
-            return push(WReg::AF);
+            push(WReg::AF);
+            break;
         case 0xF6: // OR n
         {
             // TODO: use imm?
@@ -2840,7 +2979,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xF7: // RST 30
-            return reset(0x30);
+            reset(0x30);
+            break;
         case 0xF8: // LDHL SP,n
         {
             auto f = reg(Reg::F);
@@ -2907,7 +3047,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xFF: // RST 38
-            return reset(0x38);
+            reset(0x38);
+            break;
 
         default:
             printf("unhandled op in recompile %02X\n", opcode);
