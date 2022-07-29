@@ -1412,7 +1412,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         callRestore(builder, dstReg);
     };
 
-    auto writeMem = [&builder, this](std::variant<Reg16, uint16_t> addr, Reg8 dataReg)
+    auto writeMem = [&builder, this](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
     {
         callSave(builder);
 
@@ -1421,7 +1421,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         else
             builder.mov(Reg32::ESI, std::get<uint16_t>(addr));
     
-        builder.movzx(Reg32::EDX, dataReg);
+        if(std::holds_alternative<Reg8>(data))
+            builder.movzx(Reg32::EDX, std::get<Reg8>(data));
+        else
+            builder.mov(Reg32::EDX, std::get<uint8_t>(data));
+
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
@@ -1904,20 +1908,18 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         if(flag)
         {
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 17 + 46 * 3/*cycleExecuted*/ + 56 * 2 /*writeMem*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 12 + 46 * 3/*cycleExecuted*/ + 58 * 2 /*writeMem*/);
         }
 
         cycleExecuted(); // delay
 
         auto sp = Reg16::R9W;
 
-        // TODO: we know what PC is, but there's no writeMemImmData
         builder.dec(sp);
-        builder.mov(Reg8::R10B, pc >> 8);
-        writeMem(sp, Reg8::R10B);
+        writeMem(sp, static_cast<uint8_t>(pc >> 8));
         cycleExecuted();
         builder.dec(sp);
-        writeMem(sp, Reg8::R8B); // low byte
+        writeMem(sp, static_cast<uint8_t>(pc));
         cycleExecuted();
 
         builder.mov(Reg32::R8D, addr);
@@ -1931,13 +1933,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         auto sp = Reg16::R9W;
 
-        // TODO: we know what PC is, but there's no writeMemImmData
         builder.dec(sp);
-        builder.mov(Reg8::R10B, pc >> 8);
-        writeMem(sp, Reg8::R10B);
+        writeMem(sp, static_cast<uint8_t>(pc >> 8));
         cycleExecuted();
         builder.dec(sp);
-        writeMem(sp, Reg8::R8B); // low byte
+        writeMem(sp, static_cast<uint8_t>(pc));
         cycleExecuted();
 
         builder.mov(Reg32::R8D, addr);
@@ -2302,8 +2302,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             auto val = cpu.readMem(pc++);
             incPC();
             cycleExecuted();
-            builder.mov(Reg8::R10B, val); // TODO: yeah, too lazy to add a third writeMem just for this
-            writeMem(reg(WReg::HL), Reg8::R10B);
+            writeMem(reg(WReg::HL), val);
             cycleExecuted();
             break;
         }
