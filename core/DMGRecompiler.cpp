@@ -1145,14 +1145,14 @@ static void callSave(X86Builder &builder)
     builder.push(Reg64::RDX);
     builder.push(Reg64::R8);
     builder.push(Reg64::R9);
-    builder.push(Reg64::RSI);
-    builder.sub(Reg64::RSP, 8); // align stack
+    builder.push(Reg64::RDI);
+    // builder.sub(Reg64::RSP, 8); // align stack
 }
 
 static void callRestore(X86Builder &builder)
 {
-    builder.add(Reg64::RSP, 8); // alignment
-    builder.pop(Reg64::RSI);
+    // builder.add(Reg64::RSP, 8); // alignment
+    builder.pop(Reg64::RDI);
     builder.pop(Reg64::R9);
     builder.pop(Reg64::R8);
     builder.pop(Reg64::RDX);
@@ -1162,7 +1162,7 @@ static void callRestore(X86Builder &builder)
 
 static void callRestore(X86Builder &builder, Reg32 dstReg)
 {
-    builder.add(Reg64::RSP, 8); // alignment
+    // builder.add(Reg64::RSP, 8); // alignment
     builder.pop(Reg64::RSI);
     builder.pop(Reg64::R9);
     builder.pop(Reg64::R8);
@@ -1178,7 +1178,7 @@ static void callRestore(X86Builder &builder, Reg32 dstReg)
 
 static void callRestore(X86Builder &builder, Reg8 dstReg)
 {
-    builder.add(Reg64::RSP, 8); // alignment
+    // builder.add(Reg64::RSP, 8); // alignment
     builder.pop(Reg64::RSI);
     builder.pop(Reg64::R9);
     builder.pop(Reg64::R8);
@@ -1373,7 +1373,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     // HL = EBX
     // PC = R8D
     // SP = R9D
-    // cycles = ESI
+    // cycles = EDI
 
     // TODO: should be able to avoid this
     const auto incPC = [&builder]()
@@ -1454,7 +1454,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestore(builder, Reg32::ESI);
+        callRestore(builder, Reg32::EDI);
     };
 
     using Reg = DMGCPU::Reg;
@@ -1591,7 +1591,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             {
                 auto rb = std::get<Reg8>(b);
 
-                if(rb == Reg8::DIL) // ADC (HL)
+                if(rb == Reg8::SIL) // ADC (HL)
                 {
                     // more reg shuffling...
                     builder.mov(f, rb);
@@ -1699,7 +1699,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             {
                 auto rb = std::get<Reg8>(b);
 
-                if(rb == Reg8::DIL) // SBC (HL)
+                if(rb == Reg8::SIL) // SBC (HL)
                 {
                     // more reg shuffling...
                     builder.mov(f, rb);
@@ -1953,7 +1953,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         if(flag)
         {
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 6 + 46/*cycleExecuted*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 6 + 38/*cycleExecuted*/);
         }
 
         builder.mov(Reg32::R8D, addr);
@@ -1971,7 +1971,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         if(flag)
         {
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 5 + 46/*cycleExecuted*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 5 + 38/*cycleExecuted*/);
         }
 
         builder.add(Reg16::R8W, off);
@@ -1992,7 +1992,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         if(flag)
         {
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 12 + 46 * 3/*cycleExecuted*/ + 58 * 2 /*writeMem*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 12 + 38 * 3/*cycleExecuted*/ + 50 * 2 /*writeMem*/);
         }
 
         cycleExecuted(); // delay
@@ -2037,7 +2037,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted(); // delay
 
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 22 + 46 * 3/*cycleExecuted*/ + 53 * 2 /*readMem*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 22 + 38 * 3/*cycleExecuted*/ + 45 * 2 /*readMem*/);
         }
 
         auto sp = Reg16::R9W;
@@ -2697,7 +2697,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0x8E: // ADC (HL)
         {
-            auto tmp = Reg8::DIL; // can't use F here so use something wierd
+            auto tmp = Reg8::SIL; // can't use F here so use something wierd
             readMem(reg(WReg::HL), tmp);
             addWithCarry(tmp);
             cycleExecuted();
@@ -2755,7 +2755,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0x9E: // SBC (HL)
         {
-            auto tmp = Reg8::DIL; // can't use F here so use something wierd
+            auto tmp = Reg8::SIL; // can't use F here so use something wierd
             readMem(reg(WReg::HL), tmp);
             subWithCarry(tmp);
             cycleExecuted();
@@ -3220,7 +3220,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     if(!exited)
     {
         // cycles -= executed
-        builder.sub(Reg32::ESI, cyclesThisInstr);
+        builder.sub(Reg32::EDI, cyclesThisInstr);
         // if <= 0 exit
         builder.jcc(Condition::G, 5);
         builder.call(saveAndExitPtr - builder.getPtr());
@@ -3290,7 +3290,7 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestore(builder, Reg32::ESI);
+        callRestore(builder, Reg32::EDI);
     };
 
     using Reg = DMGCPU::Reg;
@@ -4108,7 +4108,6 @@ void DMGRecompiler::compileEntry()
     builder.push(Reg64::RDX);
     builder.push(Reg64::RCX);
     builder.push(Reg64::RSI);
-    builder.push(Reg64::RDI);
 
     // save code addr
     builder.mov(Reg64::R10, Reg64::R8);
@@ -4124,9 +4123,6 @@ void DMGRecompiler::compileEntry()
     builder.movzxW(Reg32::EDX, Reg64::RSI, 4);
     builder.movzxW(Reg32::EBX, Reg64::RSI, 6);
 
-    // load cycle count
-    builder.mov(Reg32::ESI, Reg64::RDI);
-
     // jump to code
     builder.jmp(Reg64::R10);
 
@@ -4138,10 +4134,6 @@ void DMGRecompiler::compileEntry()
 
     // just exit
     exitPtr = builder.getPtr();
-
-    // store cycle count
-    builder.pop(Reg64::RDI);
-    builder.mov(Reg32::ESI, Reg64::RDI, true); // do we need this?
 
     // restore regs ptr
     builder.pop(Reg64::RSI);
