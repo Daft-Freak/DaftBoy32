@@ -1145,7 +1145,11 @@ void DMGRecompiler::handleBranch()
 
     while(true)
     {
-        int cycles = cpu.cyclesToRun; // FIXME: min interrupts
+        // calculate cycles to run
+        int cycles = std::min(cpu.cyclesToRun, cpu.getDisplay().getCyclesToNextUpdate());
+
+        if(cpu.nextTimerInterrupt)
+            cycles = std::min(cycles, static_cast<int>(cpu.nextTimerInterrupt - cpu.cycleCount));
 
         if(cycles <= 0)
             break;
