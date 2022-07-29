@@ -500,7 +500,6 @@ void X86Builder::jcc(Condition cc, int disp)
 
 void X86Builder::jmp(int disp)
 {
-    // TODO: full disp
     if(disp < 128 && disp >= -126) // 8 bit disp
     {
         // adjust for opcode len
