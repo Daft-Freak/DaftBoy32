@@ -455,6 +455,8 @@ void DMGCPU::run(int ms)
 
     cyclesToRun += cycles;
 
+    compiler.handleBranch();
+
     while(!stopped && cyclesToRun > 0)
     {
         if(!halted)
