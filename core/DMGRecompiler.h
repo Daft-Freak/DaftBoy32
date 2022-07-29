@@ -20,6 +20,8 @@ private:
     bool recompileInstruction(uint16_t &pc, X86Builder &builder, bool &exited);
     void recompileExInstruction(uint16_t &pc, X86Builder &builder, int &cyclesThisInstr);
 
+    void compileEntry();
+
     static void cycleExecuted(DMGCPU *cpu);
     static uint8_t readMem(DMGCPU *cpu, uint16_t addr);
     static int writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data);
@@ -28,17 +30,18 @@ private:
     unsigned int codeBufSize;
 
     // cycles, regs[4], pc, sp
-    using CompiledFunc = void(*)(int &, uint16_t *, uint16_t &, uint16_t &);
+    using CompiledFunc = void(*)(int &, uint16_t *, uint16_t &, uint16_t &, uint8_t *entryAddr);
 
     struct FuncInfo
     {
-        CompiledFunc func;
+        uint8_t *startPtr;
         uint8_t *endPtr;
         uint32_t endPC;
     };
 
     std::map<uint32_t, FuncInfo> compiled;
 
-    // compile state
+    // common code
+    CompiledFunc entryFunc = nullptr;
     uint8_t *exitPtr = nullptr;
 };
