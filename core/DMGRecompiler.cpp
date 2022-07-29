@@ -163,7 +163,7 @@ public:
     void inc(Reg8 r);
 
     void jcc(Condition cc, int disp);
-    void jmp(int8_t disp);
+    void jmp(int disp);
 
     void lea(Reg32 r, Reg64 base, int disp = 0);
 
@@ -472,13 +472,21 @@ void X86Builder::inc(Reg8 r)
 
 void X86Builder::jcc(Condition cc, int disp)
 {
-    if(disp < 128 && disp >= -128) // 8 bit disp
+    if(disp < 128 && disp >= -126) // 8 bit disp
     {
+        // adjust for opcode len
+        if(disp < 0)
+            disp -= 2;
+
         write(0x70 | static_cast<int>(cc)); // opcode
         write(disp);
     }
     else
     {
+        // adjust for opcode len
+        if(disp < 0)
+            disp -= 6;
+
         write(0x0F); // two byte opcode
         write(0x80 | static_cast<int>(cc)); // opcode
 
@@ -489,11 +497,31 @@ void X86Builder::jcc(Condition cc, int disp)
     }
 }
 
-void X86Builder::jmp(int8_t disp)
+void X86Builder::jmp(int disp)
 {
     // TODO: full disp
-    write(0xEB); // opcode
-    write(disp);
+    if(disp < 128 && disp >= -126) // 8 bit disp
+    {
+        // adjust for opcode len
+        if(disp < 0)
+            disp -= 2;
+
+        write(0xEB); // opcode
+        write(disp);
+    }
+    else
+    {
+        // adjust for opcode len
+        if(disp < 0)
+            disp -= 5;
+
+        write(0xE9); // opcode
+
+        write(disp);
+        write(disp >> 8);
+        write(disp >> 16);
+        write(disp >> 24);
+    }
 }
 
 void X86Builder::lea(Reg32 r, Reg64 base, int disp)
