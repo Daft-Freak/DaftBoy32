@@ -1679,10 +1679,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.and_(reg(Reg::A), r);
 
         // F = Flag_H | (res == 0 ? Flag_Z : 0)
-        builder.jcc(Condition::E, 2 + 2); // if == 0
-        builder.mov(reg(Reg::F), DMGCPU::Flag_H); // not zero
-        builder.jmp(2);
-        builder.mov(reg(Reg::F), DMGCPU::Flag_H | DMGCPU::Flag_Z); // zero
+        builder.mov(reg(Reg::F), DMGCPU::Flag_H);
+        builder.jcc(Condition::NE, 3); // if != 0
+        builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
     };
 
     const auto bitOr = [&builder](Reg8 r)
