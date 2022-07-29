@@ -30,7 +30,7 @@ private:
     unsigned int codeBufSize;
 
     // cycles, regs[4], pc, sp
-    using CompiledFunc = void(*)(int &, uint16_t *, uint16_t &, uint16_t &, uint8_t *entryAddr);
+    using CompiledFunc = void(*)(int, uint16_t *, uint16_t &, uint16_t &, uint8_t *entryAddr);
 
     struct FuncInfo
     {
