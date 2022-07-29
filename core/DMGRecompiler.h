@@ -18,7 +18,7 @@ private:
     bool compile(uint8_t *&codePtr, uint16_t &pc);
 
     bool recompileInstruction(uint16_t &pc, X86Builder &builder, bool &exited);
-    void recompileExInstruction(uint16_t &pc, X86Builder &builder);
+    void recompileExInstruction(uint16_t &pc, X86Builder &builder, int &cyclesThisInstr);
 
     static void cycleExecuted(DMGCPU *cpu);
     static uint8_t readMem(DMGCPU *cpu, uint16_t addr);
@@ -38,4 +38,7 @@ private:
     };
 
     std::map<uint32_t, FuncInfo> compiled;
+
+    // compile state
+    uint8_t *exitPtr = nullptr;
 };

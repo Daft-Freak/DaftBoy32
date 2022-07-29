@@ -219,6 +219,7 @@ public:
     void sub(Reg8 dst, Reg8 src);
     void sub(Reg8 dst, uint8_t imm);
     void sub(Reg64 dst, int8_t imm);
+    void sub(Reg32 dst, int8_t imm);
 
     void test(Reg8 dst, uint8_t imm);
 
@@ -927,12 +928,23 @@ void X86Builder::sub(Reg8 dst, uint8_t imm)
     write(imm);
 }
 
-// imm -> reg, 8 bit sign extended
+// imm -> reg, 64 bit reg, 8 bit sign extended
 void X86Builder::sub(Reg64 dst, int8_t imm)
 {
     auto dstReg = static_cast<int>(dst);
 
     encodeREX(true, 0, 0, dstReg);
+    write(0x83); // opcode, w = 1, s = 1
+    encodeModRM(dstReg, 5);
+    write(imm);
+}
+
+// imm -> reg, 8 bit sign extended
+void X86Builder::sub(Reg32 dst, int8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
     write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dstReg, 5);
     write(imm);
@@ -1222,7 +1234,7 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
     // jump over exit code
     builder.jmp(32); // size of code below
 
-    auto exitPtr = builder.getPtr();
+    exitPtr = builder.getPtr();
 
     // store cycle count
     builder.pop(Reg64::RDI);
@@ -1300,6 +1312,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 {
     auto &mem = cpu.getMem();
     uint8_t opcode = mem.read(pc++);
+    int cyclesThisInstr = 0;
 
     // AF = EAX
     // BC = ECX
@@ -1316,8 +1329,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     };
 
     // TODO: shared trampolines?
-    auto cycleExecuted = [&builder, this]()
+    auto cycleExecuted = [&builder, this, &cyclesThisInstr]()
     {
+        cyclesThisInstr += 4;
         callSave(builder);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
@@ -2052,7 +2066,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
             break;
         }
-
         case 0x18: // JR m
             jumpRel();
             break;
@@ -2793,7 +2806,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             jump(DMGCPU::Flag_Z);
             break;
         case 0xCB:
-            recompileExInstruction(pc, builder);
+            recompileExInstruction(pc, builder, cyclesThisInstr);
             break;
         case 0xCC: // CALL Z,nn
             call(DMGCPU::Flag_Z);
@@ -3092,10 +3105,20 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             return false;
     }
 
+    if(!exited)
+    {
+        // cycles -= executed
+        builder.sub(Reg32::ESI, cyclesThisInstr);
+        // if <= 0 exit
+        auto off = exitPtr - (builder.getPtr() + 2);
+        builder.jcc(Condition::G, off < -126 ? 5 : 2); // ugh, need to know length of jmp
+        builder.jmp(off);
+    }
+
     return true;
 }
 
-void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
+void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, int &cyclesThisInstr)
 {
     auto &mem = cpu.getMem();
     uint8_t opcode = mem.read(pc++);
@@ -3109,8 +3132,10 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder)
     };
 
     // TODO: shared trampolines?
-    auto cycleExecuted = [&builder, this]()
+    auto cycleExecuted = [&builder, this, &cyclesThisInstr]()
     {
+        cyclesThisInstr += 4;
+
         callSave(builder);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
