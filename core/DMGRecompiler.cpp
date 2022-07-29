@@ -154,6 +154,7 @@ public:
     void cmp(Reg8 dst, Reg8 src);
     void cmp(Reg32 dst, uint32_t imm);
     void cmp(Reg8 dst, int8_t imm);
+    void cmp(uint8_t imm, Reg64 base, int disp = 0);
 
     void dec(Reg16 r);
     void dec(Reg8 r);
@@ -401,7 +402,7 @@ void X86Builder::cmp(Reg32 dst, uint32_t imm)
     write(imm >> 8);
     write(imm >> 16);
     write(imm >> 24);
-};
+}
 
 // imm -> reg, 8 bit
 void X86Builder::cmp(Reg8 dst, int8_t imm)
@@ -412,7 +413,18 @@ void X86Builder::cmp(Reg8 dst, int8_t imm)
     write(0x80); // opcode, w = 0, s = 0
     encodeModRM(dstReg, 7);
     write(imm);
-};
+}
+
+// imm -> mem, 8 bit
+void X86Builder::cmp(uint8_t imm, Reg64 base, int disp)
+{
+    auto baseReg = static_cast<int>(base);
+
+    encodeREX(false, 0, 0, baseReg);
+    write(0x80); // opcode, w = 0
+    encodeModRM(7, baseReg, disp);
+    write(imm);
+}
 
 // reg, 16 bit
 void X86Builder::dec(Reg16 r)
@@ -2508,7 +2520,27 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             writeMem(reg(WReg::HL), reg(Reg::L));
             cycleExecuted();
             break;
+        case 0x76: // HALT
+        {
+            incPC();
+            cycleExecuted();
 
+            // halted = true
+            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+            builder.mov(Reg64::R10, cpuPtr);
+            builder.mov(1, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.halted) - cpuPtr);
+
+            // if(!masterInterruptEnable && serviceableInterrupts)
+            builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
+            builder.jcc(Condition::NE, 12);
+            builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu. serviceableInterrupts) - cpuPtr);
+            builder.jcc(Condition::E, 5);
+            // haltBug = true
+            builder.mov(1, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtr);
+
+            exited = true;
+            break;
+        }
         case 0x77: // LD (HL),A
             incPC();
             cycleExecuted();
