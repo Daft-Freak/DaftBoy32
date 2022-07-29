@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <variant>
 
 #include <sys/mman.h>
 #include <unistd.h>
@@ -1395,11 +1396,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         checkInterrupts = true;
     }
 
-    auto readMem = [&builder, this](Reg16 addrReg, Reg8 dstReg)
+    auto readMem = [&builder, this](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
     {
         callSave(builder);
 
-        builder.movzx(Reg32::ESI, addrReg);
+        if(std::holds_alternative<Reg16>(addr))
+            builder.movzx(Reg32::ESI, std::get<Reg16>(addr));
+        else
+            builder.mov(Reg32::ESI, std::get<uint16_t>(addr));
+
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
@@ -1407,36 +1412,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         callRestore(builder, dstReg);
     };
 
-    auto readMemImmAddr = [&builder, this](uint16_t addr, Reg8 dstReg)
+    auto writeMem = [&builder, this](std::variant<Reg16, uint16_t> addr, Reg8 dataReg)
     {
         callSave(builder);
 
-        builder.mov(Reg32::ESI, addr);
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
-        builder.call(Reg64::RAX); // do call
-
-        callRestore(builder, dstReg);
-    };
-
-    auto writeMem = [&builder, this](Reg16 addrReg, Reg8 dataReg)
-    {
-        callSave(builder);
-
-        builder.movzx(Reg32::ESI, addrReg);
-        builder.movzx(Reg32::EDX, dataReg);
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
-        builder.call(Reg64::RAX); // do call
-
-        callRestore(builder, Reg32::ESI);
-    };
-
-    auto writeMemImmAddr = [&builder, this](uint16_t addr, Reg8 dataReg)
-    {
-        callSave(builder);
-
-        builder.mov(Reg32::ESI, addr);
+        if(std::holds_alternative<Reg16>(addr))
+            builder.movzx(Reg32::ESI, std::get<Reg16>(addr));
+        else
+            builder.mov(Reg32::ESI, std::get<uint16_t>(addr));
+    
         builder.movzx(Reg32::EDX, dataReg);
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
@@ -2036,14 +2020,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             incPC();
             cycleExecuted();
 
-            writeMemImmAddr(addr++, Reg8::R9B); // low byte
+            writeMem(addr++, Reg8::R9B); // low byte
             cycleExecuted();
 
             // SP >> 8
             builder.mov(Reg32::R10D, Reg32::R9D);
             builder.shr(Reg32::R10D, 8);
 
-            writeMemImmAddr(addr, Reg8::R10B); // low byte
+            writeMem(addr, Reg8::R10B); // low byte
             cycleExecuted();
             break;
         }
@@ -2938,10 +2922,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xE0: // LDH (n),A
         {
-            auto addr = 0xFF00 | cpu.readMem(pc++);
+            uint16_t addr = 0xFF00 | cpu.readMem(pc++);
             incPC();
             cycleExecuted();
-            writeMemImmAddr(addr, reg(Reg::A));
+            writeMem(addr, reg(Reg::A));
             cycleExecuted();
             break;
         }
@@ -3024,7 +3008,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             incPC();
             cycleExecuted();
 
-            writeMemImmAddr(addr, reg(Reg::A));
+            writeMem(addr, reg(Reg::A));
             cycleExecuted();
             break;
         }
@@ -3047,7 +3031,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             uint16_t addr = 0xFF00 | cpu.readMem(pc++);
             incPC();
             cycleExecuted();
-            readMemImmAddr(addr, reg(Reg::A));
+            readMem(addr, reg(Reg::A));
             cycleExecuted();
             break;
         }
@@ -3136,7 +3120,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             incPC();
             cycleExecuted();
 
-            readMemImmAddr(addr, reg(Reg::A));
+            readMem(addr, reg(Reg::A));
             cycleExecuted();
             break;
         }
