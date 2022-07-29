@@ -1056,6 +1056,7 @@ static void callRestore(X86Builder &builder, Reg8 dstReg)
         // EAX = EAX + (R10D & 0xFF00)
         builder.pop(Reg64::R10);
         builder.and_(Reg32::R10D, 0xFF00);
+        builder.movzx(Reg32::EAX, Reg8::AL);
         builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
     }
 }
