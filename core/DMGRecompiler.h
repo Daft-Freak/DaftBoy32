@@ -22,7 +22,7 @@ private:
 
     static void cycleExecuted(DMGCPU *cpu);
     static uint8_t readMem(DMGCPU *cpu, uint16_t addr);
-    static void writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data);
+    static int writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data);
 
     uint8_t *codeBuf, *curCodePtr;
     unsigned int codeBufSize;

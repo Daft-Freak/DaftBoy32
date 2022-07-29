@@ -1091,6 +1091,22 @@ static void callRestore(X86Builder &builder)
     builder.pop(Reg64::RAX);
 }
 
+static void callRestore(X86Builder &builder, Reg32 dstReg)
+{
+    builder.add(Reg64::RSP, 8); // alignment
+    builder.pop(Reg64::RSI);
+    builder.pop(Reg64::R9);
+    builder.pop(Reg64::R8);
+    builder.pop(Reg64::RDX);
+    builder.pop(Reg64::RCX);
+
+    // mov ret val
+    assert(dstReg != Reg32::EAX);
+
+    builder.mov(dstReg, Reg32::EAX);
+    builder.pop(Reg64::RAX);
+}
+
 static void callRestore(X86Builder &builder, Reg8 dstReg)
 {
     builder.add(Reg64::RSP, 8); // alignment
@@ -1384,7 +1400,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestore(builder);
+        callRestore(builder, Reg32::ESI);
     };
 
     auto writeMemImmAddr = [&builder, this](uint16_t addr, Reg8 dataReg)
@@ -1397,7 +1413,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestore(builder);
+        callRestore(builder, Reg32::ESI);
     };
 
     using Reg = DMGCPU::Reg;
@@ -1876,7 +1892,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         if(flag)
         {
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 17 + 46 * 3/*cycleExecuted*/ + 54 * 2 /*writeMem*/);
+            builder.jcc(set ? Condition::E : Condition::NE, 17 + 46 * 3/*cycleExecuted*/ + 56 * 2 /*writeMem*/);
         }
 
         cycleExecuted(); // delay
@@ -3171,7 +3187,7 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
         builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
         builder.call(Reg64::RAX); // do call
 
-        callRestore(builder);
+        callRestore(builder, Reg32::ESI);
     };
 
     using Reg = DMGCPU::Reg;
@@ -3987,7 +4003,7 @@ uint8_t DMGRecompiler::readMem(DMGCPU *cpu, uint16_t addr)
     return cpu->readMem(addr);
 }
 
-void DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
+int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
 {
     // invalidate code on mem write
     if(addr & 0x8000)
@@ -4016,4 +4032,14 @@ void DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
     }
 
     cpu->writeMem(addr, data);
+
+    // if we wrote a reg, timings may have changed
+    // ... and we have a convenient return value to pass the new value back
+
+    int cycles = std::min(cpu->cyclesToRun, cpu->getDisplay().getCyclesToNextUpdate());
+
+    if(cpu->nextTimerInterrupt)
+        cycles = std::min(cycles, static_cast<int>(cpu->nextTimerInterrupt - cpu->cycleCount));
+
+    return cycles;
 }
