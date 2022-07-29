@@ -163,7 +163,9 @@ public:
     void inc(Reg8 r);
 
     void jcc(Condition cc, int disp);
+
     void jmp(int disp);
+    void jmp(Reg64 r);
 
     void lea(Reg32 r, Reg64 base, int disp = 0);
 
@@ -522,6 +524,16 @@ void X86Builder::jmp(int disp)
         write(disp >> 16);
         write(disp >> 24);
     }
+}
+
+// indirect
+void X86Builder::jmp(Reg64 r)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xFF); // opcode
+    encodeModRM(reg, 4);
 }
 
 void X86Builder::lea(Reg32 r, Reg64 base, int disp)
@@ -1176,6 +1188,9 @@ void DMGRecompiler::handleBranch()
 
         if(it == compiled.end())
         {
+            if(!entryFunc)
+                compileEntry();
+
             // attempt compile
             auto ptr = curCodePtr;
             auto startPtr = ptr;
@@ -1185,7 +1200,7 @@ void DMGRecompiler::handleBranch()
 
             if(compile(ptr, pc))
             {
-                info.func = reinterpret_cast<CompiledFunc>(startPtr);
+                info.startPtr = startPtr;
                 info.endPtr = curCodePtr = ptr;
                 info.endPC = cpu.mem.makeBankedAddress(pc);
             }
@@ -1194,8 +1209,9 @@ void DMGRecompiler::handleBranch()
         }
 
         // run the code if valid, or stop
-        if(it->second.func)
-            it->second.func(cycles, cpu.regs, cpu.pc, cpu.sp);
+        if(it->second.startPtr)
+            //it->second.func(cycles, cpu.regs, cpu.pc, cpu.sp);
+            entryFunc(cycles, cpu.regs, cpu.pc, cpu.sp, it->second.startPtr);
         else
             break;
 
@@ -1223,63 +1239,6 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
     X86Builder builder(codePtr, codeBuf + codeBufSize);
 
     auto startPC = pc;
-
-    // prologue
-    builder.push(Reg64::RBP);
-    builder.mov(Reg64::RBP, Reg64::RSP);
-
-    // TODO: reuse prologe/epilogue
-    // save
-    builder.push(Reg64::RBX);
-    builder.push(Reg64::RDX);
-    builder.push(Reg64::RCX);
-    builder.push(Reg64::RSI);
-    builder.push(Reg64::RDI);
-
-    // load emu pc/sp
-    // TODO: we know what PC is, dont bother loading/updating/saving it
-    builder.movzxW(Reg32::R8D, Reg64::RDX);
-    builder.movzxW(Reg32::R9D, Reg64::RCX);
-
-    // load emu regs
-    builder.movzxW(Reg32::EAX, Reg64::RSI);
-    builder.movzxW(Reg32::ECX, Reg64::RSI, 2);
-    builder.movzxW(Reg32::EDX, Reg64::RSI, 4);
-    builder.movzxW(Reg32::EBX, Reg64::RSI, 6);
-
-    // load cycle count
-    builder.mov(Reg32::ESI, Reg64::RDI);
-
-    // jump over exit code
-    builder.jmp(32); // size of code below
-
-    exitPtr = builder.getPtr();
-
-    // store cycle count
-    builder.pop(Reg64::RDI);
-    builder.mov(Reg32::ESI, Reg64::RDI, true); // do we need this?
-
-    // restore regs ptr
-    builder.pop(Reg64::RSI);
-
-    // save emu regs
-    builder.mov(Reg16::AX, Reg64::RSI, true);
-    builder.mov(Reg16::CX, Reg64::RSI, true, 2);
-    builder.mov(Reg16::DX, Reg64::RSI, true, 4);
-    builder.mov(Reg16::BX, Reg64::RSI, true, 6);
-
-    // restore
-    builder.pop(Reg64::RCX);
-    builder.pop(Reg64::RDX);
-    builder.pop(Reg64::RBX);
-
-    // save emu pc/sp
-    builder.mov(Reg16::R8W, Reg64::RDX, true);
-    builder.mov(Reg16::R9W, Reg64::RCX, true);
-
-    // epilogue
-    builder.pop(Reg64::RBP);
-    builder.ret();
 
     // do instructions
     int numInstructions = 0;
@@ -4040,6 +3999,83 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
     }
 }
 
+void DMGRecompiler::compileEntry()
+{
+    X86Builder builder(codeBuf, codeBuf + codeBufSize);
+
+    // prologue
+    builder.push(Reg64::RBP);
+    builder.mov(Reg64::RBP, Reg64::RSP);
+
+    // save
+    builder.push(Reg64::RBX);
+    builder.push(Reg64::RDX);
+    builder.push(Reg64::RCX);
+    builder.push(Reg64::RSI);
+    builder.push(Reg64::RDI);
+
+    // save code addr
+    builder.mov(Reg64::R10, Reg64::R8);
+
+    // load emu pc/sp
+    // TODO: we know what PC is, dont bother loading/updating/saving it
+    builder.movzxW(Reg32::R8D, Reg64::RDX);
+    builder.movzxW(Reg32::R9D, Reg64::RCX);
+
+    // load emu regs
+    builder.movzxW(Reg32::EAX, Reg64::RSI);
+    builder.movzxW(Reg32::ECX, Reg64::RSI, 2);
+    builder.movzxW(Reg32::EDX, Reg64::RSI, 4);
+    builder.movzxW(Reg32::EBX, Reg64::RSI, 6);
+
+    // load cycle count
+    builder.mov(Reg32::ESI, Reg64::RDI);
+
+    // jump to code
+    builder.jmp(Reg64::R10);
+
+    exitPtr = builder.getPtr();
+
+    // store cycle count
+    builder.pop(Reg64::RDI);
+    builder.mov(Reg32::ESI, Reg64::RDI, true); // do we need this?
+
+    // restore regs ptr
+    builder.pop(Reg64::RSI);
+
+    // save emu regs
+    builder.mov(Reg16::AX, Reg64::RSI, true);
+    builder.mov(Reg16::CX, Reg64::RSI, true, 2);
+    builder.mov(Reg16::DX, Reg64::RSI, true, 4);
+    builder.mov(Reg16::BX, Reg64::RSI, true, 6);
+
+    // restore
+    builder.pop(Reg64::RCX);
+    builder.pop(Reg64::RDX);
+    builder.pop(Reg64::RBX);
+
+    // save emu pc/sp
+    builder.mov(Reg16::R8W, Reg64::RDX, true);
+    builder.mov(Reg16::R9W, Reg64::RCX, true);
+
+    // epilogue
+    builder.pop(Reg64::RBP);
+    builder.ret();
+
+    entryFunc = reinterpret_cast<CompiledFunc>(codeBuf);
+
+    int len = builder.getPtr() - codeBuf;
+    curCodePtr = builder.getPtr();
+
+    //debug
+    printf("generated %i bytes for entry/exit\ncode:", len);
+
+    for(auto p = codeBuf; p !=curCodePtr; p++)
+        printf(" %02X", *p);
+
+    printf("\n");
+}
+
 // wrappers around member funcs
 void DMGRecompiler::cycleExecuted(DMGCPU *cpu)
 {
@@ -4069,7 +4105,7 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
                 // rewind if last code compiled
                 // TODO: reclaim memory in other cases
                 if(it->second.endPtr == compiler.curCodePtr)
-                    compiler.curCodePtr = reinterpret_cast<uint8_t *>(it->second.func);
+                    compiler.curCodePtr = it->second.startPtr;
 
                 it = compiler.compiled.erase(it);
 
