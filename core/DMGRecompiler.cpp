@@ -1333,6 +1333,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     uint8_t opcode = mem.read(pc++);
     int cyclesThisInstr = 0;
 
+    bool checkInterrupts = false;
+
     // AF = EAX
     // BC = ECX
     // DE = EDX
@@ -1364,6 +1366,27 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     auto oldPtr = builder.getPtr();
     incPC();
     cycleExecuted();
+
+    // previous op was EI
+    if(mem.read(pc - 2) == 0xFB /*EI*/)
+    {
+        // enable interrupts for EI
+        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+        builder.mov(Reg64::R10, cpuPtr);
+
+        // if(enableInterruptsNextCycle)
+        // probably don't need this check... might get a false positive in some extreme case though
+        builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
+        builder.jcc(Condition::E, 10);
+
+        // masterInterruptEnable = true
+        builder.mov(1, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
+
+        // enableInterruptsNextCycle = false
+        builder.mov(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
+
+        checkInterrupts = true;
+    }
 
     auto readMem = [&builder, this](Reg16 addrReg, Reg8 dstReg)
     {
@@ -3032,6 +3055,13 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
+        case 0xF3: // DI
+            // masterInterruptEnable = false
+            // TODO: if we store the CPU ptr then we can use a disp here
+            // TODO: after next instruction (DMGCPU also has this TODO)
+            builder.mov(Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable));
+            builder.mov(0, Reg64::R10);
+            break;
 
         case 0xF5: // PUSH AF
             push(WReg::AF);
@@ -3103,6 +3133,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         }
+        case 0xFB: // EI
+            // enableInterruptsNextCycle = true
+            // TODO: if we store the CPU ptr then we can use a disp here
+            builder.mov(Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle));
+            builder.mov(1, Reg64::R10);
+            break;
 
         case 0xFE: // CP n
         {
@@ -3132,6 +3168,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         auto off = exitPtr - (builder.getPtr() + 2);
         builder.jcc(Condition::G, off < -126 ? 5 : 2); // ugh, need to know length of jmp
         builder.jmp(off);
+
+        // interrupt check after EI
+        if(checkInterrupts)
+        {
+            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+            builder.mov(Reg64::R10, cpuPtr);
+
+            // if servicableInterrupts != 0
+            builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr);
+            auto off = exitPtr - (builder.getPtr() + 2);
+            builder.jcc(Condition::E, off < -126 ? 5 : 2); // ugh, need to know length of jmp
+            builder.jmp(off);
+        }
     }
 
     return true;
