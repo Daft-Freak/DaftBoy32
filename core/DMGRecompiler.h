@@ -43,5 +43,9 @@ private:
 
     // common code
     CompiledFunc entryFunc = nullptr;
-    uint8_t *exitPtr = nullptr;
+    uint8_t *exitPtr = nullptr, *saveAndExitPtr = nullptr;
+
+    // saved pointer on exit
+    uint8_t *savedPtr = nullptr;
+    uint16_t savedPC = 0;
 };

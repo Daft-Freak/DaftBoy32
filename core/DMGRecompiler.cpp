@@ -149,6 +149,7 @@ public:
     void and_(Reg32 dst, uint32_t imm);
     void and_(Reg8 dst, uint8_t imm);
 
+    void call(int disp);
     void call(Reg64 r);
 
     void cmp(Reg8 dst, Reg8 src);
@@ -172,6 +173,7 @@ public:
     void mov(Reg64 dst, Reg64 src);
     void mov(Reg32 dst, Reg32 src);
     void mov(Reg8 dst, Reg8 src);
+    void mov(Reg64 r, Reg64 base, bool isStore, int disp = 0);
     void mov(Reg32 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg16 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg64 r, uint64_t imm);
@@ -371,6 +373,21 @@ void X86Builder::and_(Reg8 dst, uint8_t imm)
     write(0x80); // opcode, s = 0, w = 0
     encodeModRM(dstReg, 4);
     write(imm); // imm
+}
+
+// direct
+void X86Builder::call(int disp)
+{
+    // adjust for opcode len
+    if(disp < 0)
+        disp -= 5;
+
+    write(0xE8); // opcode
+
+    write(disp);
+    write(disp >> 8);
+    write(disp >> 16);
+    write(disp >> 24);
 }
 
 // indirect
@@ -577,6 +594,22 @@ void X86Builder::mov(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x88); // opcode, w = 0
     encodeModRM(dstReg, srcReg);
+}
+
+// reg <-> mem, 64 bit
+void X86Builder::mov(Reg64 r, Reg64 base, bool isStore, int disp)
+{
+    auto reg = static_cast<int>(r);
+    auto baseReg = static_cast<int>(base);
+
+    encodeREX(true, reg, 0, baseReg);
+
+    if(isStore)
+        write(0x89); // opcode, w = 1
+    else
+        write(0x8B); // opcode, w = 1
+
+    encodeModRM(reg, baseReg, disp);
 }
 
 // reg <-> mem
@@ -1181,39 +1214,54 @@ void DMGRecompiler::handleBranch()
         if(cycles <= 0)
             break;
 
-        // lookup compiled code
-        auto mappedAddr = cpu.mem.makeBankedAddress(cpu.pc);
+        uint8_t *codePtr = nullptr;
 
-        auto it = compiled.find(mappedAddr);
+        // attempt to re-enter previous code
+        if(savedPtr && savedPC == cpu.pc)
+            codePtr = savedPtr;
 
-        if(it == compiled.end())
+        savedPtr = nullptr;
+
+        if(!codePtr)
         {
-            if(!entryFunc)
-                compileEntry();
+            // lookup compiled code
+            auto mappedAddr = cpu.mem.makeBankedAddress(cpu.pc);
 
-            // attempt compile
-            auto ptr = curCodePtr;
-            auto startPtr = ptr;
-            auto pc = cpu.pc;
+            auto it = compiled.find(mappedAddr);
 
-            FuncInfo info{};
-
-            if(compile(ptr, pc))
+            if(it == compiled.end())
             {
-                info.startPtr = startPtr;
-                info.endPtr = curCodePtr = ptr;
-                info.endPC = cpu.mem.makeBankedAddress(pc);
+                if(!entryFunc)
+                    compileEntry();
+
+                // attempt compile
+                auto ptr = curCodePtr;
+                auto startPtr = ptr;
+                auto pc = cpu.pc;
+
+                FuncInfo info{};
+
+                if(compile(ptr, pc))
+                {
+                    info.startPtr = startPtr;
+                    info.endPtr = curCodePtr = ptr;
+                    info.endPC = cpu.mem.makeBankedAddress(pc);
+                }
+                
+                it = compiled.emplace(mappedAddr, info).first;
             }
-            
-            it = compiled.emplace(mappedAddr, info).first;
+            codePtr = it->second.startPtr;
         }
 
         // run the code if valid, or stop
-        if(it->second.startPtr)
-            //it->second.func(cycles, cpu.regs, cpu.pc, cpu.sp);
-            entryFunc(cycles, cpu.regs, cpu.pc, cpu.sp, it->second.startPtr);
+        if(codePtr)
+            entryFunc(cycles, cpu.regs, cpu.pc, cpu.sp, codePtr);
         else
             break;
+
+        // code exited with a saved address for re-entry, store PC for later
+        if(savedPtr)
+            savedPC = cpu.pc;
 
         // CPU not running, stop
         if(cpu.halted || cpu.stopped || cpu.gdmaTriggered)
@@ -3124,9 +3172,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         // cycles -= executed
         builder.sub(Reg32::ESI, cyclesThisInstr);
         // if <= 0 exit
-        auto off = exitPtr - (builder.getPtr() + 2);
-        builder.jcc(Condition::G, off < -126 ? 5 : 2); // ugh, need to know length of jmp
-        builder.jmp(off);
+        builder.jcc(Condition::G, 5);
+        builder.call(saveAndExitPtr - builder.getPtr());
 
         // interrupt check after EI
         if(checkInterrupts)
@@ -3136,9 +3183,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
             // if servicableInterrupts != 0
             builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr);
-            auto off = exitPtr - (builder.getPtr() + 2);
-            builder.jcc(Condition::E, off < -126 ? 5 : 2); // ugh, need to know length of jmp
-            builder.jmp(off);
+            builder.jcc(Condition::E, 5);
+            builder.call(saveAndExitPtr - builder.getPtr());
         }
     }
 
@@ -4034,6 +4080,13 @@ void DMGRecompiler::compileEntry()
     // jump to code
     builder.jmp(Reg64::R10);
 
+    // exit saving ip
+    saveAndExitPtr = builder.getPtr();
+    builder.pop(Reg64::R10); // ret address (this is called)
+    builder.mov(Reg64::R11, reinterpret_cast<uintptr_t>(&savedPtr));
+    builder.mov(Reg64::R10, Reg64::R11, true);
+
+    // just exit
     exitPtr = builder.getPtr();
 
     // store cycle count
