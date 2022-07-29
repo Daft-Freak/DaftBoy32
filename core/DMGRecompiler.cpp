@@ -4036,6 +4036,10 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
     // if we wrote a reg, timings may have changed
     // ... and we have a convenient return value to pass the new value back
 
+    // ... also, there could be an interrupt pending RIGHT NOW
+    if(cpu->masterInterruptEnable && cpu->serviceableInterrupts)
+        return 0;
+
     int cycles = std::min(cpu->cyclesToRun, cpu->getDisplay().getCyclesToNextUpdate());
 
     if(cpu->nextTimerInterrupt)
