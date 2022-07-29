@@ -144,6 +144,7 @@ public:
     void add(Reg16 dst, int8_t imm);
 
     void adc(Reg8 dst, Reg8 src);
+    void adc(Reg8 dst, uint8_t imm);
 
     void and_(Reg16 dst, Reg16 src);
     void and_(Reg8 dst, Reg8 src);
@@ -210,6 +211,7 @@ public:
     void sar(Reg8 r, uint8_t count);
 
     void sbb(Reg8 dst, Reg8 src);
+    void sbb(Reg8 dst, uint8_t imm);
 
     void setcc(Condition cc, Reg8 dst);
 
@@ -323,6 +325,17 @@ void X86Builder::adc(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x10); // opcode
     encodeModRM(dstReg, srcReg);
+}
+
+// imm -> reg, 8 bit
+void X86Builder::adc(Reg8 dst, uint8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x80); // opcode, w = 0, s = 0
+    encodeModRM(dstReg, 2);
+    write(imm);
 }
 
 // reg -> reg, 16 bit
@@ -881,6 +894,17 @@ void X86Builder::sbb(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x18); // opcode
     encodeModRM(dstReg, srcReg);
+}
+
+// imm -> reg, 8 bit
+void X86Builder::sbb(Reg8 dst, uint8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x80); // opcode, w = 0, s = 0
+    encodeModRM(dstReg, 3);
+    write(imm);
 }
 
 // -> reg
@@ -1503,27 +1527,37 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.and_(reg(Reg::F), 0xF0);
     };
 
-    const auto add = [&builder, &incPC, &cycleExecuted](Reg8 b, bool withCarry = false)
+    const auto add = [&builder, &incPC, &cycleExecuted](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
 
+        bool bIsReg = std::holds_alternative<Reg8>(b);
+        bool bIsF = bIsReg && std::get<Reg8>(b) == f;
+
         // TODO: all of this ...
 
-        // F was used as tmp, make a second copy (affects ADD (HL), ADD n)
+        // F was used as tmp, make a second copy (affects ADD (HL))
         // also preserve F for ADC
-        if(b == f || withCarry)
+        if(bIsF || withCarry)
             builder.mov(Reg8::R11B, f);
 
         // copy src/dst (using flags reg as temp)
-        if(b == Reg8::AH || b == Reg8::CH || b == Reg8::DH || b == Reg8::BH)
+        if(bIsReg)
         {
-            // legacy regs, extra copy
-            builder.mov(f, b);
-            builder.mov(Reg8::R10B, f);
+            auto rb = std::get<Reg8>(b);
+
+            if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+            {
+                // legacy regs, extra copy
+                builder.mov(f, rb);
+                builder.mov(Reg8::R10B, f);
+            }
+            else
+                builder.mov(Reg8::R10B, rb);
         }
-        else
-            builder.mov(Reg8::R10B, b);
+        else // yeah this case could be optimised further
+            builder.mov(Reg8::R10B, std::get<uint8_t>(b));
 
         builder.mov(f, a);
 
@@ -1533,7 +1567,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.add(Reg8::R10B, f);
 
         // put tmp/flags reg back
-        if(b == f || withCarry)
+        if(bIsF || withCarry)
             builder.mov(f, Reg8::R11B);
 
         if(withCarry)
@@ -1553,17 +1587,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.jcc(Condition::E, 1); // not set
             builder.stc(); // CF = 1
 
-            if(b == Reg8::DIL) // ADC (HL), ADC n
+            if(bIsReg)
             {
-                // more reg shuffling...
-                builder.mov(f, b);
-                builder.adc(a, f);
+                auto rb = std::get<Reg8>(b);
+
+                if(rb == Reg8::DIL) // ADC (HL)
+                {
+                    // more reg shuffling...
+                    builder.mov(f, rb);
+                    builder.adc(a, f);
+                }
+                else
+                    builder.adc(a, rb);
             }
             else
-                builder.adc(a, b);
+                builder.adc(a, std::get<uint8_t>(b));
         }
-        else // do add
-            builder.add(a, b);
+        else if(bIsReg)// do add
+            builder.add(a, std::get<Reg8>(b));
+        else
+            builder.add(a, std::get<uint8_t>(b));
 
         // flags
         builder.mov(f, 0);
@@ -1586,32 +1629,42 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         return true;
     };
 
-    const auto addWithCarry = [&add](Reg8 b)
+    const auto addWithCarry = [&add](std::variant<Reg8, uint8_t> b)
     {
         return add(b, true);
     };
 
-    const auto sub = [&builder, &incPC, &cycleExecuted](Reg8 b, bool withCarry = false)
+    const auto sub = [&builder, &incPC, &cycleExecuted](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
 
+        bool bIsReg = std::holds_alternative<Reg8>(b);
+        bool bIsF = bIsReg && std::get<Reg8>(b) == f;
+
         // TODO: all of this ...
 
-        // F was used as tmp, make a second copy (affects SUB (HL), SUB n)
+        // F was used as tmp, make a second copy (affects SUB (HL))
         // also preserve F for SBC
-        if(b == f || withCarry)
+        if(bIsF || withCarry)
             builder.mov(Reg8::R11B, f);
 
         // copy src/dst (using flags reg as temp)
-        if(b == Reg8::AH || b == Reg8::CH || b == Reg8::DH || b == Reg8::BH)
+        if(bIsReg)
         {
-            // legacy regs, extra copy
-            builder.mov(f, b);
-            builder.mov(Reg8::R10B, f);
+            auto rb = std::get<Reg8>(b);
+
+            if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+            {
+                // legacy regs, extra copy
+                builder.mov(f, rb);
+                builder.mov(Reg8::R10B, f);
+            }
+            else
+                builder.mov(Reg8::R10B, rb);
         }
-        else
-            builder.mov(Reg8::R10B, b);
+        else // yeah this case could be optimised further
+            builder.mov(Reg8::R10B, std::get<uint8_t>(b));
 
         builder.mov(f, a);
 
@@ -1622,7 +1675,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(Reg8::R10B, f);
 
         // put tmp/flags reg back
-        if(b == f || withCarry)
+        if(bIsF || withCarry)
             builder.mov(f, Reg8::R11B);
 
         if(withCarry)
@@ -1642,17 +1695,26 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.jcc(Condition::E, 1); // not set
             builder.stc(); // CF = 1
 
-            if(b == Reg8::DIL) // SBC (HL), SBC n
+            if(bIsReg)
             {
-                // more reg shuffling...
-                builder.mov(f, b);
-                builder.sbb(a, f);
+                auto rb = std::get<Reg8>(b);
+
+                if(rb == Reg8::DIL) // SBC (HL)
+                {
+                    // more reg shuffling...
+                    builder.mov(f, rb);
+                    builder.sbb(a, f);
+                }
+                else
+                    builder.sbb(a, rb);
             }
             else
-                builder.sbb(a, b);
+                builder.sbb(a, std::get<uint8_t>(b));
         }
-        else // do sub
-            builder.sub(a, b);
+        else if(bIsReg) // do sub
+            builder.sub(a, std::get<Reg8>(b));
+        else
+            builder.sub(a, std::get<uint8_t>(b));
 
         // flags
         builder.mov(f, DMGCPU::Flag_N);
@@ -1673,14 +1735,17 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.or_(f, DMGCPU::Flag_Z); // set Z
     };
 
-    const auto subWithCarry = [&sub](Reg8 b)
+    const auto subWithCarry = [&sub](std::variant<Reg8, uint8_t> b)
     {
         return sub(b, true);
     };
 
-    const auto bitAnd = [&builder, &incPC, &cycleExecuted](Reg8 r)
+    const auto bitAnd = [&builder, &incPC, &cycleExecuted](std::variant<Reg8, uint8_t> b)
     {
-        builder.and_(reg(Reg::A), r);
+        if(std::holds_alternative<Reg8>(b))
+            builder.and_(reg(Reg::A), std::get<Reg8>(b));
+        else
+            builder.and_(reg(Reg::A), std::get<uint8_t>(b));
 
         // F = Flag_H | (res == 0 ? Flag_Z : 0)
         builder.mov(reg(Reg::F), DMGCPU::Flag_H);
@@ -1688,44 +1753,60 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
     };
 
-    const auto bitOr = [&builder](Reg8 r)
+    const auto bitOr = [&builder](std::variant<Reg8, uint8_t> b)
     {
-        builder.or_(reg(Reg::A), r);
+        if(std::holds_alternative<Reg8>(b))
+            builder.or_(reg(Reg::A), std::get<Reg8>(b));
+        else
+            builder.or_(reg(Reg::A), std::get<uint8_t>(b));
 
         builder.mov(reg(Reg::F), 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
     };
 
-    const auto bitXor = [&builder](Reg8 r)
+    const auto bitXor = [&builder](std::variant<Reg8, uint8_t> b)
     {
-        builder.xor_(reg(Reg::A), r);
+        if(std::holds_alternative<Reg8>(b))
+            builder.xor_(reg(Reg::A), std::get<Reg8>(b));
+        else
+            builder.xor_(reg(Reg::A), std::get<uint8_t>(b));
 
         builder.mov(reg(Reg::F), 0);
         builder.jcc(Condition::NE, 3); // if != 0
         builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
     };
 
-    const auto cmp = [&builder, &incPC, &cycleExecuted](Reg8 b)
+    const auto cmp = [&builder, &incPC, &cycleExecuted](std::variant<Reg8, uint8_t> b)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
 
+        bool bIsReg = std::holds_alternative<Reg8>(b);
+        bool bIsF = bIsReg && std::get<Reg8>(b) == f;
+
         // TODO: all of this ...
 
         // copy src/dst (using flags reg as temp)
-        if(b == Reg8::AH || b == Reg8::CH || b == Reg8::DH || b == Reg8::BH)
+        if(bIsReg)
         {
-            // legacy regs, extra copy
-            builder.mov(f, b);
-            builder.mov(Reg8::R10B, f);
-        }
-        else
-            builder.mov(Reg8::R10B, b);
+            auto rb = std::get<Reg8>(b);
 
-        // F was used as tmp, make a second copy (affects ADD (HL), ADD n)
-        if(b == f)
-            builder.mov(Reg8::R11B, b);
+            if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+            {
+                // legacy regs, extra copy
+                builder.mov(f, rb);
+                builder.mov(Reg8::R10B, f);
+            }
+            else
+                builder.mov(Reg8::R10B, rb);
+        }
+        else // yeah this case could be optimised further
+            builder.mov(Reg8::R10B, std::get<uint8_t>(b));
+
+        // F was used as tmp, make a second copy (affects CMP (HL))
+        if(bIsF)
+            builder.mov(Reg8::R11B, f);
 
         builder.mov(f, a);
 
@@ -1736,13 +1817,16 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.setcc(Condition::B, Reg8::R10B); // save carry
 
         // put tmp reg back
-        if(b == f)
-            builder.mov(b, Reg8::R11B);
+        if(bIsF)
+            builder.mov(f, Reg8::R11B);
 
         // TODO: ... can be avoided if we don't need the H flag
 
         // do cmp
-        builder.cmp(a, b);
+        if(bIsReg)
+            builder.cmp(a, std::get<Reg8>(b));
+        else
+            builder.cmp(a, std::get<uint8_t>(b));
 
         // flags
         builder.mov(f, DMGCPU::Flag_N);
@@ -2816,11 +2900,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xC6: // ADD n
         {
-            // TODO: use imm?
-            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
-            builder.mov(tmp, cpu.readMem(pc++));
+            auto v = cpu.readMem(pc++);
             incPC();
-            add(tmp);
+            add(v);
             cycleExecuted();
             break;
         }
@@ -2847,11 +2929,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xCE: // ADC n
         {
-            // TODO: use imm?
-            auto tmp = Reg8::DIL; // can't use F here so use something wierd
-            builder.mov(tmp, cpu.readMem(pc++));
+            auto v = cpu.readMem(pc++);
             incPC();
-            addWithCarry(tmp);
+            addWithCarry(v);
             cycleExecuted();
             break;
         }
@@ -2876,11 +2956,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xD6: // SUB n
         {
-            // TODO: use imm?
-            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
-            builder.mov(tmp, cpu.readMem(pc++));
+            auto v = cpu.readMem(pc++);
             incPC();
-            sub(tmp);
+            sub(v);
             cycleExecuted();
             break;
         }
@@ -2907,11 +2985,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         case 0xDE: // SBC n
         {
-            // TODO: use imm?
-            auto tmp = Reg8::DIL; // can't use F here so use something wierd
-            builder.mov(tmp, cpu.readMem(pc++));
+            auto v = cpu.readMem(pc++);
             incPC();
-            subWithCarry(tmp);
+            subWithCarry(v);
             cycleExecuted();
             break;
         }
@@ -2944,11 +3020,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xE6: // AND n
         {
-            // TODO: use AND with immediate?
-            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
-            builder.mov(tmp, cpu.readMem(pc++));
+            auto v = cpu.readMem(pc++);
             incPC();
-            bitAnd(tmp);
+            bitAnd(v);
             cycleExecuted();
             break;
         }
@@ -3013,11 +3087,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         case 0xEE: // XOR n
         {
-            // TODO: use imm?
-            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
-            builder.mov(tmp, cpu.readMem(pc++));
+            auto v = cpu.readMem(pc++);
             incPC();
-            bitXor(tmp);
+            bitXor(v);
             cycleExecuted();
             break;
         }
@@ -3057,11 +3129,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xF6: // OR n
         {
-            // TODO: use imm?
-            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
-            builder.mov(tmp, cpu.readMem(pc++));
+            auto v =  cpu.readMem(pc++);
             incPC();
-            bitOr(tmp);
+            bitOr(v);
             cycleExecuted();
             break;
         }
@@ -3131,11 +3201,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         case 0xFE: // CP n
         {
-            // TODO: use imm?
-            auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
-            builder.mov(tmp, cpu.readMem(pc++));
+            auto v = cpu.readMem(pc++);
             incPC();
-            cmp(tmp);
+            cmp(v);
             cycleExecuted();
             break;
         }
