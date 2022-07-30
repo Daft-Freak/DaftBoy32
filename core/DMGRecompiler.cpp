@@ -1167,6 +1167,13 @@ static void callSaveOrSkip(X86Builder &builder)
     // only safe if values from RAX, RCX, RDX, RDI are not moved to args
     if(tmpPtr[0] == 0x5F/*pop rdi*/ && tmpPtr[1] == 0x5A/*pop rdx*/ && tmpPtr[2] == 0x59/*pop rcx*/ && tmpPtr[3] == 0x58/*pop rax*/)
         builder.resetPtr(tmpPtr);
+    else if(tmpPtr[1] == 0x5A/*pop rdx*/ && tmpPtr[2] == 0x59/*pop rcx*/ && tmpPtr[3] == 0x58/*pop rax*/)
+    {
+        // skip 3/4 of the pops
+        // (should be after a writeMem)
+        builder.resetPtr(tmpPtr + 1);
+        builder.push(Reg64::RDI);
+    }
     else
         callSave(builder);
 }
@@ -1182,27 +1189,35 @@ static void callRestore(X86Builder &builder)
 
 static void callRestore(X86Builder &builder, Reg32 dstReg)
 {
-    // builder.add(Reg64::RSP, 8); // alignment
-    builder.pop(Reg64::RDI);
-    builder.pop(Reg64::RDX);
-    builder.pop(Reg64::RCX);
-
-    // mov ret val
-    assert(dstReg != Reg32::EAX);
+    // mov ret val (this is never used for the emulated regs)
+    assert(dstReg != Reg32::EAX && dstReg != Reg32::EDX && dstReg != Reg32::ECX);
 
     builder.mov(dstReg, Reg32::EAX);
+
+    // builder.add(Reg64::RSP, 8); // alignment
+    builder.pop(dstReg == Reg32::EDI ? Reg64::RSI : Reg64::RDI); // use RSI to pop the unneeded value
+    builder.pop(Reg64::RDX);
+    builder.pop(Reg64::RCX);
     builder.pop(Reg64::RAX);
 }
 
 static void callRestore(X86Builder &builder, Reg8 dstReg)
 {
+    assert(dstReg != Reg8::DIL); // no
+
+    // move before popping if possible
+    bool isPoppedReg = dstReg == Reg8::AL || dstReg == Reg8::CL || dstReg == Reg8::DL || dstReg == Reg8::AH || dstReg == Reg8::CH || dstReg == Reg8::DH;
+
+    if(!isPoppedReg)
+        builder.mov(dstReg, Reg8::AL);
+        
     // builder.add(Reg64::RSP, 8); // alignment
     builder.pop(Reg64::RDI);
     builder.pop(Reg64::RDX);
     builder.pop(Reg64::RCX);
 
     // mov ret val (if not going to RAX)
-    if(dstReg != Reg8::AL && dstReg != Reg8::AH)
+    if(isPoppedReg && dstReg != Reg8::AL && dstReg != Reg8::AH)
     {
         builder.mov(dstReg, Reg8::AL);
         builder.pop(Reg64::RAX);
@@ -1213,7 +1228,7 @@ static void callRestore(X86Builder &builder, Reg8 dstReg)
         builder.pop(Reg64::R10);
         builder.mov(Reg8::AL, Reg8::R10B); // restore low byte
     }
-    else // ... though this is the worst case... (AL == F, so unlikely)
+    else if(dstReg == Reg8::AL)// ... though this is the worst case... (AL == F, so unlikely)
     {
         // EAX = EAX + (R10D & 0xFF00)
         builder.pop(Reg64::R10);
@@ -1221,6 +1236,8 @@ static void callRestore(X86Builder &builder, Reg8 dstReg)
         builder.movzx(Reg32::EAX, Reg8::AL);
         builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
     }
+    else // we already did it
+        builder.pop(Reg64::RAX);
 }
 
 DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
@@ -1962,8 +1979,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.jcc(set ? Condition::E : Condition::NE, 6 + cycleExecutedCallSize);
         }
 
-        builder.mov(pcReg32, addr);
         cycleExecuted();
+        builder.mov(pcReg32, addr);
+
         exited = true;
     };
 
@@ -1980,9 +1998,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.jcc(set ? Condition::E : Condition::NE, 6 + cycleExecutedCallSize);
         }
 
-        builder.mov(pcReg32, pc + off);
-        
         cycleExecuted();
+        builder.mov(pcReg32, pc + off);
         exited = true;
     };
 
@@ -1998,7 +2015,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 14 + cycleExecutedCallSize * 3 + writeMemRegImmCallSize * 2);
+            builder.jcc(set ? Condition::E : Condition::NE, 14 + cycleExecutedCallSize * 3 + writeMemRegImmCallSize * 2 - 6 * 2);
         }
 
         cycleExecuted(); // delay
@@ -2230,8 +2247,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0x22: // LDI (HL),A
             writeMem(reg(WReg::HL), reg(Reg::A));
-            builder.inc(reg(WReg::HL));
             cycleExecuted();
+            builder.inc(reg(WReg::HL));
             break;
         case 0x23: // INC HL
             inc16(WReg::HL);
@@ -2345,8 +2362,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         }
         case 0x32: // LDD (HL),A
             writeMem(reg(WReg::HL), reg(Reg::A));
-            builder.dec(reg(WReg::HL));
             cycleExecuted();
+            builder.dec(reg(WReg::HL));
             break;
         case 0x33: // INC SP
             builder.inc(spReg16);
@@ -3245,7 +3262,9 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
 
     auto readMem = [&builder, this](Reg16 addrReg, Reg8 dstReg)
     {
-        callSave(builder);
+        // addr is always HL
+        assert(addrReg == Reg16::BX);
+        callSaveOrSkip(builder);
 
         builder.movzx(Reg32::ESI, addrReg);
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
