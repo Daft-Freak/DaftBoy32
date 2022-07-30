@@ -1132,15 +1132,22 @@ static const Reg16 regMap16[]
     Reg16::BX  // HL
 };
 
+static const Reg32 pcReg32 = Reg32::R8D;
+static const Reg16 pcReg16 = Reg16::R8W;
+
+static const Reg32 spReg32 = Reg32::R9D;
+static const Reg16 spReg16 = Reg16::R9W;
+static const Reg8 spReg8 = Reg8::R9B; // mostly for the adds with the strange flags
+
 inline Reg8 reg(DMGCPU::Reg r)
 {
     return regMap8[static_cast<int>(r)];
-};
+}
 
 inline Reg16 reg(DMGCPU::WReg r)
 {
     return regMap16[static_cast<int>(r)];
-};
+}
 
 // call helpers
 static void callSave(X86Builder &builder)
@@ -1492,16 +1499,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
-        auto sp = Reg16::R9W;
-
         cycleExecuted(); // delay
 
-        builder.dec(sp);
-        writeMem(sp, highReg);
+        builder.dec(spReg16);
+        writeMem(spReg16, highReg);
         cycleExecuted();
 
-        builder.dec(sp);
-        writeMem(sp, lowReg);
+        builder.dec(spReg16);
+        writeMem(spReg16, lowReg);
         cycleExecuted();
     };
 
@@ -1510,14 +1515,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
-        auto sp = Reg16::R9W;
-
-        readMem(sp, lowReg);
-        builder.inc(sp);
+        readMem(spReg16, lowReg);
+        builder.inc(spReg16);
         cycleExecuted();
 
-        readMem(sp, highReg);
-        builder.inc(sp);
+        readMem(spReg16, highReg);
+        builder.inc(spReg16);
         cycleExecuted();
 
         // low bits in F can never be set
@@ -1948,12 +1951,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         // condition
         if(flag)
         {
-            builder.mov(Reg32::R8D, pc);
+            builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
             builder.jcc(set ? Condition::E : Condition::NE, 6 + cycleExecutedCallSize);
         }
 
-        builder.mov(Reg32::R8D, addr);
+        builder.mov(pcReg32, addr);
         cycleExecuted();
         exited = true;
     };
@@ -1966,13 +1969,13 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         // condition
         if(flag)
         {
-            builder.mov(Reg32::R8D, pc);
+            builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
             builder.jcc(set ? Condition::E : Condition::NE, 5 + cycleExecutedCallSize);
-            builder.add(Reg16::R8W, off);
+            builder.add(pcReg16, off);
         }
         else
-            builder.mov(Reg32::R8D, pc + off);
+            builder.mov(pcReg32, pc + off);
         
         cycleExecuted();
         exited = true;
@@ -1988,23 +1991,21 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         // condition
         if(flag)
         {
-            builder.mov(Reg32::R8D, pc);
+            builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
             builder.jcc(set ? Condition::E : Condition::NE, 14 + cycleExecutedCallSize * 3 + writeMemRegImmCallSize * 2);
         }
 
         cycleExecuted(); // delay
 
-        auto sp = Reg16::R9W;
-
-        builder.dec(sp);
-        writeMem(sp, static_cast<uint8_t>(pc >> 8));
+        builder.dec(spReg16);
+        writeMem(spReg16, static_cast<uint8_t>(pc >> 8));
         cycleExecuted();
-        builder.dec(sp);
-        writeMem(sp, static_cast<uint8_t>(pc));
+        builder.dec(spReg16);
+        writeMem(spReg16, static_cast<uint8_t>(pc));
         cycleExecuted();
 
-        builder.mov(Reg32::R8D, addr);
+        builder.mov(pcReg32, addr);
         
         exited = true;
     };
@@ -2013,16 +2014,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     {
         cycleExecuted(); // delay
 
-        auto sp = Reg16::R9W;
-
-        builder.dec(sp);
-        writeMem(sp, static_cast<uint8_t>(pc >> 8));
+        builder.dec(spReg16);
+        writeMem(spReg16, static_cast<uint8_t>(pc >> 8));
         cycleExecuted();
-        builder.dec(sp);
-        writeMem(sp, static_cast<uint8_t>(pc));
+        builder.dec(spReg16);
+        writeMem(spReg16, static_cast<uint8_t>(pc));
         cycleExecuted();
 
-        builder.mov(Reg32::R8D, addr);
+        builder.mov(pcReg32, addr);
         
         exited = true;
     };
@@ -2034,24 +2033,24 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             cycleExecuted(); // delay
 
-            builder.mov(Reg32::R8D, pc);
+            builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
             builder.jcc(set ? Condition::E : Condition::NE, 22 + cycleExecutedCallSize * 3 + readMemRegCallSize * 2);
         }
 
-        auto sp = Reg16::R9W;
+        auto pcReg8 = static_cast<Reg8>(pcReg16);
 
-        builder.mov(Reg32::R8D, 0);
-        readMem(sp, Reg8::R8B);
-        builder.inc(sp);
+        builder.mov(pcReg32, 0);
+        readMem(spReg16, pcReg8);
+        builder.inc(spReg16);
         cycleExecuted();
 
-        readMem(sp, Reg8::R10B);
-        builder.inc(sp);
+        readMem(spReg16, Reg8::R10B);
+        builder.inc(spReg16);
         cycleExecuted();
 
         builder.shl(Reg32::R10D, 8);
-        builder.or_(Reg16::R8W, Reg16::R10W);
+        builder.or_(pcReg16, Reg16::R10W);
         cycleExecuted();
         
         exited = true;
@@ -2100,11 +2099,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             addr |= (cpu.readMem(pc++) << 8);
             cycleExecuted();
 
-            writeMem(addr++, Reg8::R9B); // low byte
+            writeMem(addr++, spReg8); // low byte
             cycleExecuted();
 
             // SP >> 8
-            builder.mov(Reg32::R10D, Reg32::R9D);
+            builder.mov(Reg32::R10D, spReg32);
             builder.shr(Reg32::R10D, 8);
 
             writeMem(addr, Reg8::R10B); // low byte
@@ -2336,7 +2335,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             sp |= cpu.readMem(pc++) << 8;
             cycleExecuted();
 
-            builder.mov(Reg32::R9D, sp);
+            builder.mov(spReg32, sp);
             break;
         }
         case 0x32: // LDD (HL),A
@@ -2345,7 +2344,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         case 0x33: // INC SP
-            builder.inc(Reg16::R9W);
+            builder.inc(spReg16);
             cycleExecuted();
             break;
         case 0x34: // INC (HL)
@@ -2394,7 +2393,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             jumpRel(DMGCPU::Flag_C);
             break;
         case 0x39: // ADD HL,SP
-            add16(Reg16::R9W);
+            add16(spReg16);
             break;
         case 0x3A: // LDD A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
@@ -2402,7 +2401,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             cycleExecuted();
             break;
         case 0x3B: // DEC SP
-            builder.dec(Reg16::R9W);
+            builder.dec(spReg16);
             cycleExecuted();
             break;
         case 0x3C: // INC A
@@ -2609,7 +2608,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             // haltBug = true
             builder.mov(1, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtr);
 
-            builder.mov(Reg32::R8D, pc); // exits need to set PC themselves
+            builder.mov(pcReg32, pc); // exits need to set PC themselves
             exited = true;
             break;
         }
@@ -3029,7 +3028,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.mov(f, 0);
 
             // 8 bit add
-            builder.mov(Reg8::R10B, Reg8::R9B);
+            builder.mov(Reg8::R10B, spReg8);
             builder.add(Reg8::R10B, b);
 
             // carry flag
@@ -3037,7 +3036,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.or_(f, DMGCPU::Flag_C); // set C
 
             // half add
-            builder.mov(Reg8::R10B, Reg8::R9B);
+            builder.mov(Reg8::R10B, spReg8);
             builder.and_(Reg8::R10B, 0xF);
             builder.add(Reg8::R10B, b & 0xF);
 
@@ -3047,7 +3046,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.or_(f, DMGCPU::Flag_H); // set H
 
             // real add
-            builder.add(Reg16::R9W, static_cast<int8_t>(b));
+            builder.add(spReg16, static_cast<int8_t>(b));
 
             // 2x delay
             cycleExecuted();
@@ -3056,7 +3055,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xE9: // JP (HL)
-            builder.movzx(Reg32::R8D, reg(WReg::HL)); // PC = HL
+            builder.movzx(pcReg32, reg(WReg::HL)); // PC = HL
             exited = true;
             break;
         case 0xEA: // LD (nn),A
@@ -3132,7 +3131,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.mov(f, 0);
 
             // 8 bit add
-            builder.mov(Reg8::R10B, Reg8::R9B);
+            builder.mov(Reg8::R10B, spReg8);
             builder.add(Reg8::R10B, b);
 
             // carry flag
@@ -3140,7 +3139,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.or_(f, DMGCPU::Flag_C); // set C
 
             // half add
-            builder.mov(Reg8::R10B, Reg8::R9B);
+            builder.mov(Reg8::R10B, spReg8);
             builder.and_(Reg8::R10B, 0xF);
             builder.add(Reg8::R10B, b & 0xF);
 
@@ -3150,7 +3149,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.or_(f, DMGCPU::Flag_H); // set H
 
             // real add
-            builder.mov(static_cast<Reg32>(reg(WReg::HL)), Reg32::R9D);
+            builder.mov(static_cast<Reg32>(reg(WReg::HL)), spReg32);
             builder.add(reg(WReg::HL), static_cast<int8_t>(b));
 
             cycleExecuted();
@@ -3158,7 +3157,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xF9: // LD SP,HL
-            builder.mov(Reg32::R9D, static_cast<Reg32>(reg(WReg::HL)));
+            builder.mov(spReg32, static_cast<Reg32>(reg(WReg::HL)));
             cycleExecuted();
             break;
         case 0xFA: // LD A,(nn)
@@ -3193,7 +3192,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         default:
             printf("unhandled op in recompile %02X\n", opcode);
             builder.resetPtr(oldPtr);
-            builder.mov(Reg32::R8D, pc - 1);
+            builder.mov(pcReg32, pc - 1);
             return false;
     }
 
@@ -3203,7 +3202,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.sub(Reg32::EDI, cyclesThisInstr);
         // if <= 0 exit
         builder.jcc(Condition::G, 11);
-        builder.mov(Reg32::R8D, pc);
+        builder.mov(pcReg32, pc);
         builder.call(saveAndExitPtr - builder.getPtr());
 
         // interrupt check after EI
@@ -3215,7 +3214,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             // if servicableInterrupts != 0
             builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr);
             builder.jcc(Condition::E, 11);
-            builder.mov(Reg32::R8D, pc);
+            builder.mov(pcReg32, pc);
             builder.call(saveAndExitPtr - builder.getPtr());
         }
     }
@@ -4089,8 +4088,8 @@ void DMGRecompiler::compileEntry()
 
     // load emu pc/sp
     // TODO: we know what PC is, dont bother loading/updating/saving it
-    builder.movzxW(Reg32::R8D, Reg64::RDX);
-    builder.movzxW(Reg32::R9D, Reg64::RCX);
+    builder.movzxW(pcReg32, Reg64::RDX);
+    builder.movzxW(spReg32, Reg64::RCX);
 
     // load emu regs
     builder.movzxW(Reg32::EAX, Reg64::RSI);
@@ -4125,8 +4124,8 @@ void DMGRecompiler::compileEntry()
     builder.pop(Reg64::RBX);
 
     // save emu pc/sp
-    builder.mov(Reg16::R8W, Reg64::RDX, true);
-    builder.mov(Reg16::R9W, Reg64::RCX, true);
+    builder.mov(pcReg16, Reg64::RDX, true);
+    builder.mov(spReg16, Reg64::RCX, true);
 
     // epilogue
     builder.pop(Reg64::RBP);
