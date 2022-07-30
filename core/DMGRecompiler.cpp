@@ -1380,12 +1380,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     // SP = R9D
     // cycles = EDI
 
-    // TODO: should be able to avoid this
-    const auto incPC = [&builder]()
-    {
-        builder.lea(Reg32::R8D, Reg64::R8, 1);
-    };
-
     // TODO: shared trampolines?
     auto cycleExecuted = [&builder, this, &cyclesThisInstr]()
     {
@@ -1401,7 +1395,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
     // cycle for opcode read
     auto oldPtr = builder.getPtr();
-    incPC();
     cycleExecuted();
 
     // previous op was EI
@@ -1465,36 +1458,33 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
-    const auto load8 = [this, &pc, &builder, &incPC, &cycleExecuted](Reg r)
+    const auto load8 = [this, &pc, &builder, &cycleExecuted](Reg r)
     {
         uint8_t v = cpu.readMem(pc++);
         builder.mov(reg(r), v);
-        incPC();
         cycleExecuted();
     };
 
-    const auto copy8 = [&builder, &incPC, &cycleExecuted](Reg dst, Reg src)
+    const auto copy8 = [&builder, &cycleExecuted](Reg dst, Reg src)
     {
         builder.mov(reg(dst), reg(src));
     };
 
-    const auto load16 = [this, &pc, &builder, &incPC, &cycleExecuted](WReg r)
+    const auto load16 = [this, &pc, &builder, &cycleExecuted](WReg r)
     {
         auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
         uint8_t v = cpu.readMem(pc++);
         builder.mov(lowReg, v);
-        incPC();
         cycleExecuted();
 
         v = cpu.readMem(pc++);
         builder.mov(highReg, v);
-        incPC();
         cycleExecuted();
     };
 
-    const auto push = [&builder, &incPC, &cycleExecuted, &writeMem](WReg r)
+    const auto push = [&builder, &cycleExecuted, &writeMem](WReg r)
     {
         auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
@@ -1512,7 +1502,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         cycleExecuted();
     };
 
-    const auto pop = [&builder, &incPC, &cycleExecuted, &readMem](WReg r)
+    const auto pop = [&builder, &cycleExecuted, &readMem](WReg r)
     {
         auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
@@ -1532,7 +1522,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.and_(reg(Reg::F), 0xF0);
     };
 
-    const auto add = [&builder, &incPC, &cycleExecuted](std::variant<Reg8, uint8_t> b, bool withCarry = false)
+    const auto add = [&builder](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -1639,7 +1629,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         return add(b, true);
     };
 
-    const auto sub = [&builder, &incPC, &cycleExecuted](std::variant<Reg8, uint8_t> b, bool withCarry = false)
+    const auto sub = [&builder](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -1745,7 +1735,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         return sub(b, true);
     };
 
-    const auto bitAnd = [&builder, &incPC, &cycleExecuted](std::variant<Reg8, uint8_t> b)
+    const auto bitAnd = [&builder](std::variant<Reg8, uint8_t> b)
     {
         if(std::holds_alternative<Reg8>(b))
             builder.and_(reg(Reg::A), std::get<Reg8>(b));
@@ -1782,7 +1772,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
     };
 
-    const auto cmp = [&builder, &incPC, &cycleExecuted](std::variant<Reg8, uint8_t> b)
+    const auto cmp = [&builder](std::variant<Reg8, uint8_t> b)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -1853,7 +1843,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.or_(f, DMGCPU::Flag_Z); // set Z
     };
 
-    const auto inc = [&builder, &incPC, &cycleExecuted](Reg8 r)
+    const auto inc = [&builder](Reg8 r)
     {
         auto f = reg(Reg::F);
         builder.and_(f, DMGCPU::Flag_C); // preserve C
@@ -1874,7 +1864,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.or_(f, DMGCPU::Flag_Z); // set Z
     };
 
-    const auto dec = [&builder, &incPC, &cycleExecuted](Reg8 r)
+    const auto dec = [&builder](Reg8 r)
     {
         auto f = reg(Reg::F);
         builder.and_(f, DMGCPU::Flag_C); // preserve C
@@ -1896,7 +1886,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.or_(f, DMGCPU::Flag_Z); // set Z
     };
 
-    const auto add16 = [&builder, &incPC, &cycleExecuted](Reg16 b)
+    const auto add16 = [&builder, &cycleExecuted](Reg16 b)
     {
         auto a = reg(WReg::HL);
         auto f = reg(Reg::F);
@@ -1933,30 +1923,29 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         cycleExecuted();
     };
 
-    const auto inc16 = [&builder, &incPC, &cycleExecuted](WReg r)
+    const auto inc16 = [&builder, &cycleExecuted](WReg r)
     {
         builder.inc(reg(r));
         cycleExecuted();
     };
 
-    const auto dec16 = [&builder, &incPC, &cycleExecuted](WReg r)
+    const auto dec16 = [&builder, &cycleExecuted](WReg r)
     {
         builder.dec(reg(r));
         cycleExecuted();
     };
 
-    const auto jump = [this, &pc, &exited, &builder, &incPC, &cycleExecuted](int flag = 0, bool set = true)
+    const auto jump = [this, &pc, &exited, &builder, &cycleExecuted](int flag = 0, bool set = true)
     {
         uint16_t addr = cpu.readMem(pc++);
-        incPC();
         cycleExecuted();
         addr |= cpu.readMem(pc++) << 8;
-        incPC();
         cycleExecuted();
 
         // condition
         if(flag)
         {
+            builder.mov(Reg32::R8D, pc);
             builder.test(reg(Reg::F), flag);
             builder.jcc(set ? Condition::E : Condition::NE, 6 + cycleExecutedCallSize);
         }
@@ -1966,36 +1955,37 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         exited = true;
     };
 
-    const auto jumpRel = [this, &pc, &exited, &builder, &incPC, &cycleExecuted](int flag = 0, bool set = true)
+    const auto jumpRel = [this, &pc, &exited, &builder, &cycleExecuted](int flag = 0, bool set = true)
     {
         int8_t off = cpu.readMem(pc++);
-        incPC();
         cycleExecuted();
 
         // condition
         if(flag)
         {
+            builder.mov(Reg32::R8D, pc);
             builder.test(reg(Reg::F), flag);
             builder.jcc(set ? Condition::E : Condition::NE, 5 + cycleExecutedCallSize);
+            builder.add(Reg16::R8W, off);
         }
-
-        builder.add(Reg16::R8W, off);
+        else
+            builder.mov(Reg32::R8D, pc + off);
+        
         cycleExecuted();
         exited = true;
     };
 
-    const auto call = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
+    const auto call = [this, &pc, &exited, &builder, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
     {
         uint16_t addr = cpu.readMem(pc++);
-        incPC();
         cycleExecuted();
         addr |= cpu.readMem(pc++) << 8;
-        incPC();
         cycleExecuted();
 
         // condition
         if(flag)
         {
+            builder.mov(Reg32::R8D, pc);
             builder.test(reg(Reg::F), flag);
             builder.jcc(set ? Condition::E : Condition::NE, 14 + cycleExecutedCallSize * 3 + writeMemRegImmCallSize * 2);
         }
@@ -2016,7 +2006,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         exited = true;
     };
 
-    const auto reset = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &writeMem](int addr)
+    const auto reset = [this, &pc, &exited, &builder, &cycleExecuted, &writeMem](int addr)
     {
         cycleExecuted(); // delay
 
@@ -2034,13 +2024,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         exited = true;
     };
 
-    const auto ret = [this, &pc, &exited, &builder, &incPC, &cycleExecuted, &readMem](int flag = 0, bool set = true)
+    const auto ret = [this, &pc, &exited, &builder, &cycleExecuted, &readMem](int flag = 0, bool set = true)
     {
         // condition
         if(flag)
         {
             cycleExecuted(); // delay
 
+            builder.mov(Reg32::R8D, pc);
             builder.test(reg(Reg::F), flag);
             builder.jcc(set ? Condition::E : Condition::NE, 22 + cycleExecutedCallSize * 3 + readMemRegCallSize * 2);
         }
@@ -2102,10 +2093,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0x08: // LD (nn),SP
         {
             uint16_t addr = cpu.readMem(pc++);
-            incPC();
             cycleExecuted();
             addr |= (cpu.readMem(pc++) << 8);
-            incPC();
             cycleExecuted();
 
             writeMem(addr++, Reg8::R9B); // low byte
@@ -2340,10 +2329,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0x31: // LD SP,nn
         {
             uint16_t sp = cpu.readMem(pc++);
-            incPC();
             cycleExecuted();
             sp |= cpu.readMem(pc++) << 8;
-            incPC();
             cycleExecuted();
 
             builder.mov(Reg32::R9D, sp);
@@ -2389,7 +2376,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0x36: // LD (HL),n
         {
             auto val = cpu.readMem(pc++);
-            incPC();
             cycleExecuted();
             writeMem(reg(WReg::HL), val);
             cycleExecuted();
@@ -2620,6 +2606,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             // haltBug = true
             builder.mov(1, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtr);
 
+            builder.mov(Reg32::R8D, pc); // exits need to set PC themselves
             exited = true;
             break;
         }
@@ -2906,7 +2893,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xC6: // ADD n
         {
             auto v = cpu.readMem(pc++);
-            incPC();
             add(v);
             cycleExecuted();
             break;
@@ -2935,7 +2921,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xCE: // ADC n
         {
             auto v = cpu.readMem(pc++);
-            incPC();
             addWithCarry(v);
             cycleExecuted();
             break;
@@ -2962,7 +2947,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xD6: // SUB n
         {
             auto v = cpu.readMem(pc++);
-            incPC();
             sub(v);
             cycleExecuted();
             break;
@@ -2991,7 +2975,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xDE: // SBC n
         {
             auto v = cpu.readMem(pc++);
-            incPC();
             subWithCarry(v);
             cycleExecuted();
             break;
@@ -3002,7 +2985,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xE0: // LDH (n),A
         {
             uint16_t addr = 0xFF00 | cpu.readMem(pc++);
-            incPC();
             cycleExecuted();
             writeMem(addr, reg(Reg::A));
             cycleExecuted();
@@ -3026,7 +3008,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xE6: // AND n
         {
             auto v = cpu.readMem(pc++);
-            incPC();
             bitAnd(v);
             cycleExecuted();
             break;
@@ -3039,7 +3020,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             auto f = reg(Reg::F);
 
             auto b = cpu.readMem(pc++);
-            incPC();
             cycleExecuted();
 
             // flags are set as if this is an 8 bit op
@@ -3079,10 +3059,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xEA: // LD (nn),A
         {
             uint16_t addr = cpu.readMem(pc++);
-            incPC();
             cycleExecuted();
             addr |= (cpu.readMem(pc++) << 8);
-            incPC();
             cycleExecuted();
 
             writeMem(addr, reg(Reg::A));
@@ -3093,7 +3071,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xEE: // XOR n
         {
             auto v = cpu.readMem(pc++);
-            incPC();
             bitXor(v);
             cycleExecuted();
             break;
@@ -3104,7 +3081,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xF0: // LDH A,(n)
         {
             uint16_t addr = 0xFF00 | cpu.readMem(pc++);
-            incPC();
             cycleExecuted();
             readMem(addr, reg(Reg::A));
             cycleExecuted();
@@ -3135,7 +3111,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xF6: // OR n
         {
             auto v =  cpu.readMem(pc++);
-            incPC();
             bitOr(v);
             cycleExecuted();
             break;
@@ -3148,7 +3123,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             auto f = reg(Reg::F);
 
             auto b = cpu.readMem(pc++);
-            incPC();
             cycleExecuted();
 
             // flags are set as if this is an 8 bit op
@@ -3187,10 +3161,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xFA: // LD A,(nn)
         {
             uint16_t addr = cpu.readMem(pc++);
-            incPC();
             cycleExecuted();
             addr |= (cpu.readMem(pc++) << 8);
-            incPC();
             cycleExecuted();
 
             readMem(addr, reg(Reg::A));
@@ -3207,7 +3179,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xFE: // CP n
         {
             auto v = cpu.readMem(pc++);
-            incPC();
             cmp(v);
             cycleExecuted();
             break;
@@ -3219,6 +3190,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         default:
             printf("unhandled op in recompile %02X\n", opcode);
             builder.resetPtr(oldPtr);
+            builder.mov(Reg32::R8D, pc - 1);
             return false;
     }
 
@@ -3227,7 +3199,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         // cycles -= executed
         builder.sub(Reg32::EDI, cyclesThisInstr);
         // if <= 0 exit
-        builder.jcc(Condition::G, 5);
+        builder.jcc(Condition::G, 11);
+        builder.mov(Reg32::R8D, pc);
         builder.call(saveAndExitPtr - builder.getPtr());
 
         // interrupt check after EI
@@ -3238,7 +3211,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
             // if servicableInterrupts != 0
             builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr);
-            builder.jcc(Condition::E, 5);
+            builder.jcc(Condition::E, 11);
+            builder.mov(Reg32::R8D, pc);
             builder.call(saveAndExitPtr - builder.getPtr());
         }
     }
@@ -3252,12 +3226,6 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
     uint8_t opcode = mem.read(pc++);
 
     // FIXME: copy/paste
-
-    // TODO: should be able to avoid this
-    const auto incPC = [&builder]()
-    {
-        builder.lea(Reg32::R8D, Reg64::R8, 1);
-    };
 
     // TODO: shared trampolines?
     auto cycleExecuted = [&builder, this, &cyclesThisInstr]()
@@ -3482,7 +3450,6 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
         cycleExecuted();
     };
 
-    incPC();
     cycleExecuted();
 
     switch(opcode)
