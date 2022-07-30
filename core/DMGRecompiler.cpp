@@ -1294,8 +1294,11 @@ void DMGRecompiler::handleBranch()
             savedPC = cpu.pc;
 
         // CPU not running, stop
-        if(cpu.halted || cpu.stopped || cpu.gdmaTriggered)
+        if(cpu.halted || cpu.stopped)
             break;
+
+        if(cpu.gdmaTriggered)
+            cpu.doGDMA();
 
         // we ran something, do the usual CPU update stuff
         // TODO: duplicated from CPU
@@ -4187,8 +4190,8 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
     // if we wrote a reg, timings may have changed
     // ... and we have a convenient return value to pass the new value back
 
-    // ... also, there could be an interrupt pending RIGHT NOW
-    if(cpu->masterInterruptEnable && cpu->serviceableInterrupts)
+    // ... also, there could be an interrupt/DMA pending RIGHT NOW
+    if((cpu->masterInterruptEnable && cpu->serviceableInterrupts) || cpu->gdmaTriggered)
         return 0;
 
     int cycles = std::min(cpu->cyclesToRun, cpu->getDisplay().getCyclesToNextUpdate());
