@@ -1498,8 +1498,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     const auto load8 = [this, &pc, &builder, &cycleExecuted](Reg r)
     {
         uint8_t v = cpu.readMem(pc++);
-        builder.mov(reg(r), v);
         cycleExecuted();
+        builder.mov(reg(r), v);
     };
 
     const auto copy8 = [&builder, &cycleExecuted](Reg dst, Reg src)
@@ -1540,12 +1540,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
         readMem(spReg16, lowReg);
-        builder.inc(spReg16);
         cycleExecuted();
+        builder.inc(spReg16);
 
         readMem(spReg16, highReg);
-        builder.inc(spReg16);
         cycleExecuted();
+        builder.inc(spReg16);
 
         // low bits in F can never be set
         if(r == WReg::AF)
@@ -1955,14 +1955,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
     const auto inc16 = [&builder, &cycleExecuted](WReg r)
     {
-        builder.inc(reg(r));
         cycleExecuted();
+        builder.inc(reg(r));
     };
 
     const auto dec16 = [&builder, &cycleExecuted](WReg r)
     {
-        builder.dec(reg(r));
         cycleExecuted();
+        builder.dec(reg(r));
     };
 
     const auto jump = [this, &pc, &exited, &builder, &cycleExecuted](int flag = 0, bool set = true)
@@ -2335,8 +2335,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0x2A: // LDI A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
-            builder.inc(reg(WReg::HL));
             cycleExecuted();
+            builder.inc(reg(WReg::HL));
             break;
         case 0x2B: // DEC HL
             dec16(WReg::HL);
@@ -2426,8 +2426,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0x3A: // LDD A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
-            builder.dec(reg(WReg::HL));
             cycleExecuted();
+            builder.dec(reg(WReg::HL));
             break;
         case 0x3B: // DEC SP
             builder.dec(spReg16);
@@ -2692,8 +2692,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            add(tmp);
             cycleExecuted();
+            add(tmp);
             break;
         }
         case 0x87: // ADD A,A
@@ -2721,8 +2721,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto tmp = Reg8::SIL; // can't use F here so use something wierd
             readMem(reg(WReg::HL), tmp);
-            addWithCarry(tmp);
             cycleExecuted();
+            addWithCarry(tmp);
             break;
         }
         case 0x8F: // ADC A,A
@@ -2750,8 +2750,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            sub(tmp);
             cycleExecuted();
+            sub(tmp);
             break;
         }
         case 0x97: // SUB A
@@ -2779,8 +2779,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto tmp = Reg8::SIL; // can't use F here so use something wierd
             readMem(reg(WReg::HL), tmp);
-            subWithCarry(tmp);
             cycleExecuted();
+            subWithCarry(tmp);
             break;
         }
         case 0x9F: // SBC A
@@ -2808,8 +2808,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            bitAnd(tmp);
             cycleExecuted();
+            bitAnd(tmp);
             break;
         }
         case 0xA7: // AND A
@@ -2837,8 +2837,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            bitXor(tmp);
             cycleExecuted();
+            bitXor(tmp);
             break;
         }
         case 0xAF: // XOR A
@@ -2866,8 +2866,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            bitOr(tmp);
             cycleExecuted();
+            bitOr(tmp);
             break;
         }
         case 0xB7: // OR A
@@ -2895,8 +2895,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            cmp(tmp);
             cycleExecuted();
+            cmp(tmp);
             break;
         }
         case 0xBF: // CP A
@@ -2923,8 +2923,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xC6: // ADD n
         {
             auto v = cpu.readMem(pc++);
-            add(v);
             cycleExecuted();
+            add(v);
             break;
         }
         case 0xC7: // RST 0
@@ -2951,8 +2951,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xCE: // ADC n
         {
             auto v = cpu.readMem(pc++);
-            addWithCarry(v);
             cycleExecuted();
+            addWithCarry(v);
             break;
         }
         case 0xCF: // RST 08
@@ -2977,8 +2977,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xD6: // SUB n
         {
             auto v = cpu.readMem(pc++);
-            sub(v);
             cycleExecuted();
+            sub(v);
             break;
         }
         case 0xD7: // RST 10
@@ -3003,8 +3003,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xDE: // SBC n
         {
             auto v = cpu.readMem(pc++);
-            subWithCarry(v);
             cycleExecuted();
+            subWithCarry(v);
             break;
         }
         case 0xDF: // RST 18
@@ -3036,8 +3036,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xE6: // AND n
         {
             auto v = cpu.readMem(pc++);
-            bitAnd(v);
             cycleExecuted();
+            bitAnd(v);
             break;
         }
         case 0xE7: // RST 20
@@ -3099,8 +3099,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xEE: // XOR n
         {
             auto v = cpu.readMem(pc++);
-            bitXor(v);
             cycleExecuted();
+            bitXor(v);
             break;
         }
         case 0xEF: // RST 28
@@ -3137,8 +3137,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xF6: // OR n
         {
             auto v =  cpu.readMem(pc++);
-            bitOr(v);
             cycleExecuted();
+            bitOr(v);
             break;
         }
         case 0xF7: // RST 30
@@ -3181,8 +3181,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         }
         case 0xF9: // LD SP,HL
-            builder.mov(spReg32, static_cast<Reg32>(reg(WReg::HL)));
             cycleExecuted();
+            builder.mov(spReg32, static_cast<Reg32>(reg(WReg::HL)));
             break;
         case 0xFA: // LD A,(nn)
         {
@@ -3205,8 +3205,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         case 0xFE: // CP n
         {
             auto v = cpu.readMem(pc++);
-            cmp(v);
             cycleExecuted();
+            cmp(v);
             break;
         }
         case 0xFF: // RST 38
