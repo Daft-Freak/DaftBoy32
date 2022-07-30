@@ -4082,12 +4082,7 @@ void DMGRecompiler::compileEntry()
     builder.push(Reg64::RCX);
     builder.push(Reg64::RSI);
 
-    // save code addr
-    builder.mov(Reg64::R10, Reg64::R8);
-
-    // load emu pc/sp
-    // TODO: we know what PC is, dont bother loading/updating/saving it
-    builder.movzxW(pcReg32, Reg64::RDX);
+    // load emu sp
     builder.movzxW(spReg32, Reg64::RCX);
 
     // load emu regs
@@ -4097,7 +4092,7 @@ void DMGRecompiler::compileEntry()
     builder.movzxW(Reg32::EBX, Reg64::RSI, 6);
 
     // jump to code
-    builder.jmp(Reg64::R10);
+    builder.jmp(Reg64::R8);
 
     // exit saving ip
     saveAndExitPtr = builder.getPtr();
