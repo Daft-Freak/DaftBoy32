@@ -1107,9 +1107,9 @@ void X86Builder::encodeREX(bool w, int reg, int index, int base)
 }
 
 // size of the code to call these functions
-static const int cycleExecutedCallSize = 30;
-static const int readMemRegCallSize = 37;
-static const int writeMemRegImmCallSize = 41;
+static const int cycleExecutedCallSize = 23;
+static const int readMemRegCallSize = 30;
+static const int writeMemRegImmCallSize = 34;
 
 // reg helpers
 static const Reg8 regMap8[]
@@ -1389,7 +1389,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         callSave(builder);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder);
@@ -1404,18 +1404,17 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     {
         // enable interrupts for EI
         auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-        builder.mov(Reg64::R10, cpuPtr);
 
         // if(enableInterruptsNextCycle)
         // probably don't need this check... might get a false positive in some extreme case though
-        builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
+        builder.cmp(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
         builder.jcc(Condition::E, 10);
 
         // masterInterruptEnable = true
-        builder.mov(1, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
+        builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
 
         // enableInterruptsNextCycle = false
-        builder.mov(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
+        builder.mov(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
 
         checkInterrupts = true;
     }
@@ -1430,7 +1429,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.mov(Reg32::ESI, std::get<uint16_t>(addr));
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
+        
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder, dstReg);
@@ -1451,7 +1451,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             builder.mov(Reg32::EDX, std::get<uint8_t>(data));
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder, Reg32::EDI);
@@ -2588,16 +2588,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             // halted = true
             auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-            builder.mov(Reg64::R10, cpuPtr);
-            builder.mov(1, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.halted) - cpuPtr);
+            builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.halted) - cpuPtr);
 
             // if(!masterInterruptEnable && serviceableInterrupts)
-            builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
+            builder.cmp(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
             builder.jcc(Condition::NE, 12);
-            builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu. serviceableInterrupts) - cpuPtr);
+            builder.cmp(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu. serviceableInterrupts) - cpuPtr);
             builder.jcc(Condition::E, 5);
             // haltBug = true
-            builder.mov(1, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtr);
+            builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtr);
 
             builder.mov(pcReg32, pc); // exits need to set PC themselves
             exited = true;
@@ -2952,9 +2951,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xD9: // RETI
             // masterInterruptEnable = true
-            // TODO: if we store the CPU ptr then we can use a disp here
-            builder.mov(Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable));
-            builder.mov(1, Reg64::R10);
+            builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - reinterpret_cast<uintptr_t>(&cpu));
             ret();
             break;
         case 0xDA: // JP C,nn
@@ -3092,10 +3089,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         }
         case 0xF3: // DI
             // masterInterruptEnable = false
-            // TODO: if we store the CPU ptr then we can use a disp here
             // TODO: after next instruction (DMGCPU also has this TODO)
-            builder.mov(Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable));
-            builder.mov(0, Reg64::R10);
+            builder.mov(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - reinterpret_cast<uintptr_t>(&cpu));
             break;
 
         case 0xF5: // PUSH AF
@@ -3200,10 +3195,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         if(checkInterrupts)
         {
             auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-            builder.mov(Reg64::R10, cpuPtr);
 
             // if servicableInterrupts != 0
-            builder.cmp(0, Reg64::R10, reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr);
+            builder.cmp(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr);
             builder.jcc(Condition::E, 11);
             builder.mov(pcReg32, pc);
             builder.call(saveAndExitPtr - builder.getPtr());
@@ -3228,7 +3222,7 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
         callSave(builder);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder);
@@ -3240,7 +3234,7 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
 
         builder.movzx(Reg32::ESI, addrReg);
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder, dstReg);
@@ -3253,7 +3247,7 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
         builder.movzx(Reg32::ESI, addrReg);
         builder.movzx(Reg32::EDX, dataReg);
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
-        builder.mov(Reg64::RDI, reinterpret_cast<uintptr_t>(&cpu)); // cpu/this ptr (TODO: store cpu pointer in a reg?)
+        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder, Reg32::EDI);
@@ -4071,10 +4065,12 @@ void DMGRecompiler::compileEntry()
     // save
     builder.push(Reg64::R12);
     builder.push(Reg64::R13);
+    builder.push(Reg64::R14);
     builder.push(Reg64::RBX);
     builder.push(Reg64::RDX);
     builder.push(Reg64::RCX);
     builder.push(Reg64::RSI);
+    builder.sub(Reg64::RSP, 8); // align stack
 
     // load emu sp
     builder.movzxW(spReg32, Reg64::RCX);
@@ -4084,6 +4080,9 @@ void DMGRecompiler::compileEntry()
     builder.movzxW(Reg32::ECX, Reg64::RSI, 2);
     builder.movzxW(Reg32::EDX, Reg64::RSI, 4);
     builder.movzxW(Reg32::EBX, Reg64::RSI, 6);
+
+    // store pointer to CPU
+    builder.mov(Reg64::R14, reinterpret_cast<uintptr_t>(&cpu));
 
     // jump to code
     builder.jmp(Reg64::R8);
@@ -4096,6 +4095,8 @@ void DMGRecompiler::compileEntry()
 
     // just exit
     exitPtr = builder.getPtr();
+
+    builder.add(Reg64::RSP, 8); // alignment
 
     // restore regs ptr
     builder.pop(Reg64::RSI);
@@ -4115,6 +4116,7 @@ void DMGRecompiler::compileEntry()
     builder.mov(pcReg16, Reg64::RDX, true);
     builder.mov(spReg16, Reg64::RCX, true);
 
+    builder.pop(Reg64::R14);
     builder.pop(Reg64::R13);
     builder.pop(Reg64::R12);
 
