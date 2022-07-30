@@ -1107,9 +1107,9 @@ void X86Builder::encodeREX(bool w, int reg, int index, int base)
 }
 
 // size of the code to call these functions
-static const int cycleExecutedCallSize = 38;
-static const int readMemRegCallSize = 45;
-static const int writeMemRegImmCallSize = 49;
+static const int cycleExecutedCallSize = 30;
+static const int readMemRegCallSize = 37;
+static const int writeMemRegImmCallSize = 41;
 
 // reg helpers
 static const Reg8 regMap8[]
@@ -1132,12 +1132,12 @@ static const Reg16 regMap16[]
     Reg16::BX  // HL
 };
 
-static const Reg32 pcReg32 = Reg32::R8D;
-static const Reg16 pcReg16 = Reg16::R8W;
+static const Reg32 pcReg32 = Reg32::R12D;
+static const Reg16 pcReg16 = Reg16::R12W;
 
-static const Reg32 spReg32 = Reg32::R9D;
-static const Reg16 spReg16 = Reg16::R9W;
-static const Reg8 spReg8 = Reg8::R9B; // mostly for the adds with the strange flags
+static const Reg32 spReg32 = Reg32::R13D;
+static const Reg16 spReg16 = Reg16::R13W;
+static const Reg8 spReg8 = Reg8::R13B; // mostly for the adds with the strange flags
 
 inline Reg8 reg(DMGCPU::Reg r)
 {
@@ -1155,8 +1155,6 @@ static void callSave(X86Builder &builder)
     builder.push(Reg64::RAX);
     builder.push(Reg64::RCX);
     builder.push(Reg64::RDX);
-    builder.push(Reg64::R8);
-    builder.push(Reg64::R9);
     builder.push(Reg64::RDI);
     // builder.sub(Reg64::RSP, 8); // align stack
 }
@@ -1165,8 +1163,6 @@ static void callRestore(X86Builder &builder)
 {
     // builder.add(Reg64::RSP, 8); // alignment
     builder.pop(Reg64::RDI);
-    builder.pop(Reg64::R9);
-    builder.pop(Reg64::R8);
     builder.pop(Reg64::RDX);
     builder.pop(Reg64::RCX);
     builder.pop(Reg64::RAX);
@@ -1176,8 +1172,6 @@ static void callRestore(X86Builder &builder, Reg32 dstReg)
 {
     // builder.add(Reg64::RSP, 8); // alignment
     builder.pop(Reg64::RSI);
-    builder.pop(Reg64::R9);
-    builder.pop(Reg64::R8);
     builder.pop(Reg64::RDX);
     builder.pop(Reg64::RCX);
 
@@ -1192,8 +1186,6 @@ static void callRestore(X86Builder &builder, Reg8 dstReg)
 {
     // builder.add(Reg64::RSP, 8); // alignment
     builder.pop(Reg64::RSI);
-    builder.pop(Reg64::R9);
-    builder.pop(Reg64::R8);
     builder.pop(Reg64::RDX);
     builder.pop(Reg64::RCX);
 
@@ -4077,6 +4069,8 @@ void DMGRecompiler::compileEntry()
     builder.mov(Reg64::RBP, Reg64::RSP);
 
     // save
+    builder.push(Reg64::R12);
+    builder.push(Reg64::R13);
     builder.push(Reg64::RBX);
     builder.push(Reg64::RDX);
     builder.push(Reg64::RCX);
@@ -4120,6 +4114,9 @@ void DMGRecompiler::compileEntry()
     // save emu pc/sp
     builder.mov(pcReg16, Reg64::RDX, true);
     builder.mov(spReg16, Reg64::RCX, true);
+
+    builder.pop(Reg64::R13);
+    builder.pop(Reg64::R12);
 
     // epilogue
     builder.pop(Reg64::RBP);
