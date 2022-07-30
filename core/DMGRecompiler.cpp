@@ -2057,7 +2057,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 22 + cycleExecutedCallSize * 3 + readMemRegCallSize * 2);
+            builder.jcc(set ? Condition::E : Condition::NE, 27 + cycleExecutedCallSize * 3 + readMemRegCallSize * 2);
         }
 
         auto pcReg8 = static_cast<Reg8>(pcReg16);
@@ -2074,8 +2074,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.shl(Reg32::R10D, 8);
         builder.or_(pcReg16, Reg16::R10W);
         cycleExecuted();
-        
-        exited = true;
+
+        if(flag)
+        {
+            assert(exitPtr - builder.getPtr() < -126);
+            builder.jmp(exitPtr - builder.getPtr()); // it's > 128 bytes to here from the start of the op, so should always be 5 bytes
+        }
+        else
+            exited = true;
     };
 
     switch(opcode)
