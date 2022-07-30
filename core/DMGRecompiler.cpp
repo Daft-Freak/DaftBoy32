@@ -1272,6 +1272,10 @@ void DMGRecompiler::handleBranch()
         if(cycles <= 0)
             break;
 
+        // about to hit a bus conflict
+        if(cpu.pc < 0xFF00 && (cpu.oamDMADelay || cpu.oamDMACount))
+            break;
+
         uint8_t *codePtr = nullptr;
 
         // attempt to re-enter previous code
@@ -4223,7 +4227,8 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
     // ... and we have a convenient return value to pass the new value back
 
     // ... also, there could be an interrupt/DMA pending RIGHT NOW
-    if((cpu->masterInterruptEnable && cpu->serviceableInterrupts) || cpu->gdmaTriggered)
+    bool inHRAM = cpu->pc >= 0xFF00; // PC is not up-to-date here, but should be close
+    if((cpu->masterInterruptEnable && cpu->serviceableInterrupts) || cpu->gdmaTriggered || (!inHRAM && (cpu->oamDMADelay || cpu->oamDMACount)))
         return 0;
 
     int cycles = std::min(cpu->cyclesToRun, cpu->getDisplay().getCyclesToNextUpdate());
