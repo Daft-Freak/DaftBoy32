@@ -1971,11 +1971,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 5 + cycleExecutedCallSize);
-            builder.add(pcReg16, off);
+            builder.jcc(set ? Condition::E : Condition::NE, 6 + cycleExecutedCallSize);
         }
-        else
-            builder.mov(pcReg32, pc + off);
+
+        builder.mov(pcReg32, pc + off);
         
         cycleExecuted();
         exited = true;
