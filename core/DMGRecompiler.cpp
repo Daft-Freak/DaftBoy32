@@ -1378,8 +1378,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     // BC = ECX
     // DE = EDX
     // HL = EBX
-    // PC = R8D
-    // SP = R9D
+    // PC = R12D
+    // SP = R13D
     // cycles = EDI
 
     // TODO: shared trampolines?
