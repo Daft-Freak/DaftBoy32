@@ -1509,16 +1509,13 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
     const auto load16 = [this, &pc, &builder, &cycleExecuted](WReg r)
     {
-        auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
-        auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
-
-        uint8_t v = cpu.readMem(pc++);
-        builder.mov(lowReg, v);
+        uint16_t v = cpu.readMem(pc++);
         cycleExecuted();
 
-        v = cpu.readMem(pc++);
-        builder.mov(highReg, v);
+        v |= cpu.readMem(pc++) << 8;
         cycleExecuted();
+
+        builder.mov(static_cast<Reg32>(reg(r)), v);
     };
 
     const auto push = [&builder, &cycleExecuted, &writeMem](WReg r)
