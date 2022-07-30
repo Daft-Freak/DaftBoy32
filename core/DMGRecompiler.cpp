@@ -2057,19 +2057,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 27 + cycleExecutedCallSize * 3 + readMemRegCallSize * 2);
+            builder.jcc(set ? Condition::E : Condition::NE, 27 + cycleExecutedCallSize * 3 + readMemRegCallSize * 2 - 8 * 2/*adjacent calls*/);
         }
 
         auto pcReg8 = static_cast<Reg8>(pcReg16);
 
         builder.mov(pcReg32, 0);
         readMem(spReg16, pcReg8);
-        builder.inc(spReg16);
         cycleExecuted();
+        builder.inc(spReg16);
 
         readMem(spReg16, Reg8::R10B);
-        builder.inc(spReg16);
         cycleExecuted();
+        builder.inc(spReg16);
 
         builder.shl(Reg32::R10D, 8);
         builder.or_(pcReg16, Reg16::R10W);
