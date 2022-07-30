@@ -1171,7 +1171,7 @@ static void callRestore(X86Builder &builder)
 static void callRestore(X86Builder &builder, Reg32 dstReg)
 {
     // builder.add(Reg64::RSP, 8); // alignment
-    builder.pop(Reg64::RSI);
+    builder.pop(Reg64::RDI);
     builder.pop(Reg64::RDX);
     builder.pop(Reg64::RCX);
 
@@ -1185,7 +1185,7 @@ static void callRestore(X86Builder &builder, Reg32 dstReg)
 static void callRestore(X86Builder &builder, Reg8 dstReg)
 {
     // builder.add(Reg64::RSP, 8); // alignment
-    builder.pop(Reg64::RSI);
+    builder.pop(Reg64::RDI);
     builder.pop(Reg64::RDX);
     builder.pop(Reg64::RCX);
 
