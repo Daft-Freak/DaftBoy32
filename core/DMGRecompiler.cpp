@@ -1159,6 +1159,18 @@ static void callSave(X86Builder &builder)
     // builder.sub(Reg64::RSP, 8); // align stack
 }
 
+static void callSaveOrSkip(X86Builder &builder)
+{
+    auto tmpPtr = builder.getPtr() - 4;
+
+    // skip pop/push if we just popped
+    // only safe if values from RAX, RCX, RDX, RDI are not moved to args
+    if(tmpPtr[0] == 0x5F/*pop rdi*/ && tmpPtr[1] == 0x5A/*pop rdx*/ && tmpPtr[2] == 0x59/*pop rcx*/ && tmpPtr[3] == 0x58/*pop rax*/)
+        builder.resetPtr(tmpPtr);
+    else
+        callSave(builder);
+}
+
 static void callRestore(X86Builder &builder)
 {
     // builder.add(Reg64::RSP, 8); // alignment
@@ -1386,7 +1398,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     auto cycleExecuted = [&builder, this, &cyclesThisInstr]()
     {
         cyclesThisInstr += 4;
-        callSave(builder);
+
+        // safe to skip here as we take no args
+        callSaveOrSkip(builder);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
         builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
@@ -3219,7 +3233,8 @@ void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, in
     {
         cyclesThisInstr += 4;
 
-        callSave(builder);
+        // safe to skip here as we take no args
+        callSaveOrSkip(builder);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
         builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
