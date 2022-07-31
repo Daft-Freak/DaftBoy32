@@ -28,10 +28,10 @@ private:
 
     void printInfo(std::vector<OpInfo> &instrInfo);
 
-    bool compile(uint8_t *&codePtr, uint16_t &pc);
+    bool compile(uint8_t *&codePtr, uint16_t pc, std::vector<OpInfo> &instrInfo);
 
-    bool recompileInstruction(uint16_t &pc, X86Builder &builder, bool &exited);
-    void recompileExInstruction(uint16_t &pc, X86Builder &builder, int &cyclesThisInstr);
+    bool recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder &builder);
+    void recompileExInstruction(OpInfo &instr, X86Builder &builder, int &cyclesThisInstr);
 
     void compileEntry();
 

@@ -1334,9 +1334,13 @@ void DMGRecompiler::handleBranch()
                 auto startPtr = ptr;
                 auto pc = cpu.pc;
 
+                std::vector<OpInfo> instructions;
+                analyse(pc, instructions);
+                printf("analysed %04X-%04X (%zi instructions)\n", cpu.pc, pc, instructions.size());
+
                 FuncInfo info{};
 
-                if(compile(ptr, pc))
+                if(compile(ptr, cpu.pc, instructions))
                 {
                     info.startPtr = startPtr;
                     info.endPtr = curCodePtr = ptr;
@@ -2035,7 +2039,7 @@ void DMGRecompiler::printInfo(std::vector<OpInfo> &instrInfo)
     }
 }
 
-bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
+bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc, std::vector<OpInfo> &instrInfo)
 {
     X86Builder builder(codePtr, codeBuf + codeBufSize);
 
@@ -2044,11 +2048,9 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
     // do instructions
     int numInstructions = 0;
 
-    bool exited = false;
-    
-    while(!exited)
+    for(auto &instr : instrInfo)
     {
-        if(!recompileInstruction(pc, builder, exited))
+        if(!recompileInstruction(pc, instr, builder))
             break;
 
         numInstructions++;
@@ -2087,10 +2089,12 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t &pc)
     return true;
 }
 
-bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool &exited)
+bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder &builder)
 {
     auto &mem = cpu.getMem();
-    uint8_t opcode = mem.read(pc++);
+    uint8_t opcode = instr.opcode[0];
+    pc += instr.len;
+
     int cyclesThisInstr = 0;
 
     bool checkInterrupts = false;
@@ -2123,7 +2127,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     cycleExecuted();
 
     // previous op was EI
-    if(mem.read(pc - 2) == 0xFB /*EI*/)
+    if(mem.read(pc - (instr.len + 1)) == 0xFB /*EI*/)
     {
         // enable interrupts for EI
         auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
@@ -2183,11 +2187,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
-    const auto load8 = [this, &pc, &builder, &cycleExecuted](Reg r)
+    const auto load8 = [&instr, &builder, &cycleExecuted](Reg r)
     {
-        uint8_t v = cpu.readMem(pc++);
         cycleExecuted();
-        builder.mov(reg(r), v);
+        builder.mov(reg(r), instr.opcode[1]);
     };
 
     const auto copy8 = [&builder, &cycleExecuted](Reg dst, Reg src)
@@ -2195,12 +2198,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.mov(reg(dst), reg(src));
     };
 
-    const auto load16 = [this, &pc, &builder, &cycleExecuted](WReg r)
+    const auto load16 = [&instr, &builder, &cycleExecuted](WReg r)
     {
-        uint16_t v = cpu.readMem(pc++);
+        uint16_t v = instr.opcode[1] | instr.opcode[2] << 8;
         cycleExecuted();
-
-        v |= cpu.readMem(pc++) << 8;
         cycleExecuted();
 
         builder.mov(static_cast<Reg32>(reg(r)), v);
@@ -2653,11 +2654,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.dec(reg(r));
     };
 
-    const auto jump = [this, &pc, &exited, &builder, &cycleExecuted](int flag = 0, bool set = true)
+    const auto jump = [this, &instr, &pc, &builder, &cycleExecuted](int flag = 0, bool set = true)
     {
-        uint16_t addr = cpu.readMem(pc++);
+        uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
         cycleExecuted();
-        addr |= cpu.readMem(pc++) << 8;
         cycleExecuted();
 
         // condition
@@ -2665,18 +2665,20 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 6 + cycleExecutedCallSize);
+            builder.jcc(set ? Condition::E : Condition::NE, 11 + cycleExecutedCallSize);
         }
 
         cycleExecuted();
         builder.mov(pcReg32, addr);
 
-        exited = true;
+        // TODO
+        assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
+        builder.jmp(exitPtr - builder.getPtr());
     };
 
-    const auto jumpRel = [this, &pc, &exited, &builder, &cycleExecuted](int flag = 0, bool set = true)
+    const auto jumpRel = [this, &instr, &pc, &builder, &cycleExecuted](int flag = 0, bool set = true)
     {
-        int8_t off = cpu.readMem(pc++);
+        int8_t off = instr.opcode[1];
         cycleExecuted();
 
         // condition
@@ -2684,26 +2686,21 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {  
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, (off < 0 ? 11 : 6) + cycleExecutedCallSize);
+            builder.jcc(set ? Condition::E : Condition::NE, 11 + cycleExecutedCallSize);
         }
 
         cycleExecuted();
         builder.mov(pcReg32, pc + off);
 
-        if(flag && off < 0)
-        {
-            assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
-            builder.jmp(exitPtr - builder.getPtr());
-        }
-        else
-            exited = true;
+        // TODO
+        assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
+        builder.jmp(exitPtr - builder.getPtr());
     };
 
-    const auto call = [this, &pc, &exited, &builder, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
+    const auto call = [this, &instr, &pc, &builder, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
     {
-        uint16_t addr = cpu.readMem(pc++);
+        uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
         cycleExecuted();
-        addr |= cpu.readMem(pc++) << 8;
         cycleExecuted();
 
         // condition
@@ -2711,7 +2708,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 14 + cycleExecutedCallSize * 3 + writeMemRegImmCallSize * 2 - 6 * 2);
+            builder.jcc(set ? Condition::E : Condition::NE, 19 + cycleExecutedCallSize * 3 + writeMemRegImmCallSize * 2 - 6 * 2);
         }
 
         cycleExecuted(); // delay
@@ -2725,10 +2722,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         builder.mov(pcReg32, addr);
         
-        exited = true;
+        // TODO
+        assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
+        builder.jmp(exitPtr - builder.getPtr());
     };
 
-    const auto reset = [this, &pc, &exited, &builder, &cycleExecuted, &writeMem](int addr)
+    const auto reset = [this, &pc, &builder, &cycleExecuted, &writeMem](int addr)
     {
         cycleExecuted(); // delay
 
@@ -2740,11 +2739,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         cycleExecuted();
 
         builder.mov(pcReg32, addr);
-        
-        exited = true;
+
+        builder.jmp(exitPtr - builder.getPtr()); // exit
     };
 
-    const auto ret = [this, &pc, &exited, &builder, &cycleExecuted, &readMem](int flag = 0, bool set = true)
+    const auto ret = [this, &pc, &builder, &cycleExecuted, &readMem](int flag = 0, bool set = true)
     {
         // condition
         if(flag)
@@ -2771,13 +2770,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         builder.or_(pcReg16, Reg16::R10W);
         cycleExecuted();
 
-        if(flag)
-        {
-            assert(exitPtr - builder.getPtr() < -126);
-            builder.jmp(exitPtr - builder.getPtr()); // it's > 128 bytes to here from the start of the op, so should always be 5 bytes
-        }
-        else
-            exited = true;
+        assert(exitPtr - builder.getPtr() < -126);
+        builder.jmp(exitPtr - builder.getPtr()); // it's > 128 bytes to here from the start of the op, so should always be 5 bytes
     };
 
     switch(opcode)
@@ -2818,9 +2812,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         }
         case 0x08: // LD (nn),SP
         {
-            uint16_t addr = cpu.readMem(pc++);
+            uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
             cycleExecuted();
-            addr |= (cpu.readMem(pc++) << 8);
             cycleExecuted();
 
             writeMem(addr++, spReg8); // low byte
@@ -3054,9 +3047,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0x31: // LD SP,nn
         {
-            uint16_t sp = cpu.readMem(pc++);
+            uint16_t sp = instr.opcode[1] | instr.opcode[2] << 8;
             cycleExecuted();
-            sp |= cpu.readMem(pc++) << 8;
             cycleExecuted();
 
             builder.mov(spReg32, sp);
@@ -3101,9 +3093,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         }
         case 0x36: // LD (HL),n
         {
-            auto val = cpu.readMem(pc++);
             cycleExecuted();
-            writeMem(reg(WReg::HL), val);
+            writeMem(reg(WReg::HL), instr.opcode[1]);
             cycleExecuted();
             break;
         }
@@ -3331,8 +3322,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             // haltBug = true
             builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtr);
 
+            // exit
             builder.mov(pcReg32, pc); // exits need to set PC themselves
-            exited = true;
+            builder.jmp(exitPtr - builder.getPtr());
             break;
         }
         case 0x77: // LD (HL),A
@@ -3617,9 +3609,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xC6: // ADD n
         {
-            auto v = cpu.readMem(pc++);
             cycleExecuted();
-            add(v);
+            add(instr.opcode[1]);
             break;
         }
         case 0xC7: // RST 0
@@ -3635,7 +3626,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             jump(DMGCPU::Flag_Z);
             break;
         case 0xCB:
-            recompileExInstruction(pc, builder, cyclesThisInstr);
+            recompileExInstruction(instr, builder, cyclesThisInstr);
             break;
         case 0xCC: // CALL Z,nn
             call(DMGCPU::Flag_Z);
@@ -3645,9 +3636,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xCE: // ADC n
         {
-            auto v = cpu.readMem(pc++);
             cycleExecuted();
-            addWithCarry(v);
+            addWithCarry(instr.opcode[1]);
             break;
         }
         case 0xCF: // RST 08
@@ -3671,9 +3661,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xD6: // SUB n
         {
-            auto v = cpu.readMem(pc++);
             cycleExecuted();
-            sub(v);
+            sub(instr.opcode[1]);
             break;
         }
         case 0xD7: // RST 10
@@ -3697,9 +3686,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         case 0xDE: // SBC n
         {
-            auto v = cpu.readMem(pc++);
             cycleExecuted();
-            subWithCarry(v);
+            subWithCarry(instr.opcode[1]);
             break;
         }
         case 0xDF: // RST 18
@@ -3707,7 +3695,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xE0: // LDH (n),A
         {
-            uint16_t addr = 0xFF00 | cpu.readMem(pc++);
+            uint16_t addr = 0xFF00 | instr.opcode[1];
             cycleExecuted();
             writeMem(addr, reg(Reg::A));
             cycleExecuted();
@@ -3730,9 +3718,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xE6: // AND n
         {
-            auto v = cpu.readMem(pc++);
             cycleExecuted();
-            bitAnd(v);
+            bitAnd(instr.opcode[1]);
             break;
         }
         case 0xE7: // RST 20
@@ -3742,7 +3729,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto f = reg(Reg::F);
 
-            auto b = cpu.readMem(pc++);
+            auto b = instr.opcode[1];
             cycleExecuted();
 
             // flags are set as if this is an 8 bit op
@@ -3777,13 +3764,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         }
         case 0xE9: // JP (HL)
             builder.movzx(pcReg32, reg(WReg::HL)); // PC = HL
-            exited = true;
+            builder.jmp(exitPtr - builder.getPtr()); // exit
             break;
         case 0xEA: // LD (nn),A
         {
-            uint16_t addr = cpu.readMem(pc++);
+            uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
             cycleExecuted();
-            addr |= (cpu.readMem(pc++) << 8);
             cycleExecuted();
 
             writeMem(addr, reg(Reg::A));
@@ -3793,9 +3779,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         case 0xEE: // XOR n
         {
-            auto v = cpu.readMem(pc++);
             cycleExecuted();
-            bitXor(v);
+            bitXor(instr.opcode[1]);
             break;
         }
         case 0xEF: // RST 28
@@ -3803,7 +3788,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xF0: // LDH A,(n)
         {
-            uint16_t addr = 0xFF00 | cpu.readMem(pc++);
+            uint16_t addr = 0xFF00 | instr.opcode[1];
             cycleExecuted();
             readMem(addr, reg(Reg::A));
             cycleExecuted();
@@ -3831,9 +3816,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xF6: // OR n
         {
-            auto v =  cpu.readMem(pc++);
             cycleExecuted();
-            bitOr(v);
+            bitOr(instr.opcode[1]);
             break;
         }
         case 0xF7: // RST 30
@@ -3843,7 +3827,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
         {
             auto f = reg(Reg::F);
 
-            auto b = cpu.readMem(pc++);
+            auto b = instr.opcode[1];
             cycleExecuted();
 
             // flags are set as if this is an 8 bit op
@@ -3881,9 +3865,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             break;
         case 0xFA: // LD A,(nn)
         {
-            uint16_t addr = cpu.readMem(pc++);
+            uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
             cycleExecuted();
-            addr |= (cpu.readMem(pc++) << 8);
             cycleExecuted();
 
             readMem(addr, reg(Reg::A));
@@ -3899,9 +3882,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         case 0xFE: // CP n
         {
-            auto v = cpu.readMem(pc++);
             cycleExecuted();
-            cmp(v);
+            cmp(instr.opcode[1]);
             break;
         }
         case 0xFF: // RST 38
@@ -3915,7 +3897,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
             return false;
     }
 
-    if(!exited)
+    if(!(instr.flags & Op_Exit))
     {
         // cycles -= executed
         builder.sub(Reg32::EDI, cyclesThisInstr);
@@ -3940,10 +3922,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
     return true;
 }
 
-void DMGRecompiler::recompileExInstruction(uint16_t &pc, X86Builder &builder, int &cyclesThisInstr)
+void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, int &cyclesThisInstr)
 {
-    auto &mem = cpu.getMem();
-    uint8_t opcode = mem.read(pc++);
+    uint8_t opcode = instr.opcode[1];
 
     // FIXME: copy/paste
 
