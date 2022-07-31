@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <map>
+#include <vector>
 
 class DMGCPU;
 class X86Builder;
@@ -13,7 +14,19 @@ public:
     void handleBranch();
 
 private:
+    struct OpInfo
+    {
+        uint8_t opcode[3];
+        uint8_t len; // 1-3
+        uint8_t regsRead, regsWritten;
+        uint16_t flags;
+    };
+
     DMGCPU &cpu;
+
+    void analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo);
+
+    void printInfo(std::vector<OpInfo> &instrInfo);
 
     bool compile(uint8_t *&codePtr, uint16_t &pc);
 
