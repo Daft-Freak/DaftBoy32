@@ -1993,15 +1993,22 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, X86Builder &builder, bool
 
         // condition
         if(flag)
-        {
+        {  
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 6 + cycleExecutedCallSize);
+            builder.jcc(set ? Condition::E : Condition::NE, (off < 0 ? 11 : 6) + cycleExecutedCallSize);
         }
 
         cycleExecuted();
         builder.mov(pcReg32, pc + off);
-        exited = true;
+
+        if(flag && off < 0)
+        {
+            assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
+            builder.jmp(exitPtr - builder.getPtr());
+        }
+        else
+            exited = true;
     };
 
     const auto call = [this, &pc, &exited, &builder, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
