@@ -1666,7 +1666,6 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 info.flags = Op_Store;
                 break;
             case 0x76: // HALT
-                done = true; // stop here
                 break;
             case 0x80: // ADD B
             case 0x81: // ADD C
@@ -3324,7 +3323,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
             // exit
             builder.mov(pcReg32, pc); // exits need to set PC themselves
-            builder.jmp(exitPtr - builder.getPtr());
+            builder.call(saveAndExitPtr - builder.getPtr());
             break;
         }
         case 0x77: // LD (HL),A
