@@ -1961,10 +1961,12 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
 
             default:
                 printf("invalid op in analysis %02X\n", opcode);
+                info.len = 0;
                 done = true;
         }
 
-        instrInfo.push_back(info);
+        if(info.len)
+            instrInfo.push_back(info);
     }
 }
 
