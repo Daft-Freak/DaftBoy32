@@ -61,4 +61,10 @@ private:
     // saved pointer on exit
     uint8_t *savedPtr = nullptr;
     uint16_t savedPC = 0;
+
+    // compile state
+    // TODO: make these temps
+    uint8_t *lastInstrCycleCheck = nullptr;
+    std::map<uint16_t, uint8_t *> branchTargets;
+    std::multimap<uint16_t, uint8_t *> forwardBranchesToPatch;
 };

@@ -167,7 +167,7 @@ public:
 
     void jcc(Condition cc, int disp);
 
-    void jmp(int disp);
+    void jmp(int disp, bool forceLong = false);
     void jmp(Reg64 r);
 
     void lea(Reg32 r, Reg64 base, int disp = 0);
@@ -531,9 +531,9 @@ void X86Builder::jcc(Condition cc, int disp)
     }
 }
 
-void X86Builder::jmp(int disp)
+void X86Builder::jmp(int disp, bool forceLong)
 {
-    if(disp < 128 && disp >= -126) // 8 bit disp
+    if(disp < 128 && disp >= -126 && !forceLong) // 8 bit disp
     {
         // adjust for opcode len
         if(disp < 0)
@@ -2124,6 +2124,10 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc, std::vector<OpInfo> 
         numInstructions++;
     }
 
+    lastInstrCycleCheck = nullptr;
+    branchTargets.clear();
+    forwardBranchesToPatch.clear();
+
     // jump to exit code
     builder.jmp(exitPtr - builder.getPtr());
 
@@ -2161,6 +2165,44 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 {
     auto &mem = cpu.getMem();
     uint8_t opcode = instr.opcode[0];
+
+    // handle branch targets
+    if(instr.flags & Op_BranchTarget)
+    {
+        // store for backwards jumps
+        if(lastInstrCycleCheck)
+            branchTargets.emplace(pc, lastInstrCycleCheck); // after adjusting cycle count but before the jump
+        else
+        {
+            // this is the first instruction, so make a cycle check for the branch to go to
+            builder.jmp(13);
+            lastInstrCycleCheck = builder.getPtr();
+
+            // if <= 0 exit
+            builder.jcc(Condition::G, 11);
+            builder.mov(pcReg32, pc);
+            builder.call(saveAndExitPtr - builder.getPtr());
+
+            // TODO: this is the first instruction
+            branchTargets.emplace(pc, lastInstrCycleCheck);
+        } 
+
+        // patch forwards jumps
+        // can't hit this for the first instruction, so the lastInstrCycleCheck will be valid
+        auto jumps = forwardBranchesToPatch.equal_range(pc);
+        for(auto it = jumps.first; it != jumps.second; ++it)
+        {
+            // overrite 4 byte disp
+            auto off = lastInstrCycleCheck - (it->second + 5);
+
+            it->second[1] = off;
+            it->second[2] = off >> 8;
+            it->second[3] = off >> 16;
+            it->second[4] = off >> 24;
+        }
+        forwardBranchesToPatch.erase(jumps.first, jumps.second);
+    }
+
     pc += instr.len;
 
     int cyclesThisInstr = 0;
@@ -2722,47 +2764,89 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.dec(reg(r));
     };
 
-    const auto jump = [this, &instr, &pc, &builder, &cycleExecuted](int flag = 0, bool set = true)
+    const auto jump = [this, &instr, &pc, &builder, &cycleExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
     {
         uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
         cycleExecuted();
         cycleExecuted();
 
+        auto it = branchTargets.find(addr);
+
         // condition
         if(flag)
         {
-            builder.mov(pcReg32, pc);
+            if(!(instr.flags & Op_Branch)) // branch flag means the jump is in range, so we should be able to handle it
+                builder.mov(pcReg32, pc); // otherwise we're going to exit, so save PC
+
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 11 + cycleExecutedCallSize);
+            int len = ((instr.flags & Op_Branch) ? 3/*sub*/ : 6/*mov*/) + 5/*jmp*/; 
+            builder.jcc(set ? Condition::E : Condition::NE, len + cycleExecutedCallSize);
         }
 
         cycleExecuted();
-        builder.mov(pcReg32, addr);
 
-        // TODO
-        assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
-        builder.jmp(exitPtr - builder.getPtr());
+        // sub cycles early (we jump past the usual code that does this)
+        if(instr.flags & Op_Branch)
+            builder.sub(Reg32::EDI, cyclesThisInstr);
+        else // or set PC if we're just going to exit
+            builder.mov(pcReg32, addr);
+
+        // don't update twice for unconditional branches (if it doesn't have the branch flag it's an exit anyway)
+        if(!flag)
+            cyclesThisInstr = 0;
+
+        if(it != branchTargets.end()) 
+            builder.jmp(it->second - builder.getPtr(), true);
+        else
+        {
+            if(instr.flags & Op_Branch)
+                forwardBranchesToPatch.emplace(addr, builder.getPtr());
+
+            // will be patched later if possible
+            builder.jmp(exitPtr - builder.getPtr(), true);
+        }
     };
 
-    const auto jumpRel = [this, &instr, &pc, &builder, &cycleExecuted](int flag = 0, bool set = true)
+    const auto jumpRel = [this, &instr, &pc, &builder, &cycleExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
     {
         int8_t off = instr.opcode[1];
         cycleExecuted();
 
+        auto it = branchTargets.find(pc + off);
+
         // condition
         if(flag)
-        {  
-            builder.mov(pcReg32, pc);
+        {
+            if(!(instr.flags & Op_Branch))
+                builder.mov(pcReg32, pc);
+
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 11 + cycleExecutedCallSize);
+            int len = ((instr.flags & Op_Branch) ? 3/*sub*/ : 6/*mov*/) + 5/*jmp*/; 
+            builder.jcc(set ? Condition::E : Condition::NE, len + cycleExecutedCallSize);
         }
 
         cycleExecuted();
-        builder.mov(pcReg32, pc + off);
 
-        // TODO
-        assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
-        builder.jmp(exitPtr - builder.getPtr());
+        // sub cycles early (we jump past the usual code that does this)
+        if(instr.flags & Op_Branch)
+            builder.sub(Reg32::EDI, cyclesThisInstr);
+        else // or set PC if we're just going to exit
+            builder.mov(pcReg32, pc + off);
+
+        // don't update twice for unconditional branches
+        if(!flag)
+            cyclesThisInstr = 0;
+
+        if(it != branchTargets.end()) 
+            builder.jmp(it->second - builder.getPtr(), true);
+        else
+        {
+            if(instr.flags & Op_Branch)
+                forwardBranchesToPatch.emplace(pc + off, builder.getPtr());
+
+            // will be patched later if possible
+            builder.jmp(exitPtr - builder.getPtr(), true);
+        }
     };
 
     const auto call = [this, &instr, &pc, &builder, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
@@ -3965,10 +4049,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             return false;
     }
 
-    if(!(instr.flags & Op_Exit))
+    if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
     {
         // cycles -= executed
-        builder.sub(Reg32::EDI, cyclesThisInstr);
+        if(cyclesThisInstr) // 0 means we already did the sub
+            builder.sub(Reg32::EDI, cyclesThisInstr);
+
+        lastInstrCycleCheck = builder.getPtr(); // save in case the next instr is a branch target
+
         // if <= 0 exit
         builder.jcc(Condition::G, 11);
         builder.mov(pcReg32, pc);
