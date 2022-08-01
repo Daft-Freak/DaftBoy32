@@ -1125,6 +1125,8 @@ enum OpFlags
 
     Op_Load = 1 << 11,
     Op_Store = 1 << 12,
+
+    Op_Last = 1 << 13, // last instruction in compiled block, compiler can't see this itself
 };
 
 enum RegFlags
@@ -1428,9 +1430,6 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
     auto updateEnd = [&startPC, &maxBranch](OpInfo &info, uint16_t target)
     {
         maxBranch = std::max(maxBranch, target);
-
-        if(target < startPC)
-            info.flags |= Op_Exit; // can't extend backwards, so exit if we jump back too far
     };
 
     while(!done)
@@ -1792,15 +1791,14 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 info.opcode[1] = mem.read(pc++);
                 info.opcode[2] = mem.read(pc++);
                 info.len = 3;
-                info.flags = Op_Exit | condFlags[(opcode >> 3) & 3];
-                // TODO: check if target is in range?
+                info.flags = Op_Branch | condFlags[(opcode >> 3) & 3];
                 break;
             }
             case 0xC3: // JP nn
                 info.opcode[1] = mem.read(pc++);
                 info.opcode[2] = mem.read(pc++);
                 info.len = 3;
-                info.flags = Op_Exit;
+                info.flags = Op_Branch;
                 done = true;
                 break;
             case 0xC4: // CALL NZ,nn
@@ -1968,6 +1966,75 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
         if(info.len)
             instrInfo.push_back(info);
     }
+
+    auto endPC = pc;
+
+    // cleanup
+    pc = startPC;
+
+    for(auto it = instrInfo.begin(); it != instrInfo.end(); ++it)
+    {
+        auto &instr = *it;
+        pc += instr.len;
+        // TODO: flags
+
+        if(instr.flags & Op_Branch)
+        {
+            // get target (should be JR or JP)
+            uint16_t target;
+            if(instr.opcode[0] >= 0xC2) // JP
+                target = instr.opcode[1] | instr.opcode[2] << 8;
+            else
+                target = pc + static_cast<int8_t>(instr.opcode[1]);
+
+            // not reachable, convert to exit
+            if(target < startPC || target >= endPC)
+            {
+                instr.flags &= ~Op_Branch;
+                instr.flags |= Op_Exit;
+            }
+            else
+            {
+                // find and mark target
+                auto searchPC = pc;
+                if(target < pc)
+                {
+                    auto prevIt = std::make_reverse_iterator(it + 1);
+            
+                    for(; prevIt != instrInfo.rend() && searchPC >= target; ++prevIt)
+                    {
+                        searchPC -= prevIt->len;
+                        if(searchPC == target)
+                        {
+                            prevIt->flags |= Op_BranchTarget;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    for(auto nextIt = it + 1; nextIt != instrInfo.end() && searchPC <= target; searchPC += nextIt->len, ++nextIt)
+                    {
+                        if(searchPC == target)
+                        {
+                            nextIt->flags |= Op_BranchTarget;
+                            break;
+                        }
+                    }
+                }
+
+                // failed to find target
+                // may happen if there's a jump over some data
+                if(searchPC != target)
+                {
+                    instr.flags &= ~Op_Branch;
+                    instr.flags |= Op_Exit;
+                }
+            }
+        }
+    }
+
+    instrInfo.back().flags |= Op_Last;
 }
 
 void DMGRecompiler::printInfo(std::vector<OpInfo> &instrInfo)
