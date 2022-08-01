@@ -1563,7 +1563,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 updateEnd(info, target);
 
                 // can't reach past here
-                if(target < maxBranch && target < pc)
+                if(maxBranch < pc && target < pc)
                     done = true;
 
                 break;
