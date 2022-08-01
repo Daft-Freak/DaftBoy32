@@ -1112,12 +1112,14 @@ enum OpFlags
     Op_ReadH = 1 << 1,
     Op_ReadN = 1 << 2,
     Op_ReadZ = 1 << 3,
+    Op_ReadFlags = Op_ReadC | Op_ReadH | Op_ReadN | Op_ReadZ,
 
     // these match the bits in the F register
     Op_WriteC = 1 << 4,
     Op_WriteH = 1 << 5,
     Op_WriteN = 1 << 6,
     Op_WriteZ = 1 << 7,
+    Op_WriteFlags = Op_WriteC | Op_WriteH | Op_WriteN | Op_WriteZ,
 
     Op_Branch = 1 << 8,
     Op_BranchTarget = 1 << 9,
@@ -1425,8 +1427,6 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
         Op_ReadC, // C
     };
 
-    auto allFlagsWrite = Op_WriteC | Op_WriteH | Op_WriteN | Op_WriteZ;
-
     auto updateEnd = [&startPC, &maxBranch](OpInfo &info, uint16_t target)
     {
         maxBranch = std::max(maxBranch, target);
@@ -1489,12 +1489,12 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0x3C: // INC A
             case 0x3D: // DEC A
                 info.regsRead = info.regsWritten = regMap8[opcode >> 3];
-                info.flags = allFlagsWrite;
+                info.flags = Op_WriteFlags;
                 break;
             case 0x34: // INC (HL)
             case 0x35: // DEC (HL)
                 info.regsRead = Reg_H | Reg_L;
-                info.flags = allFlagsWrite | Op_Load | Op_Store;
+                info.flags = Op_WriteFlags | Op_Load | Op_Store;
                 break;
             case 0x06: // LD B,n
             case 0x0E: // LD C,n
@@ -1516,7 +1516,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0x07: // RLCA
             case 0x0F: // RRCA
                 info.regsRead = info.regsWritten = Reg_A;
-                info.flags = allFlagsWrite; // zeroes everything other than C
+                info.flags = Op_WriteFlags; // zeroes everything other than C
                 break;
             case 0x08: // LD (nn),SP
                 info.opcode[1] = mem.read(pc++);
@@ -1531,7 +1531,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0x39: // ADD HL,SP
                 info.regsRead = regMap16[opcode >> 4] | Reg_H | Reg_L;
                 info.regsWritten = Reg_H | Reg_L;
-                info.flags = allFlagsWrite;
+                info.flags = Op_WriteFlags;
                 break;
             case 0x0A: // LD A,(BC)
             case 0x1A: // LD A,(DE)
@@ -1551,7 +1551,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0x17: // RLA
             case 0x1F: // RRA
                 info.regsRead = info.regsWritten = Reg_A;
-                info.flags = allFlagsWrite | Op_ReadC; // zeroes everything other than C
+                info.flags = Op_WriteFlags | Op_ReadC; // zeroes everything other than C
                 break;
             case 0x18: // JR m
             {
@@ -1703,7 +1703,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0xB7: // OR A
                 info.regsRead = regMap8[opcode & 7] | Reg_A;
                 info.regsWritten = Reg_A;
-                info.flags = allFlagsWrite; // bit ops mostly write 0
+                info.flags = Op_WriteFlags; // bit ops mostly write 0
                 break;
             case 0x86: // ADD (HL)
             case 0x96: // SUB (HL)
@@ -1712,7 +1712,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0xB6: // OR (HL)
                 info.regsRead = Reg_H | Reg_L | Reg_A;
                 info.regsWritten = Reg_A;
-                info.flags = allFlagsWrite | Op_Load; // bit ops mostly write 0
+                info.flags = Op_WriteFlags | Op_Load; // bit ops mostly write 0
                 break;
             case 0x88: // ADC B
             case 0x89: // ADC C
@@ -1730,13 +1730,13 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0x9F: // SBC A
                 info.regsRead = regMap8[opcode & 7] | Reg_A;
                 info.regsWritten = Reg_A;
-                info.flags = allFlagsWrite | Op_ReadC;
+                info.flags = Op_WriteFlags | Op_ReadC;
                 break;
             case 0x8E: // ADC (HL)
             case 0x9E: // SBC (HL)
                 info.regsRead = Reg_H | Reg_L | Reg_A;
                 info.regsWritten = Reg_A;
-                info.flags = allFlagsWrite | Op_ReadC | Op_Load; 
+                info.flags = Op_WriteFlags | Op_ReadC | Op_Load; 
                 break;
             case 0xB8: // CP B
             case 0xB9: // CP C
@@ -1746,11 +1746,11 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0xBD: // CP L
             case 0xBF: // CP A
                 info.regsRead = regMap8[opcode & 7] | Reg_A;
-                info.flags = allFlagsWrite;
+                info.flags = Op_WriteFlags;
                 break;
             case 0xBE: // CP (HL)
                 info.regsRead = regMap8[opcode & 7] | Reg_A;
-                info.flags = allFlagsWrite | Op_Load;
+                info.flags = Op_WriteFlags | Op_Load;
                 break;
             case 0xC0: // RET NZ
             case 0xC8: // RET Z
@@ -1781,7 +1781,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 // this is the one thing that writes F
                 info.regsRead = Reg_SP;
                 info.regsWritten = Reg_A | Reg_SP;
-                info.flags = Op_Load | allFlagsWrite; // flags through writing F
+                info.flags = Op_Load | Op_WriteFlags; // flags through writing F
                 break;
             case 0xC2: // JP NZ,nn
             case 0xCA: // JP Z,nn
@@ -1839,20 +1839,20 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 info.opcode[1] = mem.read(pc++);
                 info.len = 2;
                 info.regsRead = info.regsWritten = Reg_A;
-                info.flags = allFlagsWrite; // bit ops mostly write 0
+                info.flags = Op_WriteFlags; // bit ops mostly write 0
                 break;
             case 0xCE: // ADC n
             case 0xDE: // SBC n
                 info.opcode[1] = mem.read(pc++);
                 info.len = 2;
                 info.regsRead = info.regsWritten = Reg_A;
-                info.flags = allFlagsWrite | Op_ReadC;
+                info.flags = Op_WriteFlags | Op_ReadC;
                 break;
             case 0xFE: // CP n
                 info.opcode[1] = mem.read(pc++);
                 info.len = 2;
                 info.regsRead = Reg_A;
-                info.flags = allFlagsWrite;
+                info.flags = Op_WriteFlags;
                 break;
             case 0xC7: // RST 00
             case 0xCF: // RST 08
@@ -1886,11 +1886,11 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 }
 
                 if(info.opcode[1] < 0x10) // RLC, RRC
-                    info.flags |= allFlagsWrite;
+                    info.flags |= Op_WriteFlags;
                 else if(info.opcode[1] < 0x20) // RL, RR
-                    info.flags |= allFlagsWrite | Op_ReadC;
+                    info.flags |= Op_WriteFlags | Op_ReadC;
                 else if(info.opcode[1] < 0x40) // SLA, SRA, SWAP, SRL
-                    info.flags |= allFlagsWrite;
+                    info.flags |= Op_WriteFlags;
                 else if(info.opcode[1] < 0x80) // BIT
                     info.flags |= Op_WriteH | Op_WriteN | Op_WriteZ;
                 // RES/SET don't affect F
@@ -1910,7 +1910,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 info.opcode[1] = mem.read(pc++);
                 info.len = 2;
                 info.regsRead = info.regsWritten = Reg_SP;
-                info.flags = allFlagsWrite; // Z is always 0, H/C are... unusual
+                info.flags = Op_WriteFlags; // Z is always 0, H/C are... unusual
                 break;
             case 0xE9: // JP (HL)
                 info.regsRead = Reg_H | Reg_L;
@@ -1943,7 +1943,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 info.len = 2;
                 info.regsRead = Reg_SP;
                 info.regsWritten = Reg_H | Reg_L;
-                info.flags = allFlagsWrite; // Z is always 0, H/C are... unusual
+                info.flags = Op_WriteFlags; // Z is always 0, H/C are... unusual
                 break;
             case 0xF9: // LD SP,HL
                 info.regsRead = Reg_H | Reg_L;
