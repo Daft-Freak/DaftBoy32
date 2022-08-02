@@ -2296,8 +2296,6 @@ void DMGCPU::cycleExecuted()
 
     divCounter += 4;
 
-    if(halted) return;
-
     updateOAMDMA();
 }
 
