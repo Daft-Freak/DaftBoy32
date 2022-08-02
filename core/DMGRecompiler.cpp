@@ -1489,12 +1489,12 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0x3C: // INC A
             case 0x3D: // DEC A
                 info.regsRead = info.regsWritten = regMap8[opcode >> 3];
-                info.flags = Op_WriteFlags;
+                info.flags = Op_WriteH | Op_WriteN | Op_WriteZ; // C preserved
                 break;
             case 0x34: // INC (HL)
             case 0x35: // DEC (HL)
                 info.regsRead = Reg_H | Reg_L;
-                info.flags = Op_WriteFlags | Op_Load | Op_Store;
+                info.flags = Op_WriteH | Op_WriteN | Op_WriteZ | Op_Load | Op_Store;
                 break;
             case 0x06: // LD B,n
             case 0x0E: // LD C,n
