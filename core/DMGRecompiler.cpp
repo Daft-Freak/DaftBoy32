@@ -5031,7 +5031,8 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
 
         auto mappedAddr = cpu->mem.makeBankedAddress(addr);
 
-        for(auto it = compiler.compiled.begin(); it != compiler.compiled.end();)
+        // skip anything not in RAM
+        for(auto it = compiler.compiled.lower_bound(0x8000); it != compiler.compiled.end();)
         {
             if(mappedAddr >= it->first && mappedAddr < it->second.endPC)
             {
@@ -5046,6 +5047,11 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
 
                 continue; // might have compiled the same code more than once
             }
+
+            // past this address, stop
+            if(it->first > mappedAddr)
+                break;
+
             ++it;
         }
     }
