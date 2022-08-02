@@ -53,6 +53,7 @@ private:
     };
 
     std::map<uint32_t, FuncInfo> compiled;
+    uint16_t minRAMCode = 0xFFFF;
 
     // common code
     CompiledFunc entryFunc = nullptr;
