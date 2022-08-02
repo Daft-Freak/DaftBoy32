@@ -2297,6 +2297,86 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
+    // neededFlags is what we need to output
+    // updateFlags is what we can output from the result
+    // oneFlags is is what is alwyas set to 1
+    // preservedFlags is what is... preserved
+    const auto setFlags = [&builder](uint8_t &neededFlags, uint8_t updateFlags, uint8_t oneFlags = 0, uint8_t preservedFlags = 0)
+    {
+        auto f = reg(Reg::F);
+
+        updateFlags &= neededFlags;  // mask out unneeded
+
+        // preserved flags should have been preserved already
+        // so F should have all other bits zero
+
+        bool setF = preservedFlags != 0;
+        bool haveOpFlags = true; // assuming nothing has destroyed flags before this
+
+        if(haveOpFlags && (updateFlags & DMGCPU::Flag_C))
+        {
+            // copy + shift if not set
+            if(!setF)
+            {
+                builder.setcc(Condition::B, f);
+                builder.shl(f, 4); // C is bit 4
+                setF = true;
+            }
+            else
+            {
+                builder.jcc(Condition::AE, 3); // if !carry
+                builder.or_(f, DMGCPU::Flag_C); // set C
+            }
+
+            haveOpFlags = false;
+            neededFlags &= ~DMGCPU::Flag_C;
+        }
+
+        if(haveOpFlags && (updateFlags & DMGCPU::Flag_Z))
+        {
+            if(!setF)
+            {
+                builder.setcc(Condition::E, f);
+                builder.shl(f, 7); // Z is bit 7
+                setF = true;
+            }
+            else
+            {
+                builder.jcc(Condition::NE, 3); // if != 0
+                builder.or_(f, DMGCPU::Flag_Z); // set Z
+            }
+
+            haveOpFlags = false;
+            neededFlags &= ~DMGCPU::Flag_Z;
+        }
+
+        if(neededFlags && !setF)// some flags left and no write, make sure constant flags are set
+        {
+            builder.mov(f, oneFlags);
+            neededFlags &= ~oneFlags;
+            setF = true;
+        }
+
+        // still haven't set always one flags
+        if(neededFlags & oneFlags)
+        {
+            builder.or_(f, oneFlags);
+            neededFlags &= ~oneFlags;
+        }
+    };
+
+    // used by the rotates
+    const auto carryOut = [&instr, &builder]()
+    {
+        if(instr.flags & DMGCPU::Flag_C)
+        {
+            // copy carry out
+            // (shortcut as this is the only flag)
+            builder.setcc(Condition::B, reg(Reg::F));
+            builder.shl(reg(Reg::F), 4); // C is bit 4
+        }
+    };
+
     const auto load8 = [&instr, &builder, &cycleExecuted](Reg r)
     {
         cycleExecuted();
@@ -2351,7 +2431,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.and_(reg(Reg::F), 0xF0);
     };
 
-    const auto add = [&builder](std::variant<Reg8, uint8_t> b, bool withCarry = false)
+    const auto add = [&instr, &builder, &setFlags](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -2359,50 +2439,50 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         bool bIsReg = std::holds_alternative<Reg8>(b);
         bool bIsF = bIsReg && std::get<Reg8>(b) == f;
 
-        // TODO: all of this ...
-
-        // F was used as tmp, make a second copy (affects ADD (HL))
-        // also preserve F for ADC
-        if(bIsF || withCarry)
-            builder.mov(Reg8::R11B, f);
-
-        // copy src/dst (using flags reg as temp)
-        if(bIsReg)
+        if(instr.flags & DMGCPU::Flag_H)
         {
-            auto rb = std::get<Reg8>(b);
+            // F was used as tmp, make a second copy (affects ADD (HL))
+            // also preserve F for ADC
+            if(bIsF || withCarry)
+                builder.mov(Reg8::R11B, f);
 
-            if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+            // copy src/dst (using flags reg as temp)
+            if(bIsReg)
             {
-                // legacy regs, extra copy
-                builder.mov(f, rb);
-                builder.mov(Reg8::R10B, f);
+                auto rb = std::get<Reg8>(b);
+
+                if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+                {
+                    // legacy regs, extra copy
+                    builder.mov(f, rb);
+                    builder.mov(Reg8::R10B, f);
+                }
+                else
+                    builder.mov(Reg8::R10B, rb);
             }
-            else
-                builder.mov(Reg8::R10B, rb);
+            else // yeah this case could be optimised further
+                builder.mov(Reg8::R10B, std::get<uint8_t>(b));
+
+            builder.mov(f, a);
+
+            // mask and do half add
+            builder.and_(f, 0xF);
+            builder.and_(Reg8::R10B, 0xF);
+            builder.add(Reg8::R10B, f);
+
+            // put tmp/flags reg back
+            if(bIsF || withCarry)
+                builder.mov(f, Reg8::R11B);
+
+            if(withCarry)
+            {
+                // add carry to half add
+                builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+                builder.jcc(Condition::E, 3); // not set
+                builder.inc(Reg8::R10B);
+            }
+
         }
-        else // yeah this case could be optimised further
-            builder.mov(Reg8::R10B, std::get<uint8_t>(b));
-
-        builder.mov(f, a);
-
-        // mask and do half add
-        builder.and_(f, 0xF);
-        builder.and_(Reg8::R10B, 0xF);
-        builder.add(Reg8::R10B, f);
-
-        // put tmp/flags reg back
-        if(bIsF || withCarry)
-            builder.mov(f, Reg8::R11B);
-
-        if(withCarry)
-        {
-            // add carry to half add
-            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
-            builder.jcc(Condition::E, 3); // not set
-            builder.inc(Reg8::R10B);
-        }
-
-        // TODO: ... can be avoided if we don't need the H flag
 
         if(withCarry)
         {
@@ -2433,22 +2513,25 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.add(a, std::get<uint8_t>(b));
 
         // flags
-        builder.mov(f, 0);
+        uint8_t flags = instr.flags & Op_WriteFlags;
+        setFlags(flags, DMGCPU::Flag_C | DMGCPU::Flag_H | DMGCPU::Flag_Z); // without any preserved flags, this will always set C (if needed)
 
-        // carry flag
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
+        if(flags & DMGCPU::Flag_H)
+        {
+            // half carry flag
+            // r10b > 0xF ? H : 0
+            builder.cmp(Reg8::R10B, 0xF);
+            builder.jcc(Condition::BE, 3); // <= 0xF
+            builder.or_(f, DMGCPU::Flag_H); // set H
+        }
 
-        // half carry flag
-        // r10b > 0xF ? H : 0
-        builder.cmp(Reg8::R10B, 0xF);
-        builder.jcc(Condition::BE, 3); // <= 0xF
-        builder.or_(f, DMGCPU::Flag_H); // set H
-
-        // zero flag
-        builder.and_(a, a); // TODO: TEST?
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        if(flags & DMGCPU::Flag_Z)
+        {
+            // zero flag
+            builder.and_(a, a); // TODO: TEST?
+            builder.jcc(Condition::NE, 3); // if != 0
+            builder.or_(f, DMGCPU::Flag_Z); // set Z
+        }
 
         return true;
     };
@@ -2458,7 +2541,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         return add(b, true);
     };
 
-    const auto sub = [&builder](std::variant<Reg8, uint8_t> b, bool withCarry = false)
+    const auto sub = [&instr, &builder, &setFlags](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -2466,51 +2549,50 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         bool bIsReg = std::holds_alternative<Reg8>(b);
         bool bIsF = bIsReg && std::get<Reg8>(b) == f;
 
-        // TODO: all of this ...
-
-        // F was used as tmp, make a second copy (affects SUB (HL))
-        // also preserve F for SBC
-        if(bIsF || withCarry)
-            builder.mov(Reg8::R11B, f);
-
-        // copy src/dst (using flags reg as temp)
-        if(bIsReg)
+        if(instr.flags & DMGCPU::Flag_H)
         {
-            auto rb = std::get<Reg8>(b);
+            // F was used as tmp, make a second copy (affects SUB (HL))
+            // also preserve F for SBC
+            if(bIsF || withCarry)
+                builder.mov(Reg8::R11B, f);
 
-            if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+            // copy src/dst (using flags reg as temp)
+            if(bIsReg)
             {
-                // legacy regs, extra copy
-                builder.mov(f, rb);
-                builder.mov(Reg8::R10B, f);
+                auto rb = std::get<Reg8>(b);
+
+                if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+                {
+                    // legacy regs, extra copy
+                    builder.mov(f, rb);
+                    builder.mov(Reg8::R10B, f);
+                }
+                else
+                    builder.mov(Reg8::R10B, rb);
             }
-            else
-                builder.mov(Reg8::R10B, rb);
+            else // yeah this case could be optimised further
+                builder.mov(Reg8::R10B, std::get<uint8_t>(b));
+
+            builder.mov(f, a);
+
+            // mask and do half sub
+            builder.and_(f, 0xF);
+            builder.and_(Reg8::R10B, 0xF);
+            builder.sub(f, Reg8::R10B);
+            builder.mov(Reg8::R10B, f);
+
+            // put tmp/flags reg back
+            if(bIsF || withCarry)
+                builder.mov(f, Reg8::R11B);
+
+            if(withCarry)
+            {
+                // sub carry from half sub
+                builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+                builder.jcc(Condition::E, 3); // not set
+                builder.dec(Reg8::R10B);
+            }
         }
-        else // yeah this case could be optimised further
-            builder.mov(Reg8::R10B, std::get<uint8_t>(b));
-
-        builder.mov(f, a);
-
-        // mask and do half sub
-        builder.and_(f, 0xF);
-        builder.and_(Reg8::R10B, 0xF);
-        builder.sub(f, Reg8::R10B);
-        builder.mov(Reg8::R10B, f);
-
-        // put tmp/flags reg back
-        if(bIsF || withCarry)
-            builder.mov(f, Reg8::R11B);
-
-        if(withCarry)
-        {
-            // sub carry from half sub
-            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
-            builder.jcc(Condition::E, 3); // not set
-            builder.dec(Reg8::R10B);
-        }
-
-        // TODO: ... can be avoided if we don't need the H flag
 
         if(withCarry)
         {
@@ -2541,22 +2623,25 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.sub(a, std::get<uint8_t>(b));
 
         // flags
-        builder.mov(f, DMGCPU::Flag_N);
+        uint8_t flags = instr.flags & Op_WriteFlags;
+        setFlags(flags, DMGCPU::Flag_C | DMGCPU::Flag_H | DMGCPU::Flag_Z, DMGCPU::Flag_N);
 
-        // carry flag
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
+        if(flags & DMGCPU::Flag_H)
+        {
+            // half carry flag
+            // r10b < 0 ? H : 0
+            builder.cmp(Reg8::R10B, 0);
+            builder.jcc(Condition::GE, 3); // >= 0
+            builder.or_(f, DMGCPU::Flag_H); // set H
+        }
 
-        // half carry flag
-        // r10b < 0 ? H : 0
-        builder.cmp(Reg8::R10B, 0);
-        builder.jcc(Condition::GE, 3); // >= 0
-        builder.or_(f, DMGCPU::Flag_H); // set H
-
-        // zero flag
-        builder.and_(a, a); // TODO: TEST?
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        if(flags & DMGCPU::Flag_Z)
+        {
+            // zero flag
+            builder.and_(a, a); // TODO: TEST?
+            builder.jcc(Condition::NE, 3); // if != 0
+            builder.or_(f, DMGCPU::Flag_Z); // set Z
+        }
     };
 
     const auto subWithCarry = [&sub](std::variant<Reg8, uint8_t> b)
@@ -2564,44 +2649,40 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         return sub(b, true);
     };
 
-    const auto bitAnd = [&builder](std::variant<Reg8, uint8_t> b)
+    const auto bitAnd = [&instr, &builder, &setFlags](std::variant<Reg8, uint8_t> b)
     {
         if(std::holds_alternative<Reg8>(b))
             builder.and_(reg(Reg::A), std::get<Reg8>(b));
         else
             builder.and_(reg(Reg::A), std::get<uint8_t>(b));
 
-        // F = Flag_H | (res == 0 ? Flag_Z : 0)
-        builder.mov(reg(Reg::F), DMGCPU::Flag_H);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
+        uint8_t flags = instr.flags & Op_WriteFlags;
+        setFlags(flags, DMGCPU::Flag_Z, DMGCPU::Flag_H);
     };
 
-    const auto bitOr = [&builder](std::variant<Reg8, uint8_t> b)
+    const auto bitOr = [&instr, &builder, &setFlags](std::variant<Reg8, uint8_t> b)
     {
         if(std::holds_alternative<Reg8>(b))
             builder.or_(reg(Reg::A), std::get<Reg8>(b));
         else
             builder.or_(reg(Reg::A), std::get<uint8_t>(b));
 
-        builder.mov(reg(Reg::F), 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
+        uint8_t flags = instr.flags & Op_WriteFlags;
+        setFlags(flags, DMGCPU::Flag_Z);
     };
 
-    const auto bitXor = [&builder](std::variant<Reg8, uint8_t> b)
+    const auto bitXor = [&instr, &builder, &setFlags, &pc/*!!*/](std::variant<Reg8, uint8_t> b)
     {
         if(std::holds_alternative<Reg8>(b))
             builder.xor_(reg(Reg::A), std::get<Reg8>(b));
         else
             builder.xor_(reg(Reg::A), std::get<uint8_t>(b));
 
-        builder.mov(reg(Reg::F), 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(reg(Reg::F), DMGCPU::Flag_Z); // zero
+        uint8_t flags = instr.flags & Op_WriteFlags;
+        setFlags(flags, DMGCPU::Flag_Z);
     };
 
-    const auto cmp = [&builder](std::variant<Reg8, uint8_t> b)
+    const auto cmp = [&instr, &builder, &setFlags](std::variant<Reg8, uint8_t> b)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -2609,42 +2690,41 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         bool bIsReg = std::holds_alternative<Reg8>(b);
         bool bIsF = bIsReg && std::get<Reg8>(b) == f;
 
-        // TODO: all of this ...
-
-        // copy src/dst (using flags reg as temp)
-        if(bIsReg)
+        if(instr.flags & DMGCPU::Flag_H)
         {
-            auto rb = std::get<Reg8>(b);
-
-            if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+            // copy src/dst (using flags reg as temp)
+            if(bIsReg)
             {
-                // legacy regs, extra copy
-                builder.mov(f, rb);
-                builder.mov(Reg8::R10B, f);
+                auto rb = std::get<Reg8>(b);
+
+                if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+                {
+                    // legacy regs, extra copy
+                    builder.mov(f, rb);
+                    builder.mov(Reg8::R10B, f);
+                }
+                else
+                    builder.mov(Reg8::R10B, rb);
             }
-            else
-                builder.mov(Reg8::R10B, rb);
+            else // yeah this case could be optimised further
+                builder.mov(Reg8::R10B, std::get<uint8_t>(b));
+
+            // F was used as tmp, make a second copy (affects CMP (HL))
+            if(bIsF)
+                builder.mov(Reg8::R11B, f);
+
+            builder.mov(f, a);
+
+            // mask and do half cmp
+            builder.and_(f, 0xF);
+            builder.and_(Reg8::R10B, 0xF);
+            builder.cmp(f, Reg8::R10B);
+            builder.setcc(Condition::B, Reg8::R10B); // save carry
+
+            // put tmp reg back
+            if(bIsF)
+                builder.mov(f, Reg8::R11B);
         }
-        else // yeah this case could be optimised further
-            builder.mov(Reg8::R10B, std::get<uint8_t>(b));
-
-        // F was used as tmp, make a second copy (affects CMP (HL))
-        if(bIsF)
-            builder.mov(Reg8::R11B, f);
-
-        builder.mov(f, a);
-
-        // mask and do half cmp
-        builder.and_(f, 0xF);
-        builder.and_(Reg8::R10B, 0xF);
-        builder.cmp(f, Reg8::R10B);
-        builder.setcc(Condition::B, Reg8::R10B); // save carry
-
-        // put tmp reg back
-        if(bIsF)
-            builder.mov(f, Reg8::R11B);
-
-        // TODO: ... can be avoided if we don't need the H flag
 
         // do cmp
         if(bIsReg)
@@ -2652,102 +2732,118 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         else
             builder.cmp(a, std::get<uint8_t>(b));
 
+        if(instr.flags & DMGCPU::Flag_Z)
+            builder.setcc(Condition::E, Reg8::R11B); // save zero
+
         // flags
-        builder.mov(f, DMGCPU::Flag_N);
+        uint8_t flags = instr.flags & Op_WriteFlags;
+        setFlags(flags, DMGCPU::Flag_C | DMGCPU::Flag_H | DMGCPU::Flag_Z, DMGCPU::Flag_N);
 
-        builder.setcc(Condition::E, Reg8::R11B); // save zero
-
-        // carry flag
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
-
-        // half carry flag
-        builder.and_(Reg8::R10B, Reg8::R10B); // TODO: TEST?
-        builder.jcc(Condition::E, 3); // carry not set
-        builder.or_(f, DMGCPU::Flag_H); // set H
+        if(flags & DMGCPU::Flag_H)
+        {
+            // half carry flag
+            builder.and_(Reg8::R10B, Reg8::R10B); // TODO: TEST?
+            builder.jcc(Condition::E, 3); // carry not set
+            builder.or_(f, DMGCPU::Flag_H); // set H
+        }
 
         // zero flag
-        builder.and_(Reg8::R11B, Reg8::R11B); // TODO: TEST?
-        builder.jcc(Condition::E, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        if(flags & DMGCPU::Flag_Z)
+        {
+            builder.and_(Reg8::R11B, Reg8::R11B); // TODO: TEST?
+            builder.jcc(Condition::E, 3); // if != 0
+            builder.or_(f, DMGCPU::Flag_Z); // set Z
+        }
     };
 
-    const auto inc = [&builder](Reg8 r)
+    const auto inc = [&instr, &builder, &setFlags](Reg8 r)
     {
         auto f = reg(Reg::F);
-        builder.and_(f, DMGCPU::Flag_C); // preserve C
+
+        if(instr.flags & Op_WriteFlags)
+            builder.and_(f, DMGCPU::Flag_C); // preserve C
 
         // H flag
-        builder.mov(Reg8::R10B, f); // save F
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            builder.mov(Reg8::R10B, f); // save F
 
-        builder.mov(f, r); // & 0xF == 0xF (use F as tmp)
-        builder.and_(f, 0xF);
-        builder.cmp(f, 0xF);
-        builder.mov(f, Reg8::R10B); // restore F
-        builder.jcc(Condition::NE, 3); // != 0xF
-        builder.or_(f, DMGCPU::Flag_H); // set H
+            builder.mov(f, r); // & 0xF == 0xF (use F as tmp)
+            builder.and_(f, 0xF);
+            builder.cmp(f, 0xF);
+            builder.mov(f, Reg8::R10B); // restore F
+            builder.jcc(Condition::NE, 3); // != 0xF
+            builder.or_(f, DMGCPU::Flag_H); // set H
+        }
 
-        // do inc and set Z
+        // do inc
         builder.inc(r);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+
+        uint8_t flags = instr.flags & Op_WriteFlags;
+        setFlags(flags, DMGCPU::Flag_Z, 0, DMGCPU::Flag_C); // only works because preserve C
     };
 
-    const auto dec = [&builder](Reg8 r)
+    const auto dec = [&instr, &builder, &setFlags](Reg8 r)
     {
         auto f = reg(Reg::F);
-        builder.and_(f, DMGCPU::Flag_C); // preserve C
+
+        if(instr.flags & Op_WriteFlags)
+            builder.and_(f, DMGCPU::Flag_C); // preserve C
 
         // H flag
-        builder.mov(Reg8::R10B, f); // save F
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            builder.mov(Reg8::R10B, f); // save F
 
-        builder.mov(f, r); // & 0xF == 0 (use F as tmp)
-        builder.and_(f, 0xF);
-        builder.mov(f, Reg8::R10B); // restore F
-        builder.jcc(Condition::NE, 3); // != 0x0
-        builder.or_(f, DMGCPU::Flag_H); // set H
+            builder.mov(f, r); // & 0xF == 0 (use F as tmp)
+            builder.and_(f, 0xF);
+            builder.mov(f, Reg8::R10B); // restore F
+            builder.jcc(Condition::NE, 3); // != 0x0
+            builder.or_(f, DMGCPU::Flag_H); // set H
+        }
 
-        builder.or_(f, DMGCPU::Flag_N); // set N
-
-        // do dec and set Z
+        // do dec
         builder.dec(r);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+
+        uint8_t flags = instr.flags & Op_WriteFlags;
+        setFlags(flags, DMGCPU::Flag_Z, DMGCPU::Flag_N, DMGCPU::Flag_C); // only works because preserve C
     };
 
-    const auto add16 = [&builder, &cycleExecuted](Reg16 b)
+    const auto add16 = [&instr, &builder, &setFlags, &cycleExecuted](Reg16 b)
     {
         auto a = reg(WReg::HL);
         auto f = reg(Reg::F);
 
-        // TODO: all of this ...
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // copy src/dst
+            builder.mov(Reg32::R10D, static_cast<Reg32>(a));
+            builder.mov(Reg32::R11D, static_cast<Reg32>(b));
 
-        // copy src/dst
-        builder.mov(Reg32::R10D, static_cast<Reg32>(a));
-        builder.mov(Reg32::R11D, static_cast<Reg32>(b));
-
-        // mask and do "half"(3/4?) add
-        builder.and_(Reg32::R10D, 0xFFF);
-        builder.and_(Reg32::R11D, 0xFFF);
-        builder.add(Reg32::R10D, Reg32::R11D);
-
-        // TODO: ... can be avoided if we don't need the H flag
+            // mask and do "half"(3/4?) add
+            builder.and_(Reg32::R10D, 0xFFF);
+            builder.and_(Reg32::R11D, 0xFFF);
+            builder.add(Reg32::R10D, Reg32::R11D);
+        }
 
         // preserve Z flag
-        builder.and_(f, DMGCPU::Flag_Z);
+        if(instr.flags & Op_WriteFlags)
+            builder.and_(f, DMGCPU::Flag_Z);
 
         // do add
         builder.add(a, b);
 
-        // carry flag
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
+        uint8_t flags = instr.flags & Op_WriteFlags;
+        setFlags(flags, DMGCPU::Flag_C | DMGCPU::Flag_H | DMGCPU::Flag_N, 0, DMGCPU::Flag_Z);
 
         // half carry flag
-        // r10d > 0xFFF ? H : 0
-        builder.cmp(Reg32::R10D, 0xFFF);
-        builder.jcc(Condition::BE, 3); // <= 0xFFF
-        builder.or_(f, DMGCPU::Flag_H); // set H
+        if(flags & Op_WriteH)
+        {
+            // r10d > 0xFFF ? H : 0
+            builder.cmp(Reg32::R10D, 0xFFF);
+            builder.jcc(Condition::BE, 3); // <= 0xFFF
+            builder.or_(f, DMGCPU::Flag_H); // set H
+        }
 
         cycleExecuted();
     };
@@ -2950,18 +3046,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             load8(Reg::B);
             break;
         case 0x07: // RLCA
-        {
-            auto f = reg(Reg::F);
-
             builder.rol(reg(Reg::A), 1);
-
-            // copy carry out
-            // (shortcut as this is the only flag)
-            builder.setcc(Condition::B, f);
-            builder.shl(f, 4); // C is bit 4
-
+            carryOut();
             break;
-        }
         case 0x08: // LD (nn),SP
         {
             uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
@@ -2999,17 +3086,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             load8(Reg::C);
             break;
         case 0x0F: // RRCA
-        {
-            auto f = reg(Reg::F);
-
             builder.ror(reg(Reg::A), 1);
-
-            // copy carry out
-            builder.setcc(Condition::B, f);
-            builder.shl(f, 4); // C is bit 4
-
+            carryOut();
             break;
-        }
 
         case 0x11: // LD DE,nn
             load16(WReg::DE);
@@ -3040,10 +3119,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.stc(); // CF = 1
 
             builder.rcl(reg(Reg::A), 1);
-
-            // copy carry out
-            builder.setcc(Condition::B, f);
-            builder.shl(f, 4); // C is bit 4
+            carryOut();
 
             break;
         }
@@ -3079,10 +3155,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.stc(); // CF = 1
 
             builder.rcr(reg(Reg::A), 1);
-
-            // copy carry out
-            builder.setcc(Condition::B, f);
-            builder.shl(f, 4); // C is bit 4
+            carryOut();
 
             break;
         }
