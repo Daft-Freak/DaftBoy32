@@ -2155,9 +2155,6 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc, std::vector<OpInfo> 
     branchTargets.clear();
     forwardBranchesToPatch.clear();
 
-    // jump to exit code
-    builder.jmp(exitPtr - builder.getPtr());
-
     if(builder.getError())
     {
         printf("recompile @%04X failed due to error (out of space?)\n", startPC);
@@ -2945,6 +2942,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             // will be patched later if possible
             builder.jmp(exitPtr - builder.getPtr(), true);
         }
+
+        // exit if branch not taken
+        if(flag && (instr.flags & Op_Last))
+            builder.jmp(exitPtr - builder.getPtr());
     };
 
     const auto jumpRel = [this, &instr, &pc, &builder, &cycleExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
@@ -2993,6 +2994,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             // will be patched later if possible
             builder.jmp(exitPtr - builder.getPtr(), true);
         }
+
+        // exit if branch not taken
+        if(flag && (instr.flags & Op_Last))
+            builder.jmp(exitPtr - builder.getPtr());
     };
 
     const auto call = [this, &instr, &pc, &builder, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
@@ -3030,6 +3035,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         // TODO
         assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
         builder.jmp(exitPtr - builder.getPtr());
+
+        // exit if branch not taken
+        if(flag && (instr.flags & Op_Last))
+            builder.jmp(exitPtr - builder.getPtr());
     };
 
     const auto reset = [this, &pc, &builder, &cycleExecuted, &writeMem](int addr)
@@ -3048,7 +3057,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.jmp(exitPtr - builder.getPtr()); // exit
     };
 
-    const auto ret = [this, &pc, &builder, &cycleExecuted, &readMem](int flag = 0, bool set = true)
+    const auto ret = [this, &instr, &pc, &builder, &cycleExecuted, &readMem](int flag = 0, bool set = true)
     {
         // condition
         if(flag)
@@ -3084,6 +3093,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         assert(exitPtr - builder.getPtr() < -126);
         builder.jmp(exitPtr - builder.getPtr()); // it's > 128 bytes to here from the start of the op, so should always be 5 bytes
+
+        // exit if branch not taken
+        if(flag && (instr.flags & Op_Last))
+            builder.jmp(exitPtr - builder.getPtr());
     };
 
     switch(opcode)
@@ -4183,6 +4196,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             printf("unhandled op in recompile %02X\n", opcode);
             builder.resetPtr(oldPtr);
             builder.mov(pcReg32, pc - 1);
+            builder.jmp(exitPtr - builder.getPtr());
             return false;
     }
 
