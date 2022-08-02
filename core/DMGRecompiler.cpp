@@ -4202,54 +4202,61 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
-    // helpers
-    const auto swap = [&builder](Reg8 r)
+    // the flags here are more simple
+    // all the shifts/rotates set C and Z
+    // SWAP only sets Z
+    const auto setFlags = [&instr, &builder](Reg8 r, bool isRotate = false, bool setC = true)
     {
         auto f = reg(Reg::F);
 
-        builder.rol(r, 4); // v = (v >> 4) | (v << 4);
+        if(setC && (instr.flags & DMGCPU::Flag_C))
+        {
+            builder.setcc(Condition::B, f);
+            builder.shl(f, 4); // C is bit 4
 
-        // flags
-        builder.mov(f, 0);
-        builder.cmp(r, 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+            // also want the other one
+            if(instr.flags & DMGCPU::Flag_Z)
+            {
+                builder.cmp(r, 0);
+                builder.jcc(Condition::NE, 3); // if != 0
+                builder.or_(f, DMGCPU::Flag_Z); // set Z
+            }
+        }
+        else if(instr.flags & DMGCPU::Flag_Z)
+        {
+            if(isRotate)
+                builder.cmp(r, 0); // rotates don't set ZF
+
+            builder.setcc(Condition::E, f);
+            builder.shl(f, 7); // Z is bit 7
+        }
+        else if(instr.flags & Op_WriteFlags)
+            builder.mov(f, 0); // something relying on an unset flag
+    };
+
+    // helpers
+    const auto swap = [&builder, &setFlags](Reg8 r)
+    {
+        builder.rol(r, 4); // v = (v >> 4) | (v << 4);
+        setFlags(r, true, false);
     };
 
     // RLC
-    const auto rotLeftNoCarry = [&builder](Reg8 r)
+    const auto rotLeftNoCarry = [&builder, &setFlags](Reg8 r)
     {
-        auto f = reg(Reg::F);
-
         builder.rol(r, 1);
-
-        builder.mov(f, 0);
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
-
-        builder.cmp(r, 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        setFlags(r, true);
     };
 
     // RRC
-    const auto rotRightNoCarry = [&builder](Reg8 r)
+    const auto rotRightNoCarry = [&builder, &setFlags](Reg8 r)
     {
-        auto f = reg(Reg::F);
-
         builder.ror(r, 1);
-
-        builder.mov(f, 0);
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
-
-        builder.cmp(r, 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        setFlags(r, true);
     };
 
     // RL
-    const auto rotLeft = [&builder](Reg8 r)
+    const auto rotLeft = [&builder, &setFlags](Reg8 r)
     {
         auto f = reg(Reg::F);
 
@@ -4259,18 +4266,11 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
         builder.stc(); // CF = 1
 
         builder.rcl(r, 1);
-
-        builder.mov(f, 0);
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
-
-        builder.cmp(r, 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        setFlags(r, true);
     };
 
     // RR
-    const auto rotRight = [&builder](Reg8 r)
+    const auto rotRight = [&builder, &setFlags](Reg8 r)
     {
         auto f = reg(Reg::F);
 
@@ -4280,75 +4280,47 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
         builder.stc(); // CF = 1
 
         builder.rcr(r, 1);
-
-        builder.mov(f, 0);
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
-
-        builder.cmp(r, 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        setFlags(r, true);
     };
 
     // SLA
-    const auto shiftLeft = [&builder](Reg8 r)
+    const auto shiftLeft = [&builder, &setFlags](Reg8 r)
     {
-        auto f = reg(Reg::F);
-
         builder.shl(r, 1);
-
-        builder.mov(f, 0);
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
-
-        builder.cmp(r, 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        setFlags(r);
     };
 
     // SRA
-    const auto shiftRightArith = [&builder](Reg8 r)
+    const auto shiftRightArith = [&builder, &setFlags](Reg8 r)
     {
-        auto f = reg(Reg::F);
-
         builder.sar(r, 1);
-
-        builder.mov(f, 0);
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
-
-        builder.cmp(r, 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        setFlags(r);
     };
 
     // SRL
-    const auto shiftRight = [&builder](Reg8 r)
+    const auto shiftRight = [&builder, &setFlags](Reg8 r)
     {
-        auto f = reg(Reg::F);
-
         builder.shr(r, 1);
-
-        builder.mov(f, 0);
-        builder.jcc(Condition::AE, 3); // if !carry
-        builder.or_(f, DMGCPU::Flag_C); // set C
-
-        builder.cmp(r, 0);
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        setFlags(r);
     };
 
-    const auto testBit = [&builder](Reg8 r, int bit)
+    const auto testBit = [&instr, &builder](Reg8 r, int bit)
     {
         auto f = reg(Reg::F);
 
-        builder.and_(f, DMGCPU::Flag_C); // preserve C
-        builder.or_(f, DMGCPU::Flag_H); // set H
+        if(instr.flags & Op_WriteFlags)
+            builder.and_(f, DMGCPU::Flag_C); // preserve C
+        
+        if(instr.flags & DMGCPU::Flag_H)
+            builder.or_(f, DMGCPU::Flag_H); // set H
 
         builder.test(r, 1 << bit);
 
-        builder.jcc(Condition::NE, 3); // if != 0
-        builder.or_(f, DMGCPU::Flag_Z); // set Z
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.jcc(Condition::NE, 3); // if != 0
+            builder.or_(f, DMGCPU::Flag_Z); // set Z
+        }
     };
 
     const auto set = [&builder](Reg8 r, int bit)
