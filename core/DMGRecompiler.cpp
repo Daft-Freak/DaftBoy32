@@ -5077,7 +5077,7 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
         auto mappedAddr = cpu->mem.makeBankedAddress(addr);
 
         // skip anything not in RAM
-        for(auto it = compiler.compiled.lower_bound(0x8000); it != compiler.compiled.end();)
+        for(auto it = compiler.compiled.lower_bound(1 << 28 /*VRAM as a mapped address */); it != compiler.compiled.end();)
         {
             if(mappedAddr >= it->first && mappedAddr < it->second.endPC)
             {
