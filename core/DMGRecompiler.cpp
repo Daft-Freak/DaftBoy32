@@ -1352,6 +1352,11 @@ void DMGRecompiler::handleBranch()
                 }
                 
                 it = compiled.emplace(mappedAddr, info).first;
+
+                // running code from RAM other than HRAM seems uncommon
+                // so track the min address used for code
+                if(cpu.pc > 0x8000/*in RAM*/ && cpu.pc < minRAMCode)
+                    minRAMCode = cpu.pc;
             }
             codePtr = it->second.startPtr;
         }
@@ -5069,11 +5074,11 @@ uint8_t DMGRecompiler::readMem(DMGCPU *cpu, uint16_t addr)
 
 int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
 {
-    // invalidate code on mem write
-    if(addr & 0x8000)
-    {
-        auto &compiler = cpu->compiler; // oh right, this is a static func
+    auto &compiler = cpu->compiler; // oh right, this is a static func
 
+    // invalidate code on mem write
+    if(addr >= compiler.minRAMCode)
+    {
         auto mappedAddr = cpu->mem.makeBankedAddress(addr);
 
         // skip anything not in RAM
