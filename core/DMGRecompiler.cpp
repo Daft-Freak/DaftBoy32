@@ -142,6 +142,8 @@ public:
     void add(Reg8 dst, uint8_t imm);
     void add(Reg64 dst, int8_t imm);
     void add(Reg16 dst, int8_t imm);
+    void addD(int8_t imm, Reg64 base, int disp = 0);
+    void addW(int8_t imm, Reg64 base, int disp = 0);
 
     void adc(Reg8 dst, Reg8 src);
     void adc(Reg8 dst, uint8_t imm);
@@ -314,6 +316,24 @@ void X86Builder::add(Reg16 dst, int8_t imm)
     write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dstReg);
     write(imm);
+}
+
+// imm -> mem, 32 bit mem, 8 bit sign extended
+void X86Builder::addD(int8_t imm, Reg64 base, int disp)
+{
+    auto baseReg = static_cast<int>(base);
+
+    encodeREX(false, 0, 0, baseReg);
+    write(0x83); // opcode, w = 1, s = 1
+    encodeModRM(0, baseReg, disp);
+    write(imm);
+}
+
+// imm -> mem, 16 bit mem, 8 bit sign extended
+void X86Builder::addW(int8_t imm, Reg64 base, int disp)
+{
+    write(0x66); // 16 bit override
+    addD(imm, base, disp);
 }
 
 // reg -> reg, 8bit
@@ -1147,6 +1167,8 @@ enum RegFlags
 static const int cycleExecutedCallSize = 23;
 static const int readMemRegCallSize = 30;
 static const int writeMemRegImmCallSize = 34;
+
+static const int cycleExecutedInlineSize = 10;
 
 // reg helpers
 static const Reg8 regMap8[]
@@ -2223,9 +2245,20 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     // cycles = EDI
 
     // TODO: shared trampolines?
-    auto cycleExecuted = [&builder, this, &cyclesThisInstr]()
+    auto cycleExecuted = [this, &builder, pc, &cyclesThisInstr]()
     {
         cyclesThisInstr += 4;
+
+        if(pc < 0xFF00)
+        {
+            // since we refuse to compile when OAM DMA is active we can just inline cycleExecuted (-updateOAMDMA) when not running from HRAM
+            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+
+            //builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
+            builder.addD(-4, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cyclesToRun) - cpuPtr);
+            builder.addD(4, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr);
+            return;
+        }
 
         // safe to skip here as we take no args
         callSaveOrSkip(builder);
@@ -2880,8 +2913,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
                 builder.mov(pcReg32, pc); // otherwise we're going to exit, so save PC
 
             builder.test(reg(Reg::F), flag);
-            int len = ((instr.flags & Op_Branch) ? 3/*sub*/ : 6/*mov*/) + 5/*jmp*/; 
-            builder.jcc(set ? Condition::E : Condition::NE, len + cycleExecutedCallSize);
+            int len = ((instr.flags & Op_Branch) ? 3/*sub*/ : 6/*mov*/) + 5/*jmp*/;
+
+            if(pc >= 0xFF00)
+                len += cycleExecutedCallSize;
+            else
+                len += cycleExecutedInlineSize;
+
+            builder.jcc(set ? Condition::E : Condition::NE, len);
         }
 
         cycleExecuted();
@@ -2922,8 +2961,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
                 builder.mov(pcReg32, pc);
 
             builder.test(reg(Reg::F), flag);
-            int len = ((instr.flags & Op_Branch) ? 3/*sub*/ : 6/*mov*/) + 5/*jmp*/; 
-            builder.jcc(set ? Condition::E : Condition::NE, len + cycleExecutedCallSize);
+            int len = ((instr.flags & Op_Branch) ? 3/*sub*/ : 6/*mov*/) + 5/*jmp*/;
+
+            if(pc >= 0xFF00)
+                len += cycleExecutedCallSize;
+            else
+                len += cycleExecutedInlineSize;
+
+            builder.jcc(set ? Condition::E : Condition::NE, len);
         }
 
         cycleExecuted();
@@ -2961,7 +3006,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 19 + cycleExecutedCallSize * 3 + writeMemRegImmCallSize * 2 - 6 * 2);
+
+            int len = 19 + writeMemRegImmCallSize * 2;
+            if(pc >= 0xFF00)
+                len += cycleExecutedCallSize * 3 - 6 * 2;
+            else
+                len += cycleExecutedInlineSize * 3;
+
+            builder.jcc(set ? Condition::E : Condition::NE, len);
         }
 
         cycleExecuted(); // delay
@@ -3005,7 +3057,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
-            builder.jcc(set ? Condition::E : Condition::NE, 27 + cycleExecutedCallSize * 3 + readMemRegCallSize * 2 - 8 * 2/*adjacent calls*/);
+
+            int len = 27 + readMemRegCallSize * 2;
+            if(pc >= 0xFF00)
+                len += cycleExecutedCallSize * 3 - 8 * 2/*adjacent calls*/;
+            else
+                len += cycleExecutedInlineSize * 3;
+
+            builder.jcc(set ? Condition::E : Condition::NE, len);
         }
 
         auto pcReg8 = static_cast<Reg8>(pcReg16);
@@ -5114,7 +5173,13 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
     // ... also, there could be an interrupt/DMA pending RIGHT NOW
     bool inHRAM = cpu->pc >= 0xFF00; // PC is not up-to-date here, but should be close
     if((cpu->masterInterruptEnable && cpu->serviceableInterrupts) || cpu->gdmaTriggered || (!inHRAM && (cpu->oamDMADelay || cpu->oamDMACount)))
+    {
+        // we're going to miss the first updateOAMDMA call
+        if(cpu->oamDMADelay == 2)
+            cpu->oamDMADelay--;
+
         return 0;
+    }
 
     int cycles = std::min(cpu->cyclesToRun, cpu->getDisplay().getCyclesToNextUpdate());
 
