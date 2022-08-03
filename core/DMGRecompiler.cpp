@@ -1171,26 +1171,6 @@ static const int writeMemRegImmCallSize = 34;
 static const int cycleExecutedInlineSize = 10;
 
 // reg helpers
-static const Reg8 regMap8[]
-{
-    Reg8::AH, // A
-    Reg8::AL, // F
-    Reg8::CH, // B
-    Reg8::CL, // C
-    Reg8::DH, // D
-    Reg8::DL, // E
-    Reg8::BH, // H
-    Reg8::BL  // L
-};
-
-static const Reg16 regMap16[]
-{
-    Reg16::AX, // AF
-    Reg16::CX, // BC
-    Reg16::DX, // DE
-    Reg16::BX  // HL
-};
-
 static const Reg32 pcReg32 = Reg32::R12D;
 static const Reg16 pcReg16 = Reg16::R12W;
 
@@ -1198,13 +1178,31 @@ static const Reg32 spReg32 = Reg32::R13D;
 static const Reg16 spReg16 = Reg16::R13W;
 static const Reg8 spReg8 = Reg8::R13B; // mostly for the adds with the strange flags
 
-inline Reg8 reg(DMGCPU::Reg r)
+inline constexpr Reg8 reg(DMGCPU::Reg r)
 {
+    const Reg8 regMap8[]
+    {
+        Reg8::AH, // A
+        Reg8::AL, // F
+        Reg8::CH, // B
+        Reg8::CL, // C
+        Reg8::DH, // D
+        Reg8::DL, // E
+        Reg8::BH, // H
+        Reg8::BL  // L
+    };
     return regMap8[static_cast<int>(r)];
 }
 
-inline Reg16 reg(DMGCPU::WReg r)
+inline constexpr Reg16 reg(DMGCPU::WReg r)
 {
+    const Reg16 regMap16[]
+    {
+        Reg16::AX, // AF
+        Reg16::CX, // BC
+        Reg16::DX, // DE
+        Reg16::BX  // HL
+    };
     return regMap16[static_cast<int>(r)];
 }
 
