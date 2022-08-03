@@ -2230,6 +2230,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     pc += instr.len;
 
     int cyclesThisInstr = 0;
+    int delayedCyclesExecuted = 0;
 
     bool checkInterrupts = false;
 
@@ -2242,18 +2243,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     // cycles = EDI
 
     // TODO: shared trampolines?
-    auto cycleExecuted = [this, &builder, pc, &cyclesThisInstr]()
+    auto cycleExecuted = [this, &builder, pc, &cyclesThisInstr, &delayedCyclesExecuted]()
     {
         cyclesThisInstr += 4;
 
         if(pc < 0xFF00)
         {
             // since we refuse to compile when OAM DMA is active we can just inline cycleExecuted (-updateOAMDMA) when not running from HRAM
-            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-
-            //builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
-            builder.addD(-4, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cyclesToRun) - cpuPtr);
-            builder.addD(4, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr);
+            // ...and we can also do it slightly later
+            delayedCyclesExecuted += 4;
             return;
         }
 
@@ -2265,6 +2263,22 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder);
+    };
+
+    auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted]()
+    {
+        if(!delayedCyclesExecuted)
+            return;
+
+        assert(delayedCyclesExecuted < 127);
+        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+
+        int8_t i8Cycles = delayedCyclesExecuted;
+
+        builder.addD(-i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cyclesToRun) - cpuPtr);
+        builder.addD(i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr);
+
+        delayedCyclesExecuted = 0;
     };
 
     // cycle for opcode read
@@ -2291,8 +2305,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         checkInterrupts = true;
     }
 
-    auto readMem = [&builder, this](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
+    auto readMem = [&builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
     {
+        syncCyclesExecuted();
         callSave(builder);
 
         if(std::holds_alternative<Reg16>(addr))
@@ -2308,8 +2323,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         callRestore(builder, dstReg);
     };
 
-    auto writeMem = [&builder, this](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
+    auto writeMem = [&builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
     {
+        syncCyclesExecuted();
         callSave(builder);
 
         if(std::holds_alternative<Reg16>(addr))
@@ -2895,7 +2911,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.dec(reg(r));
     };
 
-    const auto jump = [this, &instr, &pc, &builder, &cycleExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
+    const auto jump = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
     {
         uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
         cycleExecuted();
@@ -2906,6 +2922,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         // condition
         if(flag)
         {
+            syncCyclesExecuted();
             if(!(instr.flags & Op_Branch)) // branch flag means the jump is in range, so we should be able to handle it
                 builder.mov(pcReg32, pc); // otherwise we're going to exit, so save PC
 
@@ -2921,6 +2938,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         }
 
         cycleExecuted();
+        syncCyclesExecuted();
 
         // sub cycles early (we jump past the usual code that does this)
         if(instr.flags & Op_Branch)
@@ -2948,7 +2966,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.jmp(exitPtr - builder.getPtr());
     };
 
-    const auto jumpRel = [this, &instr, &pc, &builder, &cycleExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
+    const auto jumpRel = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
     {
         int8_t off = instr.opcode[1];
         cycleExecuted();
@@ -2958,6 +2976,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         // condition
         if(flag)
         {
+            syncCyclesExecuted();
+
             if(!(instr.flags & Op_Branch))
                 builder.mov(pcReg32, pc);
 
@@ -2973,6 +2993,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         }
 
         cycleExecuted();
+        syncCyclesExecuted();
 
         // sub cycles early (we jump past the usual code that does this)
         if(instr.flags & Op_Branch)
@@ -3000,7 +3021,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.jmp(exitPtr - builder.getPtr());
     };
 
-    const auto call = [this, &instr, &pc, &builder, &cycleExecuted, &writeMem](int flag = 0, bool set = true)
+    const auto call = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &writeMem](int flag = 0, bool set = true)
     {
         uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
         cycleExecuted();
@@ -3009,6 +3030,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         // condition
         if(flag)
         {
+            syncCyclesExecuted();
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
 
@@ -3029,9 +3051,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.dec(spReg16);
         writeMem(spReg16, static_cast<uint8_t>(pc));
         cycleExecuted();
+        syncCyclesExecuted();
 
         builder.mov(pcReg32, addr);
-        
+       
         // TODO
         assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
         builder.jmp(exitPtr - builder.getPtr());
@@ -3041,7 +3064,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.jmp(exitPtr - builder.getPtr());
     };
 
-    const auto reset = [this, &pc, &builder, &cycleExecuted, &writeMem](int addr)
+    const auto reset = [this, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &writeMem](int addr)
     {
         cycleExecuted(); // delay
 
@@ -3051,18 +3074,20 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.dec(spReg16);
         writeMem(spReg16, static_cast<uint8_t>(pc));
         cycleExecuted();
+        syncCyclesExecuted();
 
         builder.mov(pcReg32, addr);
 
         builder.jmp(exitPtr - builder.getPtr()); // exit
     };
 
-    const auto ret = [this, &instr, &pc, &builder, &cycleExecuted, &readMem](int flag = 0, bool set = true)
+    const auto ret = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &readMem](int flag = 0, bool set = true)
     {
         // condition
         if(flag)
         {
             cycleExecuted(); // delay
+            syncCyclesExecuted();
 
             builder.mov(pcReg32, pc);
             builder.test(reg(Reg::F), flag);
@@ -3071,7 +3096,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             if(pc >= 0xFF00)
                 len += cycleExecutedCallSize * 3 - 8 * 2/*adjacent calls*/;
             else
-                len += cycleExecutedInlineSize * 3;
+                len += cycleExecutedInlineSize * 2;
 
             builder.jcc(set ? Condition::E : Condition::NE, len);
         }
@@ -3090,6 +3115,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.shl(Reg32::R10D, 8);
         builder.or_(pcReg16, Reg16::R10W);
         cycleExecuted();
+        syncCyclesExecuted();
 
         assert(exitPtr - builder.getPtr() < -126);
         builder.jmp(exitPtr - builder.getPtr()); // it's > 128 bytes to here from the start of the op, so should always be 5 bytes
@@ -3625,6 +3651,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtr);
 
             // exit
+            syncCyclesExecuted();
             builder.mov(pcReg32, pc); // exits need to set PC themselves
             builder.call(saveAndExitPtr - builder.getPtr());
             break;
@@ -3928,6 +3955,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             jump(DMGCPU::Flag_Z);
             break;
         case 0xCB:
+            //TODO: handle this
+            syncCyclesExecuted();
             recompileExInstruction(instr, builder, cyclesThisInstr);
             break;
         case 0xCC: // CALL Z,nn
@@ -4065,6 +4094,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
         }
         case 0xE9: // JP (HL)
+            syncCyclesExecuted();
             builder.movzx(pcReg32, reg(WReg::HL)); // PC = HL
             builder.jmp(exitPtr - builder.getPtr()); // exit
             break;
@@ -4199,6 +4229,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.jmp(exitPtr - builder.getPtr());
             return false;
     }
+
+    syncCyclesExecuted();
 
     if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
     {
