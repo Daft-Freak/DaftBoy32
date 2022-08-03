@@ -3209,9 +3209,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cycleExecuted();
             break;
         }
+
         case 0x09: // ADD HL,BC
-            add16(reg(WReg::BC));
+        case 0x19: // ADD HL,DE
+        case 0x29: // ADD HL,HL
+        case 0x39: // ADD HL,SP
+            add16(regMap16[opcode >> 4]);
             break;
+
         case 0x0A: // LD A,(BC)
         case 0x1A: // LD A,(DE)
             readMem(regMap16[opcode >> 4], reg(Reg::A));
@@ -3239,9 +3244,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         }
         case 0x18: // JR m
             jumpRel();
-            break;
-        case 0x19: // ADD HL,DE
-            add16(reg(WReg::DE));
             break;
 
         case 0x1F: // RRA
@@ -3328,9 +3330,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0x28: // JR Z,n
             jumpRel(DMGCPU::Flag_Z);
             break;
-        case 0x29: // ADD HL,HL
-            add16(reg(WReg::HL));
-            break;
+
         case 0x2A: // LDI A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
             cycleExecuted();
@@ -3394,9 +3394,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0x38: // JR C,n
             jumpRel(DMGCPU::Flag_C);
             break;
-        case 0x39: // ADD HL,SP
-            add16(spReg16);
-            break;
+
         case 0x3A: // LDD A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
             cycleExecuted();
