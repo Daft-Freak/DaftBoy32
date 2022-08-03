@@ -3568,22 +3568,13 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         }
 
         case 0x80: // ADD A,B
-            add(reg(Reg::B));
-            break;
         case 0x81: // ADD A,C
-            add(reg(Reg::C));
-            break;
         case 0x82: // ADD A,D
-            add(reg(Reg::D));
-            break;
         case 0x83: // ADD A,E
-            add(reg(Reg::E));
-            break;
         case 0x84: // ADD A,H
-            add(reg(Reg::H));
-            break;
         case 0x85: // ADD A,L
-            add(reg(Reg::L));
+        case 0x87: // ADD A,A
+            add(regMap8[opcode & 7]);
             break;
         case 0x86: // ADD (HL)
         {
@@ -3593,26 +3584,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             add(tmp);
             break;
         }
-        case 0x87: // ADD A,A
-            add(reg(Reg::A));
-            break;
+
         case 0x88: // ADC A,B
-            addWithCarry(reg(Reg::B));
-            break;
         case 0x89: // ADC A,C
-            addWithCarry(reg(Reg::C));
-            break;
         case 0x8A: // ADC A,D
-            addWithCarry(reg(Reg::D));
-            break;
         case 0x8B: // ADC A,E
-            addWithCarry(reg(Reg::E));
-            break;
         case 0x8C: // ADC A,F
-            addWithCarry(reg(Reg::H));
-            break;
         case 0x8D: // ADC A,H
-            addWithCarry(reg(Reg::L));
+        case 0x8F: // ADC A,A
+            addWithCarry(regMap8[opcode & 7]);
             break;
         case 0x8E: // ADC (HL)
         {
@@ -3622,26 +3602,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             addWithCarry(tmp);
             break;
         }
-        case 0x8F: // ADC A,A
-            addWithCarry(reg(Reg::A));
-            break;
+
         case 0x90: // SUB B
-            sub(reg(Reg::B));
-            break;
         case 0x91: // SUB C
-            sub(reg(Reg::C));
-            break;
         case 0x92: // SUB D
-            sub(reg(Reg::D));
-            break;
         case 0x93: // SUB E
-            sub(reg(Reg::E));
-            break;
         case 0x94: // SUB H
-            sub(reg(Reg::H));
-            break;
         case 0x95: // SUB L
-            sub(reg(Reg::L));
+        case 0x97: // SUB A
+            sub(regMap8[opcode & 7]);
             break;
         case 0x96: // SUB (HL)
         {
@@ -3651,26 +3620,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             sub(tmp);
             break;
         }
-        case 0x97: // SUB A
-            sub(reg(Reg::A));
-            break;
+
         case 0x98: // SBC B
-            subWithCarry(reg(Reg::B));
-            break;
         case 0x99: // SBC C
-            subWithCarry(reg(Reg::C));
-            break;
         case 0x9A: // SBC D
-            subWithCarry(reg(Reg::D));
-            break;
         case 0x9B: // SBC E
-            subWithCarry(reg(Reg::E));
-            break;
         case 0x9C: // SBC H
-            subWithCarry(reg(Reg::H));
-            break;
         case 0x9D: // SBC L
-            subWithCarry(reg(Reg::L));
+        case 0x9F: // SBC A
+            subWithCarry(regMap8[opcode & 7]);
             break;
         case 0x9E: // SBC (HL)
         {
@@ -3680,26 +3638,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             subWithCarry(tmp);
             break;
         }
-        case 0x9F: // SBC A
-            subWithCarry(reg(Reg::A));
-            break;
+
         case 0xA0: // AND B
-            bitAnd(reg(Reg::B));
-            break;
         case 0xA1: // AND C
-            bitAnd(reg(Reg::C));
-            break;
         case 0xA2: // AND D
-            bitAnd(reg(Reg::D));
-            break;
         case 0xA3: // AND E
-            bitAnd(reg(Reg::E));
-            break;
         case 0xA4: // AND H
-            bitAnd(reg(Reg::H));
-            break;
         case 0xA5: // AND L
-            bitAnd(reg(Reg::L));
+        case 0xA7: // AND A
+            bitAnd(regMap8[opcode & 7]);
             break;
         case 0xA6: // AND (HL)
         {
@@ -3709,26 +3656,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             bitAnd(tmp);
             break;
         }
-        case 0xA7: // AND A
-            bitAnd(reg(Reg::A));
-            break;
+
         case 0xA8: // XOR B
-            bitXor(reg(Reg::B));
-            break;
         case 0xA9: // XOR C
-            bitXor(reg(Reg::C));
-            break;
         case 0xAA: // XOR D
-            bitXor(reg(Reg::D));
-            break;
         case 0xAB: // XOR E
-            bitXor(reg(Reg::E));
-            break;
         case 0xAC: // XOR H
-            bitXor(reg(Reg::H));
-            break;
         case 0xAD: // XOR L
-            bitXor(reg(Reg::L));
+            bitXor(regMap8[opcode & 7]);
             break;
         case 0xAE: // XOR (HL)
         {
@@ -3742,22 +3677,13 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
             break;
         case 0xB0: // OR B
-            bitOr(reg(Reg::B));
-            break;
         case 0xB1: // OR C
-            bitOr(reg(Reg::C));
-            break;
         case 0xB2: // OR D
-            bitOr(reg(Reg::D));
-            break;
         case 0xB3: // OR E
-            bitOr(reg(Reg::E));
-            break;
         case 0xB4: // OR H
-            bitOr(reg(Reg::H));
-            break;
         case 0xB5: // OR L
-            bitOr(reg(Reg::L));
+        case 0xB7: // OR A
+            bitOr(regMap8[opcode & 7]);
             break;
         case 0xB6: // OR (HL)
         {
@@ -3767,26 +3693,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             bitOr(tmp);
             break;
         }
-        case 0xB7: // OR A
-            bitOr(reg(Reg::A));
-            break;
+
         case 0xB8: // CP B
-            cmp(reg(Reg::B));
-            break;
         case 0xB9: // CP C
-            cmp(reg(Reg::C));
-            break;
         case 0xBA: // CP D
-            cmp(reg(Reg::D));
-            break;
         case 0xBB: // CP E
-            cmp(reg(Reg::E));
-            break;
         case 0xBC: // CP H
-            cmp(reg(Reg::H));
-            break;
         case 0xBD: // CP L
-            cmp(reg(Reg::L));
+        case 0xBF: // CP A
+            cmp(regMap8[opcode & 7]);
             break;
         case 0xBE: // CP (HL)
         {
@@ -3796,9 +3711,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cmp(tmp);
             break;
         }
-        case 0xBF: // CP A
-            cmp(reg(Reg::A));
-            break;
+
         case 0xC0: // RET NZ
             ret(DMGCPU::Flag_Z, false);
             break;
