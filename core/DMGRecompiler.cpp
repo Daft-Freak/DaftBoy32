@@ -4386,78 +4386,83 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             builder.mov(f, 0); // something relying on an unset flag
     };
 
-    // helpers
-    const auto swap = [&builder, &setFlags](Reg8 r)
+    cycleExecuted();
+
+    bool isMem = (opcode & 7) == 6; // (HL)
+    auto r = isMem ? Reg8::R10B : reg(regMap8[opcode & 7]);
+
+    if(isMem)
     {
-        builder.rol(r, 4); // v = (v >> 4) | (v << 4);
-        setFlags(r, true, false);
-    };
+        readMem(reg(WReg::HL), Reg8::R10B);
+        cycleExecuted();
+    }
 
-    // RLC
-    const auto rotLeftNoCarry = [&builder, &setFlags](Reg8 r)
+    if(opcode < 0x40) // shifts/rotates
     {
-        builder.rol(r, 1);
-        setFlags(r, true);
-    };
+        switch(opcode & ~7)
+        {
+            case 0x00: // RLC
+                builder.rol(r, 1);
+                setFlags(r, true);
+                break;
 
-    // RRC
-    const auto rotRightNoCarry = [&builder, &setFlags](Reg8 r)
+            case 0x08: // RRC
+                builder.ror(r, 1);
+                setFlags(r, true);
+                break;
+
+            case 0x10: // RL
+            {
+                auto f = reg(Reg::F);
+
+                // copy carry flag
+                builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+                builder.jcc(Condition::E, 1); // not set
+                builder.stc(); // CF = 1
+
+                builder.rcl(r, 1);
+                setFlags(r, true);
+                break;
+            }
+
+            case 0x18: // RR
+            {
+                auto f = reg(Reg::F);
+
+                // copy carry flag
+                builder.test(f, DMGCPU::Flag_C); // sets CF to 0
+                builder.jcc(Condition::E, 1); // not set
+                builder.stc(); // CF = 1
+
+                builder.rcr(r, 1);
+                setFlags(r, true);
+                break;
+            }
+
+            case 0x20: // SLA
+                builder.shl(r, 1);
+                setFlags(r);
+                break;
+
+            case 0x28: // SRA
+                builder.sar(r, 1);
+                setFlags(r);
+                break;
+
+            case 0x30: // SWAP
+                builder.rol(r, 4); // v = (v >> 4) | (v << 4);
+                setFlags(r, true, false);
+                break;
+            
+            case 0x38: // SRL
+                builder.shr(r, 1);
+                setFlags(r);
+                break;
+        }
+    }
+    else if(opcode < 0x80) // BIT
     {
-        builder.ror(r, 1);
-        setFlags(r, true);
-    };
-
-    // RL
-    const auto rotLeft = [&builder, &setFlags](Reg8 r)
-    {
-        auto f = reg(Reg::F);
-
-        // copy carry flag
-        builder.test(f, DMGCPU::Flag_C); // sets CF to 0
-        builder.jcc(Condition::E, 1); // not set
-        builder.stc(); // CF = 1
-
-        builder.rcl(r, 1);
-        setFlags(r, true);
-    };
-
-    // RR
-    const auto rotRight = [&builder, &setFlags](Reg8 r)
-    {
-        auto f = reg(Reg::F);
-
-        // copy carry flag
-        builder.test(f, DMGCPU::Flag_C); // sets CF to 0
-        builder.jcc(Condition::E, 1); // not set
-        builder.stc(); // CF = 1
-
-        builder.rcr(r, 1);
-        setFlags(r, true);
-    };
-
-    // SLA
-    const auto shiftLeft = [&builder, &setFlags](Reg8 r)
-    {
-        builder.shl(r, 1);
-        setFlags(r);
-    };
-
-    // SRA
-    const auto shiftRightArith = [&builder, &setFlags](Reg8 r)
-    {
-        builder.sar(r, 1);
-        setFlags(r);
-    };
-
-    // SRL
-    const auto shiftRight = [&builder, &setFlags](Reg8 r)
-    {
-        builder.shr(r, 1);
-        setFlags(r);
-    };
-
-    const auto testBit = [&instr, &builder](Reg8 r, int bit)
-    {
+        int bit = (opcode >> 3) & 7;
         auto f = reg(Reg::F);
 
         if(instr.flags & Op_WriteFlags)
@@ -4473,121 +4478,18 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             builder.jcc(Condition::NE, 3); // if != 0
             builder.or_(f, DMGCPU::Flag_Z); // set Z
         }
-    };
-
-    const auto set = [&builder](Reg8 r, int bit)
-    {
-        builder.or_(r, 1 << bit);
-    };
-
-    const auto setHL = [&builder, &set, &cycleExecuted, &readMem, &writeMem](int bit)
-    {
-        set(Reg8::R10B, bit);
-    };
-
-    const auto reset = [&builder](Reg8 r, int bit)
-    {
-        builder.and_(r, ~(1 << bit));
-    };
-
-    const auto resetHL = [&builder, &reset, &cycleExecuted, &readMem, &writeMem](int bit)
-    {
-        reset(Reg8::R10B, bit);
-    };
-
-    cycleExecuted();
-
-    bool isMem = (opcode & 7) == 6; // (HL)
-
-    if(isMem)
-    {
-        readMem(reg(WReg::HL), Reg8::R10B);
-        cycleExecuted();
-    }
-
-    if(opcode < 0x40) // shifts/rotates
-    {
-        switch(opcode & ~7)
-        {
-            case 0x00: // RLC
-                if(isMem)
-                    rotLeftNoCarry(Reg8::R10B);
-                else
-                    rotLeftNoCarry(reg(regMap8[opcode & 7]));
-                break;
-
-            case 0x08: // RRC
-                if(isMem)
-                    rotRightNoCarry(Reg8::R10B);
-                else
-                    rotRightNoCarry(reg(regMap8[opcode & 7]));
-                break;
-
-            case 0x10: // RL
-                if(isMem)
-                    rotLeft(Reg8::R10B);
-                else
-                    rotLeft(reg(regMap8[opcode & 7]));
-                break;
-
-            case 0x18: // RR
-                if(isMem)
-                    rotRight(Reg8::R10B);
-                else
-                    rotRight(reg(regMap8[opcode & 7]));
-                break;
-
-            case 0x20: // SLA
-                if(isMem)
-                    shiftLeft(Reg8::R10B);
-                else
-                    shiftLeft(reg(regMap8[opcode & 7]));
-                break;
-
-            case 0x28: // SRA
-                if(isMem)
-                    shiftRightArith(Reg8::R10B);
-                else
-                    shiftRightArith(reg(regMap8[opcode & 7]));
-                break;
-
-            case 0x30: // SWAP
-                if(isMem)
-                    swap(Reg8::R10B);
-                else
-                    swap(reg(regMap8[opcode & 7]));
-                break;
-            
-            case 0x38: // SRL
-                if(isMem)
-                    shiftRight(Reg8::R10B);
-                else
-                    shiftRight(reg(regMap8[opcode & 7]));
-                break;
-        }
-    }
-    else if(opcode < 0x80) // BIT
-    {
-        if(isMem)
-            testBit(Reg8::R10B, (opcode >> 3) & 7);
-        else
-            testBit(reg(regMap8[opcode & 7]), (opcode >> 3) & 7);
 
         isMem = false; // this one doesn't write back
     }
     else if(opcode < 0xC0) // RES
     {
-        if(isMem)
-            resetHL((opcode >> 3) & 7);
-        else
-            reset(reg(regMap8[opcode & 7]), (opcode >> 3) & 7);
+        int bit = (opcode >> 3) & 7;
+        builder.and_(r, ~(1 << bit));
     }
     else // SET
     {
-        if(isMem)
-            setHL((opcode >> 3) & 7);
-        else
-            set(reg(regMap8[opcode & 7]), (opcode >> 3) & 7);
+        int bit = (opcode >> 3) & 7;
+        builder.or_(r, 1 << bit);
     }
 
     if(isMem)
