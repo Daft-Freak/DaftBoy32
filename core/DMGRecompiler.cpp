@@ -2431,7 +2431,41 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.and_(reg(Reg::F), 0xF0);
     };
 
-    const auto add = [&instr, &builder, &setFlags, &carryIn](std::variant<Reg8, uint8_t> b, bool withCarry = false)
+    const auto prepareForHCalc = [&builder](Reg8 a, std::variant<Reg8, uint8_t> b, bool saveF)
+    {
+        // shuffles around regs to get a,b in the F reg and R10B (masked to the low half)
+        // ready to do whatever op needs to be done to calculate the H flag
+        // also optionally saves F in R11B
+        auto f = reg(Reg::F);
+
+        if(saveF)
+            builder.mov(Reg8::R11B, f);
+
+        // copy src/dst (using flags reg as temp)
+        if(std::holds_alternative<Reg8>(b))
+        {
+            auto rb = std::get<Reg8>(b);
+
+            if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
+            {
+                // legacy regs, extra copy
+                builder.mov(f, rb);
+                builder.mov(Reg8::R10B, f);
+            }
+            else
+                builder.mov(Reg8::R10B, rb);
+        }
+        else // yeah this case could be optimised further
+            builder.mov(Reg8::R10B, std::get<uint8_t>(b));
+
+        builder.mov(f, a);
+
+        // mask and do half add
+        builder.and_(f, 0xF);
+        builder.and_(Reg8::R10B, 0xF);
+    };
+
+    const auto add = [&instr, &builder, &setFlags, &carryIn, &prepareForHCalc](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -2441,33 +2475,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         if(instr.flags & DMGCPU::Flag_H)
         {
-            // F was used as tmp, make a second copy (affects ADD (HL))
+            // preserve F if it was was used as tmp (affects ADD (HL))
             // also preserve F for ADC
-            if(bIsF || withCarry)
-                builder.mov(Reg8::R11B, f);
+            prepareForHCalc(a, b, bIsF || withCarry);
 
-            // copy src/dst (using flags reg as temp)
-            if(bIsReg)
-            {
-                auto rb = std::get<Reg8>(b);
-
-                if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
-                {
-                    // legacy regs, extra copy
-                    builder.mov(f, rb);
-                    builder.mov(Reg8::R10B, f);
-                }
-                else
-                    builder.mov(Reg8::R10B, rb);
-            }
-            else // yeah this case could be optimised further
-                builder.mov(Reg8::R10B, std::get<uint8_t>(b));
-
-            builder.mov(f, a);
-
-            // mask and do half add
-            builder.and_(f, 0xF);
-            builder.and_(Reg8::R10B, 0xF);
+            // do half add
             builder.add(Reg8::R10B, f);
 
             // put tmp/flags reg back
@@ -2481,7 +2493,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
                 builder.jcc(Condition::E, 3); // not set
                 builder.inc(Reg8::R10B);
             }
-
         }
 
         if(withCarry)
@@ -2538,7 +2549,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         return add(b, true);
     };
 
-    const auto sub = [&instr, &builder, &setFlags, &carryIn](std::variant<Reg8, uint8_t> b, bool withCarry = false)
+    const auto sub = [&instr, &builder, &setFlags, &carryIn, &prepareForHCalc](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -2548,33 +2559,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         if(instr.flags & DMGCPU::Flag_H)
         {
-            // F was used as tmp, make a second copy (affects SUB (HL))
+            // preserve F if it was was used as tmp (affects SUB (HL))
             // also preserve F for SBC
-            if(bIsF || withCarry)
-                builder.mov(Reg8::R11B, f);
+            prepareForHCalc(a, b, bIsF || withCarry);
 
-            // copy src/dst (using flags reg as temp)
-            if(bIsReg)
-            {
-                auto rb = std::get<Reg8>(b);
-
-                if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
-                {
-                    // legacy regs, extra copy
-                    builder.mov(f, rb);
-                    builder.mov(Reg8::R10B, f);
-                }
-                else
-                    builder.mov(Reg8::R10B, rb);
-            }
-            else // yeah this case could be optimised further
-                builder.mov(Reg8::R10B, std::get<uint8_t>(b));
-
-            builder.mov(f, a);
-
-            // mask and do half sub
-            builder.and_(f, 0xF);
-            builder.and_(Reg8::R10B, 0xF);
+            // do half sub
             builder.sub(f, Reg8::R10B);
             builder.mov(Reg8::R10B, f);
 
@@ -2676,7 +2665,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         setFlags(flags, DMGCPU::Flag_Z);
     };
 
-    const auto cmp = [&instr, &builder, &setFlags](std::variant<Reg8, uint8_t> b)
+    const auto cmp = [&instr, &builder, &setFlags, &prepareForHCalc](std::variant<Reg8, uint8_t> b)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -2686,32 +2675,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         if(instr.flags & DMGCPU::Flag_H)
         {
-            // copy src/dst (using flags reg as temp)
-            if(bIsReg)
-            {
-                auto rb = std::get<Reg8>(b);
+            // preserve F for (CP (HL))
+            prepareForHCalc(a, b, bIsF);
 
-                if(rb == Reg8::AH || rb == Reg8::CH || rb == Reg8::DH || rb == Reg8::BH)
-                {
-                    // legacy regs, extra copy
-                    builder.mov(f, rb);
-                    builder.mov(Reg8::R10B, f);
-                }
-                else
-                    builder.mov(Reg8::R10B, rb);
-            }
-            else // yeah this case could be optimised further
-                builder.mov(Reg8::R10B, std::get<uint8_t>(b));
-
-            // F was used as tmp, make a second copy (affects CMP (HL))
-            if(bIsF)
-                builder.mov(Reg8::R11B, f);
-
-            builder.mov(f, a);
-
-            // mask and do half cmp
-            builder.and_(f, 0xF);
-            builder.and_(Reg8::R10B, 0xF);
+            //  do half cmp
             builder.cmp(f, Reg8::R10B);
             builder.setcc(Condition::B, Reg8::R10B); // save carry
 
