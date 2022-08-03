@@ -2375,6 +2375,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         }
     };
 
+    // ADC/SBC, rotates
+    const auto carryIn = [&builder]()
+    {
+        builder.test(reg(Reg::F), DMGCPU::Flag_C); // sets CF to 0
+        builder.jcc(Condition::E, 1); // not set
+        builder.stc(); // CF = 1
+    };
+
     // used by the rotates
     const auto carryOut = [&instr, &builder]()
     {
@@ -2423,7 +2431,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.and_(reg(Reg::F), 0xF0);
     };
 
-    const auto add = [&instr, &builder, &setFlags](std::variant<Reg8, uint8_t> b, bool withCarry = false)
+    const auto add = [&instr, &builder, &setFlags, &carryIn](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -2478,10 +2486,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         if(withCarry)
         {
-            // copy carry flag
-            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
-            builder.jcc(Condition::E, 1); // not set
-            builder.stc(); // CF = 1
+            carryIn();
 
             if(bIsReg)
             {
@@ -2533,7 +2538,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         return add(b, true);
     };
 
-    const auto sub = [&instr, &builder, &setFlags](std::variant<Reg8, uint8_t> b, bool withCarry = false)
+    const auto sub = [&instr, &builder, &setFlags, &carryIn](std::variant<Reg8, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(Reg::A);
         auto f = reg(Reg::F);
@@ -2588,10 +2593,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         if(withCarry)
         {
-            // copy carry flag
-            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
-            builder.jcc(Condition::E, 1); // not set
-            builder.stc(); // CF = 1
+            carryIn();
 
             if(bIsReg)
             {
@@ -3231,37 +3233,20 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
 
         case 0x17: // RLA
-        {
-            auto f = reg(Reg::F);
-
-            // copy carry flag
-            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
-            builder.jcc(Condition::E, 1); // not set
-            builder.stc(); // CF = 1
-
+            carryIn();
             builder.rcl(reg(Reg::A), 1);
             carryOut();
-
             break;
-        }
+
         case 0x18: // JR m
             jumpRel();
             break;
 
         case 0x1F: // RRA
-        {
-            auto f = reg(Reg::F);
-
-            // copy carry flag
-            builder.test(f, DMGCPU::Flag_C); // sets CF to 0
-            builder.jcc(Condition::E, 1); // not set
-            builder.stc(); // CF = 1
-
+            carryIn();
             builder.rcr(reg(Reg::A), 1);
             carryOut();
-
             break;
-        }
 
         case 0x20: // JR NZ,n
         case 0x28: // JR Z,n
