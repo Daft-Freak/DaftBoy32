@@ -2842,12 +2842,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         cycleExecuted();
     };
 
-    const auto jump = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
+    const auto doJump = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](uint16_t addr, int flag = 0, bool set = true)
     {
-        uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
-        cycleExecuted();
-        cycleExecuted();
-
         auto it = branchTargets.find(addr);
 
         // condition
@@ -2898,60 +2894,21 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.jmp(exitPtr - builder.getPtr());
     };
 
-    const auto jumpRel = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
+    const auto jump = [&instr, &cycleExecuted, &doJump](int flag = 0, bool set = true)
+    {
+        uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
+        cycleExecuted();
+        cycleExecuted();
+
+        doJump(addr, flag, set);
+    };
+
+    const auto jumpRel = [&instr, &pc, &cycleExecuted, &doJump](int flag = 0, bool set = true)
     {
         int8_t off = instr.opcode[1];
         cycleExecuted();
 
-        auto it = branchTargets.find(pc + off);
-
-        // condition
-        if(flag)
-        {
-            syncCyclesExecuted();
-
-            if(!(instr.flags & Op_Branch))
-                builder.mov(pcReg32, pc);
-
-            builder.test(reg(Reg::F), flag);
-            int len = ((instr.flags & Op_Branch) ? 3/*sub*/ : 6/*mov*/) + 5/*jmp*/;
-
-            if(pc >= 0xFF00)
-                len += cycleExecutedCallSize;
-            else
-                len += cycleExecutedInlineSize;
-
-            builder.jcc(set ? Condition::E : Condition::NE, len);
-        }
-
-        cycleExecuted();
-        syncCyclesExecuted();
-
-        // sub cycles early (we jump past the usual code that does this)
-        if(instr.flags & Op_Branch)
-            builder.sub(Reg32::EDI, cyclesThisInstr);
-        else // or set PC if we're just going to exit
-            builder.mov(pcReg32, pc + off);
-
-        // don't update twice for unconditional branches
-        if(!flag)
-            cyclesThisInstr = 0;
-
-        if(it != branchTargets.end()) 
-            builder.jmp(it->second - builder.getPtr(), flag != 0);
-        else
-        {
-            if(instr.flags & Op_Branch)
-                forwardBranchesToPatch.emplace(pc + off, builder.getPtr());
-
-            // will be patched later if possible
-            bool forceLong = flag != 0 && (instr.flags & Op_Branch);
-            builder.jmp(exitPtr - builder.getPtr(), forceLong);
-        }
-
-        // exit if branch not taken
-        if(flag && (instr.flags & Op_Last))
-            builder.jmp(exitPtr - builder.getPtr());
+        doJump(pc + off, flag, set);
     };
 
     const auto call = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &writeMem](int flag = 0, bool set = true)
