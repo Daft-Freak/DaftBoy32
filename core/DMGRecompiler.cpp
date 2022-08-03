@@ -3680,9 +3680,18 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             add(instr.opcode[1]);
             break;
         }
+
         case 0xC7: // RST 0
-            reset(0x00);
+        case 0xCF: // RST 08
+        case 0xD7: // RST 10
+        case 0xDF: // RST 18
+        case 0xE7: // RST 20
+        case 0xEF: // RST 28
+        case 0xF7: // RST 30
+        case 0xFF: // RST 38
+            reset(opcode & 0x38);
             break;
+
         case 0xC8: // RET Z
             ret(DMGCPU::Flag_Z);
             break;
@@ -3707,9 +3716,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             addWithCarry(instr.opcode[1]);
             break;
         }
-        case 0xCF: // RST 08
-            reset(0x08);
-            break;
+
         case 0xD0: // RET NC
             ret(DMGCPU::Flag_C, false);
             break;
@@ -3728,9 +3735,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             sub(instr.opcode[1]);
             break;
         }
-        case 0xD7: // RST 10
-            reset(0x10);
-            break;
+
         case 0xD8: // RET C
             ret(DMGCPU::Flag_C);
             break;
@@ -3753,9 +3758,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             subWithCarry(instr.opcode[1]);
             break;
         }
-        case 0xDF: // RST 18
-            reset(0x18);
-            break;
+
         case 0xE0: // LDH (n),A
         {
             uint16_t addr = 0xFF00 | instr.opcode[1];
@@ -3780,9 +3783,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             bitAnd(instr.opcode[1]);
             break;
         }
-        case 0xE7: // RST 20
-            reset(0x20);
-            break;
+
         case 0xE8: // ADD SP,n
         {
             auto f = reg(Reg::F);
@@ -3842,9 +3843,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             bitXor(instr.opcode[1]);
             break;
         }
-        case 0xEF: // RST 28
-            reset(0x28);
-            break;
+
         case 0xF0: // LDH A,(n)
         {
             uint16_t addr = 0xFF00 | instr.opcode[1];
@@ -3879,9 +3878,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             bitOr(instr.opcode[1]);
             break;
         }
-        case 0xF7: // RST 30
-            reset(0x30);
-            break;
+
         case 0xF8: // LDHL SP,n
         {
             auto f = reg(Reg::F);
@@ -3945,9 +3942,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cmp(instr.opcode[1]);
             break;
         }
-        case 0xFF: // RST 38
-            reset(0x38);
-            break;
 
         default:
             printf("unhandled op in recompile %02X\n", opcode);
