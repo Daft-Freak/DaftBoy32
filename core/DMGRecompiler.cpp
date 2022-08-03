@@ -2267,7 +2267,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         delayedCyclesExecuted = 0;
     };
 
-    auto readMem = [&builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
+    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
     {
         syncCyclesExecuted();
         callSave(builder);
@@ -2283,9 +2283,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder, dstReg);
+
+        cycleExecuted();
     };
 
-    auto writeMem = [&builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
+    auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
     {
         syncCyclesExecuted();
         callSave(builder);
@@ -2305,6 +2307,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder, Reg32::EDI);
+
+        cycleExecuted();
     };
 
     // neededFlags is what we need to output
@@ -2405,25 +2409,21 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         builder.dec(spReg16);
         writeMem(spReg16, highReg);
-        cycleExecuted();
 
         builder.dec(spReg16);
         writeMem(spReg16, lowReg);
-        cycleExecuted();
     };
 
-    const auto pop = [&builder, &cycleExecuted, &readMem](Reg16 r)
+    const auto pop = [&builder, &readMem](Reg16 r)
     {
         assert(r == Reg16::AX || reg == Reg16::CX || reg == Reg16::DX || reg == Reg16::BX);
         auto lowReg = static_cast<Reg8>(r); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
         readMem(spReg16, lowReg);
-        cycleExecuted();
         builder.inc(spReg16);
 
         readMem(spReg16, highReg);
-        cycleExecuted();
         builder.inc(spReg16);
 
         // low bits in F can never be set
@@ -2937,10 +2937,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         builder.dec(spReg16);
         writeMem(spReg16, static_cast<uint8_t>(pc >> 8));
-        cycleExecuted();
         builder.dec(spReg16);
         writeMem(spReg16, static_cast<uint8_t>(pc));
-        cycleExecuted();
         syncCyclesExecuted();
 
         builder.mov(pcReg32, addr);
@@ -2960,10 +2958,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         builder.dec(spReg16);
         writeMem(spReg16, static_cast<uint8_t>(pc >> 8));
-        cycleExecuted();
         builder.dec(spReg16);
         writeMem(spReg16, static_cast<uint8_t>(pc));
-        cycleExecuted();
         syncCyclesExecuted();
 
         builder.mov(pcReg32, addr);
@@ -2995,11 +2991,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         builder.mov(pcReg32, 0);
         readMem(spReg16, pcReg8);
-        cycleExecuted();
         builder.inc(spReg16);
 
         readMem(spReg16, Reg8::R10B);
-        cycleExecuted();
         builder.inc(spReg16);
 
         builder.shl(Reg32::R10D, 8);
@@ -3097,7 +3091,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0x02: // LD (BC),A
         case 0x12: // LD (DE),A
             writeMem(regMap16[opcode >> 4], reg(Reg::A));
-            cycleExecuted();
             break;
 
         case 0x03: // INC BC
@@ -3160,14 +3153,12 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cycleExecuted();
 
             writeMem(addr++, spReg8); // low byte
-            cycleExecuted();
 
             // SP >> 8
             builder.mov(Reg32::R10D, spReg32);
             builder.shr(Reg32::R10D, 8);
 
             writeMem(addr, Reg8::R10B); // low byte
-            cycleExecuted();
             break;
         }
 
@@ -3181,7 +3172,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0x0A: // LD A,(BC)
         case 0x1A: // LD A,(DE)
             readMem(regMap16[opcode >> 4], reg(Reg::A));
-            cycleExecuted();
             break;
 
         case 0x0F: // RRCA
@@ -3217,7 +3207,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     
         case 0x22: // LDI (HL),A
             writeMem(reg(WReg::HL), reg(Reg::A));
-            cycleExecuted();
             builder.inc(reg(WReg::HL));
             break;
 
@@ -3282,7 +3271,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         case 0x2A: // LDI A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
-            cycleExecuted();
             builder.inc(reg(WReg::HL));
             break;
 
@@ -3293,7 +3281,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         case 0x32: // LDD (HL),A
             writeMem(reg(WReg::HL), reg(Reg::A));
-            cycleExecuted();
             builder.dec(reg(WReg::HL));
             break;
 
@@ -3302,12 +3289,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             auto tmp = Reg8::R11B;
 
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
-
             inc(tmp);
-
             writeMem(reg(WReg::HL), tmp);
-            cycleExecuted();            
 
             break;
         }
@@ -3316,12 +3299,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             auto tmp = Reg8::R11B;
 
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
-
             dec(tmp);
-
             writeMem(reg(WReg::HL), tmp);
-            cycleExecuted();            
 
             break;
         }
@@ -3329,7 +3308,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             cycleExecuted();
             writeMem(reg(WReg::HL), instr.opcode[1]);
-            cycleExecuted();
             break;
         }
         case 0x37: // SCF
@@ -3341,7 +3319,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         case 0x3A: // LDD A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
-            cycleExecuted();
             builder.dec(reg(WReg::HL));
             break;
 
@@ -3411,7 +3388,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0x6E: // LD L,(HL)
         case 0x7E: // LD A,(HL)
             readMem(reg(WReg::HL), regMap8[(opcode >> 3) & 7]);
-            cycleExecuted();
             break;
         case 0x70: // LD (HL),B
         case 0x71: // LD (HL),C
@@ -3421,7 +3397,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0x75: // LD (HL),L
         case 0x77: // LD (HL),A
             writeMem(reg(WReg::HL), regMap8[opcode & 7]);
-            cycleExecuted();
             break;
         
         case 0x76: // HALT
@@ -3458,7 +3433,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
             add(tmp);
             break;
         }
@@ -3476,7 +3450,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             auto tmp = Reg8::SIL; // can't use F here so use something wierd
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
             addWithCarry(tmp);
             break;
         }
@@ -3494,7 +3467,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
             sub(tmp);
             break;
         }
@@ -3512,7 +3484,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             auto tmp = Reg8::SIL; // can't use F here so use something wierd
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
             subWithCarry(tmp);
             break;
         }
@@ -3530,7 +3501,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
             bitAnd(tmp);
             break;
         }
@@ -3547,7 +3517,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
             bitXor(tmp);
             break;
         }
@@ -3567,7 +3536,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
             bitOr(tmp);
             break;
         }
@@ -3585,7 +3553,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         {
             auto tmp = reg(Reg::F); // flags are set here, so we can use it as a temp
             readMem(reg(WReg::HL), tmp);
-            cycleExecuted();
             cmp(tmp);
             break;
         }
@@ -3697,7 +3664,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             uint16_t addr = 0xFF00 | instr.opcode[1];
             cycleExecuted();
             writeMem(addr, reg(Reg::A));
-            cycleExecuted();
             break;
         }
 
@@ -3706,7 +3672,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.movzx(Reg32::R10D, reg(Reg::C));
             builder.or_(Reg32::R10D, 0xFF00);
             writeMem(Reg16::R10W, reg(Reg::A));
-            cycleExecuted();
             break;
         }
 
@@ -3776,7 +3741,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cycleExecuted();
 
             writeMem(addr, reg(Reg::A));
-            cycleExecuted();
             break;
         }
 
@@ -3792,7 +3756,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             uint16_t addr = 0xFF00 | instr.opcode[1];
             cycleExecuted();
             readMem(addr, reg(Reg::A));
-            cycleExecuted();
             break;
         }
         case 0xF1: // POP AF
@@ -3803,7 +3766,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.movzx(Reg32::R10D, reg(Reg::C));
             builder.or_(Reg32::R10D, 0xFF00);
             readMem(Reg16::R10W, reg(Reg::A));
-            cycleExecuted();
             break;
         }
         case 0xF3: // DI
@@ -3833,7 +3795,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cycleExecuted();
 
             readMem(addr, reg(Reg::A));
-            cycleExecuted();
             break;
         }
         case 0xFB: // EI
@@ -3934,7 +3895,7 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
         delayedCyclesExecuted = 0;
     };
 
-    auto readMem = [&builder, &syncCyclesExecuted](Reg16 addrReg, Reg8 dstReg)
+    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted](Reg16 addrReg, Reg8 dstReg)
     {
         // addr is always HL
         assert(addrReg == Reg16::BX);
@@ -3948,9 +3909,11 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder, dstReg);
+
+        cycleExecuted();
     };
 
-    auto writeMem = [&builder, &syncCyclesExecuted](Reg16 addrReg, Reg8 dataReg)
+    auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted](Reg16 addrReg, Reg8 dataReg)
     {
         syncCyclesExecuted();
         callSave(builder);
@@ -3962,6 +3925,8 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder, Reg32::EDI);
+
+        cycleExecuted();
     };
 
     using Reg = DMGCPU::Reg;
@@ -4017,10 +3982,7 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
     auto r = regMap8[opcode & 7];
 
     if(isMem)
-    {
         readMem(reg(WReg::HL), Reg8::R10B);
-        cycleExecuted();
-    }
 
     if(opcode < 0x40) // shifts/rotates
     {
@@ -4118,10 +4080,7 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
     }
 
     if(isMem)
-    {
         writeMem(reg(WReg::HL), Reg8::R10B);
-        cycleExecuted();
-    }
 }
 
 void DMGRecompiler::compileEntry()
