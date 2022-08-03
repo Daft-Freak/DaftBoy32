@@ -4482,13 +4482,7 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
 
     const auto setHL = [&builder, &set, &cycleExecuted, &readMem, &writeMem](int bit)
     {
-        readMem(reg(WReg::HL), Reg8::R10B);
-        cycleExecuted();
-        
         set(Reg8::R10B, bit);
-        
-        writeMem(reg(WReg::HL), Reg8::R10B);
-        cycleExecuted();
     };
 
     const auto reset = [&builder](Reg8 r, int bit)
@@ -4498,166 +4492,108 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
 
     const auto resetHL = [&builder, &reset, &cycleExecuted, &readMem, &writeMem](int bit)
     {
-        readMem(reg(WReg::HL), Reg8::R10B);
-        cycleExecuted();
-        
         reset(Reg8::R10B, bit);
-        
-        writeMem(reg(WReg::HL), Reg8::R10B);
-        cycleExecuted();
     };
 
     cycleExecuted();
+
+    bool isMem = (opcode & 7) == 6; // (HL)
+
+    if(isMem)
+    {
+        readMem(reg(WReg::HL), Reg8::R10B);
+        cycleExecuted();
+    }
 
     if(opcode < 0x40) // shifts/rotates
     {
         switch(opcode & ~7)
         {
             case 0x00: // RLC
-                if((opcode & 7) == 6) // (HL)
-                {
-                    readMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-
+                if(isMem)
                     rotLeftNoCarry(Reg8::R10B);
-
-                    writeMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-                    break;
-                }
                 else
-                    return rotLeftNoCarry(reg(regMap8[opcode & 7]));
+                    rotLeftNoCarry(reg(regMap8[opcode & 7]));
+                break;
 
             case 0x08: // RRC
-                if((opcode & 7) == 6) // (HL)
-                {
-                    readMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-
+                if(isMem)
                     rotRightNoCarry(Reg8::R10B);
-
-                    writeMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-                    break;
-                }
                 else
-                    return rotRightNoCarry(reg(regMap8[opcode & 7]));
+                    rotRightNoCarry(reg(regMap8[opcode & 7]));
+                break;
 
             case 0x10: // RL
-                if((opcode & 7) == 6) // (HL)
-                {
-                    readMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-
+                if(isMem)
                     rotLeft(Reg8::R10B);
-
-                    writeMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-                    break;
-                }
                 else
-                    return rotLeft(reg(regMap8[opcode & 7]));
+                    rotLeft(reg(regMap8[opcode & 7]));
+                break;
 
             case 0x18: // RR
-                if((opcode & 7) == 6) // (HL)
-                {
-                    readMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-
+                if(isMem)
                     rotRight(Reg8::R10B);
-
-                    writeMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-                    break;
-                }
                 else
-                    return rotRight(reg(regMap8[opcode & 7]));
+                    rotRight(reg(regMap8[opcode & 7]));
+                break;
 
             case 0x20: // SLA
-                if((opcode & 7) == 6) // (HL)
-                {
-                    readMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-
+                if(isMem)
                     shiftLeft(Reg8::R10B);
-
-                    writeMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-                    break;
-                }
                 else
-                    return shiftLeft(reg(regMap8[opcode & 7]));
+                    shiftLeft(reg(regMap8[opcode & 7]));
+                break;
 
             case 0x28: // SRA
-                if((opcode & 7) == 6) // (HL)
-                {
-                    readMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-
+                if(isMem)
                     shiftRightArith(Reg8::R10B);
-
-                    writeMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-                    break;
-                }
                 else
-                    return shiftRightArith(reg(regMap8[opcode & 7]));
+                    shiftRightArith(reg(regMap8[opcode & 7]));
+                break;
 
             case 0x30: // SWAP
-                if((opcode & 7) == 6) // (HL)
-                {
-                    readMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-
+                if(isMem)
                     swap(Reg8::R10B);
-
-                    writeMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-                    break;
-                }
                 else
-                    return swap(reg(regMap8[opcode & 7]));
+                    swap(reg(regMap8[opcode & 7]));
+                break;
             
             case 0x38: // SRL
-                if((opcode & 7) == 6) // (HL)
-                {
-                    readMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-
+                if(isMem)
                     shiftRight(Reg8::R10B);
-
-                    writeMem(reg(WReg::HL), Reg8::R10B);
-                    cycleExecuted();
-                    break;
-                }
                 else
-                    return shiftRight(reg(regMap8[opcode & 7]));
+                    shiftRight(reg(regMap8[opcode & 7]));
+                break;
         }
     }
     else if(opcode < 0x80) // BIT
     {
-        if((opcode & 7) == 6) // (HL)
-        {
-            readMem(reg(WReg::HL), Reg8::R10B);
-            cycleExecuted();
+        if(isMem)
             testBit(Reg8::R10B, (opcode >> 3) & 7);
-        }
         else
             testBit(reg(regMap8[opcode & 7]), (opcode >> 3) & 7);
+
+        isMem = false; // this one doesn't write back
     }
     else if(opcode < 0xC0) // RES
     {
-        if((opcode & 7) == 6) // (HL)
+        if(isMem)
             resetHL((opcode >> 3) & 7);
         else
             reset(reg(regMap8[opcode & 7]), (opcode >> 3) & 7);
     }
     else // SET
     {
-        if((opcode & 7) == 6) // (HL)
+        if(isMem)
             setHL((opcode >> 3) & 7);
         else
             set(reg(regMap8[opcode & 7]), (opcode >> 3) & 7);
+    }
+
+    if(isMem)
+    {
+        writeMem(reg(WReg::HL), Reg8::R10B);
+        cycleExecuted();
     }
 }
 
