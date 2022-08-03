@@ -4342,6 +4342,18 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
+    static const Reg regMap8[]
+    {
+        Reg::B,
+        Reg::C,
+        Reg::D,
+        Reg::E,
+        Reg::H,
+        Reg::L,
+        Reg::H, // placeholder for (HL)
+        Reg::A,
+    };
+
     // the flags here are more simple
     // all the shifts/rotates set C and Z
     // SWAP only sets Z
@@ -4500,17 +4512,13 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
     switch(opcode)
     {
         case 0x00: // RLC B
-            return rotLeftNoCarry(reg(Reg::B));
         case 0x01: // RLC C
-            return rotLeftNoCarry(reg(Reg::C));
         case 0x02: // RLC D
-            return rotLeftNoCarry(reg(Reg::D));
         case 0x03: // RLC E
-            return rotLeftNoCarry(reg(Reg::E));
         case 0x04: // RLC H
-            return rotLeftNoCarry(reg(Reg::H));
         case 0x05: // RLC L
-            return rotLeftNoCarry(reg(Reg::L));
+        case 0x07: // RLC A
+            return rotLeftNoCarry(reg(regMap8[opcode & 7]));
         case 0x06: // RLC (HL)
         {
             readMem(reg(WReg::HL), Reg8::R10B);
@@ -4522,21 +4530,15 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             cycleExecuted();
             break;
         }
-        case 0x07: // RLC A
-            return rotLeftNoCarry(reg(Reg::A));
 
         case 0x08: // RRC B
-            return rotRightNoCarry(reg(Reg::B));
         case 0x09: // RRC C
-            return rotRightNoCarry(reg(Reg::C));
         case 0x0A: // RRC D
-            return rotRightNoCarry(reg(Reg::D));
         case 0x0B: // RRC E
-            return rotRightNoCarry(reg(Reg::E));
         case 0x0C: // RRC H
-            return rotRightNoCarry(reg(Reg::H));
         case 0x0D: // RRC L
-            return rotRightNoCarry(reg(Reg::L));
+        case 0x0F: // RRC A
+            return rotRightNoCarry(reg(regMap8[opcode & 7]));
         case 0x0E: // RRC (HL)
         {
             readMem(reg(WReg::HL), Reg8::R10B);
@@ -4548,21 +4550,15 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             cycleExecuted();
             break;
         }
-        case 0x0F: // RRC A
-            return rotRightNoCarry(reg(Reg::A));
 
         case 0x10: // RL B
-            return rotLeft(reg(Reg::B));
         case 0x11: // RL C
-            return rotLeft(reg(Reg::C));
         case 0x12: // RL D
-            return rotLeft(reg(Reg::D));
         case 0x13: // RL E
-            return rotLeft(reg(Reg::E));
         case 0x14: // RL H
-            return rotLeft(reg(Reg::H));
         case 0x15: // RL L
-            return rotLeft(reg(Reg::L));
+        case 0x17: // RL A
+            return rotLeft(reg(regMap8[opcode & 7]));
         case 0x16: // RL (HL)
         {
             readMem(reg(WReg::HL), Reg8::R10B);
@@ -4574,21 +4570,15 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             cycleExecuted();
             break;
         }
-        case 0x17: // RL A
-            return rotLeft(reg(Reg::A));
 
         case 0x18: // RR B
-            return rotRight(reg(Reg::B));
         case 0x19: // RR C
-            return rotRight(reg(Reg::C));
         case 0x1A: // RR D
-            return rotRight(reg(Reg::D));
         case 0x1B: // RR E
-            return rotRight(reg(Reg::E));
         case 0x1C: // RR H
-            return rotRight(reg(Reg::H));
         case 0x1D: // RR L
-            return rotRight(reg(Reg::L));
+        case 0x1F: // RR A
+            return rotRight(reg(regMap8[opcode & 7]));
         case 0x1E: // RR (HL)
         {
             readMem(reg(WReg::HL), Reg8::R10B);
@@ -4600,21 +4590,15 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             cycleExecuted();
             break;
         }
-        case 0x1F: // RR A
-            return rotRight(reg(Reg::A));
 
         case 0x20: // SLA B
-            return shiftLeft(reg(Reg::B));
         case 0x21: // SLA C
-            return shiftLeft(reg(Reg::C));
         case 0x22: // SLA D
-            return shiftLeft(reg(Reg::D));
         case 0x23: // SLA E
-            return shiftLeft(reg(Reg::E));
         case 0x24: // SLA H
-            return shiftLeft(reg(Reg::H));
         case 0x25: // SLA L
-            return shiftLeft(reg(Reg::L));
+        case 0x27: // SLA A
+            return shiftLeft(reg(regMap8[opcode & 7]));
         case 0x26: // SLA (HL)
         {
             readMem(reg(WReg::HL), Reg8::R10B);
@@ -4626,21 +4610,15 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             cycleExecuted();
             break;
         }
-        case 0x27: // SLA A
-            return shiftLeft(reg(Reg::A));
 
         case 0x28: // SRA B
-            return shiftRightArith(reg(Reg::B));
         case 0x29: // SRA C
-            return shiftRightArith(reg(Reg::C));
         case 0x2A: // SRA D
-            return shiftRightArith(reg(Reg::D));
         case 0x2B: // SRA E
-            return shiftRightArith(reg(Reg::E));
         case 0x2C: // SRA H
-            return shiftRightArith(reg(Reg::H));
         case 0x2D: // SRA L
-            return shiftRightArith(reg(Reg::L));
+        case 0x2F: // SRA A
+            return shiftRightArith(reg(regMap8[opcode & 7]));
         case 0x2E: // SRA (HL)
         {
             readMem(reg(WReg::HL), Reg8::R10B);
@@ -4652,21 +4630,15 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             cycleExecuted();
             break;
         }
-        case 0x2F: // SRA A
-            return shiftRightArith(reg(Reg::A));
 
         case 0x30: // SWAP B
-            return swap(reg(Reg::B));
         case 0x31: // SWAP C
-            return swap(reg(Reg::C));
         case 0x32: // SWAP D
-            return swap(reg(Reg::D));
         case 0x33: // SWAP E
-            return swap(reg(Reg::E));
         case 0x34: // SWAP H
-            return swap(reg(Reg::H));
         case 0x35: // SWAP L
-            return swap(reg(Reg::L));
+        case 0x37: // SWAP A
+            return swap(reg(regMap8[opcode & 7]));
         case 0x36: // SWAP (HL)
         {
             readMem(reg(WReg::HL), Reg8::R10B);
@@ -4678,21 +4650,15 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             cycleExecuted();
             break;
         }
-        case 0x37: // SWAP A
-            return swap(reg(Reg::A));
         
         case 0x38: // SRL B
-            return shiftRight(reg(Reg::B));
         case 0x39: // SRL C
-            return shiftRight(reg(Reg::C));
         case 0x3A: // SRL D
-            return shiftRight(reg(Reg::D));
         case 0x3B: // SRL E
-            return shiftRight(reg(Reg::E));
         case 0x3C: // SRL H
-            return shiftRight(reg(Reg::H));
         case 0x3D: // SRL L
-            return shiftRight(reg(Reg::L));
+        case 0x3F: // SRL A
+            return shiftRight(reg(regMap8[opcode & 7]));
         case 0x3E: // SRL (HL)
         {
             readMem(reg(WReg::HL), Reg8::R10B);
@@ -4704,411 +4670,209 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             cycleExecuted();
             break;
         }
-        case 0x3F: // SRL A
-            return shiftRight(reg(Reg::A));
         
         case 0x40: // BIT 0,B
-            return testBit(reg(Reg::B), 0);
         case 0x41: // BIT 0,C
-            return testBit(reg(Reg::C), 0);
         case 0x42: // BIT 0,D
-            return testBit(reg(Reg::D), 0);
         case 0x43: // BIT 0,E
-            return testBit(reg(Reg::E), 0);
         case 0x44: // BIT 0,H
-            return testBit(reg(Reg::H), 0);
         case 0x45: // BIT 0,L
-            return testBit(reg(Reg::L), 0);
-        case 0x46: // BIT 0,(HL)
-            readMem(reg(WReg::HL), Reg8::R10B);
-            cycleExecuted();
-            return testBit(Reg8::R10B, 0);
         case 0x47: // BIT 0,A
-            return testBit(reg(Reg::A), 0);
         case 0x48: // BIT 1,B
-            return testBit(reg(Reg::B), 1);
         case 0x49: // BIT 1,C
-            return testBit(reg(Reg::C), 1);
         case 0x4A: // BIT 1,D
-            return testBit(reg(Reg::D), 1);
         case 0x4B: // BIT 1,E
-            return testBit(reg(Reg::E), 1);
         case 0x4C: // BIT 1,H
-            return testBit(reg(Reg::H), 1);
         case 0x4D: // BIT 1,L
-            return testBit(reg(Reg::L), 1);
-        case 0x4E: // BIT 1,(HL)
-            readMem(reg(WReg::HL), Reg8::R10B);
-            cycleExecuted();
-            return testBit(Reg8::R10B, 1);
         case 0x4F: // BIT 1,A
-            return testBit(reg(Reg::A), 1);
         case 0x50: // BIT 2,B
-            return testBit(reg(Reg::B), 2);
         case 0x51: // BIT 2,C
-            return testBit(reg(Reg::C), 2);
         case 0x52: // BIT 2,D
-            return testBit(reg(Reg::D), 2);
         case 0x53: // BIT 2,E
-            return testBit(reg(Reg::E), 2);
         case 0x54: // BIT 2,H
-            return testBit(reg(Reg::H), 2);
         case 0x55: // BIT 2,L
-            return testBit(reg(Reg::L), 2);
-        case 0x56: // BIT 2,(HL)
-            readMem(reg(WReg::HL), Reg8::R10B);
-            cycleExecuted();
-            return testBit(Reg8::R10B, 2);
         case 0x57: // BIT 2,A
-            return testBit(reg(Reg::A), 2);
         case 0x58: // BIT 3,B
-            return testBit(reg(Reg::B), 3);
         case 0x59: // BIT 3,C
-            return testBit(reg(Reg::C), 3);
         case 0x5A: // BIT 3,D
-            return testBit(reg(Reg::D), 3);
         case 0x5B: // BIT 3,E
-            return testBit(reg(Reg::E), 3);
         case 0x5C: // BIT 3,H
-            return testBit(reg(Reg::H), 3);
         case 0x5D: // BIT 3,L
-            return testBit(reg(Reg::L), 3);
-        case 0x5E: // BIT 3,(HL)
-            readMem(reg(WReg::HL), Reg8::R10B);
-            cycleExecuted();
-            return testBit(Reg8::R10B, 3);
         case 0x5F: // BIT 3,A
-            return testBit(reg(Reg::A), 3);
         case 0x60: // BIT 4,B
-            return testBit(reg(Reg::B), 4);
         case 0x61: // BIT 4,C
-            return testBit(reg(Reg::C), 4);
         case 0x62: // BIT 4,D
-            return testBit(reg(Reg::D), 4);
         case 0x63: // BIT 4,E
-            return testBit(reg(Reg::E), 4);
         case 0x64: // BIT 4,H
-            return testBit(reg(Reg::H), 4);
         case 0x65: // BIT 4,L
-            return testBit(reg(Reg::L), 4);
-        case 0x66: // BIT 4,(HL)
-            readMem(reg(WReg::HL), Reg8::R10B);
-            cycleExecuted();
-            return testBit(Reg8::R10B, 4);
         case 0x67: // BIT 4,A
-            return testBit(reg(Reg::A), 4);
         case 0x68: // BIT 5,B
-            return testBit(reg(Reg::B), 5);
         case 0x69: // BIT 5,C
-            return testBit(reg(Reg::C), 5);
         case 0x6A: // BIT 5,D
-            return testBit(reg(Reg::D), 5);
         case 0x6B: // BIT 5,E
-            return testBit(reg(Reg::E), 5);
         case 0x6C: // BIT 5,H
-            return testBit(reg(Reg::H), 5);
         case 0x6D: // BIT 5,L
-            return testBit(reg(Reg::L), 5);
-        case 0x6E: // BIT 5,(HL)
-            readMem(reg(WReg::HL), Reg8::R10B);
-            cycleExecuted();
-            return testBit(Reg8::R10B, 5);
         case 0x6F: // BIT 5,A
-            return testBit(reg(Reg::A), 5);
         case 0x70: // BIT 6,B
-            return testBit(reg(Reg::B), 6);
         case 0x71: // BIT 6,C
-            return testBit(reg(Reg::C), 6);
         case 0x72: // BIT 6,D
-            return testBit(reg(Reg::D), 6);
         case 0x73: // BIT 6,E
-            return testBit(reg(Reg::E), 6);
         case 0x74: // BIT 6,H
-            return testBit(reg(Reg::H), 6);
         case 0x75: // BIT 6,L
-            return testBit(reg(Reg::L), 6);
-        case 0x76: // BIT 6,(HL)
-            readMem(reg(WReg::HL), Reg8::R10B);
-            cycleExecuted();
-            return testBit(Reg8::R10B, 6);
         case 0x77: // BIT 6,A
-            return testBit(reg(Reg::A), 6);
         case 0x78: // BIT 7,B
-            return testBit(reg(Reg::B), 7);
         case 0x79: // BIT 7,C
-            return testBit(reg(Reg::C), 7);
         case 0x7A: // BIT 7,D
-            return testBit(reg(Reg::D), 7);
         case 0x7B: // BIT 7,E
-            return testBit(reg(Reg::E), 7);
         case 0x7C: // BIT 7,H
-            return testBit(reg(Reg::H), 7);
         case 0x7D: // BIT 7,L
-            return testBit(reg(Reg::L), 7);
+        case 0x7F: // BIT 7,A
+            return testBit(reg(regMap8[opcode & 7]), (opcode >> 3) & 7);
+        case 0x46: // BIT 0,(HL)
+        case 0x4E: // BIT 1,(HL)
+        case 0x56: // BIT 2,(HL)
+        case 0x5E: // BIT 3,(HL)
+        case 0x66: // BIT 4,(HL)
+        case 0x6E: // BIT 5,(HL)
+        case 0x76: // BIT 6,(HL)
         case 0x7E: // BIT 7,(HL)
             readMem(reg(WReg::HL), Reg8::R10B);
             cycleExecuted();
-            return testBit(Reg8::R10B, 7);
-        case 0x7F: // BIT 7,A
-            return testBit(reg(Reg::A), 7);
-        
+            return testBit(Reg8::R10B, (opcode >> 3) & 7);
+
         case 0x80: // RES 0,B
-            return reset(reg(Reg::B), 0);
         case 0x81: // RES 0,C
-            return reset(reg(Reg::C), 0);
         case 0x82: // RES 0,D
-            return reset(reg(Reg::D), 0);
         case 0x83: // RES 0,E
-            return reset(reg(Reg::E), 0);
         case 0x84: // RES 0,H
-            return reset(reg(Reg::H), 0);
         case 0x85: // RES 0,L
-            return reset(reg(Reg::L), 0);
-        case 0x86: // RES 0,(HL)
-            return resetHL(0);
         case 0x87: // RES 0,A
-            return reset(reg(Reg::A), 0);
         case 0x88: // RES 1,B
-            return reset(reg(Reg::B), 1);
         case 0x89: // RES 1,C
-            return reset(reg(Reg::C), 1);
         case 0x8A: // RES 1,D
-            return reset(reg(Reg::D), 1);
         case 0x8B: // RES 1,E
-            return reset(reg(Reg::E), 1);
         case 0x8C: // RES 1,H
-            return reset(reg(Reg::H), 1);
         case 0x8D: // RES 1,L
-            return reset(reg(Reg::L), 1);
-        case 0x8E: // RES 1,(HL)
-            return resetHL(1);
         case 0x8F: // RES 1,A
-            return reset(reg(Reg::A), 1);
         case 0x90: // RES 2,B
-            return reset(reg(Reg::B), 2);
         case 0x91: // RES 2,C
-            return reset(reg(Reg::C), 2);
         case 0x92: // RES 2,D
-            return reset(reg(Reg::D), 2);
         case 0x93: // RES 2,E
-            return reset(reg(Reg::E), 2);
         case 0x94: // RES 2,H
-            return reset(reg(Reg::H), 2);
         case 0x95: // RES 2,L
-            return reset(reg(Reg::L), 2);
-        case 0x96: // RES 2,(HL)
-            return resetHL(2);
         case 0x97: // RES 2,A
-            return reset(reg(Reg::A), 2);
         case 0x98: // RES 3,B
-            return reset(reg(Reg::B), 3);
         case 0x99: // RES 3,C
-            return reset(reg(Reg::C), 3);
         case 0x9A: // RES 3,D
-            return reset(reg(Reg::D), 3);
         case 0x9B: // RES 3,E
-            return reset(reg(Reg::E), 3);
         case 0x9C: // RES 3,H
-            return reset(reg(Reg::H), 3);
         case 0x9D: // RES 3,L
-            return reset(reg(Reg::L), 3);
-        case 0x9E: // RES 3,(HL)
-            return resetHL(3);
         case 0x9F: // RES 3,A
-            return reset(reg(Reg::A), 3);
         case 0xA0: // RES 4,B
-            return reset(reg(Reg::B), 4);
         case 0xA1: // RES 4,C
-            return reset(reg(Reg::C), 4);
         case 0xA2: // RES 4,D
-            return reset(reg(Reg::D), 4);
         case 0xA3: // RES 4,E
-            return reset(reg(Reg::E), 4);
         case 0xA4: // RES 4,H
-            return reset(reg(Reg::H), 4);
         case 0xA5: // RES 4,L
-            return reset(reg(Reg::L), 4);
-        case 0xA6: // RES 4,(HL)
-            return resetHL(4);
         case 0xA7: // RES 4,A
-            return reset(reg(Reg::A), 4);
         case 0xA8: // RES 5,B
-            return reset(reg(Reg::B), 5);
         case 0xA9: // RES 5,C
-            return reset(reg(Reg::C), 5);
         case 0xAA: // RES 5,D
-            return reset(reg(Reg::D), 5);
         case 0xAB: // RES 5,E
-            return reset(reg(Reg::E), 5);
         case 0xAC: // RES 5,H
-            return reset(reg(Reg::H), 5);
         case 0xAD: // RES 5,L
-            return reset(reg(Reg::L), 5);
-        case 0xAE: // RES 5,(HL)
-            return resetHL(5);
         case 0xAF: // RES 5,A
-            return reset(reg(Reg::A), 5);
         case 0xB0: // RES 6,B
-            return reset(reg(Reg::B), 6);
         case 0xB1: // RES 6,C
-            return reset(reg(Reg::C), 6);
         case 0xB2: // RES 6,D
-            return reset(reg(Reg::D), 6);
         case 0xB3: // RES 6,E
-            return reset(reg(Reg::E), 6);
         case 0xB4: // RES 6,H
-            return reset(reg(Reg::H), 6);
         case 0xB5: // RES 6,L
-            return reset(reg(Reg::L), 6);
-        case 0xB6: // RES 6,(HL)
-            return resetHL(6);
         case 0xB7: // RES 6,A
-            return reset(reg(Reg::A), 6);
         case 0xB8: // RES 7,B
-            return reset(reg(Reg::B), 7);
         case 0xB9: // RES 7,C
-            return reset(reg(Reg::C), 7);
         case 0xBA: // RES 7,D
-            return reset(reg(Reg::D), 7);
         case 0xBB: // RES 7,E
-            return reset(reg(Reg::E), 7);
         case 0xBC: // RES 7,H
-            return reset(reg(Reg::H), 7);
         case 0xBD: // RES 7,L
-            return reset(reg(Reg::L), 7);
-        case 0xBE: // RES 7,(HL)
-            return resetHL(7);
         case 0xBF: // RES 7,A
-            return reset(reg(Reg::A), 7);
+            return reset(reg(regMap8[opcode & 7]), (opcode >> 3) & 7);
+        case 0x86: // RES 0,(HL)
+        case 0x8E: // RES 1,(HL)
+        case 0x96: // RES 2,(HL)
+        case 0x9E: // RES 3,(HL)
+        case 0xA6: // RES 4,(HL)
+        case 0xAE: // RES 5,(HL)
+        case 0xB6: // RES 6,(HL)
+        case 0xBE: // RES 7,(HL)
+            return resetHL((opcode >> 3) & 7);
 
         case 0xC0: // SET 0,B
-            return set(reg(Reg::B), 0);
         case 0xC1: // SET 0,C
-            return set(reg(Reg::C), 0);
         case 0xC2: // SET 0,D
-            return set(reg(Reg::D), 0);
         case 0xC3: // SET 0,E
-            return set(reg(Reg::E), 0);
         case 0xC4: // SET 0,H
-            return set(reg(Reg::H), 0);
         case 0xC5: // SET 0,L
-            return set(reg(Reg::L), 0);
-        case 0xC6: // SET 0,(HL)
-            return setHL(0);
         case 0xC7: // SET 0,A
-            return set(reg(Reg::A), 0);
         case 0xC8: // SET 1,B
-            return set(reg(Reg::B), 1);
         case 0xC9: // SET 1,C
-            return set(reg(Reg::C), 1);
         case 0xCA: // SET 1,D
-            return set(reg(Reg::D), 1);
         case 0xCB: // SET 1,E
-            return set(reg(Reg::E), 1);
         case 0xCC: // SET 1,H
-            return set(reg(Reg::H), 1);
         case 0xCD: // SET 1,L
-            return set(reg(Reg::L), 1);
-        case 0xCE: // SET 1,(HL)
-            return setHL(1);
         case 0xCF: // SET 1,A
-            return set(reg(Reg::A), 1);
         case 0xD0: // SET 2,B
-            return set(reg(Reg::B), 2);
         case 0xD1: // SET 2,C
-            return set(reg(Reg::C), 2);
         case 0xD2: // SET 2,D
-            return set(reg(Reg::D), 2);
         case 0xD3: // SET 2,E
-            return set(reg(Reg::E), 2);
         case 0xD4: // SET 2,H
-            return set(reg(Reg::H), 2);
         case 0xD5: // SET 2,L
-            return set(reg(Reg::L), 2);
-        case 0xD6: // SET 2,(HL)
-            return setHL(2);
         case 0xD7: // SET 2,A
-            return set(reg(Reg::A), 2);
         case 0xD8: // SET 3,B
-            return set(reg(Reg::B), 3);
         case 0xD9: // SET 3,C
-            return set(reg(Reg::C), 3);
         case 0xDA: // SET 3,D
-            return set(reg(Reg::D), 3);
         case 0xDB: // SET 3,E
-            return set(reg(Reg::E), 3);
         case 0xDC: // SET 3,H
-            return set(reg(Reg::H), 3);
         case 0xDD: // SET 3,L
-            return set(reg(Reg::L), 3);
-        case 0xDE: // SET 3,(HL)
-            return setHL(3);
         case 0xDF: // SET 3,A
-            return set(reg(Reg::A), 3);
         case 0xE0: // SET 4,B
-            return set(reg(Reg::B), 4);
         case 0xE1: // SET 4,C
-            return set(reg(Reg::C), 4);
         case 0xE2: // SET 4,D
-            return set(reg(Reg::D), 4);
         case 0xE3: // SET 4,E
-            return set(reg(Reg::E), 4);
         case 0xE4: // SET 4,H
-            return set(reg(Reg::H), 4);
         case 0xE5: // SET 4,L
-            return set(reg(Reg::L), 4);
-        case 0xE6: // SET 4,(HL)
-            return setHL(4);
         case 0xE7: // SET 4,A
-            return set(reg(Reg::A), 4);
         case 0xE8: // SET 5,B
-            return set(reg(Reg::B), 5);
         case 0xE9: // SET 5,C
-            return set(reg(Reg::C), 5);
         case 0xEA: // SET 5,D
-            return set(reg(Reg::D), 5);
         case 0xEB: // SET 5,E
-            return set(reg(Reg::E), 5);
         case 0xEC: // SET 5,H
-            return set(reg(Reg::H), 5);
         case 0xED: // SET 5,L
-            return set(reg(Reg::L), 5);
-        case 0xEE: // SET 5,(HL)
-            return setHL(5);
         case 0xEF: // SET 5,A
-            return set(reg(Reg::A), 5);
         case 0xF0: // SET 6,B
-            return set(reg(Reg::B), 6);
         case 0xF1: // SET 6,C
-            return set(reg(Reg::C), 6);
         case 0xF2: // SET 6,D
-            return set(reg(Reg::D), 6);
         case 0xF3: // SET 6,E
-            return set(reg(Reg::E), 6);
         case 0xF4: // SET 6,H
-            return set(reg(Reg::H), 6);
         case 0xF5: // SET 6,L
-            return set(reg(Reg::L), 6);
-        case 0xF6: // SET 6,(HL)
-            return setHL(6);
         case 0xF7: // SET 6,A
-            return set(reg(Reg::A), 6);
         case 0xF8: // SET 7,B
-            return set(reg(Reg::B), 7);
         case 0xF9: // SET 7,C
-            return set(reg(Reg::C), 7);
         case 0xFA: // SET 7,D
-            return set(reg(Reg::D), 7);
         case 0xFB: // SET 7,E
-            return set(reg(Reg::E), 7);
         case 0xFC: // SET 7,H
-            return set(reg(Reg::H), 7);
         case 0xFD: // SET 7,L
-            return set(reg(Reg::L), 7);
-        case 0xFE: // SET 7,(HL)
-            return setHL(7);
         case 0xFF: // SET 7,A
-            return set(reg(Reg::A), 7);
+            return set(reg(regMap8[opcode & 7]), (opcode >> 3) & 7);
+        case 0xC6: // SET 0,(HL)
+        case 0xCE: // SET 1,(HL)
+        case 0xD6: // SET 2,(HL)
+        case 0xDE: // SET 3,(HL)
+        case 0xE6: // SET 4,(HL)
+        case 0xEE: // SET 5,(HL)
+        case 0xF6: // SET 6,(HL)
+        case 0xFE: // SET 7,(HL)
+            return setHL((opcode >> 3) & 7);
     }
 }
 
