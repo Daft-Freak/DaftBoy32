@@ -2954,14 +2954,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cyclesThisInstr = 0;
 
         if(it != branchTargets.end()) 
-            builder.jmp(it->second - builder.getPtr(), true);
+            builder.jmp(it->second - builder.getPtr(), flag != 0);
         else
         {
             if(instr.flags & Op_Branch)
                 forwardBranchesToPatch.emplace(addr, builder.getPtr());
 
             // will be patched later if possible
-            builder.jmp(exitPtr - builder.getPtr(), true);
+            bool forceLong = flag != 0 && (instr.flags & Op_Branch);
+            builder.jmp(exitPtr - builder.getPtr(), forceLong);
         }
 
         // exit if branch not taken
@@ -3009,14 +3010,15 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cyclesThisInstr = 0;
 
         if(it != branchTargets.end()) 
-            builder.jmp(it->second - builder.getPtr(), true);
+            builder.jmp(it->second - builder.getPtr(), flag != 0);
         else
         {
             if(instr.flags & Op_Branch)
                 forwardBranchesToPatch.emplace(pc + off, builder.getPtr());
 
             // will be patched later if possible
-            builder.jmp(exitPtr - builder.getPtr(), true);
+            bool forceLong = flag != 0 && (instr.flags & Op_Branch);
+            builder.jmp(exitPtr - builder.getPtr(), forceLong);
         }
 
         // exit if branch not taken
