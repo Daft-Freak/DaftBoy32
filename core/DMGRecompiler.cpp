@@ -3955,9 +3955,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             jump(DMGCPU::Flag_Z);
             break;
         case 0xCB:
-            //TODO: handle this
-            syncCyclesExecuted();
-            recompileExInstruction(instr, builder, cyclesThisInstr);
+            recompileExInstruction(instr, builder, cyclesThisInstr, delayedCyclesExecuted);
             break;
         case 0xCC: // CALL Z,nn
             call(DMGCPU::Flag_Z);
@@ -4261,16 +4259,23 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     return true;
 }
 
-void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, int &cyclesThisInstr)
+void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, int &cyclesThisInstr, int &delayedCyclesExecuted)
 {
     uint8_t opcode = instr.opcode[1];
 
-    // FIXME: copy/paste
+    bool delayCycles = delayedCyclesExecuted > 0; // if we have delayed cycles, we can add more
 
-    // TODO: shared trampolines?
-    auto cycleExecuted = [&builder, this, &cyclesThisInstr]()
+    // FIXME: (mostly) copy/paste
+
+    auto cycleExecuted = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted, delayCycles]()
     {
         cyclesThisInstr += 4;
+
+        if(delayCycles)
+        {
+            delayedCyclesExecuted += 4;
+            return;
+        }
 
         // safe to skip here as we take no args
         callSaveOrSkip(builder);
@@ -4282,11 +4287,30 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
         callRestore(builder);
     };
 
-    auto readMem = [&builder, this](Reg16 addrReg, Reg8 dstReg)
+    auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted]()
+    {
+        if(!delayedCyclesExecuted)
+            return;
+
+        assert(delayedCyclesExecuted < 127);
+        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+
+        int8_t i8Cycles = delayedCyclesExecuted;
+
+        builder.addD(-i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cyclesToRun) - cpuPtr);
+        builder.addD(i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr);
+        builder.addW(i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.divCounter) - cpuPtr);
+        
+        delayedCyclesExecuted = 0;
+    };
+
+    auto readMem = [&builder, &syncCyclesExecuted](Reg16 addrReg, Reg8 dstReg)
     {
         // addr is always HL
         assert(addrReg == Reg16::BX);
         callSaveOrSkip(builder);
+
+        syncCyclesExecuted();
 
         builder.movzx(Reg32::ESI, addrReg);
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
@@ -4296,8 +4320,9 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
         callRestore(builder, dstReg);
     };
 
-    auto writeMem = [&builder, this](Reg16 addrReg, Reg8 dataReg)
+    auto writeMem = [&builder, &syncCyclesExecuted](Reg16 addrReg, Reg8 dataReg)
     {
+        syncCyclesExecuted();
         callSave(builder);
 
         builder.movzx(Reg32::ESI, addrReg);

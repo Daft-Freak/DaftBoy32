@@ -31,7 +31,7 @@ private:
     bool compile(uint8_t *&codePtr, uint16_t pc, std::vector<OpInfo> &instrInfo);
 
     bool recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder &builder);
-    void recompileExInstruction(OpInfo &instr, X86Builder &builder, int &cyclesThisInstr);
+    void recompileExInstruction(OpInfo &instr, X86Builder &builder, int &cyclesThisInstr, int &delayedCyclesExecuted);
 
     void compileEntry();
 
