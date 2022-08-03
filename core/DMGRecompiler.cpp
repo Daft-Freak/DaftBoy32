@@ -3262,9 +3262,17 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
             break;
         }
+
         case 0x20: // JR NZ,n
-            jumpRel(DMGCPU::Flag_Z, false);
+        case 0x28: // JR Z,n
+        case 0x30: // JR NC,n
+        case 0x38: // JR C,n
+        {
+            int flag = opcode & (1 << 4) ? DMGCPU::Flag_C : DMGCPU::Flag_Z;
+            jumpRel(flag, opcode & (1 << 3));
             break;
+        }
+    
         case 0x22: // LDI (HL),A
             writeMem(reg(WReg::HL), reg(Reg::A));
             cycleExecuted();
@@ -3329,9 +3337,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
             break;
         }
-        case 0x28: // JR Z,n
-            jumpRel(DMGCPU::Flag_Z);
-            break;
 
         case 0x2A: // LDI A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
@@ -3343,9 +3348,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.not_(reg(Reg::A));
             builder.or_(reg(Reg::F), DMGCPU::Flag_H | DMGCPU::Flag_N);
             break;
-        case 0x30: // JR NC,n
-            jumpRel(DMGCPU::Flag_C, false);
-            break;
+
         case 0x32: // LDD (HL),A
             writeMem(reg(WReg::HL), reg(Reg::A));
             cycleExecuted();
@@ -3393,9 +3396,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.or_(reg(Reg::F), DMGCPU::Flag_C);
             break;
         }
-        case 0x38: // JR C,n
-            jumpRel(DMGCPU::Flag_C);
-            break;
 
         case 0x3A: // LDD A,(HL)
             readMem(reg(WReg::HL), reg(Reg::A));
@@ -3649,8 +3649,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         }
 
         case 0xC0: // RET NZ
-            ret(DMGCPU::Flag_Z, false);
+        case 0xC8: // RET Z
+        case 0xD0: // RET NC
+        case 0xD8: // RET C
+        {
+            int flag = opcode & (1 << 4) ? DMGCPU::Flag_C : DMGCPU::Flag_Z;
+            ret(flag, opcode & (1 << 3));
             break;
+        }
 
         case 0xC1: // POP BC
         case 0xD1: // POP DE
@@ -3659,14 +3665,27 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
 
         case 0xC2: // JP NZ,nn
-            jump(DMGCPU::Flag_Z, false);
+        case 0xCA: // JP Z,nn
+        case 0xDA: // JP C,nn
+        case 0xD2: // JP NC,nn
+        {
+            int flag = opcode & (1 << 4) ? DMGCPU::Flag_C : DMGCPU::Flag_Z;
+            jump(flag, opcode & (1 << 3));
             break;
+        }
         case 0xC3: // JP nn
             jump();
             break;
+
         case 0xC4: // CALL NZ,nn
-            call(DMGCPU::Flag_Z, false);
+        case 0xCC: // CALL Z,nn
+        case 0xD4: // CALL NC,nn
+        case 0xDC: // CALL C,nn
+        {
+            int flag = opcode & (1 << 4) ? DMGCPU::Flag_C : DMGCPU::Flag_Z;
+            call(flag, opcode & (1 << 3));
             break;
+        }
 
         case 0xC5: // PUSH BC
         case 0xD5: // PUSH DE
@@ -3692,42 +3711,24 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             reset(opcode & 0x38);
             break;
 
-        case 0xC8: // RET Z
-            ret(DMGCPU::Flag_Z);
-            break;
         case 0xC9: // RET
             ret();
             break;
-        case 0xCA: // JP Z,nn
-            jump(DMGCPU::Flag_Z);
-            break;
+
         case 0xCB:
             recompileExInstruction(instr, builder, cyclesThisInstr, delayedCyclesExecuted);
             break;
-        case 0xCC: // CALL Z,nn
-            call(DMGCPU::Flag_Z);
-            break;
+
         case 0xCD: // CALL nn
             call();
             break;
+
         case 0xCE: // ADC n
         {
             cycleExecuted();
             addWithCarry(instr.opcode[1]);
             break;
         }
-
-        case 0xD0: // RET NC
-            ret(DMGCPU::Flag_C, false);
-            break;
-
-        case 0xD2: // JP NC,nn
-            jump(DMGCPU::Flag_C, false);
-            break;
-
-        case 0xD4: // CALL NC,nn
-            call(DMGCPU::Flag_C, false);
-            break;
 
         case 0xD6: // SUB n
         {
@@ -3736,20 +3737,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
         }
 
-        case 0xD8: // RET C
-            ret(DMGCPU::Flag_C);
-            break;
         case 0xD9: // RETI
             // masterInterruptEnable = true
             builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - reinterpret_cast<uintptr_t>(&cpu));
             ret();
-            break;
-        case 0xDA: // JP C,nn
-            jump(DMGCPU::Flag_C);
-            break;
-
-        case 0xDC: // CALL C,nn
-            call(DMGCPU::Flag_C);
             break;
 
         case 0xDE: // SBC n
