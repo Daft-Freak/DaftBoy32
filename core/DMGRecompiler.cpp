@@ -2387,9 +2387,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         }
     };
 
-    const auto push = [&builder, &cycleExecuted, &writeMem](WReg r)
+    const auto push = [&builder, &cycleExecuted, &writeMem](Reg16 r)
     {
-        auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
+        assert(r == Reg16::AX || reg == Reg16::CX || reg == Reg16::DX || reg == Reg16::BX);
+        auto lowReg = static_cast<Reg8>(r); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
         cycleExecuted(); // delay
@@ -2403,9 +2404,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         cycleExecuted();
     };
 
-    const auto pop = [&builder, &cycleExecuted, &readMem](WReg r)
+    const auto pop = [&builder, &cycleExecuted, &readMem](Reg16 r)
     {
-        auto lowReg = static_cast<Reg8>(reg(r)); // AX == AL, CX == CL, ...
+        assert(r == Reg16::AX || reg == Reg16::CX || reg == Reg16::DX || reg == Reg16::BX);
+        auto lowReg = static_cast<Reg8>(r); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
         readMem(spReg16, lowReg);
@@ -2417,7 +2419,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.inc(spReg16);
 
         // low bits in F can never be set
-        if(r == WReg::AF)
+        if(r == reg(WReg::AF))
             builder.and_(reg(Reg::F), 0xF0);
     };
 
@@ -3649,9 +3651,13 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0xC0: // RET NZ
             ret(DMGCPU::Flag_Z, false);
             break;
+
         case 0xC1: // POP BC
-            pop(WReg::BC);
+        case 0xD1: // POP DE
+        case 0xE1: // POP HL
+            pop(regMap16[(opcode >> 4) & 3]);
             break;
+
         case 0xC2: // JP NZ,nn
             jump(DMGCPU::Flag_Z, false);
             break;
@@ -3661,9 +3667,13 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0xC4: // CALL NZ,nn
             call(DMGCPU::Flag_Z, false);
             break;
+
         case 0xC5: // PUSH BC
-            push(WReg::BC);
+        case 0xD5: // PUSH DE
+        case 0xE5: // PUSH HL
+            push(regMap16[(opcode >> 4) & 3]);
             break;
+
         case 0xC6: // ADD n
         {
             cycleExecuted();
@@ -3703,9 +3713,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0xD0: // RET NC
             ret(DMGCPU::Flag_C, false);
             break;
-        case 0xD1: // POP DE
-            pop(WReg::DE);
-            break;
+
         case 0xD2: // JP NC,nn
             jump(DMGCPU::Flag_C, false);
             break;
@@ -3713,9 +3721,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         case 0xD4: // CALL NC,nn
             call(DMGCPU::Flag_C, false);
             break;
-        case 0xD5: // PUSH DE
-            push(WReg::DE);
-            break;
+
         case 0xD6: // SUB n
         {
             cycleExecuted();
@@ -3758,9 +3764,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cycleExecuted();
             break;
         }
-        case 0xE1: // POP HL
-            pop(WReg::HL);
-            break;
+
         case 0xE2: // LDH (C),A
         {
             builder.movzx(Reg32::R10D, reg(Reg::C));
@@ -3770,9 +3774,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
         }
 
-        case 0xE5: // PUSH HL
-            push(WReg::HL);
-            break;
         case 0xE6: // AND n
         {
             cycleExecuted();
@@ -3853,7 +3854,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
         }
         case 0xF1: // POP AF
-            pop(WReg::AF);
+            pop(reg(WReg::AF));
             break;
         case 0xF2: // LDH A,(C)
         {
@@ -3870,7 +3871,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
 
         case 0xF5: // PUSH AF
-            push(WReg::AF);
+            push(reg(WReg::AF));
             break;
         case 0xF6: // OR n
         {
