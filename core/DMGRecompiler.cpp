@@ -2190,47 +2190,11 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc, std::vector<OpInfo> 
 
 bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder &builder)
 {
+    using Reg = DMGCPU::Reg;
+    using WReg = DMGCPU::WReg;
+
     auto &mem = cpu.getMem();
     uint8_t opcode = instr.opcode[0];
-
-    // handle branch targets
-    if(instr.flags & Op_BranchTarget)
-    {
-        // store for backwards jumps
-        if(lastInstrCycleCheck)
-            branchTargets.emplace(pc, lastInstrCycleCheck); // after adjusting cycle count but before the jump
-        else
-        {
-            // this is the first instruction, so make a cycle check for the branch to go to
-            builder.jmp(13);
-            lastInstrCycleCheck = builder.getPtr();
-
-            // if <= 0 exit
-            builder.jcc(Condition::G, 11);
-            builder.mov(pcReg32, pc);
-            builder.call(saveAndExitPtr - builder.getPtr());
-
-            // TODO: this is the first instruction
-            branchTargets.emplace(pc, lastInstrCycleCheck);
-        } 
-
-        // patch forwards jumps
-        // can't hit this for the first instruction, so the lastInstrCycleCheck will be valid
-        auto jumps = forwardBranchesToPatch.equal_range(pc);
-        for(auto it = jumps.first; it != jumps.second; ++it)
-        {
-            // overrite 4 byte disp
-            auto off = lastInstrCycleCheck - (it->second + 5);
-
-            it->second[1] = off;
-            it->second[2] = off >> 8;
-            it->second[3] = off >> 16;
-            it->second[4] = off >> 24;
-        }
-        forwardBranchesToPatch.erase(jumps.first, jumps.second);
-    }
-
-    pc += instr.len;
 
     int cyclesThisInstr = 0;
     int delayedCyclesExecuted = 0;
@@ -2284,30 +2248,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         delayedCyclesExecuted = 0;
     };
 
-    // cycle for opcode read
-    auto oldPtr = builder.getPtr();
-    cycleExecuted();
-
-    // previous op was EI
-    if(mem.read(pc - (instr.len + 1)) == 0xFB /*EI*/)
-    {
-        // enable interrupts for EI
-        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-
-        // if(enableInterruptsNextCycle)
-        // probably don't need this check... might get a false positive in some extreme case though
-        builder.cmp(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
-        builder.jcc(Condition::E, 10);
-
-        // masterInterruptEnable = true
-        builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
-
-        // enableInterruptsNextCycle = false
-        builder.mov(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
-
-        checkInterrupts = true;
-    }
-
     auto readMem = [&builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
     {
         syncCyclesExecuted();
@@ -2347,9 +2287,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         callRestore(builder, Reg32::EDI);
     };
-
-    using Reg = DMGCPU::Reg;
-    using WReg = DMGCPU::WReg;
 
     // neededFlags is what we need to output
     // updateFlags is what we can output from the result
@@ -3129,6 +3066,69 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         if(flag && (instr.flags & Op_Last))
             builder.jmp(exitPtr - builder.getPtr());
     };
+
+    // handle branch targets
+    if(instr.flags & Op_BranchTarget)
+    {
+        // store for backwards jumps
+        if(lastInstrCycleCheck)
+            branchTargets.emplace(pc, lastInstrCycleCheck); // after adjusting cycle count but before the jump
+        else
+        {
+            // this is the first instruction, so make a cycle check for the branch to go to
+            builder.jmp(13);
+            lastInstrCycleCheck = builder.getPtr();
+
+            // if <= 0 exit
+            builder.jcc(Condition::G, 11);
+            builder.mov(pcReg32, pc);
+            builder.call(saveAndExitPtr - builder.getPtr());
+
+            // TODO: this is the first instruction
+            branchTargets.emplace(pc, lastInstrCycleCheck);
+        } 
+
+        // patch forwards jumps
+        // can't hit this for the first instruction, so the lastInstrCycleCheck will be valid
+        auto jumps = forwardBranchesToPatch.equal_range(pc);
+        for(auto it = jumps.first; it != jumps.second; ++it)
+        {
+            // overrite 4 byte disp
+            auto off = lastInstrCycleCheck - (it->second + 5);
+
+            it->second[1] = off;
+            it->second[2] = off >> 8;
+            it->second[3] = off >> 16;
+            it->second[4] = off >> 24;
+        }
+        forwardBranchesToPatch.erase(jumps.first, jumps.second);
+    }
+
+    pc += instr.len;
+
+    // cycle for opcode read
+    auto oldPtr = builder.getPtr();
+    cycleExecuted();
+
+    // previous op was EI
+    if(mem.read(pc - (instr.len + 1)) == 0xFB /*EI*/)
+    {
+        // enable interrupts for EI
+        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+
+        // if(enableInterruptsNextCycle)
+        // probably don't need this check... might get a false positive in some extreme case though
+        builder.cmp(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
+        builder.jcc(Condition::E, 10);
+
+        // masterInterruptEnable = true
+        builder.mov(1, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr);
+
+        // enableInterruptsNextCycle = false
+        builder.mov(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
+
+        checkInterrupts = true;
+    }
 
     switch(opcode)
     {
