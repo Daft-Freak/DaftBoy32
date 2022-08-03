@@ -3776,6 +3776,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         }
 
         case 0xE8: // ADD SP,n
+        case 0xF8: // LDHL SP,n
         {
             auto f = reg(Reg::F);
 
@@ -3804,10 +3805,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.or_(f, DMGCPU::Flag_H); // set H
 
             // real add
-            builder.add(spReg16, static_cast<int8_t>(b));
+            if(opcode == 0xE8) // ADD SP,n
+            {
+                builder.add(spReg16, static_cast<int8_t>(b));
 
-            // 2x delay
-            cycleExecuted();
+                // 2x delay
+                cycleExecuted();
+            }
+            else // LDHL SP,n
+            {
+                builder.mov(static_cast<Reg32>(reg(WReg::HL)), spReg32);
+                builder.add(reg(WReg::HL), static_cast<int8_t>(b));
+            }
+
             cycleExecuted();
 
             break;
@@ -3870,42 +3880,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
         }
 
-        case 0xF8: // LDHL SP,n
-        {
-            auto f = reg(Reg::F);
-
-            auto b = instr.opcode[1];
-            cycleExecuted();
-
-            // flags are set as if this is an 8 bit op
-            builder.mov(f, 0);
-
-            // 8 bit add
-            builder.mov(Reg8::R10B, spReg8);
-            builder.add(Reg8::R10B, b);
-
-            // carry flag
-            builder.jcc(Condition::AE, 3); // if !carry
-            builder.or_(f, DMGCPU::Flag_C); // set C
-
-            // half add
-            builder.mov(Reg8::R10B, spReg8);
-            builder.and_(Reg8::R10B, 0xF);
-            builder.add(Reg8::R10B, b & 0xF);
-
-            // half carry flag if > 0xF
-            builder.cmp(Reg8::R10B, 0xF);
-            builder.jcc(Condition::BE, 3); // <= 0xF
-            builder.or_(f, DMGCPU::Flag_H); // set H
-
-            // real add
-            builder.mov(static_cast<Reg32>(reg(WReg::HL)), spReg32);
-            builder.add(reg(WReg::HL), static_cast<int8_t>(b));
-
-            cycleExecuted();
-
-            break;
-        }
         case 0xF9: // LD SP,HL
             cycleExecuted();
             builder.mov(spReg32, static_cast<Reg32>(reg(WReg::HL)));
