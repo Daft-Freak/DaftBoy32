@@ -2838,18 +2838,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         cycleExecuted();
     };
 
-    const auto inc16 = [&builder, &cycleExecuted](WReg r)
-    {
-        cycleExecuted();
-        builder.inc(reg(r));
-    };
-
-    const auto dec16 = [&builder, &cycleExecuted](WReg r)
-    {
-        cycleExecuted();
-        builder.dec(reg(r));
-    };
-
     const auto jump = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](int flag = 0, bool set = true)
     {
         uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
@@ -3150,15 +3138,45 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             writeMem(regMap16[opcode >> 4], reg(Reg::A));
             cycleExecuted();
             break;
+
         case 0x03: // INC BC
-            inc16(WReg::BC);
+        case 0x13: // INC DE
+        case 0x23: // INC HL
+        case 0x33: // INC SP
+            builder.inc(regMap16[opcode >> 4]);
+            cycleExecuted();
             break;
+
         case 0x04: // INC B
-            inc(reg(Reg::B));
+        case 0x0C: // INC C
+        case 0x14: // INC D
+        case 0x1C: // INC E
+        case 0x24: // INC H
+        case 0x2C: // INC L
+        case 0x3C: // INC A
+            inc(regMap8[opcode >> 3]);
             break;
+
         case 0x05: // DEC B
             dec(reg(Reg::B));
             break;
+        case 0x0D: // DEC C
+        case 0x15: // DEC D
+        case 0x1D: // DEC E
+        case 0x25: // DEC H
+        case 0x2D: // DEC L
+        case 0x3D: // DEC A
+            dec(regMap8[opcode >> 3]);
+            break;
+
+        case 0x0B: // DEC BC
+        case 0x1B: // DEC DE
+        case 0x2B: // DEC HL
+        case 0x3B: // DEC SP
+            builder.dec(regMap16[opcode >> 4]);
+            cycleExecuted();
+            break;
+
         case 0x06: // LD B,n
         case 0x0E: // LD C,n
         case 0x16: // LD D,n
@@ -3200,29 +3218,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cycleExecuted();
             break;
 
-        case 0x0B: // DEC BC
-            dec16(WReg::BC);
-            break;
-        case 0x0C: // INC C
-            inc(reg(Reg::C));
-            break;
-        case 0x0D: // DEC C
-            dec(reg(Reg::C));
-            break;
-
         case 0x0F: // RRCA
             builder.ror(reg(Reg::A), 1);
             carryOut();
-            break;
-
-        case 0x13: // INC DE
-            inc16(WReg::DE);
-            break;
-        case 0x14: // INC D
-            inc(reg(Reg::D));
-            break;
-        case 0x15: // DEC D
-            dec(reg(Reg::D));
             break;
 
         case 0x17: // RLA
@@ -3246,16 +3244,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             add16(reg(WReg::DE));
             break;
 
-        case 0x1B: // DEC DE
-            dec16(WReg::DE);
-            break;
-        case 0x1C: // INC E
-            inc(reg(Reg::E));
-            break;
-        case 0x1D: // DEC E
-            dec(reg(Reg::E));
-            break;
-
         case 0x1F: // RRA
         {
             auto f = reg(Reg::F);
@@ -3277,15 +3265,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             writeMem(reg(WReg::HL), reg(Reg::A));
             cycleExecuted();
             builder.inc(reg(WReg::HL));
-            break;
-        case 0x23: // INC HL
-            inc16(WReg::HL);
-            break;
-        case 0x24: // INC H
-            inc(reg(Reg::H));
-            break;
-        case 0x25: // DEC H
-            dec(reg(Reg::H));
             break;
 
         case 0x27: // DAA
@@ -3357,15 +3336,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cycleExecuted();
             builder.inc(reg(WReg::HL));
             break;
-        case 0x2B: // DEC HL
-            dec16(WReg::HL);
-            break;
-        case 0x2C: // INC L
-            inc(reg(Reg::L));
-            break;
-        case 0x2D: // DEC L
-            dec(reg(Reg::L));
-            break;
 
         case 0x2F: // CPL
             builder.not_(reg(Reg::A));
@@ -3379,10 +3349,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cycleExecuted();
             builder.dec(reg(WReg::HL));
             break;
-        case 0x33: // INC SP
-            builder.inc(spReg16);
-            cycleExecuted();
-            break;
+
         case 0x34: // INC (HL)
         {
             auto tmp = Reg8::R11B;
@@ -3435,16 +3402,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             cycleExecuted();
             builder.dec(reg(WReg::HL));
             break;
-        case 0x3B: // DEC SP
-            builder.dec(spReg16);
-            cycleExecuted();
-            break;
-        case 0x3C: // INC A
-            inc(reg(Reg::A));
-            break;
-        case 0x3D: // DEC A
-            dec(reg(Reg::A));
-            break;
+
         case 0x3F: // CCF
         {
             builder.and_(reg(Reg::F), DMGCPU::Flag_C | DMGCPU::Flag_Z); // H/N are cleared
