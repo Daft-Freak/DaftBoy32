@@ -4340,16 +4340,16 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
     using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
-    static const Reg regMap8[]
+    static const Reg8 regMap8[]
     {
-        Reg::B,
-        Reg::C,
-        Reg::D,
-        Reg::E,
-        Reg::H,
-        Reg::L,
-        Reg::H, // placeholder for (HL)
-        Reg::A,
+        reg(Reg::B),
+        reg(Reg::C),
+        reg(Reg::D),
+        reg(Reg::E),
+        reg(Reg::H),
+        reg(Reg::L),
+        Reg8::R10B, // where we load to for (HL)
+        reg(Reg::A),
     };
 
     // the flags here are more simple
@@ -4387,7 +4387,7 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
     cycleExecuted();
 
     bool isMem = (opcode & 7) == 6; // (HL)
-    auto r = isMem ? Reg8::R10B : reg(regMap8[opcode & 7]);
+    auto r = regMap8[opcode & 7];
 
     if(isMem)
     {
