@@ -2207,6 +2207,19 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     // SP = R13D
     // cycles = EDI
 
+    // mapping from opcodes
+    static const Reg8 regMap8[]
+    {
+        reg(Reg::B),
+        reg(Reg::C),
+        reg(Reg::D),
+        reg(Reg::E),
+        reg(Reg::H),
+        reg(Reg::L),
+        Reg8::R10B, // where we load to for (HL)
+        reg(Reg::A),
+    };
+
     // TODO: shared trampolines?
     auto cycleExecuted = [this, &builder, pc, &cyclesThisInstr, &delayedCyclesExecuted]()
     {
@@ -2370,11 +2383,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     {
         cycleExecuted();
         builder.mov(reg(r), instr.opcode[1]);
-    };
-
-    const auto copy8 = [&builder, &cycleExecuted](Reg dst, Reg src)
-    {
-        builder.mov(reg(dst), reg(src));
     };
 
     const auto load16 = [&instr, &builder, &cycleExecuted](WReg r)
@@ -3465,180 +3473,79 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.xor_(reg(Reg::F), DMGCPU::Flag_C);
             break;
         }
+
         case 0x40: // LD B,B
-            copy8(Reg::B, Reg::B);
-            break;
         case 0x41: // LD B,C
-            copy8(Reg::B, Reg::C);
-            break;
         case 0x42: // LD B,D
-            copy8(Reg::B, Reg::D);
-            break;
         case 0x43: // LD B,E
-            copy8(Reg::B, Reg::E);
-            break;
         case 0x44: // LD B,H
-            copy8(Reg::B, Reg::H);
-            break;
         case 0x45: // LD B,L
-            copy8(Reg::B, Reg::L);
+        case 0x47: // LD B,A
+        case 0x48: // LD C,B
+        case 0x49: // LD C,C
+        case 0x4A: // LD C,D
+        case 0x4B: // LD C,E
+        case 0x4C: // LD C,H
+        case 0x4D: // LD C,L
+        case 0x4F: // LD C,A
+        case 0x50: // LD D,B
+        case 0x51: // LD D,C
+        case 0x52: // LD D,D
+        case 0x53: // LD D,E
+        case 0x54: // LD D,H
+        case 0x55: // LD D,L
+        case 0x57: // LD D,A
+        case 0x58: // LD E,B
+        case 0x59: // LD E,C
+        case 0x5A: // LD E,D
+        case 0x5B: // LD E,E
+        case 0x5C: // LD E,H
+        case 0x5D: // LD E,L
+        case 0x5F: // LD E,A
+        case 0x60: // LD H,B
+        case 0x61: // LD H,C
+        case 0x62: // LD H,D
+        case 0x63: // LD H,E
+        case 0x64: // LD H,H
+        case 0x65: // LD H,L
+        case 0x67: // LD H,A
+        case 0x68: // LD L,B
+        case 0x69: // LD L,C
+        case 0x6A: // LD L,D
+        case 0x6B: // LD L,E
+        case 0x6C: // LD L,H
+        case 0x6D: // LD L,L
+        case 0x6F: // LD L,A
+        case 0x78: // LD A,B
+        case 0x79: // LD A,C
+        case 0x7A: // LD A,D
+        case 0x7B: // LD A,E
+        case 0x7C: // LD A,H
+        case 0x7D: // LD A,L
+        case 0x7F: // LD A,A
+            builder.mov(regMap8[(opcode >> 3) & 7], regMap8[opcode & 7]);
             break;
         case 0x46: // LD B,(HL)
-            readMem(reg(WReg::HL), reg(Reg::B));
-            cycleExecuted();
-            break;
-        case 0x47: // LD B,A
-            copy8(Reg::B, Reg::A);
-            break;
-        case 0x48: // LD C,B
-            copy8(Reg::C, Reg::B);
-            break;
-        case 0x49: // LD C,C
-            copy8(Reg::C, Reg::C);
-            break;
-        case 0x4A: // LD C,D
-            copy8(Reg::C, Reg::D);
-            break;
-        case 0x4B: // LD C,E
-            copy8(Reg::C, Reg::E);
-            break;
-        case 0x4C: // LD C,H
-            copy8(Reg::C, Reg::H);
-            break;
-        case 0x4D: // LD C,L
-            copy8(Reg::C, Reg::L);
-            break;
         case 0x4E: // LD C,(HL)
-            readMem(reg(WReg::HL), reg(Reg::C));
-            cycleExecuted();
-            break;
-        case 0x4F: // LD C,A
-            copy8(Reg::C, Reg::A);
-            break;
-        case 0x50: // LD D,B
-            copy8(Reg::D, Reg::B);
-            break;
-        case 0x51: // LD D,C
-            copy8(Reg::D, Reg::C);
-            break;
-        case 0x52: // LD D,D
-            copy8(Reg::D, Reg::D);
-            break;
-        case 0x53: // LD D,E
-            copy8(Reg::D, Reg::E);
-            break;
-        case 0x54: // LD D,H
-            copy8(Reg::D, Reg::H);
-            break;
-        case 0x55: // LD D,L
-            copy8(Reg::D, Reg::L);
-            break;
         case 0x56: // LD D,(HL)
-            readMem(reg(WReg::HL), reg(Reg::D));
-            cycleExecuted();
-            break;
-        case 0x57: // LD D,A
-            copy8(Reg::D, Reg::A);
-            break;
-        case 0x58: // LD E,B
-            copy8(Reg::E, Reg::B);
-            break;
-        case 0x59: // LD E,C
-            copy8(Reg::E, Reg::C);
-            break;
-        case 0x5A: // LD E,D
-            copy8(Reg::E, Reg::D);
-            break;
-        case 0x5B: // LD E,E
-            copy8(Reg::E, Reg::E);
-            break;
-        case 0x5C: // LD E,H
-            copy8(Reg::E, Reg::H);
-            break;
-        case 0x5D: // LD E,L
-            copy8(Reg::E, Reg::L);
-            break;
         case 0x5E: // LD E,(HL)
-            readMem(reg(WReg::HL), reg(Reg::E));
-            cycleExecuted();
-            break;
-        case 0x5F: // LD E,A
-            copy8(Reg::E, Reg::A);
-            break;
-        case 0x60: // LD H,B
-            copy8(Reg::H, Reg::B);
-            break;
-        case 0x61: // LD H,C
-            copy8(Reg::H, Reg::C);
-            break;
-        case 0x62: // LD H,D
-            copy8(Reg::H, Reg::D);
-            break;
-        case 0x63: // LD H,E
-            copy8(Reg::H, Reg::E);
-            break;
-        case 0x64: // LD H,H
-            copy8(Reg::H, Reg::H);
-            break;
-        case 0x65: // LD H,L
-            copy8(Reg::H, Reg::L);
-            break;
         case 0x66: // LD H,(HL)
-            readMem(reg(WReg::HL), reg(Reg::H));
-            cycleExecuted();
-            break;
-        case 0x67: // LD H,A
-            copy8(Reg::H, Reg::A);
-            break;
-        case 0x68: // LD L,B
-            copy8(Reg::L, Reg::B);
-            break;
-        case 0x69: // LD L,C
-            copy8(Reg::L, Reg::C);
-            break;
-        case 0x6A: // LD L,D
-            copy8(Reg::L, Reg::D);
-            break;
-        case 0x6B: // LD L,E
-            copy8(Reg::L, Reg::E);
-            break;
-        case 0x6C: // LD L,H
-            copy8(Reg::L, Reg::H);
-            break;
-        case 0x6D: // LD L,L
-            copy8(Reg::L, Reg::L);
-            break;
         case 0x6E: // LD L,(HL)
-            readMem(reg(WReg::HL), reg(Reg::L));
+        case 0x7E: // LD A,(HL)
+            readMem(reg(WReg::HL), regMap8[(opcode >> 3) & 7]);
             cycleExecuted();
-            break;
-        case 0x6F: // LD L,A
-            copy8(Reg::L, Reg::A);
             break;
         case 0x70: // LD (HL),B
-            writeMem(reg(WReg::HL), reg(Reg::B));
-            cycleExecuted();
-            break;
         case 0x71: // LD (HL),C
-            writeMem(reg(WReg::HL), reg(Reg::C));
-            cycleExecuted();
-            break;
         case 0x72: // LD (HL),D
-            writeMem(reg(WReg::HL), reg(Reg::D));
-            cycleExecuted();
-            break;
         case 0x73: // LD (HL),E
-            writeMem(reg(WReg::HL), reg(Reg::E));
-            cycleExecuted();
-            break;
         case 0x74: // LD (HL),H
-            writeMem(reg(WReg::HL), reg(Reg::H));
-            cycleExecuted();
-            break;
         case 0x75: // LD (HL),L
-            writeMem(reg(WReg::HL), reg(Reg::L));
+        case 0x77: // LD (HL),A
+            writeMem(reg(WReg::HL), regMap8[opcode & 7]);
             cycleExecuted();
             break;
+        
         case 0x76: // HALT
         {
             // halted = true
@@ -3659,35 +3566,6 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.call(saveAndExitPtr - builder.getPtr());
             break;
         }
-        case 0x77: // LD (HL),A
-            writeMem(reg(WReg::HL), reg(Reg::A));
-            cycleExecuted();
-            break;
-        case 0x78: // LD A,B
-            copy8(Reg::A, Reg::B);
-            break;
-        case 0x79: // LD A,C
-            copy8(Reg::A, Reg::C);
-            break;
-        case 0x7A: // LD A,D
-            copy8(Reg::A, Reg::D);
-            break;
-        case 0x7B: // LD A,E
-            copy8(Reg::A, Reg::E);
-            break;
-        case 0x7C: // LD A,H
-            copy8(Reg::A, Reg::H);
-            break;
-        case 0x7D: // LD A,L
-            copy8(Reg::A, Reg::L);
-            break;
-        case 0x7E: // LD A,(HL)
-            readMem(reg(WReg::HL), reg(Reg::A));
-            cycleExecuted();
-            break;
-        case 0x7F: // LD A,A
-            copy8(Reg::A, Reg::A);
-            break;
 
         case 0x80: // ADD A,B
             add(reg(Reg::B));
