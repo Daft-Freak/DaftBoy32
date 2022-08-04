@@ -2033,6 +2033,33 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
     // cleanup
     pc = startPC;
 
+    // TODO: we end up scanning for branch targets a lot
+    auto findBranchTarget = [&instrInfo](uint16_t pc, uint16_t target, std::vector<OpInfo>::iterator it)
+    {
+        auto searchPC = pc;
+        if(target < pc)
+        {
+            auto prevIt = std::make_reverse_iterator(it + 1);
+    
+            for(; prevIt != instrInfo.rend() && searchPC >= target; ++prevIt)
+            {
+                searchPC -= prevIt->len;
+                if(searchPC == target)
+                    return prevIt.base() - 1;
+            }
+        }
+        else
+        {
+            for(auto nextIt = it + 1; nextIt != instrInfo.end() && searchPC <= target; searchPC += nextIt->len, ++nextIt)
+            {
+                if(searchPC == target)
+                    return nextIt;
+            }
+        }
+
+        return instrInfo.end();
+    };
+
     for(auto it = instrInfo.begin(); it != instrInfo.end(); ++it)
     {
         auto &instr = *it;
@@ -2057,37 +2084,14 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             else
             {
                 // find and mark target
-                auto searchPC = pc;
-                if(target < pc)
-                {
-                    auto prevIt = std::make_reverse_iterator(it + 1);
-            
-                    for(; prevIt != instrInfo.rend() && searchPC >= target; ++prevIt)
-                    {
-                        searchPC -= prevIt->len;
-                        if(searchPC == target)
-                        {
-                            prevIt->flags |= Op_BranchTarget;
-                            break;
-                        }
-                    }
-                }
+                auto targetInstr = findBranchTarget(pc, target, it);
+
+                if(targetInstr != instrInfo.end())
+                    targetInstr->flags |= Op_BranchTarget;
                 else
                 {
-                    for(auto nextIt = it + 1; nextIt != instrInfo.end() && searchPC <= target; searchPC += nextIt->len, ++nextIt)
-                    {
-                        if(searchPC == target)
-                        {
-                            nextIt->flags |= Op_BranchTarget;
-                            break;
-                        }
-                    }
-                }
-
-                // failed to find target
-                // may happen if there's a jump over some data
-                if(searchPC != target)
-                {
+                    // failed to find target
+                    // may happen if there's a jump over some data
                     instr.flags &= ~Op_Branch;
                     instr.flags |= Op_Exit;
                 }
