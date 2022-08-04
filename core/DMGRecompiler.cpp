@@ -1377,12 +1377,13 @@ void DMGRecompiler::handleBranch()
                 auto pc = cpu.pc;
 
                 std::vector<OpInfo> instructions;
-                analyse(pc, instructions);
+                BlockInfo blockInfo;
+                analyse(pc, blockInfo);
                 printf("analysed %04X-%04X (%zi instructions)\n", cpu.pc, pc, instructions.size());
 
                 FuncInfo info{};
 
-                if(compile(ptr, cpu.pc, instructions))
+                if(compile(ptr, cpu.pc, blockInfo))
                 {
                     info.startPtr = startPtr;
                     info.endPtr = curCodePtr = ptr;
@@ -1446,7 +1447,7 @@ void DMGRecompiler::handleBranch()
     }
 }
 
-void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
+void DMGRecompiler::analyse(uint16_t &pc, BlockInfo &blockInfo)
 {
     bool done = false;
 
@@ -2025,7 +2026,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
         }
 
         if(info.len)
-            instrInfo.push_back(info);
+            blockInfo.instructions.push_back(info);
     }
 
     auto endPC = pc;
@@ -2034,14 +2035,14 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
     pc = startPC;
 
     // TODO: we end up scanning for branch targets a lot
-    auto findBranchTarget = [&instrInfo](uint16_t pc, uint16_t target, std::vector<OpInfo>::iterator it)
+    auto findBranchTarget = [&blockInfo](uint16_t pc, uint16_t target, std::vector<OpInfo>::iterator it)
     {
         auto searchPC = pc;
         if(target < pc)
         {
             auto prevIt = std::make_reverse_iterator(it + 1);
     
-            for(; prevIt != instrInfo.rend() && searchPC >= target; ++prevIt)
+            for(; prevIt != blockInfo.instructions.rend() && searchPC >= target; ++prevIt)
             {
                 searchPC -= prevIt->len;
                 if(searchPC == target)
@@ -2050,20 +2051,20 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
         }
         else
         {
-            for(auto nextIt = it + 1; nextIt != instrInfo.end() && searchPC <= target; searchPC += nextIt->len, ++nextIt)
+            for(auto nextIt = it + 1; nextIt != blockInfo.instructions.end() && searchPC <= target; searchPC += nextIt->len, ++nextIt)
             {
                 if(searchPC == target)
                     return nextIt;
             }
         }
 
-        return instrInfo.end();
+        return blockInfo.instructions.end();
     };
 
     std::vector<uint8_t> origFlags; // there aren't enough bits in ->flags...
-    origFlags.resize(instrInfo.size());
+    origFlags.resize(blockInfo.instructions.size());
 
-    for(auto it = instrInfo.begin(); it != instrInfo.end(); ++it)
+    for(auto it = blockInfo.instructions.begin(); it != blockInfo.instructions.end(); ++it)
     {
         auto &instr = *it;
         pc += instr.len;
@@ -2077,11 +2078,11 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             bool inBranch = false;
 
             // save flags
-            origFlags[it - instrInfo.begin()] = instr.flags & Op_WriteFlags;
+            origFlags[it - blockInfo.instructions.begin()] = instr.flags & Op_WriteFlags;
 
             // look ahead until we have no flags wrtiten that are not read
             auto nextPC = pc;
-            for(auto next = it + 1; next != instrInfo.end() && (instr.flags & Op_WriteFlags) != read << 4;)
+            for(auto next = it + 1; next != blockInfo.instructions.end() && (instr.flags & Op_WriteFlags) != read << 4;)
             {
                 nextPC += next->len;
 
@@ -2110,7 +2111,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                     auto targetInstr = findBranchTarget(nextPC, target, next);
 
                     // bad branch, give up
-                    if(targetInstr == instrInfo.end())
+                    if(targetInstr == blockInfo.instructions.end())
                         break;
 
                     if(!isConditional)
@@ -2124,7 +2125,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                     {
                         // follow false branch until we hit another branch
                         falseBranchFlags = instr.flags & Op_WriteFlags;
-                        for(auto falseInstr = next + 1; falseInstr != instrInfo.end() && falseBranchFlags != read << 4; ++falseInstr)
+                        for(auto falseInstr = next + 1; falseInstr != blockInfo.instructions.end() && falseBranchFlags != read << 4; ++falseInstr)
                         {
                             if(falseInstr->flags & (Op_Branch | Op_Exit))
                                 break;
@@ -2142,7 +2143,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
 
                 auto written = next->flags & Op_WriteFlags;
                 if(next < it) // backwards jump, restore old flags
-                    written = origFlags[next - instrInfo.begin()];
+                    written = origFlags[next - blockInfo.instructions.begin()];
 
                 // clear overriden flags (keep any that are used)
                 instr.flags = (instr.flags & ~(written)) | read << 4 | falseBranchFlags;
@@ -2171,7 +2172,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 // find and mark target
                 auto targetInstr = findBranchTarget(pc, target, it);
 
-                if(targetInstr != instrInfo.end())
+                if(targetInstr != blockInfo.instructions.end())
                     targetInstr->flags |= Op_BranchTarget;
                 else
                 {
@@ -2184,12 +2185,12 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
         }
     }
 
-    instrInfo.back().flags |= Op_Last;
+    blockInfo.instructions.back().flags |= Op_Last;
 }
 
-void DMGRecompiler::printInfo(std::vector<OpInfo> &instrInfo)
+void DMGRecompiler::printInfo(BlockInfo &blockInfo)
 {
-    for(auto &instr : instrInfo)
+    for(auto &instr : blockInfo.instructions)
     {
         int i = 0;
         for(; i < instr.len; i++)
@@ -2257,7 +2258,7 @@ void DMGRecompiler::printInfo(std::vector<OpInfo> &instrInfo)
     }
 }
 
-bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc, std::vector<OpInfo> &instrInfo)
+bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo)
 {
     X86Builder builder(codePtr, codeBuf + codeBufSize);
 
@@ -2266,7 +2267,7 @@ bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc, std::vector<OpInfo> 
     // do instructions
     int numInstructions = 0;
 
-    for(auto &instr : instrInfo)
+    for(auto &instr : blockInfo.instructions)
     {
         if(!recompileInstruction(pc, instr, builder))
             break;

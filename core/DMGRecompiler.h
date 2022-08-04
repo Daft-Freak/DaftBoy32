@@ -22,13 +22,18 @@ private:
         uint16_t flags;
     };
 
+    struct BlockInfo
+    {
+        std::vector<OpInfo> instructions;
+    };
+
     DMGCPU &cpu;
 
-    void analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo);
+    void analyse(uint16_t &pc, BlockInfo &blockInfo);
 
-    void printInfo(std::vector<OpInfo> &instrInfo);
+    void printInfo(BlockInfo &blockInfo);
 
-    bool compile(uint8_t *&codePtr, uint16_t pc, std::vector<OpInfo> &instrInfo);
+    bool compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo);
 
     bool recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder &builder);
     void recompileExInstruction(OpInfo &instr, X86Builder &builder, int &cyclesThisInstr, int &delayedCyclesExecuted);
