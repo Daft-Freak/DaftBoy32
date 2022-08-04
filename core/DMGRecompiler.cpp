@@ -3717,8 +3717,22 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
 
         case 0xCB:
-            recompileExInstruction(instr, builder, cyclesThisInstr, delayedCyclesExecuted);
+        {
+            uint8_t exOpcode = instr.opcode[1];
+
+            cycleExecuted();
+
+            bool isMem = (exOpcode & 7) == 6; // (HL)
+
+            if(isMem)
+                readMem(reg(WReg::HL), Reg8::R10B);
+
+            recompileExInstruction(instr, builder);
+
+            if(isMem && (exOpcode >= 0x80 || exOpcode < 0x40)) // BIT doesn't write back
+                writeMem(reg(WReg::HL), Reg8::R10B);
             break;
+        }
 
         case 0xCD: // CALL nn
             call();
@@ -3942,87 +3956,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     return true;
 }
 
-void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, int &cyclesThisInstr, int &delayedCyclesExecuted)
+void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder)
 {
     uint8_t opcode = instr.opcode[1];
 
-    bool delayCycles = delayedCyclesExecuted > 0; // if we have delayed cycles, we can add more
-
-    // FIXME: (mostly) copy/paste
-
-    auto cycleExecuted = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted, delayCycles]()
-    {
-        cyclesThisInstr += 4;
-
-        if(delayCycles)
-        {
-            delayedCyclesExecuted += 4;
-            return;
-        }
-
-        // safe to skip here as we take no args
-        callSaveOrSkip(builder);
-
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::cycleExecuted)); // function ptr
-        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
-        builder.call(Reg64::RAX); // do call
-
-        callRestore(builder);
-    };
-
-    auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted]()
-    {
-        if(!delayedCyclesExecuted)
-            return;
-
-        assert(delayedCyclesExecuted < 127);
-        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-
-        int8_t i8Cycles = delayedCyclesExecuted;
-
-        builder.addD(-i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cyclesToRun) - cpuPtr);
-        builder.addD(i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr);
-        builder.addW(i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.divCounter) - cpuPtr);
-        
-        delayedCyclesExecuted = 0;
-    };
-
-    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted](Reg16 addrReg, Reg8 dstReg)
-    {
-        // addr is always HL
-        assert(addrReg == Reg16::BX);
-        callSaveOrSkip(builder);
-
-        syncCyclesExecuted();
-
-        builder.movzx(Reg32::ESI, addrReg);
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
-        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
-        builder.call(Reg64::RAX); // do call
-
-        callRestore(builder, dstReg);
-
-        cycleExecuted();
-    };
-
-    auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted](Reg16 addrReg, Reg8 dataReg)
-    {
-        syncCyclesExecuted();
-        callSave(builder);
-
-        builder.movzx(Reg32::ESI, addrReg);
-        builder.movzx(Reg32::EDX, dataReg);
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
-        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
-        builder.call(Reg64::RAX); // do call
-
-        callRestore(builder, Reg32::EDI);
-
-        cycleExecuted();
-    };
-
     using Reg = DMGCPU::Reg;
-    using WReg = DMGCPU::WReg;
 
     static const Reg8 regMap8[]
     {
@@ -4068,13 +4006,7 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             builder.mov(f, 0); // something relying on an unset flag
     };
 
-    cycleExecuted();
-
-    bool isMem = (opcode & 7) == 6; // (HL)
     auto r = regMap8[opcode & 7];
-
-    if(isMem)
-        readMem(reg(WReg::HL), Reg8::R10B);
 
     if(opcode < 0x40) // shifts/rotates
     {
@@ -4157,8 +4089,6 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
             builder.jcc(Condition::NE, 3); // if != 0
             builder.or_(f, DMGCPU::Flag_Z); // set Z
         }
-
-        isMem = false; // this one doesn't write back
     }
     else if(opcode < 0xC0) // RES
     {
@@ -4170,9 +4100,6 @@ void DMGRecompiler::recompileExInstruction(OpInfo &instr, X86Builder &builder, i
         int bit = (opcode >> 3) & 7;
         builder.or_(r, 1 << bit);
     }
-
-    if(isMem)
-        writeMem(reg(WReg::HL), Reg8::R10B);
 }
 
 void DMGRecompiler::compileEntry()
