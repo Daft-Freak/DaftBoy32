@@ -1311,6 +1311,9 @@ DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
         perror("failed to allocate code buffer (mmap failed)");
 
     curCodePtr = codeBuf;
+
+    for(auto &saved : savedExits)
+        saved = {nullptr, 0};
 }
 
 void DMGRecompiler::handleBranch()
@@ -1335,17 +1338,32 @@ void DMGRecompiler::handleBranch()
 
         uint8_t *codePtr = nullptr;
 
-        // attempt to re-enter previous code
-        if(savedPtr && savedPC == cpu.pc)
-            codePtr = savedPtr;
+        auto mappedAddr = cpu.mem.makeBankedAddress(cpu.pc);
 
-        savedPtr = nullptr;
+        // attempt to re-enter previous code
+        int savedIndex = curSavedExit - 1;
+        for(int i = 0; i < savedExitsSize; i++, savedIndex--)
+        {
+            // wrap
+            if(savedIndex < 0)
+                savedIndex += savedExitsSize;
+
+            uint8_t *ptr;
+            uint32_t pc;
+            std::tie(ptr, pc) = savedExits[savedIndex];
+
+            if(pc == mappedAddr && ptr)
+            {
+                codePtr = ptr;
+                curSavedExit = savedIndex;
+                savedExits[savedIndex] = {nullptr, 0};
+                break;
+            }
+        }
 
         if(!codePtr)
         {
             // lookup compiled code
-            auto mappedAddr = cpu.mem.makeBankedAddress(cpu.pc);
-
             auto it = compiled.find(mappedAddr);
 
             if(it == compiled.end())
@@ -1388,8 +1406,23 @@ void DMGRecompiler::handleBranch()
             break;
 
         // code exited with a saved address for re-entry, store PC for later
-        if(savedPtr)
-            savedPC = cpu.pc;
+        if(tmpSavedPtr)
+        {
+            auto savedPC = cpu.pc;
+
+            if(exitCallFlag)
+            {
+                // get return address from stack
+                auto &mem = cpu.getMem();
+                savedPC = mem.read(cpu.sp) | mem.read(cpu.sp + 1) << 8;
+            }
+
+            savedExits[curSavedExit++] = {tmpSavedPtr, cpu.getMem().makeBankedAddress(savedPC)};
+            curSavedExit %= savedExitsSize;
+
+            tmpSavedPtr = nullptr;
+            exitCallFlag = false;
+        }
 
         // CPU not running, stop
         if(cpu.halted || cpu.stopped)
@@ -2909,10 +2942,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         syncCyclesExecuted();
 
         builder.mov(pcReg32, addr);
-       
-        // TODO
-        assert(exitPtr - builder.getPtr() < -126); // hmm, could fail?
-        builder.jmp(exitPtr - builder.getPtr());
+
+        // exit but flag as a call so we can save the return addr
+        builder.call(exitForCallPtr - builder.getPtr());
 
         // exit if branch not taken
         if(flag && (instr.flags & Op_Last))
@@ -4083,10 +4115,15 @@ void DMGRecompiler::compileEntry()
     // jump to code
     builder.jmp(Reg64::R8);
 
+    // exit setting the call flag ... and saving ip
+    exitForCallPtr = builder.getPtr();
+    builder.mov(Reg64::R11, reinterpret_cast<uintptr_t>(&exitCallFlag));
+    builder.mov(1, Reg64::R11);
+
     // exit saving ip
     saveAndExitPtr = builder.getPtr();
     builder.pop(Reg64::R10); // ret address (this is called)
-    builder.mov(Reg64::R11, reinterpret_cast<uintptr_t>(&savedPtr));
+    builder.mov(Reg64::R11, reinterpret_cast<uintptr_t>(&tmpSavedPtr));
     builder.mov(Reg64::R10, Reg64::R11, true);
 
     // just exit
@@ -4165,6 +4202,13 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
                 // TODO: reclaim memory in other cases
                 if(it->second.endPtr == compiler.curCodePtr)
                     compiler.curCodePtr = it->second.startPtr;
+
+                // invalidate any saved return addresses
+                for(auto &saved : compiler.savedExits)
+                {
+                    if(std::get<1>(saved) >= it->first && std::get<1>(saved) <= it->second.endPC)
+                        saved = {nullptr, 0};
+                }
 
                 it = compiler.compiled.erase(it);
 

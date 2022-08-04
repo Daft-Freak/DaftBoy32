@@ -57,11 +57,15 @@ private:
 
     // common code
     CompiledFunc entryFunc = nullptr;
-    uint8_t *exitPtr = nullptr, *saveAndExitPtr = nullptr;
+    uint8_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;
 
     // saved pointer on exit
-    uint8_t *savedPtr = nullptr;
-    uint16_t savedPC = 0;
+    uint8_t *tmpSavedPtr = nullptr;
+    bool exitCallFlag = false; // if we exited because of a call
+
+    static const int savedExitsSize = 16;
+    int curSavedExit = 0;
+    std::tuple<uint8_t *, uint32_t> savedExits[savedExitsSize];
 
     // compile state
     // TODO: make these temps
