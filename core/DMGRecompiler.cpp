@@ -2060,11 +2060,96 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
         return instrInfo.end();
     };
 
+    std::vector<uint8_t> origFlags; // there aren't enough bits in ->flags...
+    origFlags.resize(instrInfo.size());
+
     for(auto it = instrInfo.begin(); it != instrInfo.end(); ++it)
     {
         auto &instr = *it;
         pc += instr.len;
-        // TODO: flags
+
+        if(instr.flags & Op_WriteFlags)
+        {
+            // find actually used flags
+            int read = 0;
+
+            int falseBranchFlags = 0; // flags used by the "other" branch
+            bool inBranch = false;
+
+            // save flags
+            origFlags[it - instrInfo.begin()] = instr.flags & Op_WriteFlags;
+
+            // look ahead until we have no flags wrtiten that are not read
+            auto nextPC = pc;
+            for(auto next = it + 1; next != instrInfo.end() && (instr.flags & Op_WriteFlags) != read << 4;)
+            {
+                nextPC += next->len;
+
+                // collect read flags
+                read |= next->flags & Op_ReadFlags;
+
+                if(next->flags & Op_Exit)
+                    break; // give up
+
+                if(next->flags & Op_Branch)
+                {
+                    // don't go too deep
+                    if(inBranch)
+                        break;
+
+                    inBranch = true;
+
+                    bool isConditional = next->flags & Op_ReadFlags;
+
+                    uint16_t target;
+                    if(next->opcode[0] >= 0xC2) // JP
+                        target = next->opcode[1] | next->opcode[2] << 8;
+                    else // JR
+                        target = nextPC + static_cast<int8_t>(next->opcode[1]);
+
+                    auto targetInstr = findBranchTarget(nextPC, target, next);
+
+                    // bad branch, give up
+                    if(targetInstr == instrInfo.end())
+                        break;
+
+                    if(!isConditional)
+                    {
+                        // follow it
+                        next = targetInstr;
+                        nextPC = target;
+                        continue;
+                    }
+                    else
+                    {
+                        // follow false branch until we hit another branch
+                        falseBranchFlags = instr.flags & Op_WriteFlags;
+                        for(auto falseInstr = next + 1; falseInstr != instrInfo.end() && falseBranchFlags != read << 4; ++falseInstr)
+                        {
+                            if(falseInstr->flags & (Op_Branch | Op_Exit))
+                                break;
+
+                            read |= falseInstr->flags & Op_ReadFlags;
+                            falseBranchFlags = (falseBranchFlags & ~falseInstr->flags) | read << 4;
+                        }
+
+                        // follow the true branch
+                        next = targetInstr;
+                        nextPC = target;
+                        continue;
+                    }
+                }
+
+                auto written = next->flags & Op_WriteFlags;
+                if(next < it) // backwards jump, restore old flags
+                    written = origFlags[next - instrInfo.begin()];
+
+                // clear overriden flags (keep any that are used)
+                instr.flags = (instr.flags & ~(written)) | read << 4 | falseBranchFlags;
+
+                ++next;
+            }
+        }
 
         if(instr.flags & Op_Branch)
         {
