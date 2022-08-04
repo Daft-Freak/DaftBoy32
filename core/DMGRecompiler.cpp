@@ -1789,7 +1789,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 info.regsRead = info.regsWritten = Reg_SP;
                 info.flags = Op_Exit;
 
-                if(pc >= maxBranch)
+                if(pc > maxBranch)
                     done = true;
                 break;
             case 0xC1: // POP BC
@@ -1822,7 +1822,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 info.len = 3;
                 info.flags = Op_Branch;
 
-                if(pc >= maxBranch)
+                if(pc > maxBranch)
                     done = true;
                 break;
             case 0xC4: // CALL NZ,nn
@@ -1888,7 +1888,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
             case 0xFF: // RST 38
                 info.flags = Op_Exit;
 
-                if(pc >= maxBranch)
+                if(pc > maxBranch)
                     done = true;
                 break;
             case 0xCB: // extended ops
@@ -1942,7 +1942,7 @@ void DMGRecompiler::analyse(uint16_t &pc, std::vector<OpInfo> &instrInfo)
                 info.regsRead = Reg_H | Reg_L;
                 info.flags = Op_Exit;
 
-                if(pc >= maxBranch)
+                if(pc > maxBranch)
                     done = true;
                 break;
             case 0xEA: // LD (nn),A
