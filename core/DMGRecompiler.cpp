@@ -3609,7 +3609,10 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             break;
         }
         case 0xAF: // XOR A
-            builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
+            if(instr.flags & Op_WriteFlags)
+                builder.mov(Reg32::EAX, DMGCPU::Flag_Z); // A = 0, F = Z
+            else
+                builder.mov(reg(Reg::A), 0);
             break;
         case 0xB0: // OR B
         case 0xB1: // OR C
