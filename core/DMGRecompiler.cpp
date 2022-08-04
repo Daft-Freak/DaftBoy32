@@ -1376,10 +1376,9 @@ void DMGRecompiler::handleBranch()
                 auto startPtr = ptr;
                 auto pc = cpu.pc;
 
-                std::vector<OpInfo> instructions;
                 BlockInfo blockInfo;
                 analyse(pc, blockInfo);
-                printf("analysed %04X-%04X (%zi instructions)\n", cpu.pc, pc, instructions.size());
+                printf("analysed %04X-%04X (%zi instructions)\n", cpu.pc, pc, blockInfo.instructions.size());
 
                 FuncInfo info{};
 
