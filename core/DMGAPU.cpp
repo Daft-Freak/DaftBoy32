@@ -795,7 +795,9 @@ void DMGAPU::sampleOutput()
 
     vol = (mem.readIOReg(IO_NR32) >> 5) & 0x3;
     auto ch3Val = (channelEnabled & 4) && vol ? (ch3Sample * 2) - 0xF : 0;
-    ch3Val /= (1 << (vol - 1));
+
+    if(vol)
+        ch3Val /= (1 << (vol - 1));
 
     vol = ch4EnvVolume;
     auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : -vol;
