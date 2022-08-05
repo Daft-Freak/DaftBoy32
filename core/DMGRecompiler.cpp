@@ -2389,15 +2389,29 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         delayedCyclesExecuted = 0;
     };
 
-    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
+    auto setupMemAddr = [&builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr)
     {
-        syncCyclesExecuted();
+        if(std::holds_alternative<Reg16>(addr))
+        {
+            syncCyclesExecuted();
+            builder.movzx(Reg32::ESI, std::get<Reg16>(addr));
+        }
+        else
+        {
+            // accessing most ram shouldn't cause anything to be updated, so we don't need an accurate cycle count
+            auto immAddr = std::get<uint16_t>(addr);
+            if(immAddr >> 8 == 0xFF)
+                syncCyclesExecuted();
+
+            builder.mov(Reg32::ESI, immAddr);
+        }
+    };
+
+    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
+    {
         callSave(builder);
 
-        if(std::holds_alternative<Reg16>(addr))
-            builder.movzx(Reg32::ESI, std::get<Reg16>(addr));
-        else
-            builder.mov(Reg32::ESI, std::get<uint16_t>(addr));
+        setupMemAddr(addr);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem)); // function ptr
         builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
@@ -2409,15 +2423,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         cycleExecuted();
     };
 
-    auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
+    auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
     {
-        syncCyclesExecuted();
         callSave(builder);
 
-        if(std::holds_alternative<Reg16>(addr))
-            builder.movzx(Reg32::ESI, std::get<Reg16>(addr));
-        else
-            builder.mov(Reg32::ESI, std::get<uint16_t>(addr));
+        setupMemAddr(addr);
     
         if(std::holds_alternative<Reg8>(data))
             builder.movzx(Reg32::EDX, std::get<Reg8>(data));
