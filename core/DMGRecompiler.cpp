@@ -2565,7 +2565,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
     const auto push = [&builder, &cycleExecuted, &writeMem](Reg16 r)
     {
-        assert(r == Reg16::AX || reg == Reg16::CX || reg == Reg16::DX || reg == Reg16::BX);
+        assert(r == Reg16::AX || r == Reg16::CX || r == Reg16::DX || r == Reg16::BX);
         auto lowReg = static_cast<Reg8>(r); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
@@ -2577,7 +2577,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
     const auto pop = [&builder, &readMem](Reg16 r)
     {
-        assert(r == Reg16::AX || reg == Reg16::CX || reg == Reg16::DX || reg == Reg16::BX);
+        assert(r == Reg16::AX || r == Reg16::CX || r == Reg16::DX || r == Reg16::BX);
         auto lowReg = static_cast<Reg8>(r); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
