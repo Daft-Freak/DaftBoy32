@@ -149,6 +149,8 @@ int main(int argc, char *argv[])
     int screenScale = 5;
     bool useBIOS = true;
 
+    uint32_t timeToRun = 0;
+    bool timeLimit = false;
     std::string romFilename;
 
     int i = 1;
@@ -161,6 +163,11 @@ int main(int argc, char *argv[])
             screenScale = std::stoi(argv[++i]);
         else if(arg == "--turbo")
             turbo = true;
+        else if(arg == "--time" && i + 1 < argc)
+        {
+            timeLimit = true;
+            timeToRun = std::stoi(argv[++i]) * 1000;
+        }
         else if(arg == "--no-bios")
             useBIOS = false;
         else
@@ -308,6 +315,22 @@ int main(int argc, char *argv[])
         SDL_PauseAudioDevice(dev, 0);
 
     auto lastTick = SDL_GetTicks();
+    auto startTime = SDL_GetTicks();
+
+    auto checkTimeLimit = [timeLimit, &timeToRun]()
+    {
+        // fixed length benchmark
+        if(timeLimit)
+        {
+            timeToRun -= 10;
+            if(timeToRun == 0)
+            {
+                quit = true;
+                return true;
+            }
+        }
+        return false;
+    };
 
     while(!quit)
     {
@@ -326,21 +349,25 @@ int main(int argc, char *argv[])
                 if(agbCPU.getAPU().getNumSamples() > 2047 - 549)
                     break;
 
-                agbCPU.runFrame();
-                agbCPU.getAPU().update();
-
                 if(turbo)
                 {
+                    agbCPU.run(10);
+
+                    agbCPU.getAPU().update();
                     while(agbCPU.getAPU().getNumSamples())
                         agbCPU.getAPU().getSample();
 
-                    if(now - lastTick >= 10)
+                    if(now - lastTick >= 10 || checkTimeLimit())
                         break;
 
                     now = SDL_GetTicks();
                 }
                 else
+                {
+                    agbCPU.runFrame();
+                    agbCPU.getAPU().update();
                     agbCPU.getDisplay().update();
+                }
             }
         }
         else
@@ -362,6 +389,9 @@ int main(int argc, char *argv[])
                         apu.getSample();
 
                     now = SDL_GetTicks();
+
+                    if(checkTimeLimit())
+                        break;
                 }
             }
             else
@@ -419,6 +449,12 @@ int main(int argc, char *argv[])
     {
         std::ofstream saveFile(romFilename + ".ram");
         saveFile.write(reinterpret_cast<char *>(dmgCPU.getMem().getCartridgeRAM()), dmgCPU.getMem().getCartridgeRAMSize());
+    }
+
+    if(timeLimit)
+    {
+        auto runTime = SDL_GetTicks() - startTime;
+        printf("Ran for %ums\n", runTime);
     }
 
     SDL_CloseAudioDevice(dev);
