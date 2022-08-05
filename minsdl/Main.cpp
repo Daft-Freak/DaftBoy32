@@ -341,13 +341,31 @@ int main(int argc, char *argv[])
         }
         else
         {
-            dmgCPU.setInputs(inputs);
-            dmgCPU.run(turbo ? 10 : now - lastTick);
-            dmgCPU.getAPU().update();
             if(turbo)
             {
-                while(dmgCPU.getAPU().getNumSamples())
-                    dmgCPU.getAPU().getSample();
+                dmgCPU.setInputs(inputs);
+
+                // push as fast as possible
+                // avoid doing SDL stuff between updates
+                while(now - lastTick < 10)
+                {
+                    dmgCPU.run(10);
+                    dmgCPU.getAPU().update();
+
+                    // discard audio
+                    auto &apu = dmgCPU.getAPU();
+                    while(apu.getNumSamples())
+                        apu.getSample();
+
+                    now = SDL_GetTicks();
+                }
+            }
+            else
+            {
+                dmgCPU.setInputs(inputs);
+                dmgCPU.run(now - lastTick);
+                dmgCPU.getAPU().update();
+                dmgCPU.getDisplay().update();
             }
         }
 
