@@ -44,7 +44,7 @@ private:
     static uint8_t readMem(DMGCPU *cpu, uint16_t addr);
     static int writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data, int cyclesToRun);
 
-    uint8_t *codeBuf, *curCodePtr;
+    uint8_t *codeBuf = nullptr, *curCodePtr;
     unsigned int codeBufSize;
 
     // cycles, regs[4], pc, sp

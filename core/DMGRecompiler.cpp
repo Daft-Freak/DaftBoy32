@@ -2,8 +2,10 @@
 #include <cstdio>
 #include <variant>
 
+#ifdef __linux__
 #include <sys/mman.h>
 #include <unistd.h>
+#endif
 
 #include "DMGRecompiler.h"
 
@@ -1299,6 +1301,7 @@ static void callRestore(X86Builder &builder, Reg8 dstReg)
 
 DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
 {
+#if defined(__linux__) && defined(__x86_64__)
     // allocate some memory
     auto pageSize = sysconf(_SC_PAGE_SIZE);
     int numPages = 256;
@@ -1309,6 +1312,7 @@ DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
 
     if(codeBuf == MAP_FAILED)
         perror("failed to allocate code buffer (mmap failed)");
+#endif
 
     curCodePtr = codeBuf;
 
