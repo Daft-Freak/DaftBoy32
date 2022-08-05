@@ -4274,7 +4274,7 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data, int cycles
 
     // ... also, there could be an interrupt/DMA pending RIGHT NOW
     bool inHRAM = cpu->pc >= 0xFF00; // PC is not up-to-date here, but should be close
-    if((cpu->masterInterruptEnable && cpu->serviceableInterrupts) || cpu->gdmaTriggered || (!inHRAM && (cpu->oamDMADelay || cpu->oamDMACount)))
+    if((cpu->masterInterruptEnable && cpu->serviceableInterrupts) || cpu->gdmaTriggered || (!inHRAM && (cpu->oamDMADelay || cpu->oamDMACount)) || cpu->timerReload)
     {
         // we're going to miss the first updateOAMDMA call
         if(cpu->oamDMADelay == 2)
