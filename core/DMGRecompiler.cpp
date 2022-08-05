@@ -2416,7 +2416,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         }
     };
 
-    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
+    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg16, uint16_t> addr, Reg8 dstReg, bool postInc = false)
     {
         callSave(builder);
 
@@ -2427,14 +2427,20 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         
         builder.call(Reg64::RAX); // do call
 
+        if(postInc && std::holds_alternative<Reg16>(addr))
+            builder.inc(std::get<Reg16>(addr));
+
         callRestore(builder, dstReg);
 
         cycleExecuted();
     };
 
-    auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
+    auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data, bool preDec = false)
     {
         callSave(builder);
+
+        if(preDec && std::holds_alternative<Reg16>(addr))
+            builder.dec(std::get<Reg16>(addr));
 
         setupMemAddr(addr);
     
@@ -2550,11 +2556,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         cycleExecuted(); // delay
 
-        builder.dec(spReg16);
-        writeMem(spReg16, highReg);
-
-        builder.dec(spReg16);
-        writeMem(spReg16, lowReg);
+        writeMem(spReg16, highReg, true);
+        writeMem(spReg16, lowReg, true);
     };
 
     const auto pop = [&builder, &readMem](Reg16 r)
@@ -2563,11 +2566,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         auto lowReg = static_cast<Reg8>(r); // AX == AL, CX == CL, ...
         auto highReg = static_cast<Reg8>(static_cast<int>(lowReg) + 4); // AH == AL + 4
 
-        readMem(spReg16, lowReg);
-        builder.inc(spReg16);
-
-        readMem(spReg16, highReg);
-        builder.inc(spReg16);
+        readMem(spReg16, lowReg, true);
+        readMem(spReg16, highReg, true);
 
         // low bits in F can never be set
         if(r == reg(WReg::AF))
@@ -3045,10 +3045,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         cycleExecuted(); // delay
 
-        builder.dec(spReg16);
-        writeMem(spReg16, static_cast<uint8_t>(pc >> 8));
-        builder.dec(spReg16);
-        writeMem(spReg16, static_cast<uint8_t>(pc));
+        writeMem(spReg16, static_cast<uint8_t>(pc >> 8), true);
+        writeMem(spReg16, static_cast<uint8_t>(pc), true);
         syncCyclesExecuted();
 
         builder.mov(pcReg32, addr);
@@ -3065,10 +3063,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
     {
         cycleExecuted(); // delay
 
-        builder.dec(spReg16);
-        writeMem(spReg16, static_cast<uint8_t>(pc >> 8));
-        builder.dec(spReg16);
-        writeMem(spReg16, static_cast<uint8_t>(pc));
+        writeMem(spReg16, static_cast<uint8_t>(pc >> 8), true);
+        writeMem(spReg16, static_cast<uint8_t>(pc), true);
         syncCyclesExecuted();
 
         builder.mov(pcReg32, addr);
@@ -3099,11 +3095,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         auto pcReg8 = static_cast<Reg8>(pcReg16);
 
         builder.mov(pcReg32, 0);
-        readMem(spReg16, pcReg8);
-        builder.inc(spReg16);
-
-        readMem(spReg16, Reg8::R10B);
-        builder.inc(spReg16);
+        readMem(spReg16, pcReg8, true);
+        readMem(spReg16, Reg8::R10B, true);
 
         builder.shl(Reg32::R10D, 8);
         builder.or_(pcReg16, Reg16::R10W);
