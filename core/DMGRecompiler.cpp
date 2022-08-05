@@ -1400,7 +1400,7 @@ void DMGRecompiler::handleBranch()
         }
 
         auto startCycleCount = cpu.cycleCount;
-        bool inHRAM = cpu.pc > 0xFF00;
+        bool inHRAM = cpu.pc >= 0xFF00;
 
         // run the code if valid, or stop
         if(codePtr)
@@ -2357,12 +2357,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         spReg16, // unless it's push/pop, then it's AF
     };
 
+    bool inHRAM = pc >= 0xFF00;
+
     // TODO: shared trampolines?
-    auto cycleExecuted = [this, &builder, pc, &cyclesThisInstr, &delayedCyclesExecuted]()
+    auto cycleExecuted = [this, &builder, inHRAM, &cyclesThisInstr, &delayedCyclesExecuted]()
     {
         cyclesThisInstr += 4;
 
-        if(pc < 0xFF00)
+        if(!inHRAM)
         {
             // since we refuse to compile when OAM DMA is active we can just inline cycleExecuted (-updateOAMDMA) when not running from HRAM
             // ...and we can also do it slightly later
@@ -2950,7 +2952,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         cycleExecuted();
     };
 
-    const auto doJump = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](uint16_t addr, int flag = 0, bool set = true)
+    const auto doJump = [this, &instr, &pc, &builder, inHRAM, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](uint16_t addr, int flag = 0, bool set = true)
     {
         auto it = branchTargets.find(addr);
 
@@ -2964,7 +2966,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.test(reg(Reg::F), flag);
             int len = ((instr.flags & Op_Branch) ? 3/*sub*/ : 6/*mov*/) + 5/*jmp*/;
 
-            if(pc >= 0xFF00)
+            if(inHRAM)
                 len += cycleExecutedCallSize;
             else
                 len += cycleExecutedInlineSize;
@@ -3019,7 +3021,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         doJump(pc + off, flag, set);
     };
 
-    const auto call = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &writeMem](int flag = 0, bool set = true)
+    const auto call = [this, &instr, &pc, &builder, inHRAM, &cycleExecuted, &syncCyclesExecuted, &writeMem](int flag = 0, bool set = true)
     {
         uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
         cycleExecuted();
@@ -3033,7 +3035,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.test(reg(Reg::F), flag);
 
             int len = 19 + writeMemRegImmCallSize * 2;
-            if(pc >= 0xFF00)
+            if(inHRAM)
                 len += cycleExecutedCallSize * 3 - 6 * 2;
             else
                 len += cycleExecutedInlineSize * 3;
@@ -3074,7 +3076,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
         builder.jmp(exitPtr - builder.getPtr()); // exit
     };
 
-    const auto ret = [this, &instr, &pc, &builder, &cycleExecuted, &syncCyclesExecuted, &readMem](int flag = 0, bool set = true)
+    const auto ret = [this, &instr, &pc, &builder, inHRAM, &cycleExecuted, &syncCyclesExecuted, &readMem](int flag = 0, bool set = true)
     {
         // condition
         if(flag)
@@ -3086,7 +3088,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.test(reg(Reg::F), flag);
 
             int len = 27 + readMemRegCallSize * 2;
-            if(pc >= 0xFF00)
+            if(inHRAM)
                 len += cycleExecutedCallSize * 3 - 8 * 2/*adjacent calls*/;
             else
                 len += cycleExecutedInlineSize * 2;
