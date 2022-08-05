@@ -2418,7 +2418,11 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
     auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg16, uint16_t> addr, Reg8 dstReg, bool postInc = false)
     {
-        callSave(builder);
+        // can skip push/pop if we don't need AX/CX/DX
+        if(!std::holds_alternative<Reg16>(addr) || std::get<Reg16>(addr) == spReg16)
+            callSaveOrSkip(builder);
+        else
+            callSave(builder);
 
         setupMemAddr(addr);
 
@@ -2437,7 +2441,14 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
     auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data, bool preDec = false)
     {
-        callSave(builder);
+        // can skip push/pop if we don't need AX/CX/DX
+        bool noPopAddr = !std::holds_alternative<Reg16>(addr) || std::get<Reg16>(addr) == spReg16;
+        bool noPopData = !std::holds_alternative<Reg8>(data) || std::get<Reg8>(data) == Reg8::BL || std::get<Reg8>(data) == Reg8::BH;
+
+        if(noPopAddr && noPopData)
+            callSaveOrSkip(builder);
+        else
+            callSave(builder);
 
         if(preDec && std::holds_alternative<Reg16>(addr))
             builder.dec(std::get<Reg16>(addr));
@@ -3036,9 +3047,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
             int len = 19 + writeMemRegImmCallSize * 2;
             if(inHRAM)
-                len += cycleExecutedCallSize * 3 - 6 * 2;
+                len += cycleExecutedCallSize * 3 - (6 * 2 + 8 * 2) /*adjacent calls*/;
             else
-                len += cycleExecutedInlineSize * 3;
+                len += cycleExecutedInlineSize * 3 - 6;
 
             builder.jcc(set ? Condition::E : Condition::NE, len);
         }
@@ -3085,9 +3096,9 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
             int len = 27 + readMemRegCallSize * 2;
             if(inHRAM)
-                len += cycleExecutedCallSize * 3 - 8 * 2/*adjacent calls*/;
+                len += cycleExecutedCallSize * 3 - 8 * 3/*adjacent calls*/;
             else
-                len += cycleExecutedInlineSize * 2;
+                len += cycleExecutedInlineSize * 2 - 8;
 
             builder.jcc(set ? Condition::E : Condition::NE, len);
         }
