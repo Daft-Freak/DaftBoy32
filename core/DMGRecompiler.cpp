@@ -1166,9 +1166,9 @@ enum RegFlags
 // size of the code to call these functions
 static const int cycleExecutedCallSize = 23;
 static const int readMemRegCallSize = 30;
-static const int writeMemRegImmCallSize = 34;
+static const int writeMemRegImmCallSize = 36; // this is only accurate for call (addr = SP)
 
-static const int cycleExecutedInlineSize = 10;
+static const int cycleExecutedInlineSize = 5;
 
 // reg helpers
 static const Reg32 pcReg32 = Reg32::R12D;
@@ -1399,11 +1399,18 @@ void DMGRecompiler::handleBranch()
             codePtr = it->second.startPtr;
         }
 
+        auto startCycleCount = cpu.cycleCount;
+        bool inHRAM = cpu.pc > 0xFF00;
+
         // run the code if valid, or stop
         if(codePtr)
             entryFunc(cycles, cpu.regs, cpu.pc, cpu.sp, codePtr);
         else
             break;
+
+        // update cyclesToRun if we inlined cycleExecuted and skipped updating it
+        if(!inHRAM)
+            cpu.cyclesToRun -= (cpu.cycleCount - startCycleCount);
 
         // code exited with a saved address for re-entry, store PC for later
         if(tmpSavedPtr)
@@ -2383,7 +2390,7 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
 
         int8_t i8Cycles = delayedCyclesExecuted;
 
-        builder.addD(-i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cyclesToRun) - cpuPtr);
+        // we don't update cyclesToRun here, do it after returning instead
         builder.addD(i8Cycles, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr);
 
         delayedCyclesExecuted = 0;
@@ -2433,6 +2440,8 @@ bool DMGRecompiler::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder
             builder.movzx(Reg32::EDX, std::get<Reg8>(data));
         else
             builder.mov(Reg32::EDX, std::get<uint8_t>(data));
+
+        builder.mov(Reg32::ECX, Reg32::EDI); // cycle count
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem)); // function ptr
         builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
@@ -4211,7 +4220,7 @@ uint8_t DMGRecompiler::readMem(DMGCPU *cpu, uint16_t addr)
     return cpu->readMem(addr);
 }
 
-int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
+int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data, int cyclesToRun)
 {
     auto &compiler = cpu->compiler; // oh right, this is a static func
 
@@ -4268,7 +4277,7 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data)
         return 0;
     }
 
-    int cycles = std::min(cpu->cyclesToRun, cpu->getDisplay().getCyclesToNextUpdate());
+    int cycles = std::min(cyclesToRun, cpu->getDisplay().getCyclesToNextUpdate());
 
     if(cpu->nextTimerInterrupt)
         cycles = std::min(cycles, static_cast<int>(cpu->nextTimerInterrupt - cpu->cycleCount));
