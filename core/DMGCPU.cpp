@@ -6,7 +6,10 @@
 #include "DMGRegs.h"
 #include "DMGSaveState.h"
 
-DMGCPU::DMGCPU() : mem(*this), apu(*this), display(*this), compiler(*this)
+DMGCPU::DMGCPU() : mem(*this), apu(*this), display(*this)
+#ifdef RECOMPILER
+                 , compiler(*this)
+#endif
 {}
 
 void DMGCPU::reset()
@@ -456,7 +459,7 @@ void DMGCPU::run(int ms)
     cyclesToRun += cycles;
 
     if(!halted)
-        compiler.handleBranch();
+        enterCompiledCode();
 
     while(!stopped && cyclesToRun > 0)
     {
@@ -506,7 +509,7 @@ void DMGCPU::run(int ms)
                 serviceInterrupts();
 
                 if(!haltBug)
-                    compiler.handleBranch(); // un-halted
+                    enterCompiledCode(); // un-halted
             }
 
         } while(halted && cyclesToRun > 0); // wait until not halted
@@ -1008,7 +1011,7 @@ void DMGCPU::executeInstruction()
         {
             pc = addr;
             cycleExecuted();
-            compiler.handleBranch();
+            enterCompiledCode();
         }
     };
 
@@ -1021,7 +1024,7 @@ void DMGCPU::executeInstruction()
         {
             pc += off;
             cycleExecuted();
-            compiler.handleBranch();
+            enterCompiledCode();
         }
     };
 
@@ -1042,7 +1045,7 @@ void DMGCPU::executeInstruction()
             cycleExecuted();
 
             pc = addr;
-            compiler.handleBranch();
+            enterCompiledCode();
         }
     };
 
@@ -1055,7 +1058,7 @@ void DMGCPU::executeInstruction()
         cycleExecuted();
 
         pc = addr;
-        compiler.handleBranch();
+        enterCompiledCode();
     };
 
     const auto ret = [this](int flag = 0, bool set = true)
@@ -1072,7 +1075,7 @@ void DMGCPU::executeInstruction()
 
             pc = addr;
             cycleExecuted();
-            compiler.handleBranch();
+            enterCompiledCode();
         }
     };
 
@@ -1925,7 +1928,7 @@ void DMGCPU::executeInstruction()
 
         case 0xE9: // JP (HL)
             pc = reg(WReg::HL);
-            compiler.handleBranch();
+            enterCompiledCode();
             break;
 
         case 0xEA: // LD (nn),A
@@ -3037,4 +3040,11 @@ void DMGCPU::calculateNextSerialUpdate()
     }
 
     nextSerialBitCycle = ((cycleCount - 1) & ~(clockDiv - 1)) + clockDiv + 52;
+}
+
+void DMGCPU::enterCompiledCode()
+{
+#ifdef RECOMPILER
+    compiler.handleBranch();
+#endif
 }

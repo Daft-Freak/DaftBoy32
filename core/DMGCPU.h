@@ -6,9 +6,12 @@
 #include "DMGDisplay.h"
 #include "DMGMemory.h"
 
+#ifdef RECOMPILER_X86
+#define RECOMPILER
 #include "compiler/DMGRecompilerX86.h"
 
 using Recompiler = DMGRecompilerX86;
+#endif
 
 enum Interrupts
 {
@@ -115,6 +118,8 @@ private:
     void updateSerial();
     void calculateNextSerialUpdate();
 
+    void enterCompiledCode();
+
     static const uint32_t clockSpeed = 4194304;
 
     // internal state
@@ -159,7 +164,9 @@ private:
     DMGDisplay display;
     uint8_t inputs = 0;
 
+#ifdef RECOMPILER
     Recompiler compiler;
     friend class DMGRecompiler; // needs access to internals
     friend Recompiler;
+#endif
 };
