@@ -11,6 +11,11 @@
 #include "compiler/DMGRecompilerX86.h"
 
 using Recompiler = DMGRecompilerX86;
+#elif defined(RECOMPILER_THUMB)
+#define RECOMPILER
+#include "compiler/DMGRecompilerThumb.h"
+
+using Recompiler = DMGRecompilerThumb;
 #endif
 
 enum Interrupts

@@ -14,7 +14,7 @@
 
 DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
 {
-#if defined(__linux__) && defined(__x86_64__)
+#if defined(__linux__)
     // allocate some memory
     auto pageSize = sysconf(_SC_PAGE_SIZE);
     int numPages = 256;
