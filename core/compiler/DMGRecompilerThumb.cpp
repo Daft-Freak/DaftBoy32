@@ -65,26 +65,65 @@ bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bloc
 
 bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, ThumbBuilder &builder)
 {
+    // don't handle HRAM for now
+    if(pc >= 0xFF00)
+        return false;
+
     //using Reg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
     auto &mem = cpu.getMem();
     uint8_t opcode = instr.opcode[0];
 
+    int cyclesThisInstr = 0;
+    int delayedCyclesExecuted = 0;
+
     auto getOff = [&builder](uint8_t *ptr)
     {
         return ptr - reinterpret_cast<uint8_t *>(builder.getPtr());
     };
 
+    auto cycleExecuted = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted]()
+    {
+        cyclesThisInstr += 4;
+
+        // only the optimised not-HRAM path
+        delayedCyclesExecuted += 4;
+    };
+
+    auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted]()
+    {
+        if(!delayedCyclesExecuted)
+            return;
+
+        assert(delayedCyclesExecuted < 0xFF);
+        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+
+        uint8_t u8Cycles = delayedCyclesExecuted;
+
+        // we don't update cyclesToRun here, do it after returning instead
+        auto cycleCountOff = reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr;
+        assert(cycleCountOff <= 124);
+
+        // load to r2, add and store back
+        builder.mov(Reg::R1, Reg::R8); // cpu ptr
+
+        builder.ldr(Reg::R2, Reg::R1, cycleCountOff);
+        builder.add(Reg::R2, u8Cycles);
+        builder.str(Reg::R2, Reg::R1, cycleCountOff);
+
+        delayedCyclesExecuted = 0;
+    };
+
     pc += instr.len;
 
     auto oldPtr = builder.getPtr();
-    //cycleExecuted
+    cycleExecuted();
 
     switch(opcode)
     {
-        //case 0x00: // NOP
-        //    break;
+        case 0x00: // NOP
+            break;
 
         default:
             printf("unhandled op in recompile %02X\n", opcode);
@@ -99,7 +138,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             return false;
     }
 
-    //syncCyclesExecuted();
+    syncCyclesExecuted();
 
     // cycle check
 
