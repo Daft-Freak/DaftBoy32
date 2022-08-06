@@ -7,6 +7,49 @@
 #include "DMGCPU.h"
 #include "ThumbBuilder.h"
 
+// reg helpers
+// we only have 32 bit regs, so A/F/AF all map to the same thing
+enum class RegPart
+{
+    Low = 1,
+    High = 2,
+    Both = Low | High
+};
+
+struct RegInfo
+{
+    Reg reg;
+    RegPart part;
+};
+
+inline constexpr RegInfo reg(DMGCPU::Reg r)
+{
+    const RegInfo regMap8[]
+    {
+        {Reg::R4, RegPart::High}, // A
+        {Reg::R4, RegPart::Low }, // F
+        {Reg::R5, RegPart::High}, // B
+        {Reg::R5, RegPart::Low }, // C
+        {Reg::R6, RegPart::High}, // D
+        {Reg::R6, RegPart::Low }, // E
+        {Reg::R7, RegPart::High}, // H
+        {Reg::R7, RegPart::Low }  // L
+    };
+    return regMap8[static_cast<int>(r)];
+}
+
+inline constexpr RegInfo reg(DMGCPU::WReg r)
+{
+    const RegInfo regMap16[]
+    {
+        {Reg::R4, RegPart::Both}, // AF
+        {Reg::R5, RegPart::Both}, // BC
+        {Reg::R6, RegPart::Both}, // DE
+        {Reg::R7, RegPart::Both}  // HL
+    };
+    return regMap16[static_cast<int>(r)];
+}
+
 bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo)
 {
     auto codePtr16 = reinterpret_cast<uint16_t *>(codePtr);
@@ -69,7 +112,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     if(pc >= 0xFF00)
         return false;
 
-    //using Reg = DMGCPU::Reg;
+    using DMGReg = DMGCPU::Reg;
     using WReg = DMGCPU::WReg;
 
     auto &mem = cpu.getMem();
@@ -77,6 +120,19 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     int cyclesThisInstr = 0;
     int delayedCyclesExecuted = 0;
+
+    // mapping from opcodes
+    static const RegInfo regMap8[]
+    {
+        reg(DMGReg::B),
+        reg(DMGReg::C),
+        reg(DMGReg::D),
+        reg(DMGReg::E),
+        reg(DMGReg::H),
+        reg(DMGReg::L),
+        {Reg::R1, RegPart::Low}, // placeholder (HL)
+        reg(DMGReg::A),
+    };
 
     auto getOff = [&builder](uint8_t *ptr)
     {
@@ -124,6 +180,36 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     {
         case 0x00: // NOP
             break;
+
+        case 0x06: // LD B,n
+        case 0x0E: // LD C,n
+        case 0x16: // LD D,n
+        case 0x1E: // LD E,n
+        case 0x26: // LD H,n
+        case 0x2E: // LD L,n
+        case 0x3E: // LD A,n
+        {
+            cycleExecuted();
+
+            auto dst = regMap8[opcode >> 3];
+
+            builder.mov(Reg::R1, instr.opcode[1]);
+
+            if(dst.part == RegPart::Low)
+            {
+                builder.mov(Reg::R2, 0xFF);
+                builder.bic(dst.reg, Reg::R2);
+            }
+            else
+            {
+                builder.uxtb(dst.reg, dst.reg);
+                builder.lsl(Reg::R1, Reg::R1, 8);
+            }
+
+            builder.orr(dst.reg, Reg::R1);
+
+            break;
+        }
 
         default:
             printf("unhandled op in recompile %02X\n", opcode);

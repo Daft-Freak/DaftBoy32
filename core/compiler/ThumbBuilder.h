@@ -46,6 +46,8 @@ public:
 
     void add(LowReg dn, uint8_t imm);
 
+    void bic(LowReg dn, LowReg m);
+
     void bl(int32_t off);
 
     void bx(Reg r);
@@ -70,6 +72,8 @@ public:
 
     void strh(LowReg t, LowReg n, uint8_t imm);
     void strh(LowReg t, LowReg n, LowReg m);
+
+    void uxtb(LowReg d, LowReg m);
 
     uint16_t *getPtr() const {return ptr;}
 
