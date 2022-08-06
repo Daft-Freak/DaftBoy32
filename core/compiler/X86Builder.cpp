@@ -831,7 +831,7 @@ void X86Builder::xor_(Reg8 dst, uint8_t imm)
 
 void X86Builder::resetPtr(uint8_t *oldPtr)
 {
-    assert(oldPtr < ptr);
+    assert(oldPtr <= ptr);
     ptr = oldPtr;
     error = false;
 }
