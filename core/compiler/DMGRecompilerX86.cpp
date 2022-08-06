@@ -2017,25 +2017,24 @@ void DMGRecompilerX86::compileEntry()
     builder.push(Reg64::R13);
     builder.push(Reg64::R14);
     builder.push(Reg64::RBX);
-    builder.push(Reg64::RDX);
-    builder.push(Reg64::RCX);
-    builder.push(Reg64::RSI);
-    builder.sub(Reg64::RSP, 8); // align stack
-
-    // load emu sp
-    builder.movzxW(spReg32, Reg64::RCX);
-
-    // load emu regs
-    builder.movzxW(Reg32::EAX, Reg64::RSI);
-    builder.movzxW(Reg32::ECX, Reg64::RSI, 2);
-    builder.movzxW(Reg32::EDX, Reg64::RSI, 4);
-    builder.movzxW(Reg32::EBX, Reg64::RSI, 6);
 
     // store pointer to CPU
-    builder.mov(Reg64::R14, reinterpret_cast<uintptr_t>(&cpu));
+    auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+    builder.mov(Reg64::R14, cpuPtr);
+
+    // load emu sp
+    auto spPtr = reinterpret_cast<uintptr_t>(&cpu.sp) - cpuPtr;
+    builder.movzxW(spReg32, Reg64::R14, spPtr);
+
+    // load emu regs
+    auto regsPtr = reinterpret_cast<uintptr_t>(&cpu.regs) - cpuPtr;
+    builder.movzxW(Reg32::EAX, Reg64::R14, regsPtr);
+    builder.movzxW(Reg32::ECX, Reg64::R14, regsPtr + 2);
+    builder.movzxW(Reg32::EDX, Reg64::R14, regsPtr + 4);
+    builder.movzxW(Reg32::EBX, Reg64::R14, regsPtr + 6);
 
     // jump to code
-    builder.jmp(Reg64::R8);
+    builder.jmp(Reg64::RSI);
 
     // exit setting the call flag ... and saving ip
     exitForCallPtr = builder.getPtr();
@@ -2051,26 +2050,18 @@ void DMGRecompilerX86::compileEntry()
     // just exit
     exitPtr = builder.getPtr();
 
-    builder.add(Reg64::RSP, 8); // alignment
-
-    // restore regs ptr
-    builder.pop(Reg64::RSI);
-
     // save emu regs
-    builder.mov(Reg16::AX, Reg64::RSI, true);
-    builder.mov(Reg16::CX, Reg64::RSI, true, 2);
-    builder.mov(Reg16::DX, Reg64::RSI, true, 4);
-    builder.mov(Reg16::BX, Reg64::RSI, true, 6);
-
-    // restore
-    builder.pop(Reg64::RCX);
-    builder.pop(Reg64::RDX);
-    builder.pop(Reg64::RBX);
+    builder.mov(Reg16::AX, Reg64::R14, true, regsPtr);
+    builder.mov(Reg16::CX, Reg64::R14, true, regsPtr + 2);
+    builder.mov(Reg16::DX, Reg64::R14, true, regsPtr + 4);
+    builder.mov(Reg16::BX, Reg64::R14, true, regsPtr + 6);
 
     // save emu pc/sp
-    builder.mov(pcReg16, Reg64::RDX, true);
-    builder.mov(spReg16, Reg64::RCX, true);
+    builder.mov(pcReg16, Reg64::R14, true, reinterpret_cast<uintptr_t>(&cpu.pc) - cpuPtr);
+    builder.mov(spReg16, Reg64::R14, true, spPtr);
 
+    // restore
+    builder.pop(Reg64::RBX);
     builder.pop(Reg64::R14);
     builder.pop(Reg64::R13);
     builder.pop(Reg64::R12);
