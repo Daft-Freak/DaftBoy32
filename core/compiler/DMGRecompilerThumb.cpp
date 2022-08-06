@@ -71,6 +71,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     auto &mem = cpu.getMem();
     uint8_t opcode = instr.opcode[0];
 
+    auto getOff = [&builder](uint8_t *ptr)
+    {
+        return ptr - reinterpret_cast<uint8_t *>(builder.getPtr());
+    };
+
     pc += instr.len;
 
     auto oldPtr = builder.getPtr();
@@ -85,7 +90,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             printf("unhandled op in recompile %02X\n", opcode);
             builder.resetPtr(oldPtr);
             //builder.mov(pcReg32, pc - 1);
-            //builder.jmp(exitPtr - builder.getPtr());
+            builder.bl(getOff(exitPtr));
             return false;
     }
 
@@ -102,7 +107,15 @@ void DMGRecompilerThumb::compileEntry()
     ThumbBuilder builder(codePtr16, reinterpret_cast<uint16_t *>(codeBuf + codeBufSize));
 
     //FIXME: actually implement this
-    builder.bx(Reg::LR);
+    // set the low bit so we stay in thumb mode
+    builder.push(0, true); // LR
+    builder.mov(Reg::R2, 1);
+    builder.orr(Reg::R1, Reg::R2);
+    builder.bx(Reg::R1);
+
+    exitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
+
+    builder.pop(0, true); // PC
 
     entryFunc = reinterpret_cast<CompiledFunc>(codeBuf + 1/*thumb*/);
 
