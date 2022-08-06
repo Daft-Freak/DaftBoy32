@@ -14,6 +14,13 @@ if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         compiler/DMGRecompilerX86.cpp
     )
     target_compile_definitions(DaftBoyCore INTERFACE RECOMPILER_X86)
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
+    target_sources(DaftBoyCore INTERFACE
+        compiler/DMGRecompiler.cpp
+        compiler/ThumbBuilder.cpp
+        compiler/DMGRecompilerThumb.cpp
+    )
+    target_compile_definitions(DaftBoyCore INTERFACE RECOMPILER_THUMB)
 endif()
 
 target_include_directories(DaftBoyCore INTERFACE ${CMAKE_CURRENT_LIST_DIR})
