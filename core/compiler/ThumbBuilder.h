@@ -39,6 +39,25 @@ public:
     Reg val;
 };
 
+enum class Condition
+{
+    EQ = 0,
+    NE,
+    CS,
+    CC,
+    MI,
+    PL,
+    VS,
+    VC,
+    HI,
+    LS,
+    GE,
+    LT,
+    GT,
+    LE,
+    AL
+};
+
 class ThumbBuilder final
 {
 public:
@@ -46,11 +65,17 @@ public:
 
     void add(LowReg dn, uint8_t imm);
 
+    void and_(LowReg dn, LowReg m);
+
+    void b(Condition cond, int imm);
+
     void bic(LowReg dn, LowReg m);
 
     void bl(int32_t off);
 
     void bx(Reg r);
+
+    void eor(LowReg dn, LowReg m);
 
     void ldr(LowReg t, LowReg n, uint8_t imm);
     void ldr(LowReg t, uint16_t imm);
@@ -58,6 +83,8 @@ public:
     void ldrh(LowReg t, LowReg n, uint8_t imm);
 
     void lsl(LowReg d, LowReg m, uint8_t imm);
+
+    void lsr(LowReg d, LowReg m, uint8_t imm);
 
     void mov(LowReg r, uint8_t imm);
     void mov(Reg d, Reg m);
