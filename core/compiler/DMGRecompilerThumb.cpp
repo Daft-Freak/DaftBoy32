@@ -134,6 +134,14 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         reg(DMGReg::A),
     };
 
+    static const RegInfo regMap16[]
+    {
+        reg(WReg::BC),
+        reg(WReg::DE),
+        reg(WReg::HL),
+        {Reg::R1, RegPart::Both}, // TODO: SP, unless it's push/pop, then it's AF
+    };
+
     auto getOff = [&builder](uint8_t *ptr)
     {
         return ptr - reinterpret_cast<uint8_t *>(builder.getPtr());
@@ -180,6 +188,26 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     {
         case 0x00: // NOP
             break;
+
+        case 0x01: // LD BC,nn
+        case 0x11: // LD DE,nn
+        case 0x21: // LD HL,nn
+        //case 0x31: // LD SP,nn
+        {
+            cycleExecuted();
+            cycleExecuted();
+
+            auto dst = regMap16[opcode >> 4];
+
+            // TODO: can emit less code if one of the bytes is zero
+            // or other cases where we can shift an 8 bit value
+            builder.mov(dst.reg, instr.opcode[1]);
+            builder.mov(Reg::R1, instr.opcode[2]);
+            builder.lsl(Reg::R1, Reg::R1, 8);
+            builder.orr(dst.reg, Reg::R1);
+
+            break;
+        }
 
         case 0x06: // LD B,n
         case 0x0E: // LD C,n
