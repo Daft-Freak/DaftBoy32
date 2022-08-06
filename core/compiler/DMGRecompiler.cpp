@@ -121,7 +121,7 @@ void DMGRecompiler::handleBranch()
 
         // run the code if valid, or stop
         if(codePtr)
-            entryFunc(cycles, cpu.regs, cpu.pc, cpu.sp, codePtr);
+            entryFunc(cycles, codePtr);
         else
             break;
 
