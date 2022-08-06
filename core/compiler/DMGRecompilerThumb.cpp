@@ -129,8 +129,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             printf("unhandled op in recompile %02X\n", opcode);
             builder.resetPtr(oldPtr);
 
-            builder.mov(Reg::R1, (pc - 1) & 0xFF);
-            builder.mov(Reg::R0, (pc - 1) >> 8);
+            builder.mov(Reg::R1, (pc - instr.len) & 0xFF);
+            builder.mov(Reg::R0, (pc - instr.len) >> 8);
             builder.lsl(Reg::R0, Reg::R0, 8);
             builder.orr(Reg::R1, Reg::R0);
             
