@@ -239,6 +239,10 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xAF: // XOR A
+            builder.mov(reg(WReg::AF).reg, DMGCPU::Flag_Z); // A = 0, F = Z
+            break;
+
         default:
             printf("unhandled op in recompile %02X\n", opcode);
             builder.resetPtr(oldPtr);
