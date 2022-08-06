@@ -48,13 +48,20 @@ public:
 
     void bx(Reg r);
 
+    void ldr(LowReg t, uint16_t imm);
+
+    void lsl(LowReg d, LowReg m, uint8_t imm);
+
     void mov(LowReg r, uint8_t imm);
+    void mov(Reg d, Reg m);
 
     void orr(LowReg d, LowReg m);
 
     void pop(uint8_t regList, bool pc);
 
     void push(uint8_t regList, bool lr);
+
+    void strh(LowReg t, LowReg n, LowReg m);
 
     uint16_t *getPtr() const {return ptr;}
 
