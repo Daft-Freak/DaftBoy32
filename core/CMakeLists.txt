@@ -5,11 +5,16 @@ target_sources(DaftBoyCore INTERFACE
     DMGCPU.cpp
     DMGDisplay.cpp
     DMGMemory.cpp
-    DMGRecompiler.cpp
-
-    compiler/X86Builder.cpp # TODO: arch detect
-    compiler/DMGRecompilerX86.cpp
 )
+
+if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+    target_sources(DaftBoyCore INTERFACE
+        DMGRecompiler.cpp
+        compiler/X86Builder.cpp
+        compiler/DMGRecompilerX86.cpp
+    )
+    target_compile_definitions(DaftBoyCore INTERFACE RECOMPILER_X86)
+endif()
 
 target_include_directories(DaftBoyCore INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 
