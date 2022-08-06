@@ -8,6 +8,26 @@ void ThumbBuilder::add(LowReg dn, uint8_t imm)
     write(0x3000 | dnReg << 8 | imm);
 }
 
+void ThumbBuilder::and_(LowReg dn, LowReg m)
+{
+    int mReg = static_cast<int>(m.val);
+    int dnReg = static_cast<int>(dn.val);
+    write(0x4000 | mReg << 3 | dnReg);
+}
+
+void ThumbBuilder::b(Condition cond, int imm)
+{
+    assert(cond != Condition::AL);
+    assert(imm >= -252 && imm <= 256);
+
+    imm -= 2;
+
+    if(imm < 0)
+        imm -= 2;
+
+    write(0xD000 | static_cast<int>(cond) << 8 | ((imm >> 1) & 0xFF));
+}
+
 void ThumbBuilder::bic(LowReg dn, LowReg m)
 {
     int mReg = static_cast<int>(m.val);
@@ -42,6 +62,13 @@ void ThumbBuilder::bx(Reg r)
     write(0x4700 | reg << 3);
 }
 
+void ThumbBuilder::eor(LowReg dn, LowReg m)
+{
+    int mReg = static_cast<int>(m.val);
+    int dnReg = static_cast<int>(dn.val);
+    write(0x4040 | mReg << 3 | dnReg);
+}
+
 // imm
 void ThumbBuilder::ldr(LowReg t, LowReg n, uint8_t imm)
 {
@@ -74,6 +101,7 @@ void ThumbBuilder::ldrh(LowReg t, LowReg n, uint8_t imm)
     write(0x8800 | (imm >> 1) << 6 | nReg << 3 | tReg);
 }
 
+// imm
 void ThumbBuilder::lsl(LowReg d, LowReg m, uint8_t imm)
 {
     assert(imm < 32);
@@ -81,6 +109,16 @@ void ThumbBuilder::lsl(LowReg d, LowReg m, uint8_t imm)
     int dReg = static_cast<int>(d.val);
     int mReg = static_cast<int>(m.val);
     write(imm << 6 | mReg << 3 | dReg);
+}
+
+// imm
+void ThumbBuilder::lsr(LowReg d, LowReg m, uint8_t imm)
+{
+    assert(imm < 32);
+
+    int dReg = static_cast<int>(d.val);
+    int mReg = static_cast<int>(m.val);
+    write(0x0800 | imm << 6 | mReg << 3 | dReg);
 }
 
 // imm

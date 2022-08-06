@@ -179,6 +179,86 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         delayedCyclesExecuted = 0;
     };
 
+    // copies 8 bit value from upper/lower reg or imm to reg
+    const auto getValue = [&builder](Reg dst, std::variant<RegInfo, uint8_t> b)
+    {
+        if(std::holds_alternative<RegInfo>(b))
+        {
+            auto reg = std::get<RegInfo>(b);
+
+            if(reg.part == RegPart::High)
+                builder.lsr(dst, reg.reg, 8); // shift it down
+            else
+                builder.uxtb(dst, reg.reg); // clear the high half
+        }
+        else
+            builder.mov(dst, std::get<uint8_t>(b));
+    };
+
+    // op helpers
+    const auto bitAnd = [&instr, &builder, &getValue](std::variant<RegInfo, uint8_t> b)
+    {
+        auto regA = reg(WReg::AF).reg;
+        auto regB = Reg::R1;
+
+        getValue(regB, b);
+
+        builder.lsr(regA, regA, 8); // shift A down (clears the flags for us)
+        builder.and_(regA, regB);
+        builder.lsl(regA, regA, 8); // shift it back up (still have a Z flag we can use)
+
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.orr(regA, Reg::R1);
+        }
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            builder.mov(Reg::R1, DMGCPU::Flag_H);
+            builder.orr(regA, Reg::R1);
+        }
+    };
+
+    const auto bitOr = [&instr, &builder, &getValue](std::variant<RegInfo, uint8_t> b)
+    {
+        auto regA = reg(WReg::AF).reg;
+        auto regB = Reg::R1;
+
+        getValue(regB, b);
+
+        builder.lsr(regA, regA, 8); // shift A down (clears the flags for us)
+        builder.orr(regA, regB);
+        builder.lsl(regA, regA, 8); // shift it back up (still have a Z flag we can use)
+
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.orr(regA, Reg::R1);
+        }
+    };
+
+    const auto bitXor = [&instr, &builder, &getValue](std::variant<RegInfo, uint8_t> b)
+    {
+        auto regA = reg(WReg::AF).reg;
+        auto regB = Reg::R1;
+
+        getValue(regB, b);
+
+        builder.lsr(regA, regA, 8); // shift A down (clears the flags for us)
+        builder.eor(regA, regB);
+        builder.lsl(regA, regA, 8); // shift it back up (still have a Z flag we can use)
+
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.orr(regA, Reg::R1);
+        }
+    };
+
     pc += instr.len;
 
     auto oldPtr = builder.getPtr();
@@ -239,9 +319,59 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xA0: // AND B
+        case 0xA1: // AND C
+        case 0xA2: // AND D
+        case 0xA3: // AND E
+        case 0xA4: // AND H
+        case 0xA5: // AND L
+        case 0xA7: // AND A
+            bitAnd(regMap8[opcode & 7]);
+            break;
+
+        case 0xA8: // XOR B
+        case 0xA9: // XOR C
+        case 0xAA: // XOR D
+        case 0xAB: // XOR E
+        case 0xAC: // XOR H
+        case 0xAD: // XOR L
+            bitXor(regMap8[opcode & 7]);
+            break;
+
         case 0xAF: // XOR A
             builder.mov(reg(WReg::AF).reg, DMGCPU::Flag_Z); // A = 0, F = Z
             break;
+
+        case 0xB0: // OR B
+        case 0xB1: // OR C
+        case 0xB2: // OR D
+        case 0xB3: // OR E
+        case 0xB4: // OR H
+        case 0xB5: // OR L
+        case 0xB7: // OR A
+            bitOr(regMap8[opcode & 7]);
+            break;
+
+        case 0xE6: // AND n
+        {
+            cycleExecuted();
+            bitAnd(instr.opcode[1]);
+            break;
+        }
+
+        case 0xEE: // XOR n
+        {
+            cycleExecuted();
+            bitXor(instr.opcode[1]);
+            break;
+        }
+
+        case 0xF6: // OR n
+        {
+            cycleExecuted();
+            bitOr(instr.opcode[1]);
+            break;
+        }
 
         default:
             printf("unhandled op in recompile %02X\n", opcode);
