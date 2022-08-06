@@ -156,15 +156,23 @@ void DMGRecompilerThumb::compileEntry()
     
     builder.mov(Reg::R2, Reg::R8);
     builder.mov(Reg::R3, Reg::R9);
-    builder.push((1 << 2) | (1 << 3), true); // R2-3, LR
+    builder.push(0b11111100, true); // R2-7, LR
     
     // set the low bit so we stay in thumb mode
     builder.mov(Reg::R2, 1);
     builder.orr(Reg::R1, Reg::R2);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 20);
+    builder.ldr(Reg::R2, 40);
     builder.mov(Reg::R8, Reg::R2);
+
+    // load emu regs
+    int regsOff = reinterpret_cast<uintptr_t>(&cpu.regs) - cpuPtr;
+    builder.add(Reg::R2, regsOff); // add to cpu ptr
+    builder.ldrh(Reg::R4, Reg::R2, 0);
+    builder.ldrh(Reg::R5, Reg::R2, 2);
+    builder.ldrh(Reg::R6, Reg::R2, 4);
+    builder.ldrh(Reg::R7, Reg::R2, 6);
 
     builder.bx(Reg::R1);
 
@@ -178,7 +186,15 @@ void DMGRecompilerThumb::compileEntry()
     builder.mov(Reg::R0, pcOff);
     builder.strh(Reg::R1, Reg::R2, Reg::R0);
 
-    builder.pop((1 << 2) | (1 << 3), false); // R2-3
+    // save emu regs
+    builder.add(Reg::R2, regsOff); // add to cpu ptr
+    builder.strh(Reg::R4, Reg::R2, 0);
+    builder.strh(Reg::R5, Reg::R2, 2);
+    builder.strh(Reg::R6, Reg::R2, 4);
+    builder.strh(Reg::R7, Reg::R2, 6);
+
+    // restore regs and return
+    builder.pop(0b11111100, false); // R2-7
     builder.mov(Reg::R8, Reg::R2);
     builder.mov(Reg::R9, Reg::R3);
 
