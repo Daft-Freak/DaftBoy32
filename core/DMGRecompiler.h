@@ -4,16 +4,53 @@
 #include <vector>
 
 class DMGCPU;
-class X86Builder;
 
 class DMGRecompiler
 {
 public:
     DMGRecompiler(DMGCPU &cpu);
+    ~DMGRecompiler() = default;
 
     void handleBranch();
 
-private:
+protected:
+    enum OpFlags
+    {
+        Op_ReadC = 1 << 0,
+        Op_ReadH = 1 << 1,
+        Op_ReadN = 1 << 2,
+        Op_ReadZ = 1 << 3,
+        Op_ReadFlags = Op_ReadC | Op_ReadH | Op_ReadN | Op_ReadZ,
+
+        // these match the bits in the F register
+        Op_WriteC = 1 << 4,
+        Op_WriteH = 1 << 5,
+        Op_WriteN = 1 << 6,
+        Op_WriteZ = 1 << 7,
+        Op_WriteFlags = Op_WriteC | Op_WriteH | Op_WriteN | Op_WriteZ,
+
+        Op_Branch = 1 << 8,
+        Op_BranchTarget = 1 << 9,
+        Op_Exit = 1 << 10,
+
+        Op_Load = 1 << 11,
+        Op_Store = 1 << 12,
+
+        Op_Last = 1 << 13, // last instruction in compiled block, compiler can't see this itself
+    };
+
+    enum RegFlags
+    {
+        Reg_A = 1 << 0,
+        Reg_SP = 1 << 1, // this would be F, but we track flags seperately
+        Reg_B = 1 << 2,
+        Reg_C = 1 << 3,
+        Reg_D = 1 << 4,
+        Reg_E = 1 << 5,
+        Reg_H = 1 << 6,
+        Reg_L = 1 << 7
+    };
+
     struct OpInfo
     {
         uint8_t opcode[3];
@@ -33,12 +70,9 @@ private:
 
     void printInfo(BlockInfo &blockInfo);
 
-    bool compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo);
+    virtual bool compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo) = 0;
 
-    bool recompileInstruction(uint16_t &pc, OpInfo &instr, X86Builder &builder);
-    void recompileExInstruction(OpInfo &instr, X86Builder &builder);
-
-    void compileEntry();
+    virtual void compileEntry() = 0;
 
     static void cycleExecuted(DMGCPU *cpu);
     static uint8_t readMem(DMGCPU *cpu, uint16_t addr);

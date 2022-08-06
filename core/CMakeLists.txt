@@ -8,6 +8,7 @@ target_sources(DaftBoyCore INTERFACE
     DMGRecompiler.cpp
 
     compiler/X86Builder.cpp # TODO: arch detect
+    compiler/DMGRecompilerX86.cpp
 )
 
 target_include_directories(DaftBoyCore INTERFACE ${CMAKE_CURRENT_LIST_DIR})
