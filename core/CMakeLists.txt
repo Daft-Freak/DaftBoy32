@@ -9,7 +9,7 @@ target_sources(DaftBoyCore INTERFACE
 
 if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
     target_sources(DaftBoyCore INTERFACE
-        DMGRecompiler.cpp
+        compiler/DMGRecompiler.cpp
         compiler/X86Builder.cpp
         compiler/DMGRecompilerX86.cpp
     )
