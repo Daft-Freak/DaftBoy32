@@ -44,11 +44,16 @@ class ThumbBuilder final
 public:
     ThumbBuilder(uint16_t *ptr, uint16_t *endPtr) : ptr(ptr), endPtr(endPtr){}
 
+    void add(LowReg dn, uint8_t imm);
+
     void bl(int32_t off);
 
     void bx(Reg r);
 
+    void ldr(LowReg t, LowReg n, uint8_t imm);
     void ldr(LowReg t, uint16_t imm);
+
+    void ldrh(LowReg t, LowReg n, uint8_t imm);
 
     void lsl(LowReg d, LowReg m, uint8_t imm);
 
@@ -61,6 +66,9 @@ public:
 
     void push(uint8_t regList, bool lr);
 
+    void str(LowReg t, LowReg n, uint8_t imm);
+
+    void strh(LowReg t, LowReg n, uint8_t imm);
     void strh(LowReg t, LowReg n, LowReg m);
 
     uint16_t *getPtr() const {return ptr;}
