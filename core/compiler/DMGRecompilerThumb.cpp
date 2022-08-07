@@ -389,6 +389,78 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
     };
 
+    const auto cmp = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
+    {
+        auto a = reg(DMGReg::A);
+
+        bool bIsReg = std::holds_alternative<RegInfo>(b);
+
+        if(instr.flags & Op_WriteFlags)
+        {
+            // clear flags
+            builder.mov(Reg::R1, 0xFF);
+            builder.bic(a.reg, Reg::R1);
+        }
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // room for optimisation here, probably
+            builder.mov(Reg::R1, 0xF);
+            get8BitValue(builder, Reg::R2, a);
+            get8BitValue(builder, Reg::R3, b);
+
+            builder.and_(Reg::R2, Reg::R1);
+            builder.and_(Reg::R3, Reg::R1);
+            builder.sub(Reg::R3, Reg::R2, Reg::R3);
+        }
+
+        // set the N flag
+        if(instr.flags & DMGCPU::Flag_N)
+        {
+            builder.mov(Reg::R1, DMGCPU::Flag_N);
+            builder.orr(a.reg, Reg::R1);
+        }
+
+        // get first reg
+        get8BitValue(builder, Reg::R1, a);
+
+        // get second value and do cmp
+        // ... well, actually a sub but ...
+        if(bIsReg)
+        {
+            get8BitValue(builder, Reg::R2, b);
+            builder.sub(Reg::R1, Reg::R1, Reg::R2);
+        }
+        else
+            builder.sub(Reg::R1, std::get<uint8_t>(b));
+
+        // flags
+        if(instr.flags & DMGCPU::Flag_C)
+        {
+            // carry is reversed for sub 
+            builder.b(Condition::CS, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_C);
+            builder.orr(a.reg, Reg::R2);
+        }
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // half res < 0
+            builder.cmp(Reg::R3, 0);
+            builder.b(Condition::GE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_H);
+            builder.orr(a.reg, Reg::R2);
+        }
+
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.cmp(Reg::R1, 0);
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_Z);
+            builder.orr(a.reg, Reg::R2);
+        }
+    };
+
     pc += instr.len;
 
     auto oldPtr = builder.getPtr();
@@ -610,6 +682,16 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             bitOr(regMap8[opcode & 7]);
             break;
 
+        case 0xB8: // CP B
+        case 0xB9: // CP C
+        case 0xBA: // CP D
+        case 0xBB: // CP E
+        case 0xBC: // CP H
+        case 0xBD: // CP L
+        case 0xBF: // CP A
+            cmp(regMap8[opcode & 7]);
+            break;
+
         case 0xE0: // LDH (n),A
         {
             uint16_t addr = 0xFF00 | instr.opcode[1];
@@ -688,6 +770,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             cycleExecuted();
 
             readMem(addr, reg(DMGReg::A));
+            break;
+        }
+
+        case 0xFE: // CP n
+        {
+            cycleExecuted();
+            cmp(instr.opcode[1]);
             break;
         }
 
