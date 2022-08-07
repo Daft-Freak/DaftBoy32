@@ -175,6 +175,13 @@ void ThumbBuilder::mov(Reg d, Reg m)
     write(0x4600 | (dReg & 8) << 4 | mReg << 3 | (dReg & 7));
 }
 
+void ThumbBuilder::mvn(LowReg d, LowReg m)
+{
+    int dReg = static_cast<int>(d.val);
+    int mReg = static_cast<int>(m.val);
+    write(0x43C0 | mReg << 3 | dReg);
+}
+
 void ThumbBuilder::orr(LowReg d, LowReg m)
 {
     int dReg = static_cast<int>(d.val);
@@ -221,6 +228,13 @@ void ThumbBuilder::strh(LowReg t, LowReg n, LowReg m)
     int nReg = static_cast<int>(n.val);
     int mReg = static_cast<int>(m.val);
     write(0x5200 | mReg << 6 | nReg << 3 | tReg);
+}
+
+void ThumbBuilder::sbc(LowReg dn, LowReg m)
+{
+    int dnReg = static_cast<int>(dn.val);
+    int mReg = static_cast<int>(m.val);
+    write(0x4180 | mReg << 3 | dnReg);
 }
 
 // imm
