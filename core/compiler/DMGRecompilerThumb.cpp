@@ -285,6 +285,36 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         cycleExecuted();
     };
 
+    auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, std::variant<RegInfo, uint8_t> data, bool preDec = false)
+    {
+        builder.push(1 << 4, false); // R4
+
+        // TODO
+        /*if(preDec && std::holds_alternative<Reg>(addr))
+        {
+            auto addrReg = std::get<Reg>(addr);
+            builder.sub(addrReg, 1);
+            builder.uxth(addrReg, addrReg);
+        }*/
+
+        setupMemAddr(addr);
+        get8BitValue(builder, Reg::R2, data);
+        builder.mov(Reg::R3, Reg::R0); // TODO: cycle count
+
+        builder.mov(Reg::R0, Reg::R8); // cpu pointer
+
+        // get func ptr
+        load32BitValue(builder, Reg::R4, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem));
+
+        builder.blx(Reg::R4); // do call
+
+        // TODO: returns new cycle count
+
+        builder.pop(1 << 4, false);
+
+        cycleExecuted();
+    };
+
     // op helpers
     const auto bitAnd = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
     {
@@ -421,6 +451,14 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xB7: // OR A
             bitOr(regMap8[opcode & 7]);
             break;
+
+        case 0xE0: // LDH (n),A
+        {
+            uint16_t addr = 0xFF00 | instr.opcode[1];
+            cycleExecuted();
+            writeMem(addr, reg(DMGReg::A));
+            break;
+        }
 
         case 0xE6: // AND n
         {
