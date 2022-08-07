@@ -481,6 +481,31 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x32: // LDD (HL),A
+        {
+            auto r = reg(WReg::HL).reg;
+            writeMem(r, reg(DMGReg::A));
+            builder.sub(r, 1);
+            builder.uxth(r, r);
+            break;
+        }
+
+        case 0x36: // LD (HL),n
+        {
+            cycleExecuted();
+            writeMem(reg(WReg::HL).reg, instr.opcode[1]);
+            break;
+        }
+
+        case 0x3A: // LDD A, (HL)
+        {
+            auto r = reg(WReg::HL).reg;
+            readMem(r, reg(DMGReg::A));
+            builder.sub(r, 1);
+            builder.uxth(r, r);
+            break;
+        }
+
         case 0x40: // LD B,B
         case 0x41: // LD B,C
         case 0x42: // LD B,D
@@ -653,6 +678,16 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             cycleExecuted();
             bitOr(instr.opcode[1]);
+            break;
+        }
+
+        case 0xFA: // LD A,(nn)
+        {
+            uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
+            cycleExecuted();
+            cycleExecuted();
+
+            readMem(addr, reg(DMGReg::A));
             break;
         }
 
