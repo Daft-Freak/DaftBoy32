@@ -179,6 +179,78 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         delayedCyclesExecuted = 0;
     };
 
+    auto setupMemAddr = [&builder, &syncCyclesExecuted](std::variant<Reg, uint16_t> addr)
+    {
+        if(std::holds_alternative<Reg>(addr))
+        {
+            syncCyclesExecuted();
+            builder.mov(Reg::R1, std::get<Reg>(addr));
+        }
+        else
+        {
+            // accessing most ram shouldn't cause anything to be updated, so we don't need an accurate cycle count
+            auto immAddr = std::get<uint16_t>(addr);
+            if(immAddr >> 8 == 0xFF)
+                syncCyclesExecuted();
+
+            // TODO: helper for 16 bit values
+            builder.mov(Reg::R1, immAddr & 0xFF);
+            builder.mov(Reg::R2, immAddr >> 8);
+            builder.lsl(Reg::R2, Reg::R2, 8);
+            builder.orr(Reg::R1, Reg::R2);
+        }
+    };
+
+    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, RegInfo dst, bool postInc = false)
+    {
+        builder.push(1, false); // R0
+
+        setupMemAddr(addr);
+
+        builder.mov(Reg::R0, Reg::R8); // cpu pointer
+
+        // get func ptr
+        // TODO: delay writing the value
+        bool aligned = reinterpret_cast<uintptr_t>(builder.getPtr()) & 2; // if we're misaligned here, we'll be aligned after the instruction 
+        builder.ldr(Reg::R2, aligned ? 4 : 0);
+        builder.b(aligned ? 6 : 4);
+
+        if(aligned)
+            builder.data(0);
+
+        auto readMemPtr = reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem);
+        builder.data(readMemPtr);
+        builder.data(readMemPtr >> 16);
+
+        builder.blx(Reg::R2); // do call
+
+        // move to dest
+        // TODO: helper for writing to 8-bit emu reg
+        if(dst.part == RegPart::Low)
+        {
+            builder.mov(Reg::R2, 0xFF);
+            builder.bic(dst.reg, Reg::R2);
+        }
+        else
+        {
+            builder.uxtb(dst.reg, dst.reg);
+            builder.lsl(Reg::R0, Reg::R0, 8);
+        }
+
+        builder.orr(dst.reg, Reg::R0);
+
+        if(postInc && std::holds_alternative<Reg>(addr))
+        {
+            auto addrReg = std::get<Reg>(addr);
+            builder.add(addrReg, 1);
+            builder.uxth(addrReg, addrReg);
+        }
+
+        builder.pop(1, false);
+
+        cycleExecuted();
+    };
+
     // copies 8 bit value from upper/lower reg or imm to reg
     const auto getValue = [&builder](Reg dst, std::variant<RegInfo, uint8_t> b)
     {
@@ -363,6 +435,14 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             cycleExecuted();
             bitXor(instr.opcode[1]);
+            break;
+        }
+
+        case 0xF0: // LDH A,(n)
+        {
+            uint16_t addr = 0xFF00 | instr.opcode[1];
+            cycleExecuted();
+            readMem(addr, reg(DMGReg::A));
             break;
         }
 

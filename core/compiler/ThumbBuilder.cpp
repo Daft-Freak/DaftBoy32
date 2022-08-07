@@ -28,6 +28,18 @@ void ThumbBuilder::b(Condition cond, int imm)
     write(0xD000 | static_cast<int>(cond) << 8 | ((imm >> 1) & 0xFF));
 }
 
+void ThumbBuilder::b(int imm)
+{
+    assert(imm >= -2044 && imm <= 2048);
+
+    imm -= 2;
+
+    if(imm < 0)
+        imm -= 2;
+
+    write(0xE000 | ((imm >> 1) & 0x7FF));
+}
+
 void ThumbBuilder::bic(LowReg dn, LowReg m)
 {
     int mReg = static_cast<int>(m.val);
@@ -54,6 +66,12 @@ void ThumbBuilder::bl(int32_t off)
 
     write(0xF000 | s | imm10);
     write(0xD000 | j1 | j2 | imm11);
+}
+
+void ThumbBuilder::blx(Reg r)
+{
+    int reg = static_cast<int>(r);
+    write(0x4780 | reg << 3);
 }
 
 void ThumbBuilder::bx(Reg r)
@@ -191,6 +209,18 @@ void ThumbBuilder::uxtb(LowReg d, LowReg m)
     int dReg = static_cast<int>(d.val);
     int mReg = static_cast<int>(m.val);
     write(0xB2C0 | mReg << 3 | dReg);
+}
+
+void ThumbBuilder::uxth(LowReg d, LowReg m)
+{
+    int dReg = static_cast<int>(d.val);
+    int mReg = static_cast<int>(m.val);
+    write(0xB280 | mReg << 3 | dReg);
+}
+
+void ThumbBuilder::data(uint16_t d)
+{
+    write(d);
 }
 
 void ThumbBuilder::resetPtr(uint16_t *oldPtr)
