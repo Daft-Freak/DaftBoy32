@@ -2,10 +2,28 @@
 
 #include "ThumbBuilder.h"
 
+void ThumbBuilder::adc(LowReg dn, LowReg m)
+{
+    int dnReg = static_cast<int>(dn.val);
+    int mReg = static_cast<int>(m.val);
+    write(0x4140 | mReg << 3 | dnReg);
+}
+
+// imm
 void ThumbBuilder::add(LowReg dn, uint8_t imm)
 {
     int dnReg = static_cast<int>(dn.val);
     write(0x3000 | dnReg << 8 | imm);
+}
+
+// reg
+void ThumbBuilder::add(LowReg d, LowReg n, LowReg m)
+{
+    int dReg = static_cast<int>(d.val);
+    int nReg = static_cast<int>(n.val);
+    int mReg = static_cast<int>(m.val);
+
+    write(0x1800 | mReg << 6 | nReg << 3 | dReg);
 }
 
 void ThumbBuilder::and_(LowReg dn, LowReg m)
