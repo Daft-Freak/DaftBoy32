@@ -413,6 +413,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x02: // LD (BC),A
+        case 0x12: // LD (DE),A
+            writeMem(regMap16[opcode >> 4].reg, reg(DMGReg::A));
+            break;
+
         case 0x06: // LD B,n
         case 0x0E: // LD C,n
         case 0x16: // LD D,n
@@ -428,6 +433,100 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
             break;
         }
+
+        case 0x0A: // LD A,(BC)
+        case 0x1A: // LD A,(DE)
+            readMem(regMap16[opcode >> 4].reg, reg(DMGReg::A));
+            break;
+
+        case 0x22: // LDI (HL),A
+        {
+            auto r = reg(WReg::HL).reg;
+            writeMem(r, reg(DMGReg::A));
+            builder.add(r, 1);
+            builder.uxth(r, r);
+            break;
+        }
+
+        case 0x2A: // LDI A, (HL)
+        {
+            auto r = reg(WReg::HL).reg;
+            readMem(r, reg(DMGReg::A));
+            builder.add(r, 1);
+            builder.uxth(r, r);
+            break;
+        }
+
+        case 0x40: // LD B,B
+        case 0x41: // LD B,C
+        case 0x42: // LD B,D
+        case 0x43: // LD B,E
+        case 0x44: // LD B,H
+        case 0x45: // LD B,L
+        case 0x47: // LD B,A
+        case 0x48: // LD C,B
+        case 0x49: // LD C,C
+        case 0x4A: // LD C,D
+        case 0x4B: // LD C,E
+        case 0x4C: // LD C,H
+        case 0x4D: // LD C,L
+        case 0x4F: // LD C,A
+        case 0x50: // LD D,B
+        case 0x51: // LD D,C
+        case 0x52: // LD D,D
+        case 0x53: // LD D,E
+        case 0x54: // LD D,H
+        case 0x55: // LD D,L
+        case 0x57: // LD D,A
+        case 0x58: // LD E,B
+        case 0x59: // LD E,C
+        case 0x5A: // LD E,D
+        case 0x5B: // LD E,E
+        case 0x5C: // LD E,H
+        case 0x5D: // LD E,L
+        case 0x5F: // LD E,A
+        case 0x60: // LD H,B
+        case 0x61: // LD H,C
+        case 0x62: // LD H,D
+        case 0x63: // LD H,E
+        case 0x64: // LD H,H
+        case 0x65: // LD H,L
+        case 0x67: // LD H,A
+        case 0x68: // LD L,B
+        case 0x69: // LD L,C
+        case 0x6A: // LD L,D
+        case 0x6B: // LD L,E
+        case 0x6C: // LD L,H
+        case 0x6D: // LD L,L
+        case 0x6F: // LD L,A
+        case 0x78: // LD A,B
+        case 0x79: // LD A,C
+        case 0x7A: // LD A,D
+        case 0x7B: // LD A,E
+        case 0x7C: // LD A,H
+        case 0x7D: // LD A,L
+        case 0x7F: // LD A,A
+            get8BitValue(builder, Reg::R1, regMap8[opcode & 7]);
+            write8BitReg(builder, regMap8[(opcode >> 3) & 7], Reg::R1);
+            break;
+        case 0x46: // LD B,(HL)
+        case 0x4E: // LD C,(HL)
+        case 0x56: // LD D,(HL)
+        case 0x5E: // LD E,(HL)
+        case 0x66: // LD H,(HL)
+        case 0x6E: // LD L,(HL)
+        case 0x7E: // LD A,(HL)
+            readMem(reg(WReg::HL).reg, regMap8[(opcode >> 3) & 7]);
+            break;
+        case 0x70: // LD (HL),B
+        case 0x71: // LD (HL),C
+        case 0x72: // LD (HL),D
+        case 0x73: // LD (HL),E
+        case 0x74: // LD (HL),H
+        case 0x75: // LD (HL),L
+        case 0x77: // LD (HL),A
+            writeMem(reg(WReg::HL).reg, regMap8[opcode & 7]);
+            break;
 
         case 0xA0: // AND B
         case 0xA1: // AND C
@@ -470,10 +569,32 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xE2: // LDH (C),A
+        {
+            get8BitValue(builder, Reg::R1, reg(DMGReg::C));
+            // C | 0xFF00
+            builder.mov(Reg::R2, 0xFF);
+            builder.lsl(Reg::R2, Reg::R2, 8);
+            builder.orr(Reg::R1, Reg::R2);
+
+            writeMem(Reg::R1, reg(DMGReg::A));
+            break;
+        }
+
         case 0xE6: // AND n
         {
             cycleExecuted();
             bitAnd(instr.opcode[1]);
+            break;
+        }
+
+        case 0xEA: // LD (nn),A
+        {
+            uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
+            cycleExecuted();
+            cycleExecuted();
+
+            writeMem(addr, reg(DMGReg::A));
             break;
         }
 
@@ -489,6 +610,18 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             uint16_t addr = 0xFF00 | instr.opcode[1];
             cycleExecuted();
             readMem(addr, reg(DMGReg::A));
+            break;
+        }
+
+        case 0xF2: // LDH A,(C)
+        {
+            get8BitValue(builder, Reg::R1, reg(DMGReg::C));
+            // C | 0xFF00
+            builder.mov(Reg::R2, 0xFF);
+            builder.lsl(Reg::R2, Reg::R2, 8);
+            builder.orr(Reg::R1, Reg::R2);
+
+            readMem(Reg::R1, reg(DMGReg::A));
             break;
         }
 
