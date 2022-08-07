@@ -63,7 +63,10 @@ class ThumbBuilder final
 public:
     ThumbBuilder(uint16_t *ptr, uint16_t *endPtr) : ptr(ptr), endPtr(endPtr){}
 
+    void adc(LowReg dn, LowReg m);
+
     void add(LowReg dn, uint8_t imm);
+    void add(LowReg d, LowReg n, LowReg m);
 
     void and_(LowReg dn, LowReg m);
 

@@ -325,6 +325,113 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         cycleExecuted();
     };
 
+    const auto add = [&instr, &builder](std::variant<RegInfo, uint8_t> b, bool withCarry = false)
+    {
+        auto a = reg(DMGReg::A);
+
+        if(withCarry)
+        {
+            // we're going to need another reg
+            builder.push(1, false); // R0
+            builder.mov(Reg::R0, a.reg); // copy AF
+            builder.mov(Reg::R1, DMGCPU::Flag_C);
+            builder.and_(Reg::R0, Reg::R1);
+        }
+
+        bool bIsReg = std::holds_alternative<RegInfo>(b);
+
+        if(instr.flags & Op_WriteFlags)
+        {
+            // clear flags
+            builder.mov(Reg::R1, 0xFF);
+            builder.bic(a.reg, Reg::R1);
+        }
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // room for optimisation here, probably
+            builder.mov(Reg::R1, 0xF);
+            get8BitValue(builder, Reg::R2, a);
+            get8BitValue(builder, Reg::R3, b);
+
+            builder.and_(Reg::R2, Reg::R1);
+            builder.and_(Reg::R3, Reg::R1);
+            builder.add(Reg::R3, Reg::R2, Reg::R3);
+
+            if(withCarry)
+            {
+                // add the carry
+                builder.cmp(Reg::R0, 0);
+                builder.b(Condition::EQ, 2);
+                builder.add(Reg::R3, 1);
+            }
+        }
+
+        // get first reg
+        get8BitValue(builder, Reg::R1, a);
+
+        // get second value and do add/adc
+        if(bIsReg)
+        {
+            get8BitValue(builder, Reg::R2, b);
+            if(withCarry)
+            {
+                builder.cmp(Reg::R0, 0xF); // set C
+                builder.adc(Reg::R1, Reg::R2);
+            }
+            else
+                builder.add(Reg::R1, Reg::R1, Reg::R2);
+        }
+        else if(withCarry)
+        {
+            // no adc imm
+            builder.mov(Reg::R2, std::get<uint8_t>(b));
+            builder.cmp(Reg::R0, 0xF); // set C
+            builder.adc(Reg::R1, Reg::R2);
+        }
+        else
+            builder.add(Reg::R1, std::get<uint8_t>(b));
+
+        // flags
+        // cant use carry from op here
+        if(instr.flags & DMGCPU::Flag_C)
+        {
+            builder.cmp(Reg::R1, 0xFF);
+            builder.b(Condition::LE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_C);
+            builder.orr(a.reg, Reg::R2);
+        }
+
+        builder.uxtb(Reg::R1, Reg::R1); // mask
+
+        write8BitReg(builder, a, Reg::R1);
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // half res > 0xF
+            builder.cmp(Reg::R3, 0xF);
+            builder.b(Condition::LE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_H);
+            builder.orr(a.reg, Reg::R2);
+        }
+
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.cmp(Reg::R1, 0);
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_Z);
+            builder.orr(a.reg, Reg::R2);
+        }
+
+        if(withCarry)
+            builder.pop(1, false);
+    };
+
+    const auto addWithCarry = [&add](std::variant<RegInfo, uint8_t> b)
+    {
+        return add(b, true);
+    };
+
     // SUB, SBC and CP
     const auto doSub = [&instr, &builder](std::variant<RegInfo, uint8_t> b, bool storeResult, bool withCarry)
     {
@@ -703,6 +810,26 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             writeMem(reg(WReg::HL).reg, regMap8[opcode & 7]);
             break;
 
+        case 0x80: // ADD A,B
+        case 0x81: // ADD A,C
+        case 0x82: // ADD A,D
+        case 0x83: // ADD A,E
+        case 0x84: // ADD A,H
+        case 0x85: // ADD A,L
+        case 0x87: // ADD A,A
+            add(regMap8[opcode & 7]);
+            break;
+
+        case 0x88: // ADC A,B
+        case 0x89: // ADC A,C
+        case 0x8A: // ADC A,D
+        case 0x8B: // ADC A,E
+        case 0x8C: // ADC A,F
+        case 0x8D: // ADC A,H
+        case 0x8F: // ADC A,A
+            addWithCarry(regMap8[opcode & 7]);
+            break;
+
         case 0x90: // SUB B
         case 0x91: // SUB C
         case 0x92: // SUB D
@@ -765,6 +892,20 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xBF: // CP A
             cmp(regMap8[opcode & 7]);
             break;
+
+        case 0xC6: // ADD n
+        {
+            cycleExecuted();
+            add(instr.opcode[1]);
+            break;
+        }
+
+        case 0xCE: // ADC n
+        {
+            cycleExecuted();
+            addWithCarry(instr.opcode[1]);
+            break;
+        }
 
         case 0xD6: // SUB n
         {
