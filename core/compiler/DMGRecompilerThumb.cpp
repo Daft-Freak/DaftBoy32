@@ -325,9 +325,20 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         cycleExecuted();
     };
 
-    const auto doSub = [&instr, &builder](std::variant<RegInfo, uint8_t> b, bool storeResult)
+    // SUB, SBC and CP
+    const auto doSub = [&instr, &builder](std::variant<RegInfo, uint8_t> b, bool storeResult, bool withCarry)
     {
         auto a = reg(DMGReg::A);
+
+        if(withCarry)
+        {
+            // we're going to need another reg
+            builder.push(1, false); // R0
+            builder.mov(Reg::R0, a.reg); // copy AF
+            builder.mov(Reg::R1, DMGCPU::Flag_C);
+            builder.mvn(Reg::R0, Reg::R0); // invert
+            builder.and_(Reg::R0, Reg::R1);
+        }
 
         bool bIsReg = std::holds_alternative<RegInfo>(b);
 
@@ -348,6 +359,14 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.and_(Reg::R2, Reg::R1);
             builder.and_(Reg::R3, Reg::R1);
             builder.sub(Reg::R3, Reg::R2, Reg::R3);
+
+            if(withCarry)
+            {
+                // sub the carry
+                builder.cmp(Reg::R0, 0);
+                builder.b(Condition::NE, 2); // we inverted it
+                builder.sub(Reg::R3, 1);
+            }
         }
 
         // set the N flag
@@ -360,12 +379,24 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         // get first reg
         get8BitValue(builder, Reg::R1, a);
 
-        // get second value and do cmp
-        // ... well, actually a sub but ...
+        // get second value and do sub/sbc
         if(bIsReg)
         {
             get8BitValue(builder, Reg::R2, b);
-            builder.sub(Reg::R1, Reg::R1, Reg::R2);
+            if(withCarry)
+            {
+                builder.cmp(Reg::R0, 0xF); // set C
+                builder.sbc(Reg::R1, Reg::R2);
+            }
+            else
+                builder.sub(Reg::R1, Reg::R1, Reg::R2);
+        }
+        else if(withCarry)
+        {
+            // no sbc imm
+            builder.mov(Reg::R2, std::get<uint8_t>(b));
+            builder.cmp(Reg::R0, 0xF); // set C
+            builder.sbc(Reg::R1, Reg::R2);
         }
         else
             builder.sub(Reg::R1, std::get<uint8_t>(b));
@@ -400,11 +431,19 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.mov(Reg::R2, DMGCPU::Flag_Z);
             builder.orr(a.reg, Reg::R2);
         }
+
+        if(withCarry)
+            builder.pop(1, false);
     };
 
     const auto sub = [&doSub](std::variant<RegInfo, uint8_t> b)
     {
-        doSub(b, true);
+        doSub(b, true, false);
+    };
+
+    const auto subWithCarry = [&doSub](std::variant<RegInfo, uint8_t> b)
+    {
+        doSub(b, true, true);
     };
 
     // op helpers
@@ -473,7 +512,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     const auto cmp = [&doSub](std::variant<RegInfo, uint8_t> b)
     {
-        doSub(b, false);
+        doSub(b, false, false);
     };
 
     pc += instr.len;
@@ -674,6 +713,16 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             sub(regMap8[opcode & 7]);
             break;
 
+        case 0x98: // SBC B
+        case 0x99: // SBC C
+        case 0x9A: // SBC D
+        case 0x9B: // SBC E
+        case 0x9C: // SBC H
+        case 0x9D: // SBC L
+        case 0x9F: // SBC A
+            subWithCarry(regMap8[opcode & 7]);
+            break;
+
         case 0xA0: // AND B
         case 0xA1: // AND C
         case 0xA2: // AND D
@@ -721,6 +770,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             cycleExecuted();
             sub(instr.opcode[1]);
+            break;
+        }
+
+        case 0xDE: // SBC n
+        {
+            cycleExecuted();
+            subWithCarry(instr.opcode[1]);
             break;
         }
 

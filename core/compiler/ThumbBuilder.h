@@ -95,6 +95,8 @@ public:
     void mov(LowReg r, uint8_t imm);
     void mov(Reg d, Reg m);
 
+    void mvn(LowReg d, LowReg m);
+
     void orr(LowReg d, LowReg m);
 
     void pop(uint8_t regList, bool pc);
@@ -105,6 +107,8 @@ public:
 
     void strh(LowReg t, LowReg n, uint8_t imm);
     void strh(LowReg t, LowReg n, LowReg m);
+
+    void sbc(LowReg dn, LowReg m);
 
     void sub(LowReg dn, uint8_t imm);
     void sub(LowReg d, LowReg n, LowReg m);
