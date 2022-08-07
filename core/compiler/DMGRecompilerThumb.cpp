@@ -325,6 +325,88 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         cycleExecuted();
     };
 
+    const auto doSub = [&instr, &builder](std::variant<RegInfo, uint8_t> b, bool storeResult)
+    {
+        auto a = reg(DMGReg::A);
+
+        bool bIsReg = std::holds_alternative<RegInfo>(b);
+
+        if(instr.flags & Op_WriteFlags)
+        {
+            // clear flags
+            builder.mov(Reg::R1, 0xFF);
+            builder.bic(a.reg, Reg::R1);
+        }
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // room for optimisation here, probably
+            builder.mov(Reg::R1, 0xF);
+            get8BitValue(builder, Reg::R2, a);
+            get8BitValue(builder, Reg::R3, b);
+
+            builder.and_(Reg::R2, Reg::R1);
+            builder.and_(Reg::R3, Reg::R1);
+            builder.sub(Reg::R3, Reg::R2, Reg::R3);
+        }
+
+        // set the N flag
+        if(instr.flags & DMGCPU::Flag_N)
+        {
+            builder.mov(Reg::R1, DMGCPU::Flag_N);
+            builder.orr(a.reg, Reg::R1);
+        }
+
+        // get first reg
+        get8BitValue(builder, Reg::R1, a);
+
+        // get second value and do cmp
+        // ... well, actually a sub but ...
+        if(bIsReg)
+        {
+            get8BitValue(builder, Reg::R2, b);
+            builder.sub(Reg::R1, Reg::R1, Reg::R2);
+        }
+        else
+            builder.sub(Reg::R1, std::get<uint8_t>(b));
+
+        builder.uxtb(Reg::R1, Reg::R1);
+
+        // flags
+        if(instr.flags & DMGCPU::Flag_C)
+        {
+            // carry is reversed for sub 
+            builder.b(Condition::CS, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_C);
+            builder.orr(a.reg, Reg::R2);
+        }
+
+        if(storeResult)
+            write8BitReg(builder, a, Reg::R1);
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // half res < 0
+            builder.cmp(Reg::R3, 0);
+            builder.b(Condition::GE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_H);
+            builder.orr(a.reg, Reg::R2);
+        }
+
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.cmp(Reg::R1, 0);
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_Z);
+            builder.orr(a.reg, Reg::R2);
+        }
+    };
+
+    const auto sub = [&doSub](std::variant<RegInfo, uint8_t> b)
+    {
+        doSub(b, true);
+    };
+
     // op helpers
     const auto bitAnd = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
     {
@@ -389,76 +471,9 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
     };
 
-    const auto cmp = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
+    const auto cmp = [&doSub](std::variant<RegInfo, uint8_t> b)
     {
-        auto a = reg(DMGReg::A);
-
-        bool bIsReg = std::holds_alternative<RegInfo>(b);
-
-        if(instr.flags & Op_WriteFlags)
-        {
-            // clear flags
-            builder.mov(Reg::R1, 0xFF);
-            builder.bic(a.reg, Reg::R1);
-        }
-
-        if(instr.flags & DMGCPU::Flag_H)
-        {
-            // room for optimisation here, probably
-            builder.mov(Reg::R1, 0xF);
-            get8BitValue(builder, Reg::R2, a);
-            get8BitValue(builder, Reg::R3, b);
-
-            builder.and_(Reg::R2, Reg::R1);
-            builder.and_(Reg::R3, Reg::R1);
-            builder.sub(Reg::R3, Reg::R2, Reg::R3);
-        }
-
-        // set the N flag
-        if(instr.flags & DMGCPU::Flag_N)
-        {
-            builder.mov(Reg::R1, DMGCPU::Flag_N);
-            builder.orr(a.reg, Reg::R1);
-        }
-
-        // get first reg
-        get8BitValue(builder, Reg::R1, a);
-
-        // get second value and do cmp
-        // ... well, actually a sub but ...
-        if(bIsReg)
-        {
-            get8BitValue(builder, Reg::R2, b);
-            builder.sub(Reg::R1, Reg::R1, Reg::R2);
-        }
-        else
-            builder.sub(Reg::R1, std::get<uint8_t>(b));
-
-        // flags
-        if(instr.flags & DMGCPU::Flag_C)
-        {
-            // carry is reversed for sub 
-            builder.b(Condition::CS, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_C);
-            builder.orr(a.reg, Reg::R2);
-        }
-
-        if(instr.flags & DMGCPU::Flag_H)
-        {
-            // half res < 0
-            builder.cmp(Reg::R3, 0);
-            builder.b(Condition::GE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_H);
-            builder.orr(a.reg, Reg::R2);
-        }
-
-        if(instr.flags & DMGCPU::Flag_Z)
-        {
-            builder.cmp(Reg::R1, 0);
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_Z);
-            builder.orr(a.reg, Reg::R2);
-        }
+        doSub(b, false);
     };
 
     pc += instr.len;
@@ -649,6 +664,16 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             writeMem(reg(WReg::HL).reg, regMap8[opcode & 7]);
             break;
 
+        case 0x90: // SUB B
+        case 0x91: // SUB C
+        case 0x92: // SUB D
+        case 0x93: // SUB E
+        case 0x94: // SUB H
+        case 0x95: // SUB L
+        case 0x97: // SUB A
+            sub(regMap8[opcode & 7]);
+            break;
+
         case 0xA0: // AND B
         case 0xA1: // AND C
         case 0xA2: // AND D
@@ -691,6 +716,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xBF: // CP A
             cmp(regMap8[opcode & 7]);
             break;
+
+        case 0xD6: // SUB n
+        {
+            cycleExecuted();
+            sub(instr.opcode[1]);
+            break;
+        }
 
         case 0xE0: // LDH (n),A
         {
