@@ -68,10 +68,13 @@ public:
     void and_(LowReg dn, LowReg m);
 
     void b(Condition cond, int imm);
+    void b(int imm);
 
     void bic(LowReg dn, LowReg m);
 
     void bl(int32_t off);
+
+    void blx(Reg r);
 
     void bx(Reg r);
 
@@ -101,6 +104,11 @@ public:
     void strh(LowReg t, LowReg n, LowReg m);
 
     void uxtb(LowReg d, LowReg m);
+
+    void uxth(LowReg d, LowReg m);
+
+    // not an instruction
+    void data(uint16_t d);
 
     uint16_t *getPtr() const {return ptr;}
 
