@@ -78,6 +78,9 @@ public:
 
     void bx(Reg r);
 
+    void cmp(LowReg n, uint8_t imm);
+    void cmp(Reg n, Reg m);
+
     void eor(LowReg dn, LowReg m);
 
     void ldr(LowReg t, LowReg n, uint8_t imm);
@@ -104,6 +107,7 @@ public:
     void strh(LowReg t, LowReg n, LowReg m);
 
     void sub(LowReg dn, uint8_t imm);
+    void sub(LowReg d, LowReg n, LowReg m);
 
     void uxtb(LowReg d, LowReg m);
 

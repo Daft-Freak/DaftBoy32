@@ -80,6 +80,25 @@ void ThumbBuilder::bx(Reg r)
     write(0x4700 | reg << 3);
 }
 
+// imm
+void ThumbBuilder::cmp(LowReg n, uint8_t imm)
+{
+    int nReg = static_cast<int>(n.val);
+    write(0x2800 | nReg << 8 | imm);
+}
+
+// reg
+void ThumbBuilder::cmp(Reg n, Reg m)
+{
+    int mReg = static_cast<int>(m);
+    int nReg = static_cast<int>(n);
+
+    if(mReg < 8 && nReg < 8)
+        write(0x4280 | mReg << 3 | nReg);
+    else
+        write(0x4500 | (nReg & 8) << 4 | mReg << 3 | (nReg & 7));
+}
+
 void ThumbBuilder::eor(LowReg dn, LowReg m)
 {
     int mReg = static_cast<int>(m.val);
@@ -209,6 +228,16 @@ void ThumbBuilder::sub(LowReg dn, uint8_t imm)
 {
     int dnReg = static_cast<int>(dn.val);
     write(0x3800 | dnReg << 8 | imm);
+}
+
+// reg
+void ThumbBuilder::sub(LowReg d, LowReg n, LowReg m)
+{
+    int dReg = static_cast<int>(d.val);
+    int nReg = static_cast<int>(n.val);
+    int mReg = static_cast<int>(m.val);
+
+    write(0x1A00 | mReg << 6 | nReg << 3 | dReg);
 }
 
 void ThumbBuilder::uxtb(LowReg d, LowReg m)
