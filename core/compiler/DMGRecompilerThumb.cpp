@@ -95,6 +95,21 @@ static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value, Reg t
     builder.orr(dst, tmp);
 }
 
+static void load32BitValue(ThumbBuilder &builder, Reg dst, uint32_t value)
+{
+    // LDR literal + b over data + some alignment bits
+    // TODO: delay writing the value
+    bool aligned = reinterpret_cast<uintptr_t>(builder.getPtr()) & 2; // if we're misaligned here, we'll be aligned after the instruction 
+    builder.ldr(dst, aligned ? 4 : 0);
+    builder.b(aligned ? 6 : 4);
+
+    if(aligned)
+        builder.data(0);
+
+    builder.data(value);
+    builder.data(value >> 16);
+}
+
 bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo)
 {
     auto codePtr16 = reinterpret_cast<uint16_t *>(codePtr);
@@ -251,17 +266,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.mov(Reg::R0, Reg::R8); // cpu pointer
 
         // get func ptr
-        // TODO: delay writing the value
-        bool aligned = reinterpret_cast<uintptr_t>(builder.getPtr()) & 2; // if we're misaligned here, we'll be aligned after the instruction 
-        builder.ldr(Reg::R2, aligned ? 4 : 0);
-        builder.b(aligned ? 6 : 4);
-
-        if(aligned)
-            builder.data(0);
-
-        auto readMemPtr = reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem);
-        builder.data(readMemPtr);
-        builder.data(readMemPtr >> 16);
+        load32BitValue(builder, Reg::R2, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem));
 
         builder.blx(Reg::R2); // do call
 
