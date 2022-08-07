@@ -204,6 +204,13 @@ void ThumbBuilder::strh(LowReg t, LowReg n, LowReg m)
     write(0x5200 | mReg << 6 | nReg << 3 | tReg);
 }
 
+// imm
+void ThumbBuilder::sub(LowReg dn, uint8_t imm)
+{
+    int dnReg = static_cast<int>(dn.val);
+    write(0x3800 | dnReg << 8 | imm);
+}
+
 void ThumbBuilder::uxtb(LowReg d, LowReg m)
 {
     int dReg = static_cast<int>(d.val);

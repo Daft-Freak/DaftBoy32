@@ -103,6 +103,8 @@ public:
     void strh(LowReg t, LowReg n, uint8_t imm);
     void strh(LowReg t, LowReg n, LowReg m);
 
+    void sub(LowReg dn, uint8_t imm);
+
     void uxtb(LowReg d, LowReg m);
 
     void uxth(LowReg d, LowReg m);
