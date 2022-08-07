@@ -243,8 +243,18 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     {
         if(std::holds_alternative<Reg>(addr))
         {
-            syncCyclesExecuted();
-            builder.mov(Reg::R1, std::get<Reg>(addr));
+            auto reg = std::get<Reg>(addr);
+
+            // LDH (C) does this
+            if(reg == Reg::R1)
+                builder.push(1 << 1, false);
+
+            syncCyclesExecuted(); // uses R1-2
+
+            if(reg == Reg::R1)
+                builder.pop(1 << 1, false);
+            else
+                builder.mov(Reg::R1, reg);
         }
         else
         {
