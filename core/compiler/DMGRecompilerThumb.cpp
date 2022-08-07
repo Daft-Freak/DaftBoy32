@@ -622,6 +622,89 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         doSub(b, false, false);
     };
 
+    const auto inc = [&instr, &builder](RegInfo r)
+    {
+        auto regA = reg(WReg::AF).reg;
+
+        if(instr.flags & Op_WriteFlags)
+        {
+            builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N | DMGCPU::Flag_Z);
+            builder.bic(regA, Reg::R1); // preserve C (and all of A), clear others
+        }
+
+        get8BitValue(builder, Reg::R1, r);
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // & 0xF == 0xF
+            builder.mov(Reg::R2, 0xF);
+            builder.and_(Reg::R2, Reg::R1);
+            builder.cmp(Reg::R2, 0xF);
+
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_H);
+            builder.orr(regA, Reg::R2);
+        }
+
+        // do inc
+        builder.add(Reg::R1, 1);
+        builder.uxtb(Reg::R1, Reg::R1);
+    
+        write8BitReg(builder, r, Reg::R1);
+
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.cmp(Reg::R1, 0);
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.orr(regA, Reg::R1);
+        }
+    };
+
+    const auto dec = [&instr, &builder](RegInfo r)
+    {
+        auto regA = reg(WReg::AF).reg;
+
+        if(instr.flags & Op_WriteFlags)
+        {
+            builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N | DMGCPU::Flag_Z);
+            builder.bic(regA, Reg::R1); // preserve C (and all of A), clear others
+        }
+
+        if(instr.flags & DMGCPU::Flag_N)
+        {
+            builder.mov(Reg::R1, DMGCPU::Flag_N);
+            builder.orr(regA, Reg::R1);
+        }
+
+        get8BitValue(builder, Reg::R1, r);
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // & 0xF == 0
+            builder.mov(Reg::R2, 0xF);
+            builder.and_(Reg::R2, Reg::R1);
+
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_H);
+            builder.orr(regA, Reg::R2);
+        }
+
+        // do dec
+        builder.sub(Reg::R1, 1);
+        builder.uxtb(Reg::R1, Reg::R1);
+    
+        write8BitReg(builder, r, Reg::R1);
+
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.cmp(Reg::R1, 0);
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.orr(regA, Reg::R1);
+        }
+    };
+
     pc += instr.len;
 
     auto oldPtr = builder.getPtr();
@@ -662,6 +745,26 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             cycleExecuted();
             break;
         }
+
+        case 0x04: // INC B
+        case 0x0C: // INC C
+        case 0x14: // INC D
+        case 0x1C: // INC E
+        case 0x24: // INC H
+        case 0x2C: // INC L
+        case 0x3C: // INC A
+            inc(regMap8[opcode >> 3]);
+            break;
+
+        case 0x05: // DEC B
+        case 0x0D: // DEC C
+        case 0x15: // DEC D
+        case 0x1D: // DEC E
+        case 0x25: // DEC H
+        case 0x2D: // DEC L
+        case 0x3D: // DEC A
+            dec(regMap8[opcode >> 3]);
+            break;
 
         case 0x0B: // DEC BC
         case 0x1B: // DEC DE
