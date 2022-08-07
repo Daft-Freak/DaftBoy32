@@ -418,6 +418,30 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             writeMem(regMap16[opcode >> 4].reg, reg(DMGReg::A));
             break;
 
+        case 0x03: // INC BC
+        case 0x13: // INC DE
+        case 0x23: // INC HL
+        //case 0x33: // INC SP
+        {
+            auto r = regMap16[opcode >> 4].reg;
+            builder.add(r, 1);
+            builder.uxth(r, r);
+            cycleExecuted();
+            break;
+        }
+
+        case 0x0B: // DEC BC
+        case 0x1B: // DEC DE
+        case 0x2B: // DEC HL
+        //case 0x3B: // DEC SP
+        {
+            auto r = regMap16[opcode >> 4].reg;
+            builder.sub(r, 1);
+            builder.uxth(r, r);
+            cycleExecuted();
+            break;
+        }
+
         case 0x06: // LD B,n
         case 0x0E: // LD C,n
         case 0x16: // LD D,n
