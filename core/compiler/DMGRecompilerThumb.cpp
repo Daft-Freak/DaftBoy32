@@ -50,6 +50,51 @@ inline constexpr RegInfo reg(DMGCPU::WReg r)
     return regMap16[static_cast<int>(r)];
 }
 
+// helpers for accessing 8/16-bit regs/values
+
+// copies 8 bit value from upper/lower reg or imm to reg
+static void get8BitValue(ThumbBuilder &builder, Reg dst, std::variant<RegInfo, uint8_t> b)
+{
+    if(std::holds_alternative<RegInfo>(b))
+    {
+        auto reg = std::get<RegInfo>(b);
+
+        if(reg.part == RegPart::High)
+            builder.lsr(dst, reg.reg, 8); // shift it down
+        else
+            builder.uxtb(dst, reg.reg); // clear the high half
+    }
+    else
+        builder.mov(dst, std::get<uint8_t>(b));
+}
+
+// store to 8-bit reg, modifies src
+static void  write8BitReg(ThumbBuilder &builder, RegInfo dst, Reg src, Reg tmp = Reg::R2)
+{
+    if(dst.part == RegPart::Low)
+    {
+        builder.mov(tmp, 0xFF);
+        builder.bic(dst.reg, tmp);
+    }
+    else
+    {
+        builder.uxtb(dst.reg, dst.reg);
+        builder.lsl(src, src, 8);
+    }
+
+    builder.orr(dst.reg, src);
+}
+
+static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value, Reg tmp = Reg::R2)
+{
+    // TODO: can emit less code if one of the bytes is zero
+    // or other cases where we can shift an 8 bit value
+    builder.mov(dst, value & 0xFF);
+    builder.mov(tmp, value >> 8);
+    builder.lsl(tmp, tmp, 8);
+    builder.orr(dst, tmp);
+}
+
 bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo)
 {
     auto codePtr16 = reinterpret_cast<uint16_t *>(codePtr);
@@ -193,11 +238,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             if(immAddr >> 8 == 0xFF)
                 syncCyclesExecuted();
 
-            // TODO: helper for 16 bit values
-            builder.mov(Reg::R1, immAddr & 0xFF);
-            builder.mov(Reg::R2, immAddr >> 8);
-            builder.lsl(Reg::R2, Reg::R2, 8);
-            builder.orr(Reg::R1, Reg::R2);
+            load16BitValue(builder, Reg::R1, immAddr);
         }
     };
 
@@ -225,19 +266,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.blx(Reg::R2); // do call
 
         // move to dest
-        // TODO: helper for writing to 8-bit emu reg
-        if(dst.part == RegPart::Low)
-        {
-            builder.mov(Reg::R2, 0xFF);
-            builder.bic(dst.reg, Reg::R2);
-        }
-        else
-        {
-            builder.uxtb(dst.reg, dst.reg);
-            builder.lsl(Reg::R0, Reg::R0, 8);
-        }
-
-        builder.orr(dst.reg, Reg::R0);
+        write8BitReg(builder, dst, Reg::R0);
 
         if(postInc && std::holds_alternative<Reg>(addr))
         {
@@ -251,29 +280,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         cycleExecuted();
     };
 
-    // copies 8 bit value from upper/lower reg or imm to reg
-    const auto getValue = [&builder](Reg dst, std::variant<RegInfo, uint8_t> b)
-    {
-        if(std::holds_alternative<RegInfo>(b))
-        {
-            auto reg = std::get<RegInfo>(b);
-
-            if(reg.part == RegPart::High)
-                builder.lsr(dst, reg.reg, 8); // shift it down
-            else
-                builder.uxtb(dst, reg.reg); // clear the high half
-        }
-        else
-            builder.mov(dst, std::get<uint8_t>(b));
-    };
-
     // op helpers
-    const auto bitAnd = [&instr, &builder, &getValue](std::variant<RegInfo, uint8_t> b)
+    const auto bitAnd = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
     {
         auto regA = reg(WReg::AF).reg;
         auto regB = Reg::R1;
 
-        getValue(regB, b);
+        get8BitValue(builder, regB, b);
 
         builder.lsr(regA, regA, 8); // shift A down (clears the flags for us)
         builder.and_(regA, regB);
@@ -293,12 +306,12 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
     };
 
-    const auto bitOr = [&instr, &builder, &getValue](std::variant<RegInfo, uint8_t> b)
+    const auto bitOr = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
     {
         auto regA = reg(WReg::AF).reg;
         auto regB = Reg::R1;
 
-        getValue(regB, b);
+        get8BitValue(builder, regB, b);
 
         builder.lsr(regA, regA, 8); // shift A down (clears the flags for us)
         builder.orr(regA, regB);
@@ -312,12 +325,12 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
     };
 
-    const auto bitXor = [&instr, &builder, &getValue](std::variant<RegInfo, uint8_t> b)
+    const auto bitXor = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
     {
         auto regA = reg(WReg::AF).reg;
         auto regB = Reg::R1;
 
-        getValue(regB, b);
+        get8BitValue(builder, regB, b);
 
         builder.lsr(regA, regA, 8); // shift A down (clears the flags for us)
         builder.eor(regA, regB);
@@ -350,13 +363,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             cycleExecuted();
 
             auto dst = regMap16[opcode >> 4];
-
-            // TODO: can emit less code if one of the bytes is zero
-            // or other cases where we can shift an 8 bit value
-            builder.mov(dst.reg, instr.opcode[1]);
-            builder.mov(Reg::R1, instr.opcode[2]);
-            builder.lsl(Reg::R1, Reg::R1, 8);
-            builder.orr(dst.reg, Reg::R1);
+            load16BitValue(builder, dst.reg, instr.opcode[1] | instr.opcode[2] << 8);
 
             break;
         }
@@ -371,22 +378,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             cycleExecuted();
 
-            auto dst = regMap8[opcode >> 3];
-
             builder.mov(Reg::R1, instr.opcode[1]);
-
-            if(dst.part == RegPart::Low)
-            {
-                builder.mov(Reg::R2, 0xFF);
-                builder.bic(dst.reg, Reg::R2);
-            }
-            else
-            {
-                builder.uxtb(dst.reg, dst.reg);
-                builder.lsl(Reg::R1, Reg::R1, 8);
-            }
-
-            builder.orr(dst.reg, Reg::R1);
+            write8BitReg(builder, regMap8[opcode >> 3], Reg::R1);
 
             break;
         }
@@ -456,12 +449,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         default:
             printf("unhandled op in recompile %02X\n", opcode);
             builder.resetPtr(oldPtr);
-
-            builder.mov(Reg::R1, (pc - instr.len) & 0xFF);
-            builder.mov(Reg::R0, (pc - instr.len) >> 8);
-            builder.lsl(Reg::R0, Reg::R0, 8);
-            builder.orr(Reg::R1, Reg::R0);
-            
+            load16BitValue(builder, Reg::R1, pc - instr.len);
             builder.bl(getOff(exitPtr));
             return false;
     }
