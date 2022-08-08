@@ -70,6 +70,8 @@ public:
 
     void and_(LowReg dn, LowReg m);
 
+    void asr(LowReg d, LowReg m, uint8_t imm);
+
     void b(Condition cond, int imm);
     void b(int imm);
 
@@ -116,6 +118,8 @@ public:
 
     void sub(LowReg dn, uint8_t imm);
     void sub(LowReg d, LowReg n, LowReg m);
+
+    void sxtb(LowReg d, LowReg m);
 
     void uxtb(LowReg d, LowReg m);
 
