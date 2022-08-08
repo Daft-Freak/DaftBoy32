@@ -1616,8 +1616,32 @@ bool DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
                 break;
 
             case 0x30: // SWAP
-                return false;
+            {
+                auto f = reg(DMGReg::F).reg;
+                get8BitValue(builder, Reg::R2, r);
+
+                if(instr.flags & Op_WriteFlags)
+                {
+                    builder.mov(Reg::R1, 0xFF);
+                    builder.bic(f, Reg::R1); // clear flags
+                }
+
+                builder.lsr(Reg::R1, Reg::R2, 4); // >> 4
+                builder.lsl(Reg::R2, Reg::R2, 4); // << 4
+                builder.orr(Reg::R2, Reg::R1);
+
+                builder.uxtb(Reg::R2, Reg::R2);
+
+                if(instr.flags & DMGCPU::Flag_Z)
+                {
+                    builder.b(Condition::NE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
+                    builder.orr(f, Reg::R1);
+                }
+
+                write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
+            }
 
             case 0x38: // SRL
                 return false;
@@ -1628,6 +1652,7 @@ bool DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
     {
         int bit = (opcode >> 3) & 7;
         auto f = reg(DMGReg::F).reg;
+
         if(instr.flags & Op_WriteFlags)
         {
             builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N | DMGCPU::Flag_Z);
