@@ -22,6 +22,8 @@ struct RegInfo
     RegPart part;
 };
 
+auto spReg = Reg::R9;
+
 inline constexpr RegInfo reg(DMGCPU::Reg r)
 {
     const RegInfo regMap8[]
@@ -206,7 +208,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         reg(WReg::BC),
         reg(WReg::DE),
         reg(WReg::HL),
-        {Reg::R1, RegPart::Both}, // TODO: SP, unless it's push/pop, then it's AF
+        {spReg, RegPart::Both}, // unless it's push/pop, then it's AF
     };
 
     auto getOff = [&builder](uint8_t *ptr)
@@ -1330,8 +1332,14 @@ void DMGRecompilerThumb::compileEntry()
     builder.orr(Reg::R1, Reg::R2);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 40);
+    builder.ldr(Reg::R2, 52);
     builder.mov(Reg::R8, Reg::R2);
+
+    // load SP
+    int spOff = reinterpret_cast<uintptr_t>(&cpu.sp) - cpuPtr;
+    builder.mov(Reg::R3, spOff);
+    builder.ldrh(Reg::R3, Reg::R2, Reg::R3);
+    builder.mov(spReg, Reg::R3);
 
     // load emu regs
     int regsOff = reinterpret_cast<uintptr_t>(&cpu.regs) - cpuPtr;
@@ -1352,6 +1360,11 @@ void DMGRecompilerThumb::compileEntry()
     builder.mov(Reg::R2, Reg::R8); // cpu ptr
     builder.mov(Reg::R0, pcOff);
     builder.strh(Reg::R1, Reg::R2, Reg::R0);
+
+    // store SP
+    builder.mov(Reg::R0, spOff);
+    builder.mov(Reg::R3, spReg);
+    builder.strh(Reg::R3, Reg::R2, Reg::R0);
 
     // save emu regs
     builder.add(Reg::R2, regsOff); // add to cpu ptr

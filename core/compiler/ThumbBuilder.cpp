@@ -156,6 +156,15 @@ void ThumbBuilder::ldrh(LowReg t, LowReg n, uint8_t imm)
     write(0x8800 | (imm >> 1) << 6 | nReg << 3 | tReg);
 }
 
+// reg
+void ThumbBuilder::ldrh(LowReg t, LowReg n, LowReg m)
+{
+    int tReg = static_cast<int>(t.val);
+    int nReg = static_cast<int>(n.val);
+    int mReg = static_cast<int>(m.val);
+    write(0x5A00 | mReg << 6 | nReg << 3 | tReg);
+}
+
 // imm
 void ThumbBuilder::lsl(LowReg d, LowReg m, uint8_t imm)
 {
