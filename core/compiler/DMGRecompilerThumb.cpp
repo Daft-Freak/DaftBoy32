@@ -278,7 +278,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, RegInfo dst, bool postInc = false)
     {
-        builder.push(1, false); // R0
+        int pushMask = 1 << 0; // R0
+
+        // save addr if we're post-incrementing it (assume it's in R1-3)
+        if(postInc && std::holds_alternative<Reg>(addr))
+            pushMask |= 1 << static_cast<int>(std::get<Reg>(addr));
+
+        builder.push(pushMask, false);
 
         setupMemAddr(addr);
 
@@ -292,6 +298,9 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         // move to dest
         write8BitReg(builder, dst, Reg::R0);
 
+
+        builder.pop(pushMask, false);
+
         if(postInc && std::holds_alternative<Reg>(addr))
         {
             auto addrReg = std::get<Reg>(addr);
@@ -299,22 +308,23 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.uxth(addrReg, addrReg);
         }
 
-        builder.pop(1, false);
-
         cycleExecuted();
     };
 
     auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, std::variant<RegInfo, uint8_t> data, bool preDec = false)
     {
-        builder.push(1 << 4, false); // R4
-
-        // TODO
-        /*if(preDec && std::holds_alternative<Reg>(addr))
+        int pushMask = 1 << 4; // R4
+        if(preDec && std::holds_alternative<Reg>(addr))
         {
             auto addrReg = std::get<Reg>(addr);
             builder.sub(addrReg, 1);
             builder.uxth(addrReg, addrReg);
-        }*/
+
+            // used for push, we don't want to lose the reg
+            pushMask |= 1 << static_cast<int>(addrReg);
+        }
+
+        builder.push(pushMask, false);
 
         setupMemAddr(addr);
         get8BitValue(builder, Reg::R2, data);
@@ -329,9 +339,25 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         // TODO: returns new cycle count
 
-        builder.pop(1 << 4, false);
+        builder.pop(pushMask, false);
 
         cycleExecuted();
+    };
+
+    const auto push = [&builder, &cycleExecuted, &writeMem](Reg r)
+    {
+        builder.mov(Reg::R2, spReg);
+        writeMem(Reg::R2, RegInfo{r, RegPart::High}, true);
+        writeMem(Reg::R2, RegInfo{r, RegPart::Low}, true);
+        builder.mov(spReg, Reg::R2);
+    };
+
+    const auto pop = [&builder, &cycleExecuted, &readMem](Reg r)
+    {
+        builder.mov(Reg::R2, spReg);
+        readMem(Reg::R2, RegInfo{r, RegPart::Low}, true);
+        readMem(Reg::R2, RegInfo{r, RegPart::High}, true);
+        builder.mov(spReg, Reg::R2);
     };
 
     const auto add = [&instr, &builder](std::variant<RegInfo, uint8_t> b, bool withCarry = false)
@@ -1219,6 +1245,18 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xC1: // POP BC
+        case 0xD1: // POP DE
+        case 0xE1: // POP HL
+            pop(regMap16[(opcode >> 4) & 3].reg);
+            break;
+
+        case 0xC5: // PUSH BC
+        case 0xD5: // PUSH DE
+        case 0xE5: // PUSH HL
+            push(regMap16[(opcode >> 4) & 3].reg);
+            break;
+
         case 0xC6: // ADD n
         {
             cycleExecuted();
@@ -1299,6 +1337,14 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xF1: // POP AF
+            pop(reg(WReg::AF).reg);
+
+            // low bits in F can never be set
+            builder.mov(Reg::R1, 0xF);
+            builder.bic(reg(WReg::AF).reg, Reg::R1);
+            break;
+
         case 0xF2: // LDH A,(C)
         {
             get8BitValue(builder, Reg::R1, reg(DMGReg::C));
@@ -1310,6 +1356,10 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             readMem(Reg::R1, reg(DMGReg::A));
             break;
         }
+
+        case 0xF5: // PUSH AF
+            push(reg(WReg::AF).reg);
+            break;
 
         case 0xF6: // OR n
         {
