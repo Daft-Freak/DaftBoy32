@@ -1608,12 +1608,76 @@ bool DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
             }
 
             case 0x20: // SLA
-                return false;
+            {
+                auto f = reg(DMGReg::F).reg;
+                get8BitValue(builder, Reg::R2, r);
+
+                if(instr.flags & Op_WriteFlags)
+                {
+                    builder.mov(Reg::R1, 0xFF);
+                    builder.bic(f, Reg::R1); // clear flags
+                }
+
+                builder.lsl(Reg::R2, Reg::R2, 1);
+
+                // flags
+                if(instr.flags & DMGCPU::Flag_C)
+                {
+                    builder.cmp(Reg::R2, 0xFF);
+                    builder.b(Condition::LE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_C);
+                    builder.orr(f, Reg::R1);
+                }
+
+                builder.uxtb(Reg::R2, Reg::R2);
+       
+                if(instr.flags & DMGCPU::Flag_Z)
+                {
+                    builder.cmp(Reg::R2, 0);
+                    builder.b(Condition::NE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
+                    builder.orr(f, Reg::R1);
+                }
+
+                write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
+            }
 
             case 0x28: // SRA
-                return false;
+            {
+                auto f = reg(DMGReg::F).reg;
+                get8BitValue(builder, Reg::R2, r);
+
+                if(instr.flags & Op_WriteFlags)
+                {
+                    builder.mov(Reg::R1, 0xFF);
+                    builder.bic(f, Reg::R1); // clear flags
+                }
+
+                builder.sxtb(Reg::R2, Reg::R2); // TODO: can avoid this by replacing get8BitValue(lsr/uxtb) with asr/sxtb
+                builder.asr(Reg::R2, Reg::R2, 1);
+
+                // flags
+                if(instr.flags & DMGCPU::Flag_C)
+                {
+                    builder.b(Condition::CC, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_C);
+                    builder.orr(f, Reg::R1);
+                }
+
+                builder.uxtb(Reg::R2, Reg::R2);
+       
+                if(instr.flags & DMGCPU::Flag_Z)
+                {
+                    builder.cmp(Reg::R2, 0);
+                    builder.b(Condition::NE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
+                    builder.orr(f, Reg::R1);
+                }
+
+                write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
+            }
 
             case 0x30: // SWAP
             {
@@ -1644,8 +1708,37 @@ bool DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
             }
 
             case 0x38: // SRL
-                return false;
+            {
+                auto f = reg(DMGReg::F).reg;
+                get8BitValue(builder, Reg::R2, r);
+
+                if(instr.flags & Op_WriteFlags)
+                {
+                    builder.mov(Reg::R1, 0xFF);
+                    builder.bic(f, Reg::R1); // clear flags
+                }
+
+                builder.lsr(Reg::R2, Reg::R2, 1);
+
+                // flags
+                if(instr.flags & DMGCPU::Flag_C)
+                {
+                    builder.b(Condition::CC, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_C);
+                    builder.orr(f, Reg::R1);
+                }
+
+                if(instr.flags & DMGCPU::Flag_Z)
+                {
+                    builder.cmp(Reg::R2, 0);
+                    builder.b(Condition::NE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
+                    builder.orr(f, Reg::R1);
+                }
+
+                write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
+            }
         }
     }
     else if(opcode < 0x80) // BIT
