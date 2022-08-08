@@ -705,6 +705,61 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
     };
 
+    const auto add16 = [&instr, &builder](Reg b)
+    {
+        auto a = reg(WReg::HL);
+        auto f = reg(WReg::AF);
+
+        if(instr.flags & Op_WriteFlags)
+        {
+            // clear flags
+            builder.mov(Reg::R1, DMGCPU::Flag_C | DMGCPU::Flag_H | DMGCPU::Flag_N);
+            builder.bic(f.reg, Reg::R1); // preserve Z (and all of A), clear others
+        }
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // room for optimisation here, probably
+            // & 0xFFF == & ~(0xF << 12)
+            builder.mov(Reg::R1, 0xF);
+            builder.lsl(Reg::R1, Reg::R1, 12);
+            builder.mov(Reg::R2, a.reg);
+            builder.mov(Reg::R3, b);
+
+            builder.bic(Reg::R2, Reg::R1);
+            builder.bic(Reg::R3, Reg::R1);
+            builder.add(Reg::R3, Reg::R2, Reg::R3);
+
+            builder.lsr(Reg::R3, Reg::R3, 8); // ignore the bottom 8 bits
+        }
+
+        // do add
+        builder.add(a.reg, a.reg, b);
+
+        // flags
+        // cant use carry from op here
+        if(instr.flags & DMGCPU::Flag_C)
+        {
+            // > 0xFFFF == >> 8 > 0xFF
+            builder.lsr(Reg::R1, a.reg, 8); // shift down for comparison
+            builder.cmp(Reg::R1, 0xFF);
+            builder.b(Condition::LE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_C);
+            builder.orr(f.reg, Reg::R2);
+        }
+
+        builder.uxth(a.reg, a.reg); // mask
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            // half res > 0xF (shifted down 8)
+            builder.cmp(Reg::R3, 0xF);
+            builder.b(Condition::LE, 4);
+            builder.mov(Reg::R2, DMGCPU::Flag_H);
+            builder.orr(f.reg, Reg::R2);
+        }
+    };
+
     pc += instr.len;
 
     auto oldPtr = builder.getPtr();
@@ -793,6 +848,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
             break;
         }
+
+        case 0x09: // ADD HL,BC
+        case 0x19: // ADD HL,DE
+        case 0x29: // ADD HL,HL
+        //case 0x39: // ADD HL,SP
+            add16(regMap16[opcode >> 4].reg);
+            break;
 
         case 0x0A: // LD A,(BC)
         case 0x1A: // LD A,(DE)
