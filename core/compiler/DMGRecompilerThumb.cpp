@@ -1573,6 +1573,48 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
         reg(DMGReg::A),
     };
 
+    // flag helpers, all use R1
+    auto clearFlags = [&instr, &builder](int preserve = 0)
+    {
+        if(instr.flags & Op_WriteFlags)
+        {
+            builder.mov(Reg::R1, ~preserve);
+            builder.bic(reg(DMGReg::F).reg, Reg::R1); // clear flags
+        }
+    };
+
+    // assumes value in R2 if needCompare is true
+    auto updateC = [&instr, &builder](bool needCompare = false)
+    {
+        if(instr.flags & DMGCPU::Flag_C)
+        {
+            if(needCompare)
+            {
+                builder.cmp(Reg::R2, 0xFF);
+                builder.b(Condition::LE, 4);
+            }
+            else
+                builder.b(Condition::CC, 4);
+
+            builder.mov(Reg::R1, DMGCPU::Flag_C);
+            builder.orr(reg(DMGReg::F).reg, Reg::R1);
+        }
+    };
+
+    // assumes value in R2 if needCompare is true
+    auto updateZ = [&instr, &builder](bool needCompare = true)
+    {
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            if(needCompare)
+                builder.cmp(Reg::R2, 0);
+
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.orr(reg(DMGReg::F).reg, Reg::R1);
+        }
+    };
+
     auto r = regMap8[opcode & 7];
 
     if(opcode < 0x40) // shifts/rotates
@@ -1581,14 +1623,9 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
         {
             case 0x00: // RLC
             {
-                auto f = reg(DMGReg::F).reg;
                 get8BitValue(builder, Reg::R2, r);
 
-                if(instr.flags & Op_WriteFlags)
-                {
-                    builder.mov(Reg::R1, 0xFF);
-                    builder.bic(f, Reg::R1); // clear flags
-                }
+                clearFlags();
 
                 // = << 1 | >> 7
                 builder.lsr(Reg::R1, Reg::R2, 7);
@@ -1596,23 +1633,11 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
                 builder.orr(Reg::R2, Reg::R1);
 
                 // flags
-                if(instr.flags & DMGCPU::Flag_C)
-                {
-                    builder.cmp(Reg::R2, 0xFF);
-                    builder.b(Condition::LE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_C);
-                    builder.orr(f, Reg::R1);
-                }
+                updateC(true);
 
                 builder.uxtb(Reg::R2, Reg::R2);
        
-                if(instr.flags & DMGCPU::Flag_Z)
-                {
-                    builder.cmp(Reg::R2, 0);
-                    builder.b(Condition::NE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
-                    builder.orr(f, Reg::R1);
-                }
+                updateZ();
 
                 write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
@@ -1620,14 +1645,9 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
 
             case 0x08: // RRC
             {
-                auto f = reg(DMGReg::F).reg;
                 get8BitValue(builder, Reg::R2, r);
 
-                if(instr.flags & Op_WriteFlags)
-                {
-                    builder.mov(Reg::R1, 0xFF);
-                    builder.bic(f, Reg::R1); // clear flags
-                }
+                clearFlags();
 
                 // = << 7 | >> 1
                 builder.lsl(Reg::R3, Reg::R2, 7);
@@ -1635,23 +1655,12 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
 
                 // flags
                 // set C before the or
-                if(instr.flags & DMGCPU::Flag_C)
-                {
-                    builder.b(Condition::CC, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_C);
-                    builder.orr(f, Reg::R1);
-                }
+                updateC();
 
                 builder.orr(Reg::R2, Reg::R3);
                 builder.uxtb(Reg::R2, Reg::R2);
        
-                if(instr.flags & DMGCPU::Flag_Z)
-                {
-                    builder.cmp(Reg::R2, 0);
-                    builder.b(Condition::NE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
-                    builder.orr(f, Reg::R1);
-                }
+                updateZ();
 
                 write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
@@ -1666,11 +1675,7 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
                 builder.mov(Reg::R3, DMGCPU::Flag_C);
                 builder.and_(Reg::R3, f);
 
-                if(instr.flags & Op_WriteFlags)
-                {
-                    builder.mov(Reg::R1, 0xFF);
-                    builder.bic(f, Reg::R1); // clear flags
-                }
+                clearFlags();
 
                 // <<= 1 
                 builder.lsl(Reg::R2, Reg::R2, 1);
@@ -1680,23 +1685,11 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
                 builder.orr(Reg::R2, Reg::R3);
 
                 // flags
-                if(instr.flags & DMGCPU::Flag_C)
-                {
-                    builder.cmp(Reg::R2, 0xFF);
-                    builder.b(Condition::LE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_C);
-                    builder.orr(f, Reg::R1);
-                }
+                updateC(true);
 
                 builder.uxtb(Reg::R2, Reg::R2);
        
-                if(instr.flags & DMGCPU::Flag_Z)
-                {
-                    builder.cmp(Reg::R2, 0);
-                    builder.b(Condition::NE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
-                    builder.orr(f, Reg::R1);
-                }
+                updateZ();
 
                 write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
@@ -1711,34 +1704,19 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
                 builder.mov(Reg::R3, DMGCPU::Flag_C);
                 builder.and_(Reg::R3, f);
 
-                if(instr.flags & Op_WriteFlags)
-                {
-                    builder.mov(Reg::R1, 0xFF);
-                    builder.bic(f, Reg::R1); // clear flags
-                }
+                clearFlags();
 
                 // >>= 1 
                 builder.lsr(Reg::R2, Reg::R2, 1);
 
                 // flags
-                if(instr.flags & DMGCPU::Flag_C)
-                {
-                    builder.b(Condition::CC, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_C);
-                    builder.orr(f, Reg::R1);
-                }
+                updateC();
 
                 // copy carry in
                 builder.lsl(Reg::R3, Reg::R3, 3); // C is bit 4
                 builder.orr(Reg::R2, Reg::R3);
 
-                if(instr.flags & DMGCPU::Flag_Z)
-                {
-                    builder.cmp(Reg::R2, 0);
-                    builder.b(Condition::NE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
-                    builder.orr(f, Reg::R1);
-                }
+                updateZ();
 
                 write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
@@ -1746,35 +1724,18 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
 
             case 0x20: // SLA
             {
-                auto f = reg(DMGReg::F).reg;
                 get8BitValue(builder, Reg::R2, r);
 
-                if(instr.flags & Op_WriteFlags)
-                {
-                    builder.mov(Reg::R1, 0xFF);
-                    builder.bic(f, Reg::R1); // clear flags
-                }
+                clearFlags();
 
                 builder.lsl(Reg::R2, Reg::R2, 1);
 
                 // flags
-                if(instr.flags & DMGCPU::Flag_C)
-                {
-                    builder.cmp(Reg::R2, 0xFF);
-                    builder.b(Condition::LE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_C);
-                    builder.orr(f, Reg::R1);
-                }
+                updateC(true);
 
                 builder.uxtb(Reg::R2, Reg::R2);
        
-                if(instr.flags & DMGCPU::Flag_Z)
-                {
-                    builder.cmp(Reg::R2, 0);
-                    builder.b(Condition::NE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
-                    builder.orr(f, Reg::R1);
-                }
+                updateZ();
 
                 write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
@@ -1782,35 +1743,19 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
 
             case 0x28: // SRA
             {
-                auto f = reg(DMGReg::F).reg;
                 get8BitValue(builder, Reg::R2, r);
 
-                if(instr.flags & Op_WriteFlags)
-                {
-                    builder.mov(Reg::R1, 0xFF);
-                    builder.bic(f, Reg::R1); // clear flags
-                }
+                clearFlags();
 
                 builder.sxtb(Reg::R2, Reg::R2); // TODO: can avoid this by replacing get8BitValue(lsr/uxtb) with asr/sxtb
                 builder.asr(Reg::R2, Reg::R2, 1);
 
                 // flags
-                if(instr.flags & DMGCPU::Flag_C)
-                {
-                    builder.b(Condition::CC, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_C);
-                    builder.orr(f, Reg::R1);
-                }
+                updateC();
 
                 builder.uxtb(Reg::R2, Reg::R2);
        
-                if(instr.flags & DMGCPU::Flag_Z)
-                {
-                    builder.cmp(Reg::R2, 0);
-                    builder.b(Condition::NE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
-                    builder.orr(f, Reg::R1);
-                }
+                updateZ();
 
                 write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
@@ -1818,14 +1763,9 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
 
             case 0x30: // SWAP
             {
-                auto f = reg(DMGReg::F).reg;
                 get8BitValue(builder, Reg::R2, r);
 
-                if(instr.flags & Op_WriteFlags)
-                {
-                    builder.mov(Reg::R1, 0xFF);
-                    builder.bic(f, Reg::R1); // clear flags
-                }
+                clearFlags();
 
                 builder.lsr(Reg::R1, Reg::R2, 4); // >> 4
                 builder.lsl(Reg::R2, Reg::R2, 4); // << 4
@@ -1833,12 +1773,7 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
 
                 builder.uxtb(Reg::R2, Reg::R2);
 
-                if(instr.flags & DMGCPU::Flag_Z)
-                {
-                    builder.b(Condition::NE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
-                    builder.orr(f, Reg::R1);
-                }
+                updateZ(false);
 
                 write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
@@ -1846,32 +1781,15 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
 
             case 0x38: // SRL
             {
-                auto f = reg(DMGReg::F).reg;
                 get8BitValue(builder, Reg::R2, r);
 
-                if(instr.flags & Op_WriteFlags)
-                {
-                    builder.mov(Reg::R1, 0xFF);
-                    builder.bic(f, Reg::R1); // clear flags
-                }
+                clearFlags();
 
                 builder.lsr(Reg::R2, Reg::R2, 1);
 
                 // flags
-                if(instr.flags & DMGCPU::Flag_C)
-                {
-                    builder.b(Condition::CC, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_C);
-                    builder.orr(f, Reg::R1);
-                }
-
-                if(instr.flags & DMGCPU::Flag_Z)
-                {
-                    builder.cmp(Reg::R2, 0);
-                    builder.b(Condition::NE, 4);
-                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
-                    builder.orr(f, Reg::R1);
-                }
+                updateC();
+                updateZ();
 
                 write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
@@ -1883,11 +1801,7 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
         int bit = (opcode >> 3) & 7;
         auto f = reg(DMGReg::F).reg;
 
-        if(instr.flags & Op_WriteFlags)
-        {
-            builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N | DMGCPU::Flag_Z);
-            builder.bic(f, Reg::R1); // preserve C (and all of A), clear others
-        }
+        clearFlags(DMGCPU::Flag_C);
 
         if(instr.flags & DMGCPU::Flag_H)
         {
@@ -1900,12 +1814,7 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
         builder.mov(Reg::R1, 1 << bit);
         builder.and_(Reg::R1, Reg::R2); // could use TST
 
-        if(instr.flags & DMGCPU::Flag_Z)
-        {
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R1, DMGCPU::Flag_Z);
-            builder.orr(f, Reg::R1);
-        }
+        updateZ(false);
     }
     else if(opcode < 0xC0) // RES
     {
@@ -1927,8 +1836,6 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
 
         write8BitReg(builder, r, Reg::R2, Reg::R1);
     }
-
-    return true;
 }
 
 void DMGRecompilerThumb::compileEntry()
