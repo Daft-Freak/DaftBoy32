@@ -1083,6 +1083,81 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x27: // DAA
+        {
+            auto f = reg(DMGReg::F).reg;
+            auto a = Reg::R2;
+
+            builder.lsr(a, f, 8); // get A
+
+            // clear Z flag (will add back later)
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.bic(f, Reg::R1);
+
+            builder.mov(Reg::R1, DMGCPU::Flag_N);
+            builder.and_(Reg::R1, f); // tst?
+            builder.b(Condition::EQ, 18); // N not set
+
+            // negative
+
+            // if (Flag_C) A -= 0x60
+            builder.mov(Reg::R1, DMGCPU::Flag_C);
+            builder.and_(Reg::R1, f); // tst?
+            builder.b(Condition::EQ, 2); // C not set
+            builder.sub(a, 0x60);
+
+            // if (Flag_H) A -= 0x06
+            builder.mov(Reg::R1, DMGCPU::Flag_H);
+            builder.and_(Reg::R1, f); // tst?
+            builder.b(Condition::EQ, 2); // C not set
+            builder.sub(a, 0x06);
+
+            builder.b(32); // skip
+
+            // positive
+
+            // if (Flag_C ...
+            builder.mov(Reg::R1, DMGCPU::Flag_C);
+            builder.and_(Reg::R1, f); // tst?
+            builder.b(Condition::NE, 4); // C set
+            // ... || A > 0x99) ...
+            builder.cmp(a, 0x99);
+            builder.b(Condition::LE, 6);
+            // ... A += 0x60
+            builder.add(a, 0x60);
+            builder.mov(Reg::R1, DMGCPU::Flag_C);
+            builder.orr(f, Reg::R1); // set C flag
+
+            // if (Flag_H ...
+            builder.mov(Reg::R1, DMGCPU::Flag_H);
+            builder.and_(Reg::R1, f); // tst?
+            builder.b(Condition::NE, 8); // H set
+            // ... || A & (0x0F) > 0x09) ...
+            builder.mov(Reg::R1, 0xF);
+            builder.and_(Reg::R1, a);
+            builder.cmp(Reg::R1, 0x09);
+            builder.b(Condition::LE, 2);
+            // .. A += 0x06
+            builder.add(a, 0x06);
+
+            builder.uxtb(a, a);
+
+            // Z flag
+            builder.cmp(a, 0);
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.orr(f, Reg::R1);
+
+            // clear H flag
+            builder.mov(Reg::R1, DMGCPU::Flag_H);
+            builder.bic(f, Reg::R1);
+
+            // write A back
+            write8BitReg(builder, reg(DMGReg::A), Reg::R2, Reg::R1);
+
+            break;
+        }
+
         case 0x2A: // LDI A, (HL)
         {
             auto r = reg(WReg::HL).reg;
