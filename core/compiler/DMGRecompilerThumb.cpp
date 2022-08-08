@@ -328,7 +328,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         setupMemAddr(addr);
         get8BitValue(builder, Reg::R2, data);
-        builder.mov(Reg::R3, Reg::R0); // TODO: cycle count
+        builder.mov(Reg::R3, Reg::R0); // cycle count
 
         builder.mov(Reg::R0, Reg::R8); // cpu pointer
 
@@ -337,7 +337,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         builder.blx(Reg::R4); // do call
 
-        // TODO: returns new cycle count
+        // new cycle count is already in R0
 
         builder.pop(pushMask, false);
 
@@ -1625,7 +1625,21 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     syncCyclesExecuted();
 
-    // cycle check
+    if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
+    {
+        // cycles -= executed
+        if(cyclesThisInstr) // 0 means we already did the sub
+            builder.sub(Reg::R0, cyclesThisInstr);
+
+        lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
+
+        // if <= 0 exit
+        builder.b(Condition::GT, 12);
+        load16BitValue(builder, Reg::R1, pc); // currently always 4 instructions
+        builder.bl(getOff(saveAndExitPtr));
+
+        // TODO: ei check
+    }
 
     return true;
 }
@@ -1920,8 +1934,6 @@ void DMGRecompilerThumb::compileEntry()
 
     auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
 
-    //FIXME: actually implement this
-    
     builder.mov(Reg::R2, Reg::R8);
     builder.mov(Reg::R3, Reg::R9);
     builder.push(0b11111100, true); // R2-7, LR
@@ -1931,7 +1943,7 @@ void DMGRecompilerThumb::compileEntry()
     builder.orr(Reg::R1, Reg::R2);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 52);
+    builder.ldr(Reg::R2, 56);
     builder.mov(Reg::R8, Reg::R2);
 
     // load SP
@@ -1950,9 +1962,16 @@ void DMGRecompilerThumb::compileEntry()
 
     builder.bx(Reg::R1);
 
-    exitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
+    // exit saving LR
+    saveAndExitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
+
+    builder.mov(Reg::R0, Reg::LR);
+    builder.ldr(Reg::R2, 36);
+    builder.str(Reg::R0, Reg::R2, 0);
 
     // exit
+    exitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
+
     // store PC
     int pcOff = reinterpret_cast<uintptr_t>(&cpu.pc) - cpuPtr;
     assert(pcOff <= 0xFF);
@@ -1985,9 +2004,14 @@ void DMGRecompilerThumb::compileEntry()
 
     // write cpu addr
     auto ptr = builder.getPtr();
-    *ptr++ = 0; // align
+    //*ptr++ = 0; // align
     *ptr++ = cpuPtr;
     *ptr++ = cpuPtr >> 16;
+
+    //write addr of tmpSavedPtr
+    auto addr = reinterpret_cast<uintptr_t>(&tmpSavedPtr);
+    *ptr++ = addr;
+    *ptr++ = addr >> 16;
 
     curCodePtr = reinterpret_cast<uint8_t *>(ptr);
 
