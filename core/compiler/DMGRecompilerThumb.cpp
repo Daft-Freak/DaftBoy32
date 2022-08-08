@@ -898,6 +898,20 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x2F: // CPL
+            // A is the high byte so AF ^ 0xFF00
+            builder.mov(Reg::R1, 0xFF);
+            builder.lsl(Reg::R1, Reg::R1, 8);
+            builder.eor(reg(DMGReg::A).reg, Reg::R1);
+
+            if(instr.flags & Op_WriteFlags)
+            {
+                // set H and N
+                builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N);
+                builder.orr(reg(DMGReg::A).reg, Reg::R1);
+            }
+            break;
+
         case 0x32: // LDD (HL),A
         {
             auto r = reg(WReg::HL).reg;
@@ -935,6 +949,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x37: // SCF
+            builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N); // clear H/N
+            builder.bic(reg(DMGReg::A).reg, Reg::R1);
+            builder.mov(Reg::R1, DMGCPU::Flag_C);
+            builder.orr(reg(DMGReg::A).reg, Reg::R1);
+            break;
+
         case 0x3A: // LDD A, (HL)
         {
             auto r = reg(WReg::HL).reg;
@@ -943,6 +964,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.uxth(r, r);
             break;
         }
+
+        case 0x3F: // CCF
+            builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N); // clear H/N
+            builder.bic(reg(DMGReg::A).reg, Reg::R1);
+            builder.mov(Reg::R1, DMGCPU::Flag_C);
+            builder.eor(reg(DMGReg::A).reg, Reg::R1);
+            break;
 
         case 0x40: // LD B,B
         case 0x41: // LD B,C
