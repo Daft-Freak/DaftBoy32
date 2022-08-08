@@ -13,6 +13,7 @@ private:
     bool compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo) override;
 
     bool recompileInstruction(uint16_t &pc, OpInfo &instr, ThumbBuilder &builder);
+    bool recompileExInstruction(OpInfo &instr, ThumbBuilder &builder);
 
     void compileEntry() override;
 };

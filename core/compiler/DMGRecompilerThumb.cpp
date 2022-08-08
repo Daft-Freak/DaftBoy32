@@ -1394,6 +1394,34 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xCB:
+        {
+            uint8_t exOpcode = instr.opcode[1];
+
+            cycleExecuted();
+
+            bool isMem = (exOpcode & 7) == 6; // (HL)
+            auto tmp = RegInfo{Reg::R2, RegPart::Low};
+
+            if(isMem)
+                readMem(reg(WReg::HL).reg, tmp);
+
+            if(recompileExInstruction(instr, builder))
+            {
+                if(isMem && (exOpcode >= 0x80 || exOpcode < 0x40)) // BIT doesn't write back
+                    writeMem(reg(WReg::HL).reg, tmp);
+            }
+            else
+            {
+                printf("unhandled op in recompile CB%02X\n", exOpcode);
+                builder.resetPtr(oldPtr);
+                load16BitValue(builder, Reg::R1, pc - instr.len);
+                builder.bl(getOff(exitPtr));
+                return false;
+            }
+            break;
+        }
+
         case 0xCE: // ADC n
         {
             cycleExecuted();
@@ -1531,6 +1559,83 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     syncCyclesExecuted();
 
     // cycle check
+
+    return true;
+}
+
+bool DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &builder)
+{
+    uint8_t opcode = instr.opcode[1];
+
+    using DMGReg = DMGCPU::Reg;
+
+    static const RegInfo regMap8[]
+    {
+        reg(DMGReg::B),
+        reg(DMGReg::C),
+        reg(DMGReg::D),
+        reg(DMGReg::E),
+        reg(DMGReg::H),
+        reg(DMGReg::L),
+        {Reg::R2, RegPart::Low}, // where we load to for (HL)
+        reg(DMGReg::A),
+    };
+
+    auto r = regMap8[opcode & 7];
+
+    if(opcode < 0x40) // shifts/rotates
+    {
+        switch(opcode & ~7)
+        {
+            case 0x00: // RLC
+                return false;
+                break;
+
+            case 0x08: // RRC
+                return false;
+                break;
+
+            case 0x10: // RL
+            {
+                return false;
+                break;
+            }
+
+            case 0x18: // RR
+            {
+                return false;
+                break;
+            }
+
+            case 0x20: // SLA
+                return false;
+                break;
+
+            case 0x28: // SRA
+                return false;
+                break;
+
+            case 0x30: // SWAP
+                return false;
+                break;
+
+            case 0x38: // SRL
+                return false;
+                break;
+        }
+    }
+    else if(opcode < 0x80) // BIT
+    {
+        return false;
+    }
+    else if(opcode < 0xC0) // RES
+    {
+        return false;
+    }
+    else // SET
+    {
+        return false;
+    }
 
     return true;
 }
