@@ -1406,19 +1406,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             if(isMem)
                 readMem(reg(WReg::HL).reg, tmp);
 
-            if(recompileExInstruction(instr, builder))
-            {
-                if(isMem && (exOpcode >= 0x80 || exOpcode < 0x40)) // BIT doesn't write back
-                    writeMem(reg(WReg::HL).reg, tmp);
-            }
-            else
-            {
-                printf("unhandled op in recompile CB%02X\n", exOpcode);
-                builder.resetPtr(oldPtr);
-                load16BitValue(builder, Reg::R1, pc - instr.len);
-                builder.bl(getOff(exitPtr));
-                return false;
-            }
+            recompileExInstruction(instr, builder);
+
+            if(isMem && (exOpcode >= 0x80 || exOpcode < 0x40)) // BIT doesn't write back
+                writeMem(reg(WReg::HL).reg, tmp);
+
             break;
         }
 
@@ -1563,7 +1555,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     return true;
 }
 
-bool DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &builder)
+void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &builder)
 {
     uint8_t opcode = instr.opcode[1];
 
