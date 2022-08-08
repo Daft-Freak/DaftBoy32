@@ -740,18 +740,24 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         if(instr.flags & DMGCPU::Flag_H)
         {
+            if(b == Reg::R2) // SP, save the value
+                builder.push(1 << 2, false);
+    
             // room for optimisation here, probably
             // & 0xFFF == & ~(0xF << 12)
             builder.mov(Reg::R1, 0xF);
             builder.lsl(Reg::R1, Reg::R1, 12);
-            builder.mov(Reg::R2, a.reg);
             builder.mov(Reg::R3, b);
+            builder.mov(Reg::R2, a.reg);
 
             builder.bic(Reg::R2, Reg::R1);
             builder.bic(Reg::R3, Reg::R1);
             builder.add(Reg::R3, Reg::R2, Reg::R3);
 
             builder.lsr(Reg::R3, Reg::R3, 8); // ignore the bottom 8 bits
+
+            if(b == Reg::R2)
+                builder.pop(1 << 2, false);
         }
 
         // do add
@@ -794,13 +800,22 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x01: // LD BC,nn
         case 0x11: // LD DE,nn
         case 0x21: // LD HL,nn
-        //case 0x31: // LD SP,nn
         {
             cycleExecuted();
             cycleExecuted();
 
             auto dst = regMap16[opcode >> 4];
             load16BitValue(builder, dst.reg, instr.opcode[1] | instr.opcode[2] << 8);
+
+            break;
+        }
+        case 0x31: // LD SP,nn
+        {
+            cycleExecuted();
+            cycleExecuted();
+
+            load16BitValue(builder, Reg::R1, instr.opcode[1] | instr.opcode[2] << 8);
+            builder.mov(spReg, Reg::R1);
 
             break;
         }
@@ -813,11 +828,20 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x03: // INC BC
         case 0x13: // INC DE
         case 0x23: // INC HL
-        //case 0x33: // INC SP
         {
             auto r = regMap16[opcode >> 4].reg;
             builder.add(r, 1);
             builder.uxth(r, r);
+            cycleExecuted();
+            break;
+        }
+        case 0x33: // INC SP
+        {
+            auto r = Reg::R1;
+            builder.mov(r, spReg);
+            builder.add(r, 1);
+            builder.uxth(r, r);
+            builder.mov(spReg, r);
             cycleExecuted();
             break;
         }
@@ -845,11 +869,20 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x0B: // DEC BC
         case 0x1B: // DEC DE
         case 0x2B: // DEC HL
-        //case 0x3B: // DEC SP
         {
             auto r = regMap16[opcode >> 4].reg;
             builder.sub(r, 1);
             builder.uxth(r, r);
+            cycleExecuted();
+            break;
+        }
+        case 0x3B: // DEC SP
+        {
+            auto r = Reg::R1;
+            builder.mov(r, spReg);
+            builder.sub(r, 1);
+            builder.uxth(r, r);
+            builder.mov(spReg, r);
             cycleExecuted();
             break;
         }
@@ -873,8 +906,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x09: // ADD HL,BC
         case 0x19: // ADD HL,DE
         case 0x29: // ADD HL,HL
-        //case 0x39: // ADD HL,SP
             add16(regMap16[opcode >> 4].reg);
+            break;
+        case 0x39: // ADD HL,SP
+            builder.mov(Reg::R2, spReg);
+            add16(Reg::R2);
             break;
 
         case 0x0A: // LD A,(BC)
@@ -1281,6 +1317,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             bitOr(instr.opcode[1]);
             break;
         }
+
+        case 0xF9: // LD SP,HL
+            cycleExecuted();
+            builder.mov(spReg, reg(WReg::HL).reg);
+            break;
 
         case 0xFA: // LD A,(nn)
         {
