@@ -1588,22 +1588,167 @@ bool DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
         switch(opcode & ~7)
         {
             case 0x00: // RLC
-                return false;
+            {
+                auto f = reg(DMGReg::F).reg;
+                get8BitValue(builder, Reg::R2, r);
+
+                if(instr.flags & Op_WriteFlags)
+                {
+                    builder.mov(Reg::R1, 0xFF);
+                    builder.bic(f, Reg::R1); // clear flags
+                }
+
+                // = << 1 | >> 7
+                builder.lsr(Reg::R1, Reg::R2, 7);
+                builder.lsl(Reg::R2, Reg::R2, 1);
+                builder.orr(Reg::R2, Reg::R1);
+
+                // flags
+                if(instr.flags & DMGCPU::Flag_C)
+                {
+                    builder.cmp(Reg::R2, 0xFF);
+                    builder.b(Condition::LE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_C);
+                    builder.orr(f, Reg::R1);
+                }
+
+                builder.uxtb(Reg::R2, Reg::R2);
+       
+                if(instr.flags & DMGCPU::Flag_Z)
+                {
+                    builder.cmp(Reg::R2, 0);
+                    builder.b(Condition::NE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
+                    builder.orr(f, Reg::R1);
+                }
+
+                write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
+            }
 
             case 0x08: // RRC
-                return false;
+            {
+                auto f = reg(DMGReg::F).reg;
+                get8BitValue(builder, Reg::R2, r);
+
+                if(instr.flags & Op_WriteFlags)
+                {
+                    builder.mov(Reg::R1, 0xFF);
+                    builder.bic(f, Reg::R1); // clear flags
+                }
+
+                // = << 7 | >> 1
+                builder.lsl(Reg::R3, Reg::R2, 7);
+                builder.lsr(Reg::R2, Reg::R2, 1);
+
+                // flags
+                // set C before the or
+                if(instr.flags & DMGCPU::Flag_C)
+                {
+                    builder.b(Condition::CC, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_C);
+                    builder.orr(f, Reg::R1);
+                }
+
+                builder.orr(Reg::R2, Reg::R3);
+                builder.uxtb(Reg::R2, Reg::R2);
+       
+                if(instr.flags & DMGCPU::Flag_Z)
+                {
+                    builder.cmp(Reg::R2, 0);
+                    builder.b(Condition::NE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
+                    builder.orr(f, Reg::R1);
+                }
+
+                write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
+            }
 
             case 0x10: // RL
             {
-                return false;
+                auto f = reg(DMGReg::F).reg;
+                get8BitValue(builder, Reg::R2, r);
+
+                // get the carry flag
+                builder.mov(Reg::R3, DMGCPU::Flag_C);
+                builder.and_(Reg::R3, f);
+
+                if(instr.flags & Op_WriteFlags)
+                {
+                    builder.mov(Reg::R1, 0xFF);
+                    builder.bic(f, Reg::R1); // clear flags
+                }
+
+                // <<= 1 
+                builder.lsl(Reg::R2, Reg::R2, 1);
+
+                // copy carry in
+                builder.lsr(Reg::R3, Reg::R3, 4); // C is bit 4
+                builder.orr(Reg::R2, Reg::R3);
+
+                // flags
+                if(instr.flags & DMGCPU::Flag_C)
+                {
+                    builder.cmp(Reg::R2, 0xFF);
+                    builder.b(Condition::LE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_C);
+                    builder.orr(f, Reg::R1);
+                }
+
+                builder.uxtb(Reg::R2, Reg::R2);
+       
+                if(instr.flags & DMGCPU::Flag_Z)
+                {
+                    builder.cmp(Reg::R2, 0);
+                    builder.b(Condition::NE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
+                    builder.orr(f, Reg::R1);
+                }
+
+                write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
             }
 
             case 0x18: // RR
             {
-                return false;
+                auto f = reg(DMGReg::F).reg;
+                get8BitValue(builder, Reg::R2, r);
+
+                // get the carry flag
+                builder.mov(Reg::R3, DMGCPU::Flag_C);
+                builder.and_(Reg::R3, f);
+
+                if(instr.flags & Op_WriteFlags)
+                {
+                    builder.mov(Reg::R1, 0xFF);
+                    builder.bic(f, Reg::R1); // clear flags
+                }
+
+                // >>= 1 
+                builder.lsr(Reg::R2, Reg::R2, 1);
+
+                // flags
+                if(instr.flags & DMGCPU::Flag_C)
+                {
+                    builder.b(Condition::CC, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_C);
+                    builder.orr(f, Reg::R1);
+                }
+
+                // copy carry in
+                builder.lsl(Reg::R3, Reg::R3, 3); // C is bit 4
+                builder.orr(Reg::R2, Reg::R3);
+
+                if(instr.flags & DMGCPU::Flag_Z)
+                {
+                    builder.cmp(Reg::R2, 0);
+                    builder.b(Condition::NE, 4);
+                    builder.mov(Reg::R1, DMGCPU::Flag_Z);
+                    builder.orr(f, Reg::R1);
+                }
+
+                write8BitReg(builder, r, Reg::R2, Reg::R1);
                 break;
             }
 
