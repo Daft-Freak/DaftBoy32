@@ -90,6 +90,7 @@ public:
     void ldr(LowReg t, uint16_t imm);
 
     void ldrh(LowReg t, LowReg n, uint8_t imm);
+    void ldrh(LowReg t, LowReg n, LowReg m);
 
     void lsl(LowReg d, LowReg m, uint8_t imm);
 
