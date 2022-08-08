@@ -1626,15 +1626,51 @@ bool DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
     }
     else if(opcode < 0x80) // BIT
     {
-        return false;
+        int bit = (opcode >> 3) & 7;
+        auto f = reg(DMGReg::F).reg;
+        if(instr.flags & Op_WriteFlags)
+        {
+            builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N | DMGCPU::Flag_Z);
+            builder.bic(f, Reg::R1); // preserve C (and all of A), clear others
+        }
+
+        if(instr.flags & DMGCPU::Flag_H)
+        {
+            builder.mov(Reg::R1, DMGCPU::Flag_H);
+            builder.orr(f, Reg::R1); // set H
+        }
+
+        get8BitValue(builder, Reg::R2, r);
+
+        builder.mov(Reg::R1, 1 << bit);
+        builder.and_(Reg::R1, Reg::R2); // could use TST
+
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.orr(f, Reg::R1);
+        }
     }
     else if(opcode < 0xC0) // RES
     {
-        return false;
+        int bit = (opcode >> 3) & 7;
+        get8BitValue(builder, Reg::R2, r);
+
+        builder.mov(Reg::R1, 1 << bit);
+        builder.bic(Reg::R2, Reg::R1);
+
+        write8BitReg(builder, r, Reg::R2, Reg::R1);
     }
     else // SET
     {
-        return false;
+        int bit = (opcode >> 3) & 7;
+        get8BitValue(builder, Reg::R2, r);
+
+        builder.mov(Reg::R1, 1 << bit);
+        builder.orr(Reg::R2, Reg::R1);
+
+        write8BitReg(builder, r, Reg::R2, Reg::R1);
     }
 
     return true;
