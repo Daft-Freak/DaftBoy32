@@ -929,6 +929,37 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x07: // RLCA
+        {
+            auto a = reg(DMGReg::A).reg;
+            builder.lsr(Reg::R1, a, 8); // shift out flags
+
+            // = << 1 | >> 7
+            builder.lsr(Reg::R2, Reg::R1, 7);
+            builder.lsl(Reg::R1, Reg::R1, 1);
+            builder.orr(Reg::R1, Reg::R2);
+
+            if(instr.flags & Op_WriteFlags)
+            {
+                builder.mov(a, 0);
+                builder.lsl(Reg::R2, Reg::R1, 24); // shift it again to set carry
+                builder.b(Condition::CC, 2);
+                builder.mov(a, DMGCPU::Flag_C);
+            }
+
+            builder.uxtb(Reg::R1, Reg::R1);
+
+            if(instr.flags & Op_WriteFlags)
+            {
+                builder.lsl(Reg::R1, Reg::R1, 8);
+                builder.orr(a, Reg::R1); // keep the flag
+            }
+            else
+                builder.lsl(a, Reg::R1, 8);
+
+            break;
+        }
+
         case 0x09: // ADD HL,BC
         case 0x19: // ADD HL,DE
         case 0x29: // ADD HL,HL
@@ -943,6 +974,105 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x1A: // LD A,(DE)
             readMem(regMap16[opcode >> 4].reg, reg(DMGReg::A));
             break;
+
+        case 0x0F: // RRCA
+        {
+            auto a = reg(DMGReg::A).reg;
+            builder.lsr(Reg::R1, a, 8); // shift out flags
+
+            // = << 7 | >> 1
+            builder.lsl(Reg::R2, Reg::R1, 7);
+            builder.lsr(Reg::R1, Reg::R1, 1);
+            builder.orr(Reg::R1, Reg::R2);
+
+            if(instr.flags & Op_WriteFlags)
+            {
+                builder.mov(a, 0);
+                builder.lsl(Reg::R2, Reg::R1, 25); // shift it again to set carry
+                builder.b(Condition::CC, 2);
+                builder.mov(a, DMGCPU::Flag_C);
+            }
+
+            builder.uxtb(Reg::R1, Reg::R1);
+
+            if(instr.flags & Op_WriteFlags)
+            {
+                builder.lsl(Reg::R1, Reg::R1, 8);
+                builder.orr(a, Reg::R1); // keep the flag
+            }
+            else
+                builder.lsl(a, Reg::R1, 8);
+
+            break;
+        }
+
+        case 0x17: // RLA
+        {
+            auto a = reg(DMGReg::A).reg;
+            builder.lsr(Reg::R1, a, 8); // shift out flags
+
+            // <<= 1
+            builder.lsl(Reg::R1, Reg::R1, 1);
+
+            // copy carry
+            builder.mov(Reg::R2, DMGCPU::Flag_C);
+            builder.and_(Reg::R2, a);
+            builder.lsr(Reg::R2, Reg::R2, 4); // C is bit 4
+            builder.orr(Reg::R1, Reg::R2);
+
+            if(instr.flags & Op_WriteFlags)
+            {
+                builder.mov(a, 0);
+                builder.lsl(Reg::R2, Reg::R1, 24); // shift it again to set carry
+                builder.b(Condition::CC, 2);
+                builder.mov(a, DMGCPU::Flag_C);
+            }
+
+            builder.uxtb(Reg::R1, Reg::R1);
+
+            if(instr.flags & Op_WriteFlags)
+            {
+                builder.lsl(Reg::R1, Reg::R1, 8);
+                builder.orr(a, Reg::R1); // keep the flag
+            }
+            else
+                builder.lsl(a, Reg::R1, 8);
+
+            break;
+        }
+
+        case 0x1F: // RRA
+        {
+            auto a = reg(DMGReg::A).reg;
+
+            // get the carry flag
+            builder.mov(Reg::R2, DMGCPU::Flag_C);
+            builder.and_(Reg::R2, a);
+
+            builder.lsr(Reg::R1, a, 9); // shift out flags and left 1
+
+            if(instr.flags & Op_WriteFlags)
+            {
+                // can actually use the carry flag here
+                builder.mov(a, 0);
+                builder.b(Condition::CC, 2);
+                builder.mov(a, DMGCPU::Flag_C);
+            }
+
+            // copy carry in
+            builder.lsl(Reg::R2, Reg::R2, 3); // C is bit 4
+            builder.orr(Reg::R1, Reg::R2);
+
+            if(instr.flags & Op_WriteFlags)
+            {
+                builder.lsl(Reg::R1, Reg::R1, 8);
+                builder.orr(a, Reg::R1); // keep the flag
+            }
+            else
+                builder.lsl(a, Reg::R1, 8);
+
+            break;
+        }
 
         case 0x22: // LDI (HL),A
         {
