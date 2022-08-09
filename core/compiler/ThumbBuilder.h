@@ -103,6 +103,8 @@ public:
 
     void mvn(LowReg d, LowReg m);
 
+    void nop();
+
     void orr(LowReg d, LowReg m);
 
     void pop(uint8_t regList, bool pc);
