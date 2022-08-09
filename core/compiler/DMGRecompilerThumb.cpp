@@ -104,14 +104,37 @@ static void  write8BitReg(ThumbBuilder &builder, RegInfo dst, Reg src, Reg tmp =
     builder.orr(dst.reg, src);
 }
 
+// TODO: improve branch handling
+static int load16BitValueSize(uint16_t value)
+{
+    if(value <= 0xFF)
+        return 2; // mov
+    
+    if(value >> __builtin_ctz(value) <= 0xFF)
+        return 4; // mov + lsl
+
+    return 8; // mov + mov + lsl + orr
+}
+
 static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value, Reg tmp = Reg::R2)
 {
-    // TODO: can emit less code if one of the bytes is zero
-    // or other cases where we can shift an 8 bit value
-    builder.mov(dst, value & 0xFF);
-    builder.mov(tmp, value >> 8);
-    builder.lsl(tmp, tmp, 8);
-    builder.orr(dst, tmp);
+    if(value <= 0xFF || value >> __builtin_ctz(value) <= 0xFF)
+    {
+        int shift = 0;
+        if(value > 0xFF)
+            shift = __builtin_ctz(value);
+
+        builder.mov(dst, value >> shift);
+        if(shift)
+            builder.lsl(dst, dst, shift);
+    }
+    else
+    {
+        builder.mov(dst, value & 0xFF);
+        builder.mov(tmp, value >> 8);
+        builder.lsl(tmp, tmp, 8);
+        builder.orr(dst, tmp);
+    }
 }
 
 static void load32BitValue(ThumbBuilder &builder, Reg dst, uint32_t value)
@@ -1036,12 +1059,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         else
         {
             // this is the first instruction, so make a cycle check for the branch to go to
-            builder.b(14);
+            auto loadSize = load16BitValueSize(pc);
+            builder.b(loadSize + 6);
             lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr());
 
             // if <= 0 exit
-            builder.b(Condition::GT, 12);
-            load16BitValue(builder, Reg::R1, pc); // currently always 4 instructions
+            builder.b(Condition::GT, loadSize + 4);
+            load16BitValue(builder, Reg::R1, pc);
             builder.bl(getOff(saveAndExitPtr));
 
             branchTargets.emplace(pc, lastInstrCycleCheck);
@@ -2147,9 +2171,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
 
+        auto loadSize = load16BitValueSize(pc);
+
         // if <= 0 exit
-        builder.b(Condition::GT, 12);
-        load16BitValue(builder, Reg::R1, pc); // currently always 4 instructions
+        builder.b(Condition::GT, loadSize + 4);
+        load16BitValue(builder, Reg::R1, pc);
         builder.bl(getOff(saveAndExitPtr));
 
         // interrupt check after EI
@@ -2163,7 +2189,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.mov(Reg::R2, Reg::R8); // cpu ptr
             builder.ldrb(Reg::R1, Reg::R2, serviceableInterruptsOff);
             builder.cmp(Reg::R1, 0);
-            builder.b(Condition::EQ, 12);
+            builder.b(Condition::EQ, loadSize + 4);
 
             // exit
             load16BitValue(builder, Reg::R1, pc); 
