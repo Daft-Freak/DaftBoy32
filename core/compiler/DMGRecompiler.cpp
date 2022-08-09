@@ -95,7 +95,10 @@ void DMGRecompiler::handleBranch()
 
                 BlockInfo blockInfo;
                 analyse(pc, blockInfo);
+
+#ifdef RECOMPILER_DEBUG
                 printf("analysed %04X-%04X (%zi instructions)\n", cpu.pc, pc, blockInfo.instructions.size());
+#endif
 
                 FuncInfo info{};
 
@@ -1006,8 +1009,9 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data, int cycles
         {
             if(mappedAddr >= it->first && mappedAddr < it->second.endPC)
             {
+#ifdef RECOMPILER_DEBUG
                 printf("invalidate compiled code @%07X(%04X) in %04X-%04X\n", mappedAddr, addr, it->first, it->second.endPC);
-
+#endif
                 // rewind if last code compiled
                 // TODO: reclaim memory in other cases
                 if(it->second.endPtr == compiler.curCodePtr)

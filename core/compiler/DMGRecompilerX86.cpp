@@ -173,12 +173,15 @@ bool DMGRecompilerX86::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockI
 
     if(numInstructions == 0)
     {
+#ifdef RECOMPILER_DEBUG
         printf("recompile @%04X failed to handle any instructions\n", startPC);
+#endif
         return false;
     }
 
     auto endPtr = builder.getPtr();
 
+#ifdef RECOMPILER_DEBUG
     int len = endPtr - codePtr;
 
     //debug
@@ -189,6 +192,7 @@ bool DMGRecompilerX86::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockI
 
     printf("\n");
     printf("(addr %p->%p)\n", codePtr, endPtr);
+#endif
 
     codePtr = endPtr;
 
@@ -2075,8 +2079,10 @@ void DMGRecompilerX86::compileEntry()
 
     entryFunc = reinterpret_cast<CompiledFunc>(codeBuf);
 
-    int len = builder.getPtr() - codeBuf;
     curCodePtr = builder.getPtr();
+
+#ifdef RECOMPILER_DEBUG
+    int len = builder.getPtr() - codeBuf;
 
     //debug
     printf("generated %i bytes for entry/exit\ncode:", len);
@@ -2085,4 +2091,5 @@ void DMGRecompilerX86::compileEntry()
         printf(" %02X", *p);
 
     printf("\n");
+#endif
 }

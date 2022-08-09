@@ -162,12 +162,15 @@ bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bloc
 
     if(numInstructions == 0)
     {
+#ifdef RECOMPILER_DEBUG
         printf("recompile @%04X failed to handle any instructions\n", startPC);
+#endif
         return false;
     }
 
     auto endPtr = builder.getPtr();
 
+#ifdef RECOMPILER_DEBUG
     int len = endPtr - codePtr16;
 
     //debug
@@ -178,6 +181,7 @@ bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bloc
 
     printf("\n");
     printf("(addr %p->%p)\n", codePtr, endPtr);
+#endif
 
     codePtr = reinterpret_cast<uint8_t *>(endPtr);
 
@@ -2532,8 +2536,6 @@ void DMGRecompilerThumb::compileEntry()
 
     entryFunc = reinterpret_cast<CompiledFunc>(codeBuf + 1/*thumb*/);
 
-    int len = builder.getPtr() - codePtr16;
-
     // write cpu addr
     auto ptr = builder.getPtr();
     *ptr++ = 0; // align
@@ -2552,6 +2554,9 @@ void DMGRecompilerThumb::compileEntry()
 
     curCodePtr = reinterpret_cast<uint8_t *>(ptr);
 
+#ifdef RECOMPILER_DEBUG
+    int len = builder.getPtr() - codePtr16;
+
     //debug
     printf("generated %i halfwords for entry/exit\ncode:", len);
 
@@ -2559,4 +2564,5 @@ void DMGRecompilerThumb::compileEntry()
         printf(" %02X", *p);
 
     printf("\n");
+#endif
 }
