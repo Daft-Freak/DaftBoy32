@@ -813,6 +813,129 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
     };
 
+    const auto doJump = [this, &instr, &pc, &builder, &getOff, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](uint16_t addr, int flag = 0, bool set = true)
+    {
+        auto it = branchTargets.find(addr);
+
+        // condition
+        uint16_t *branchPtr = nullptr;
+        if(flag)
+        {
+            syncCyclesExecuted();
+
+            builder.mov(Reg::R2, flag);
+            builder.and_(Reg::R2, reg(DMGReg::F).reg); // tst?
+
+            branchPtr = builder.getPtr();
+            builder.b(set ? Condition::EQ : Condition::NE, 0);
+        }
+
+        cycleExecuted();
+        syncCyclesExecuted();
+
+        load16BitValue(builder, Reg::R1, addr); // might not be able to patch branch (if it's too far)
+
+        // sub cycles early (we jump past the usual code that does this)
+        if(instr.flags & Op_Branch)
+            builder.sub(Reg::R0, cyclesThisInstr);
+        //else // or set PC if we're just going to exit
+
+        // don't update twice for unconditional branches (if it doesn't have the branch flag it's an exit anyway)
+        if(!flag)
+            cyclesThisInstr = 0;
+
+        if(it != branchTargets.end())
+        {
+            int off = getOff(it->second);
+            if(off >= -2044)
+            {
+                builder.b(getOff(it->second));
+                builder.nop(); // B is shorter than BL
+            }
+            else
+                builder.bl(getOff(exitPtr)); // branch is too far, give up
+        }
+        else
+        {
+            if(instr.flags & Op_Branch)
+                forwardBranchesToPatch.emplace(addr, reinterpret_cast<uint8_t *>(builder.getPtr()));
+
+            // will be patched later if possible
+            builder.bl(getOff(exitPtr));
+        }
+
+        if(branchPtr)
+        {
+            // update branch
+            int off = (builder.getPtr() - (branchPtr + 1));
+            *branchPtr = (*branchPtr & 0xFF00) | off;
+        }
+
+        // exit if branch not taken
+        if(flag && (instr.flags & Op_Last))
+        {
+            load16BitValue(builder, Reg::R1, pc);
+            builder.bl(getOff(exitPtr));
+        }
+    };
+
+    const auto jump = [&instr, &cycleExecuted, &doJump](int flag = 0, bool set = true)
+    {
+        uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
+        cycleExecuted();
+        cycleExecuted();
+
+        doJump(addr, flag, set);
+    };
+
+    const auto jumpRel = [&instr, &pc, &cycleExecuted, &doJump](int flag = 0, bool set = true)
+    {
+        int8_t off = instr.opcode[1];
+        cycleExecuted();
+
+        doJump(pc + off, flag, set);
+    };
+
+    // handle branch targets
+    if(instr.flags & Op_BranchTarget)
+    {
+        // store for backwards jumps
+        if(lastInstrCycleCheck)
+            branchTargets.emplace(pc, lastInstrCycleCheck); // after adjusting cycle count but before the jump
+        else
+        {
+            // this is the first instruction, so make a cycle check for the branch to go to
+            builder.b(14);
+            lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr());
+
+            // if <= 0 exit
+            builder.b(Condition::GT, 12);
+            load16BitValue(builder, Reg::R1, pc); // currently always 4 instructions
+            builder.bl(getOff(saveAndExitPtr));
+
+            branchTargets.emplace(pc, lastInstrCycleCheck);
+        }
+
+        // patch forwards jumps
+        // can't hit this for the first instruction, so the lastInstrCycleCheck will be valid
+        auto jumps = forwardBranchesToPatch.equal_range(pc);
+        for(auto it = jumps.first; it != jumps.second; ++it)
+        {
+            auto off = lastInstrCycleCheck - (it->second + 2);
+
+            auto ptr = reinterpret_cast<uint16_t *>(it->second);
+
+            // replace BL with B+NOP
+            // TODO: need better branch patching
+            if(off <= 2048)
+            {
+                *ptr++ = 0xE000 | (((off - 2) >> 1) & 0x7FF);
+                *ptr++ = 0xBF00;
+            }
+        }
+        forwardBranchesToPatch.erase(jumps.first, jumps.second);
+    }
+
     pc += instr.len;
 
     auto oldPtr = builder.getPtr();
@@ -1041,6 +1164,10 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x18: // JR m
+            jumpRel();
+            break;
+
         case 0x1F: // RRA
         {
             auto a = reg(DMGReg::A).reg;
@@ -1071,6 +1198,16 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             else
                 builder.lsl(a, Reg::R1, 8);
 
+            break;
+        }
+
+        case 0x20: // JR NZ,n
+        case 0x28: // JR Z,n
+        case 0x30: // JR NC,n
+        case 0x38: // JR C,n
+        {
+            int flag = opcode & (1 << 4) ? DMGCPU::Flag_C : DMGCPU::Flag_Z;
+            jumpRel(flag, opcode & (1 << 3));
             break;
         }
 
@@ -1454,6 +1591,19 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xD1: // POP DE
         case 0xE1: // POP HL
             pop(regMap16[(opcode >> 4) & 3].reg);
+            break;
+
+        case 0xC2: // JP NZ,nn
+        case 0xCA: // JP Z,nn
+        case 0xDA: // JP C,nn
+        case 0xD2: // JP NC,nn
+        {
+            int flag = opcode & (1 << 4) ? DMGCPU::Flag_C : DMGCPU::Flag_Z;
+            jump(flag, opcode & (1 << 3));
+            break;
+        }
+        case 0xC3: // JP nn
+            jump();
             break;
 
         case 0xC5: // PUSH BC

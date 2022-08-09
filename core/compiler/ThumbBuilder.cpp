@@ -219,6 +219,11 @@ void ThumbBuilder::mvn(LowReg d, LowReg m)
     write(0x43C0 | mReg << 3 | dReg);
 }
 
+void ThumbBuilder::nop()
+{
+    write(0xBF00);
+}
+
 void ThumbBuilder::orr(LowReg d, LowReg m)
 {
     int dReg = static_cast<int>(d.val);
