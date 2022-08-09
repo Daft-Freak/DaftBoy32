@@ -1944,6 +1944,74 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xE8: // ADD SP,n
+        case 0xF8: // LDHL SP,n
+        {
+            auto f = reg(DMGReg::F);
+
+            auto b = instr.opcode[1];
+            cycleExecuted();
+
+            // flags are set as if this is an 8 bit op
+            if(instr.flags & Op_WriteFlags)
+            {
+                // clear flags
+                builder.mov(Reg::R1, 0xFF);
+                builder.bic(f.reg, Reg::R1);
+            }
+
+            if(instr.flags & DMGCPU::Flag_C)
+            {
+                // 8 bit add
+                builder.mov(Reg::R1, spReg);
+                builder.uxtb(Reg::R1, Reg::R1);
+                builder.add(Reg::R1, b);
+
+                // carry flag
+                builder.cmp(Reg::R1, 0xFF);
+                builder.b(Condition::LE, 4);
+                builder.mov(Reg::R2, DMGCPU::Flag_C);
+                builder.orr(f.reg, Reg::R2); // set C
+            }
+
+            if(instr.flags & DMGCPU::Flag_H)
+            {
+                // half add
+                builder.mov(Reg::R1, spReg);
+                builder.mov(Reg::R2, 0xF);
+                builder.and_(Reg::R1, Reg::R2);
+                builder.add(Reg::R1, b & 0xF);
+
+                // half carry flag if > 0xF
+                builder.cmp(Reg::R1, 0xF);
+                builder.b(Condition::LE, 4); // <= 0xF
+                builder.mov(Reg::R2, DMGCPU::Flag_H);
+                builder.orr(f.reg, Reg::R2); // set H
+            }
+
+            builder.mov(Reg::R2, b);
+            builder.sxtb(Reg::R2, Reg::R2); // b is signed
+
+            // real add
+            builder.mov(Reg::R1, spReg);
+            builder.add(Reg::R1, Reg::R1, Reg::R2);
+
+            if(opcode == 0xE8) // ADD SP,n
+            {
+                builder.uxth(Reg::R1, Reg::R1);
+                builder.mov(spReg, Reg::R1);
+
+                // 2x delay
+                cycleExecuted();
+            }
+            else // LDHL SP,n
+                builder.uxth(reg(WReg::HL).reg, Reg::R1);
+
+            cycleExecuted();
+
+            break;
+        }
+
         case 0xE9: // JP (HL)
             syncCyclesExecuted();
             builder.mov(Reg::R1, reg(WReg::HL).reg);
