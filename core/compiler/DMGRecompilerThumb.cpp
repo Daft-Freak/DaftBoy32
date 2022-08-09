@@ -1846,6 +1846,21 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xD9: // RETI
+        {
+            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+            auto masterInterruptEnableOff = reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr;
+            assert(masterInterruptEnableOff < 32);
+
+            // masterInterruptEnable = true
+            builder.mov(Reg::R2, Reg::R8); // cpu ptr
+            builder.mov(Reg::R1, 1);
+            builder.strb(Reg::R1, Reg::R2, masterInterruptEnableOff);
+
+            ret();
+            break;
+        }
+
         case 0xDE: // SBC n
         {
             cycleExecuted();
