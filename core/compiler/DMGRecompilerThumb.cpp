@@ -404,19 +404,16 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             if(needCompare)
                 builder.cmp(Reg::R1, 0);
 
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R1, DMGCPU::Flag_Z);
-            builder.orr(reg(DMGReg::F).reg, Reg::R1);
+            builder.b(Condition::NE, 2);
+            // assuming we started with 0 and never set the same flag twice, we can use add instead of orr
+            builder.add(reg(DMGReg::F).reg, DMGCPU::Flag_Z);
         }
     };
 
     const auto setFlag = [&instr, &builder](int flag)
     {
         if(instr.flags & flag)
-        {
-            builder.mov(Reg::R1, flag);
-            builder.orr(reg(DMGReg::F).reg, Reg::R1);
-        }
+            builder.add(reg(DMGReg::F).reg, flag);
     };
 
     // op helpers
@@ -510,9 +507,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         if(instr.flags & DMGCPU::Flag_C)
         {
             builder.cmp(Reg::R1, 0xFF);
-            builder.b(Condition::LE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_C);
-            builder.orr(a.reg, Reg::R2);
+            builder.b(Condition::LE, 2);
+            builder.add(a.reg, DMGCPU::Flag_C);
         }
 
         builder.uxtb(Reg::R1, Reg::R1); // mask
@@ -523,9 +519,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             // half res > 0xF
             builder.cmp(Reg::R3, 0xF);
-            builder.b(Condition::LE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_H);
-            builder.orr(a.reg, Reg::R2);
+            builder.b(Condition::LE, 2);
+            builder.add(a.reg, DMGCPU::Flag_H);
         }
 
         updateZ(true);
@@ -617,9 +612,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         if(instr.flags & DMGCPU::Flag_C)
         {
             // carry is reversed for sub 
-            builder.b(Condition::CS, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_C);
-            builder.orr(a.reg, Reg::R2);
+            builder.b(Condition::CS, 2);
+            builder.add(a.reg, DMGCPU::Flag_C);
         }
 
         if(storeResult)
@@ -629,9 +623,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             // half res < 0
             builder.cmp(Reg::R3, 0);
-            builder.b(Condition::GE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_H);
-            builder.orr(a.reg, Reg::R2);
+            builder.b(Condition::GE, 2);
+            builder.add(a.reg, DMGCPU::Flag_H);
         }
 
         updateZ(true);
@@ -713,9 +706,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.and_(Reg::R2, Reg::R1);
             builder.cmp(Reg::R2, 0xF);
 
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_H);
-            builder.orr(regA, Reg::R2);
+            builder.b(Condition::NE, 2);
+            builder.add(regA, DMGCPU::Flag_H);
         }
 
         // do inc
@@ -743,9 +735,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.mov(Reg::R2, 0xF);
             builder.and_(Reg::R2, Reg::R1);
 
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_H);
-            builder.orr(regA, Reg::R2);
+            builder.b(Condition::NE, 2);
+            builder.add(regA, DMGCPU::Flag_H);
         }
 
         // do dec
@@ -796,9 +787,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             // > 0xFFFF == >> 8 > 0xFF
             builder.lsr(Reg::R1, a, 8); // shift down for comparison
             builder.cmp(Reg::R1, 0xFF);
-            builder.b(Condition::LE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_C);
-            builder.orr(f, Reg::R2);
+            builder.b(Condition::LE, 2);
+            builder.add(f, DMGCPU::Flag_C);
         }
 
         builder.uxth(a, a); // mask
@@ -807,9 +797,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             // half res > 0xF (shifted down 8)
             builder.cmp(Reg::R3, 0xF);
-            builder.b(Condition::LE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_H);
-            builder.orr(f, Reg::R2);
+            builder.b(Condition::LE, 2);
+            builder.add(f, DMGCPU::Flag_H);
         }
 
         cycleExecuted();
@@ -1951,9 +1940,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
                 // carry flag
                 builder.cmp(Reg::R1, 0xFF);
-                builder.b(Condition::LE, 4);
-                builder.mov(Reg::R2, DMGCPU::Flag_C);
-                builder.orr(f.reg, Reg::R2); // set C
+                builder.b(Condition::LE, 2);
+                builder.add(f.reg, DMGCPU::Flag_C);
             }
 
             if(instr.flags & DMGCPU::Flag_H)
@@ -1966,9 +1954,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
                 // half carry flag if > 0xF
                 builder.cmp(Reg::R1, 0xF);
-                builder.b(Condition::LE, 4); // <= 0xF
-                builder.mov(Reg::R2, DMGCPU::Flag_H);
-                builder.orr(f.reg, Reg::R2); // set H
+                builder.b(Condition::LE, 2); // <= 0xF
+                builder.add(f.reg, DMGCPU::Flag_H);
             }
 
             builder.mov(Reg::R2, b);
@@ -2188,13 +2175,12 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
             if(needCompare)
             {
                 builder.cmp(Reg::R2, 0xFF);
-                builder.b(Condition::LE, 4);
+                builder.b(Condition::LE, 2);
             }
             else
-                builder.b(Condition::CC, 4);
+                builder.b(Condition::CC, 2);
 
-            builder.mov(Reg::R1, DMGCPU::Flag_C);
-            builder.orr(reg(DMGReg::F).reg, Reg::R1);
+            builder.add(reg(DMGReg::F).reg, DMGCPU::Flag_C);
         }
     };
 
@@ -2206,9 +2192,8 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
             if(needCompare)
                 builder.cmp(Reg::R2, 0);
 
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R1, DMGCPU::Flag_Z);
-            builder.orr(reg(DMGReg::F).reg, Reg::R1);
+            builder.b(Condition::NE, 2);
+            builder.add(reg(DMGReg::F).reg, DMGCPU::Flag_Z);
         }
     };
 
@@ -2401,10 +2386,7 @@ void DMGRecompilerThumb::recompileExInstruction(OpInfo &instr, ThumbBuilder &bui
         clearFlags(DMGCPU::Flag_C);
 
         if(instr.flags & DMGCPU::Flag_H)
-        {
-            builder.mov(Reg::R1, DMGCPU::Flag_H);
-            builder.orr(f, Reg::R1); // set H
-        }
+            builder.add(f, DMGCPU::Flag_H);// set H
 
         get8BitValue(builder, Reg::R2, r);
 
