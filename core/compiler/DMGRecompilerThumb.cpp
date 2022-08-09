@@ -285,7 +285,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             if(immAddr >> 8 == 0xFF)
                 syncCyclesExecuted();
 
-            load16BitValue(builder, Reg::R1, immAddr);
+            load16BitValue(builder, Reg::R1, immAddr, Reg::R3);
         }
     };
 
@@ -1234,6 +1234,19 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             else
                 builder.lsl(a, Reg::R1, 8);
 
+            break;
+        }
+
+        case 0x08: // LD (nn),SP
+        {
+            uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
+            cycleExecuted();
+            cycleExecuted();
+
+            builder.mov(Reg::R2, spReg);
+            writeMem(addr++, RegInfo{Reg::R2, RegPart::Low});
+            builder.mov(Reg::R2, spReg);
+            writeMem(addr, RegInfo{Reg::R2, RegPart::High});
             break;
         }
 
