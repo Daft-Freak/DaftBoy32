@@ -386,6 +386,39 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         cycleExecuted();
     };
 
+    // flag helpers, all use R1
+    const auto clearFlags = [&instr, &builder](int preserve = 0)
+    {
+        if(instr.flags & Op_WriteFlags)
+        {
+            builder.mov(Reg::R1, ~preserve);
+            builder.bic(reg(DMGReg::F).reg, Reg::R1); // clear flags
+        }
+    };
+
+    // assumes value in R1 if needCompare is true
+    const auto updateZ = [&instr, &builder](bool needCompare)
+    {
+        if(instr.flags & DMGCPU::Flag_Z)
+        {
+            if(needCompare)
+                builder.cmp(Reg::R1, 0);
+
+            builder.b(Condition::NE, 4);
+            builder.mov(Reg::R1, DMGCPU::Flag_Z);
+            builder.orr(reg(DMGReg::F).reg, Reg::R1);
+        }
+    };
+
+    const auto setFlag = [&instr, &builder](int flag)
+    {
+        if(instr.flags & flag)
+        {
+            builder.mov(Reg::R1, flag);
+            builder.orr(reg(DMGReg::F).reg, Reg::R1);
+        }
+    };
+
     // op helpers
     const auto push = [&builder, &cycleExecuted, &writeMem](Reg r)
     {
@@ -404,7 +437,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.mov(spReg, Reg::R2);
     };
 
-    const auto add = [&instr, &builder](std::variant<RegInfo, uint8_t> b, bool withCarry = false)
+    const auto add = [&instr, &builder, &clearFlags, &updateZ](std::variant<RegInfo, uint8_t> b, bool withCarry = false)
     {
         auto a = reg(DMGReg::A);
 
@@ -419,12 +452,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         bool bIsReg = std::holds_alternative<RegInfo>(b);
 
-        if(instr.flags & Op_WriteFlags)
-        {
-            // clear flags
-            builder.mov(Reg::R1, 0xFF);
-            builder.bic(a.reg, Reg::R1);
-        }
+        clearFlags();
 
         if(instr.flags & DMGCPU::Flag_H)
         {
@@ -500,13 +528,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.orr(a.reg, Reg::R2);
         }
 
-        if(instr.flags & DMGCPU::Flag_Z)
-        {
-            builder.cmp(Reg::R1, 0);
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_Z);
-            builder.orr(a.reg, Reg::R2);
-        }
+        updateZ(true);
 
         if(withCarry)
             builder.pop(1, false);
@@ -518,7 +540,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     };
 
     // SUB, SBC and CP
-    const auto doSub = [&instr, &builder](std::variant<RegInfo, uint8_t> b, bool storeResult, bool withCarry)
+    const auto doSub = [&instr, &builder, &clearFlags, &updateZ, &setFlag](std::variant<RegInfo, uint8_t> b, bool storeResult, bool withCarry)
     {
         auto a = reg(DMGReg::A);
 
@@ -534,12 +556,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         bool bIsReg = std::holds_alternative<RegInfo>(b);
 
-        if(instr.flags & Op_WriteFlags)
-        {
-            // clear flags
-            builder.mov(Reg::R1, 0xFF);
-            builder.bic(a.reg, Reg::R1);
-        }
+        clearFlags();
 
         if(instr.flags & DMGCPU::Flag_H)
         {
@@ -567,12 +584,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
                 builder.pop(1 << 2, false);
         }
 
-        // set the N flag
-        if(instr.flags & DMGCPU::Flag_N)
-        {
-            builder.mov(Reg::R1, DMGCPU::Flag_N);
-            builder.orr(a.reg, Reg::R1);
-        }
+        setFlag(DMGCPU::Flag_N);
 
         // get first reg
         get8BitValue(builder, Reg::R1, a);
@@ -622,13 +634,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.orr(a.reg, Reg::R2);
         }
 
-        if(instr.flags & DMGCPU::Flag_Z)
-        {
-            builder.cmp(Reg::R1, 0);
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R2, DMGCPU::Flag_Z);
-            builder.orr(a.reg, Reg::R2);
-        }
+        updateZ(true);
 
         if(withCarry)
             builder.pop(1, false);
@@ -644,7 +650,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         doSub(b, true, true);
     };
 
-    const auto bitAnd = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
+    const auto bitAnd = [&instr, &builder, &updateZ, &setFlag](std::variant<RegInfo, uint8_t> b)
     {
         auto regA = reg(WReg::AF);
         auto regB = Reg::R1;
@@ -655,21 +661,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.and_(regA, regB);
         builder.lsl(regA, regA, 8); // shift it back up (still have a Z flag we can use)
 
-        if(instr.flags & DMGCPU::Flag_Z)
-        {
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R1, DMGCPU::Flag_Z);
-            builder.orr(regA, Reg::R1);
-        }
-
-        if(instr.flags & DMGCPU::Flag_H)
-        {
-            builder.mov(Reg::R1, DMGCPU::Flag_H);
-            builder.orr(regA, Reg::R1);
-        }
+        updateZ(false);
+        setFlag(DMGCPU::Flag_H);
     };
 
-    const auto bitOr = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
+    const auto bitOr = [&instr, &builder, &updateZ](std::variant<RegInfo, uint8_t> b)
     {
         auto regA = reg(WReg::AF);
         auto regB = Reg::R1;
@@ -680,15 +676,10 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.orr(regA, regB);
         builder.lsl(regA, regA, 8); // shift it back up (still have a Z flag we can use)
 
-        if(instr.flags & DMGCPU::Flag_Z)
-        {
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R1, DMGCPU::Flag_Z);
-            builder.orr(regA, Reg::R1);
-        }
+        updateZ(false);
     };
 
-    const auto bitXor = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
+    const auto bitXor = [&instr, &builder, &updateZ](std::variant<RegInfo, uint8_t> b)
     {
         auto regA = reg(WReg::AF);
         auto regB = Reg::R1;
@@ -699,12 +690,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.eor(regA, regB);
         builder.lsl(regA, regA, 8); // shift it back up (still have a Z flag we can use)
 
-        if(instr.flags & DMGCPU::Flag_Z)
-        {
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R1, DMGCPU::Flag_Z);
-            builder.orr(regA, Reg::R1);
-        }
+        updateZ(false);
     };
 
     const auto cmp = [&doSub](std::variant<RegInfo, uint8_t> b)
@@ -712,15 +698,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         doSub(b, false, false);
     };
 
-    const auto inc = [&instr, &builder](RegInfo r)
+    const auto inc = [&instr, &builder, &clearFlags, &updateZ](RegInfo r)
     {
         auto regA = reg(WReg::AF);
 
-        if(instr.flags & Op_WriteFlags)
-        {
-            builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N | DMGCPU::Flag_Z);
-            builder.bic(regA, Reg::R1); // preserve C (and all of A), clear others
-        }
+        clearFlags(DMGCPU::Flag_C); // preserve C (and all of A), clear others
 
         get8BitValue(builder, Reg::R1, r);
 
@@ -742,30 +724,16 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     
         write8BitReg(builder, r, Reg::R1);
 
-        if(instr.flags & DMGCPU::Flag_Z)
-        {
-            builder.cmp(Reg::R1, 0);
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R1, DMGCPU::Flag_Z);
-            builder.orr(regA, Reg::R1);
-        }
+        updateZ(true);
     };
 
-    const auto dec = [&instr, &builder](RegInfo r)
+    const auto dec = [&instr, &builder, &clearFlags, &updateZ, &setFlag](RegInfo r)
     {
         auto regA = reg(WReg::AF);
 
-        if(instr.flags & Op_WriteFlags)
-        {
-            builder.mov(Reg::R1, DMGCPU::Flag_H | DMGCPU::Flag_N | DMGCPU::Flag_Z);
-            builder.bic(regA, Reg::R1); // preserve C (and all of A), clear others
-        }
+        clearFlags(DMGCPU::Flag_C); // preserve C (and all of A), clear others
 
-        if(instr.flags & DMGCPU::Flag_N)
-        {
-            builder.mov(Reg::R1, DMGCPU::Flag_N);
-            builder.orr(regA, Reg::R1);
-        }
+        setFlag(DMGCPU::Flag_N);
 
         get8BitValue(builder, Reg::R1, r);
 
@@ -786,26 +754,15 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     
         write8BitReg(builder, r, Reg::R1);
 
-        if(instr.flags & DMGCPU::Flag_Z)
-        {
-            builder.cmp(Reg::R1, 0);
-            builder.b(Condition::NE, 4);
-            builder.mov(Reg::R1, DMGCPU::Flag_Z);
-            builder.orr(regA, Reg::R1);
-        }
+        updateZ(true);
     };
 
-    const auto add16 = [&instr, &builder, &cycleExecuted](Reg b)
+    const auto add16 = [&instr, &builder, &cycleExecuted, &clearFlags](Reg b)
     {
         auto a = reg(WReg::HL);
         auto f = reg(WReg::AF);
 
-        if(instr.flags & Op_WriteFlags)
-        {
-            // clear flags
-            builder.mov(Reg::R1, DMGCPU::Flag_C | DMGCPU::Flag_H | DMGCPU::Flag_N);
-            builder.bic(f, Reg::R1); // preserve Z (and all of A), clear others
-        }
+        clearFlags(DMGCPU::Flag_Z); // preserve Z (and all of A), clear others
 
         if(instr.flags & DMGCPU::Flag_H)
         {
@@ -1983,12 +1940,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             cycleExecuted();
 
             // flags are set as if this is an 8 bit op
-            if(instr.flags & Op_WriteFlags)
-            {
-                // clear flags
-                builder.mov(Reg::R1, 0xFF);
-                builder.bic(f.reg, Reg::R1);
-            }
+            clearFlags();
 
             if(instr.flags & DMGCPU::Flag_C)
             {
