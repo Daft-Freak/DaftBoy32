@@ -1616,6 +1616,42 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             writeMem(reg(WReg::HL).reg, regMap8[opcode & 7]);
             break;
 
+        case 0x76: // HALT
+        {
+            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+            auto haltedOff = reinterpret_cast<uintptr_t>(&cpu.halted) - cpuPtr;
+            auto masterInterruptEnableOff = reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr;
+            auto serviceableInterruptsOff = reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr;
+            auto haltBugOff = reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtr;
+            assert(haltedOff < 32);
+            assert(masterInterruptEnableOff < 32);
+            assert(serviceableInterruptsOff < 32);
+            assert(haltBugOff < 32);
+
+            builder.mov(Reg::R2, Reg::R8); // cpu ptr
+
+            // halted = true
+            builder.mov(Reg::R1, 1);
+            builder.strb(Reg::R1, Reg::R2, haltedOff);
+
+            // if(!masterInterruptEnable && serviceableInterrupts)
+            builder.ldrb(Reg::R1, Reg::R2, masterInterruptEnableOff);
+            builder.cmp(Reg::R1, 0);
+            builder.b(Condition::NE, 10);
+            builder.ldrb(Reg::R1, Reg::R2, serviceableInterruptsOff);
+            builder.cmp(Reg::R1, 0);
+            builder.b(Condition::EQ, 4);
+            // haltBug = true
+            builder.mov(Reg::R1, 1);
+            builder.strb(Reg::R1, Reg::R2, haltBugOff);
+
+            // exit
+            syncCyclesExecuted();
+            load16BitValue(builder, Reg::R1, pc); // exits need to set PC themselves
+            builder.bl(getOff(saveAndExitPtr));
+            break;
+        }
+
         case 0x80: // ADD A,B
         case 0x81: // ADD A,C
         case 0x82: // ADD A,D
