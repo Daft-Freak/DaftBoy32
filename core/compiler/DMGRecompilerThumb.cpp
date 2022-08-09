@@ -144,6 +144,9 @@ bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bloc
         if(!recompileInstruction(pc, instr, builder))
             break;
 
+        if(builder.getError())
+            break;
+
         numInstructions++;
     }
 

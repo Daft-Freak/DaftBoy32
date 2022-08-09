@@ -155,6 +155,9 @@ bool DMGRecompilerX86::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockI
         if(!recompileInstruction(pc, instr, builder))
             break;
 
+        if(builder.getError())
+            break;
+
         numInstructions++;
     }
 
