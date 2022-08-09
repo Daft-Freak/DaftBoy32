@@ -201,6 +201,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     int cyclesThisInstr = 0;
     int delayedCyclesExecuted = 0;
 
+    bool checkInterrupts = false;
+
     // mapping from opcodes
     static const RegInfo regMap8[]
     {
@@ -1011,6 +1013,35 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     auto oldPtr = builder.getPtr();
     cycleExecuted();
+
+    // previous op was EI
+    if(mem.read(pc - (instr.len + 1)) == 0xFB /*EI*/)
+    {
+        // enable interrupts for EI
+        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+
+        auto enableInterruptsNextCycleOff = reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr;
+        auto masterInterruptEnableOff = reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr;
+        assert(enableInterruptsNextCycleOff < 32);
+        assert(masterInterruptEnableOff < 32);        
+
+        // if(enableInterruptsNextCycle)
+        // probably don't need this check... might get a false positive in some extreme case though
+        builder.mov(Reg::R2, Reg::R8); // cpu ptr
+        builder.ldrb(Reg::R1, Reg::R2, enableInterruptsNextCycleOff);
+
+        builder.cmp(Reg::R1, 0);
+        builder.b(Condition::EQ, 6);
+
+        // masterInterruptEnable = true
+        builder.strb(Reg::R1, Reg::R2, masterInterruptEnableOff); // R1 == 1 here
+
+        // enableInterruptsNextCycle = false
+        builder.mov(Reg::R1, 0);
+        builder.strb(Reg::R1, Reg::R2, enableInterruptsNextCycleOff);
+
+        checkInterrupts = true;
+    }
 
     switch(opcode)
     {
@@ -1834,6 +1865,20 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xF3: // DI
+        {
+            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+            auto masterInterruptEnableOff = reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtr;
+            assert(masterInterruptEnableOff < 32);
+
+            // masterInterruptEnable = false
+            // TODO: after next instruction (DMGCPU also has this TODO)
+            builder.mov(Reg::R2, Reg::R8); // cpu ptr
+            builder.mov(Reg::R1, 0);
+            builder.strb(Reg::R1, Reg::R2, masterInterruptEnableOff);
+            break;
+        }
+
         case 0xF5: // PUSH AF
             push(reg(WReg::AF).reg);
             break;
@@ -1857,6 +1902,19 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             cycleExecuted();
 
             readMem(addr, reg(DMGReg::A));
+            break;
+        }
+
+        case 0xFB: // EI
+        {
+            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+            auto enableInterruptsNextCycleOff = reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr;
+            assert(enableInterruptsNextCycleOff < 32);
+
+            // enableInterruptsNextCycle = true
+            builder.mov(Reg::R2, Reg::R8); // cpu ptr
+            builder.mov(Reg::R1, 1);
+            builder.strb(Reg::R1, Reg::R2, enableInterruptsNextCycleOff);
             break;
         }
 
@@ -1890,7 +1948,23 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         load16BitValue(builder, Reg::R1, pc); // currently always 4 instructions
         builder.bl(getOff(saveAndExitPtr));
 
-        // TODO: ei check
+        // interrupt check after EI
+        if(checkInterrupts)
+        {
+            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+            auto serviceableInterruptsOff = reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr;
+            assert(serviceableInterruptsOff < 32);
+
+            // if servicableInterrupts != 0
+            builder.mov(Reg::R2, Reg::R8); // cpu ptr
+            builder.ldrb(Reg::R1, Reg::R2, serviceableInterruptsOff);
+            builder.cmp(Reg::R1, 0);
+            builder.b(Condition::EQ, 12);
+
+            // exit
+            load16BitValue(builder, Reg::R1, pc); 
+            builder.bl(getOff(saveAndExitPtr));
+        }
     }
 
     return true;
