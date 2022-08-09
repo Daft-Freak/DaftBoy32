@@ -1757,6 +1757,12 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xE9: // JP (HL)
+            syncCyclesExecuted();
+            builder.mov(Reg::R1, reg(WReg::HL).reg);
+            builder.bl(getOff(exitPtr));
+            break;
+
         case 0xEA: // LD (nn),A
         {
             uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
