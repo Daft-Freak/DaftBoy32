@@ -80,6 +80,17 @@ static void  write8BitReg(ThumbBuilder &builder, RegInfo dst, Reg src, Reg tmp =
         return;
     }
 
+    // don't preserve the other half if the dest is not an emulated register
+    if(static_cast<int>(dst.reg) < 4)
+    {
+        if(dst.part == RegPart::Low)
+            builder.mov(dst.reg, src);
+        else
+            builder.lsl(dst.reg, src, 8);
+
+        return;
+    }
+
     if(dst.part == RegPart::Low)
     {
         builder.mov(tmp, 0xFF);
@@ -276,9 +287,9 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
     };
 
-    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, RegInfo dst, bool postInc = false)
+    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, RegInfo dst, bool postInc = false, int extraSave = 0)
     {
-        int pushMask = 1 << 0; // R0
+        int pushMask = 1 << 0 | extraSave; // R0
 
         // save addr if we're post-incrementing it (assume it's in R1-3)
         if(postInc && std::holds_alternative<Reg>(addr))
@@ -894,6 +905,51 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         cycleExecuted();
 
         doJump(pc + off, flag, set);
+    };
+
+
+    const auto ret = [this, &instr, &pc, &builder, &getOff, &cycleExecuted, &syncCyclesExecuted, &readMem](int flag = 0, bool set = true)
+    {
+        // condition
+        uint16_t *branchPtr = nullptr;
+        if(flag)
+        {
+            cycleExecuted(); // delay
+            syncCyclesExecuted();
+
+            builder.mov(Reg::R2, flag);
+            builder.and_(Reg::R2, reg(DMGReg::F).reg); // tst?
+
+            branchPtr = builder.getPtr();
+            builder.b(set ? Condition::EQ : Condition::NE, 0);
+        }
+
+        // pop PC
+        builder.mov(Reg::R1, spReg);
+        readMem(Reg::R1, {Reg::R2, RegPart::Low}, true);
+        readMem(Reg::R1, {Reg::R3, RegPart::High}, true, 1 << 2/*save R2*/);
+        builder.orr(Reg::R2, Reg::R3);
+        builder.mov(spReg, Reg::R1);
+
+        cycleExecuted();
+        syncCyclesExecuted(); // uses R1/3
+
+        builder.mov(Reg::R1, Reg::R2); // move popped PC value
+        builder.bl(getOff(exitPtr));
+
+        if(branchPtr)
+        {
+            // update branch
+            int off = (builder.getPtr() - (branchPtr + 1));
+            *branchPtr = (*branchPtr & 0xFF00) | off;
+        }
+
+        // exit if branch not taken
+        if(flag && (instr.flags & Op_Last))
+        {
+            load16BitValue(builder, Reg::R1, pc);
+            builder.bl(getOff(exitPtr));
+        }
     };
 
     // handle branch targets
@@ -1587,6 +1643,16 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xC0: // RET NZ
+        case 0xC8: // RET Z
+        case 0xD0: // RET NC
+        case 0xD8: // RET C
+        {
+            int flag = opcode & (1 << 4) ? DMGCPU::Flag_C : DMGCPU::Flag_Z;
+            ret(flag, opcode & (1 << 3));
+            break;
+        }
+
         case 0xC1: // POP BC
         case 0xD1: // POP DE
         case 0xE1: // POP HL
@@ -1618,6 +1684,10 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             add(instr.opcode[1]);
             break;
         }
+
+        case 0xC9: // RET
+            ret();
+            break;
 
         case 0xCB:
         {
