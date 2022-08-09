@@ -386,6 +386,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         cycleExecuted();
     };
 
+    // op helpers
     const auto push = [&builder, &cycleExecuted, &writeMem](Reg r)
     {
         cycleExecuted(); // delay
@@ -643,7 +644,6 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         doSub(b, true, true);
     };
 
-    // op helpers
     const auto bitAnd = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
     {
         auto regA = reg(WReg::AF);
