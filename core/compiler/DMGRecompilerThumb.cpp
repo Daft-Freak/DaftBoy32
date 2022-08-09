@@ -359,13 +359,14 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     const auto push = [&builder, &cycleExecuted, &writeMem](Reg r)
     {
+        cycleExecuted(); // delay
         builder.mov(Reg::R2, spReg);
         writeMem(Reg::R2, RegInfo{r, RegPart::High}, true);
         writeMem(Reg::R2, RegInfo{r, RegPart::Low}, true);
         builder.mov(spReg, Reg::R2);
     };
 
-    const auto pop = [&builder, &cycleExecuted, &readMem](Reg r)
+    const auto pop = [&builder, &readMem](Reg r)
     {
         builder.mov(Reg::R2, spReg);
         readMem(Reg::R2, RegInfo{r, RegPart::Low}, true);
@@ -765,7 +766,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
     };
 
-    const auto add16 = [&instr, &builder](Reg b)
+    const auto add16 = [&instr, &builder, &cycleExecuted](Reg b)
     {
         auto a = reg(WReg::HL);
         auto f = reg(WReg::AF);
@@ -824,6 +825,8 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.mov(Reg::R2, DMGCPU::Flag_H);
             builder.orr(f.reg, Reg::R2);
         }
+
+        cycleExecuted();
     };
 
     const auto doJump = [this, &instr, &pc, &builder, &getOff, &cycleExecuted, &syncCyclesExecuted, &cyclesThisInstr](uint16_t addr, int flag = 0, bool set = true)
