@@ -13,7 +13,6 @@ enum class RegPart
 {
     Low = 1,
     High = 2,
-    Both = Low | High
 };
 
 struct RegInfo
@@ -40,14 +39,14 @@ inline constexpr RegInfo reg(DMGCPU::Reg r)
     return regMap8[static_cast<int>(r)];
 }
 
-inline constexpr RegInfo reg(DMGCPU::WReg r)
+inline constexpr Reg reg(DMGCPU::WReg r)
 {
-    const RegInfo regMap16[]
+    const Reg regMap16[] // TODO: nothing uses ::Both
     {
-        {Reg::R4, RegPart::Both}, // AF
-        {Reg::R5, RegPart::Both}, // BC
-        {Reg::R6, RegPart::Both}, // DE
-        {Reg::R7, RegPart::Both}  // HL
+        Reg::R4, // AF
+        Reg::R5, // BC
+        Reg::R6, // DE
+        Reg::R7  // HL
     };
     return regMap16[static_cast<int>(r)];
 }
@@ -216,12 +215,12 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         reg(DMGReg::A),
     };
 
-    static const RegInfo regMap16[]
+    static const Reg regMap16[]
     {
         reg(WReg::BC),
         reg(WReg::DE),
         reg(WReg::HL),
-        {spReg, RegPart::Both}, // unless it's push/pop, then it's AF
+        spReg, // unless it's push/pop, then it's AF
     };
 
     auto getOff = [&builder](uint8_t *ptr)
@@ -617,7 +616,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     // op helpers
     const auto bitAnd = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
     {
-        auto regA = reg(WReg::AF).reg;
+        auto regA = reg(WReg::AF);
         auto regB = Reg::R1;
 
         get8BitValue(builder, regB, b);
@@ -642,7 +641,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     const auto bitOr = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
     {
-        auto regA = reg(WReg::AF).reg;
+        auto regA = reg(WReg::AF);
         auto regB = Reg::R1;
 
         get8BitValue(builder, regB, b);
@@ -661,7 +660,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     const auto bitXor = [&instr, &builder](std::variant<RegInfo, uint8_t> b)
     {
-        auto regA = reg(WReg::AF).reg;
+        auto regA = reg(WReg::AF);
         auto regB = Reg::R1;
 
         get8BitValue(builder, regB, b);
@@ -685,7 +684,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     const auto inc = [&instr, &builder](RegInfo r)
     {
-        auto regA = reg(WReg::AF).reg;
+        auto regA = reg(WReg::AF);
 
         if(instr.flags & Op_WriteFlags)
         {
@@ -724,7 +723,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     const auto dec = [&instr, &builder](RegInfo r)
     {
-        auto regA = reg(WReg::AF).reg;
+        auto regA = reg(WReg::AF);
 
         if(instr.flags & Op_WriteFlags)
         {
@@ -775,7 +774,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             // clear flags
             builder.mov(Reg::R1, DMGCPU::Flag_C | DMGCPU::Flag_H | DMGCPU::Flag_N);
-            builder.bic(f.reg, Reg::R1); // preserve Z (and all of A), clear others
+            builder.bic(f, Reg::R1); // preserve Z (and all of A), clear others
         }
 
         if(instr.flags & DMGCPU::Flag_H)
@@ -788,7 +787,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.mov(Reg::R1, 0xF);
             builder.lsl(Reg::R1, Reg::R1, 12);
             builder.mov(Reg::R3, b);
-            builder.mov(Reg::R2, a.reg);
+            builder.mov(Reg::R2, a);
 
             builder.bic(Reg::R2, Reg::R1);
             builder.bic(Reg::R3, Reg::R1);
@@ -801,21 +800,21 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
 
         // do add
-        builder.add(a.reg, a.reg, b);
+        builder.add(a, a, b);
 
         // flags
         // cant use carry from op here
         if(instr.flags & DMGCPU::Flag_C)
         {
             // > 0xFFFF == >> 8 > 0xFF
-            builder.lsr(Reg::R1, a.reg, 8); // shift down for comparison
+            builder.lsr(Reg::R1, a, 8); // shift down for comparison
             builder.cmp(Reg::R1, 0xFF);
             builder.b(Condition::LE, 4);
             builder.mov(Reg::R2, DMGCPU::Flag_C);
-            builder.orr(f.reg, Reg::R2);
+            builder.orr(f, Reg::R2);
         }
 
-        builder.uxth(a.reg, a.reg); // mask
+        builder.uxth(a, a); // mask
 
         if(instr.flags & DMGCPU::Flag_H)
         {
@@ -823,7 +822,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.cmp(Reg::R3, 0xF);
             builder.b(Condition::LE, 4);
             builder.mov(Reg::R2, DMGCPU::Flag_H);
-            builder.orr(f.reg, Reg::R2);
+            builder.orr(f, Reg::R2);
         }
 
         cycleExecuted();
@@ -1108,7 +1107,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             cycleExecuted();
 
             auto dst = regMap16[opcode >> 4];
-            load16BitValue(builder, dst.reg, instr.opcode[1] | instr.opcode[2] << 8);
+            load16BitValue(builder, dst, instr.opcode[1] | instr.opcode[2] << 8);
 
             break;
         }
@@ -1125,14 +1124,14 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         case 0x02: // LD (BC),A
         case 0x12: // LD (DE),A
-            writeMem(regMap16[opcode >> 4].reg, reg(DMGReg::A));
+            writeMem(regMap16[opcode >> 4], reg(DMGReg::A));
             break;
 
         case 0x03: // INC BC
         case 0x13: // INC DE
         case 0x23: // INC HL
         {
-            auto r = regMap16[opcode >> 4].reg;
+            auto r = regMap16[opcode >> 4];
             builder.add(r, 1);
             builder.uxth(r, r);
             cycleExecuted();
@@ -1173,7 +1172,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x1B: // DEC DE
         case 0x2B: // DEC HL
         {
-            auto r = regMap16[opcode >> 4].reg;
+            auto r = regMap16[opcode >> 4];
             builder.sub(r, 1);
             builder.uxth(r, r);
             cycleExecuted();
@@ -1253,7 +1252,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x09: // ADD HL,BC
         case 0x19: // ADD HL,DE
         case 0x29: // ADD HL,HL
-            add16(regMap16[opcode >> 4].reg);
+            add16(regMap16[opcode >> 4]);
             break;
         case 0x39: // ADD HL,SP
             builder.mov(Reg::R2, spReg);
@@ -1262,7 +1261,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         case 0x0A: // LD A,(BC)
         case 0x1A: // LD A,(DE)
-            readMem(regMap16[opcode >> 4].reg, reg(DMGReg::A));
+            readMem(regMap16[opcode >> 4], reg(DMGReg::A));
             break;
 
         case 0x0F: // RRCA
@@ -1380,7 +1379,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         case 0x22: // LDI (HL),A
         {
-            auto r = reg(WReg::HL).reg;
+            auto r = reg(WReg::HL);
             writeMem(r, reg(DMGReg::A));
             builder.add(r, 1);
             builder.uxth(r, r);
@@ -1464,7 +1463,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         case 0x2A: // LDI A, (HL)
         {
-            auto r = reg(WReg::HL).reg;
+            auto r = reg(WReg::HL);
             readMem(r, reg(DMGReg::A));
             builder.add(r, 1);
             builder.uxth(r, r);
@@ -1487,7 +1486,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         case 0x32: // LDD (HL),A
         {
-            auto r = reg(WReg::HL).reg;
+            auto r = reg(WReg::HL);
             writeMem(r, reg(DMGReg::A));
             builder.sub(r, 1);
             builder.uxth(r, r);
@@ -1498,9 +1497,9 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
 
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             inc(tmp);
-            writeMem(reg(WReg::HL).reg, tmp);
+            writeMem(reg(WReg::HL), tmp);
 
             break;
         }
@@ -1508,9 +1507,9 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
 
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             dec(tmp);
-            writeMem(reg(WReg::HL).reg, tmp);
+            writeMem(reg(WReg::HL), tmp);
 
             break;
         }
@@ -1518,7 +1517,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x36: // LD (HL),n
         {
             cycleExecuted();
-            writeMem(reg(WReg::HL).reg, instr.opcode[1]);
+            writeMem(reg(WReg::HL), instr.opcode[1]);
             break;
         }
 
@@ -1531,7 +1530,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         case 0x3A: // LDD A, (HL)
         {
-            auto r = reg(WReg::HL).reg;
+            auto r = reg(WReg::HL);
             readMem(r, reg(DMGReg::A));
             builder.sub(r, 1);
             builder.uxth(r, r);
@@ -1604,7 +1603,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x66: // LD H,(HL)
         case 0x6E: // LD L,(HL)
         case 0x7E: // LD A,(HL)
-            readMem(reg(WReg::HL).reg, regMap8[(opcode >> 3) & 7]);
+            readMem(reg(WReg::HL), regMap8[(opcode >> 3) & 7]);
             break;
         case 0x70: // LD (HL),B
         case 0x71: // LD (HL),C
@@ -1613,7 +1612,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x74: // LD (HL),H
         case 0x75: // LD (HL),L
         case 0x77: // LD (HL),A
-            writeMem(reg(WReg::HL).reg, regMap8[opcode & 7]);
+            writeMem(reg(WReg::HL), regMap8[opcode & 7]);
             break;
 
         case 0x76: // HALT
@@ -1664,7 +1663,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x86: // ADD (HL)
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             add(tmp);
             break;
         }
@@ -1681,7 +1680,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x8E: // ADC (HL)
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             addWithCarry(tmp);
             break;
         }
@@ -1698,7 +1697,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x96: // SUB (HL)
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             sub(tmp);
             break;
         }
@@ -1715,7 +1714,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0x9E: // SBC (HL)
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             subWithCarry(tmp);
             break;
         }
@@ -1732,7 +1731,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xA6: // AND (HL)
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             bitAnd(tmp);
             break;
         }
@@ -1748,12 +1747,12 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xAE: // XOR (HL)
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             bitXor(tmp);
             break;
         }
         case 0xAF: // XOR A
-            builder.mov(reg(WReg::AF).reg, DMGCPU::Flag_Z); // A = 0, F = Z
+            builder.mov(reg(WReg::AF), DMGCPU::Flag_Z); // A = 0, F = Z
             break;
 
         case 0xB0: // OR B
@@ -1768,7 +1767,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xB6: // OR (HL)
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             bitOr(tmp);
             break;
         }
@@ -1785,7 +1784,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xBE: // CP (HL)
         {
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
-            readMem(reg(WReg::HL).reg, tmp);
+            readMem(reg(WReg::HL), tmp);
             cmp(tmp);
             break;
         }
@@ -1803,7 +1802,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xC1: // POP BC
         case 0xD1: // POP DE
         case 0xE1: // POP HL
-            pop(regMap16[(opcode >> 4) & 3].reg);
+            pop(regMap16[(opcode >> 4) & 3]);
             break;
 
         case 0xC2: // JP NZ,nn
@@ -1832,7 +1831,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xC5: // PUSH BC
         case 0xD5: // PUSH DE
         case 0xE5: // PUSH HL
-            push(regMap16[(opcode >> 4) & 3].reg);
+            push(regMap16[(opcode >> 4) & 3]);
             break;
 
         case 0xC6: // ADD n
@@ -1867,12 +1866,12 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             auto tmp = RegInfo{Reg::R2, RegPart::Low};
 
             if(isMem)
-                readMem(reg(WReg::HL).reg, tmp);
+                readMem(reg(WReg::HL), tmp);
 
             recompileExInstruction(instr, builder);
 
             if(isMem && (exOpcode >= 0x80 || exOpcode < 0x40)) // BIT doesn't write back
-                writeMem(reg(WReg::HL).reg, tmp);
+                writeMem(reg(WReg::HL), tmp);
 
             break;
         }
@@ -2005,7 +2004,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
                 cycleExecuted();
             }
             else // LDHL SP,n
-                builder.uxth(reg(WReg::HL).reg, Reg::R1);
+                builder.uxth(reg(WReg::HL), Reg::R1);
 
             cycleExecuted();
 
@@ -2014,7 +2013,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         case 0xE9: // JP (HL)
             syncCyclesExecuted();
-            builder.mov(Reg::R1, reg(WReg::HL).reg);
+            builder.mov(Reg::R1, reg(WReg::HL));
             builder.bl(getOff(exitPtr));
             break;
 
@@ -2044,11 +2043,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
 
         case 0xF1: // POP AF
-            pop(reg(WReg::AF).reg);
+            pop(reg(WReg::AF));
 
             // low bits in F can never be set
             builder.mov(Reg::R1, 0xF);
-            builder.bic(reg(WReg::AF).reg, Reg::R1);
+            builder.bic(reg(WReg::AF), Reg::R1);
             break;
 
         case 0xF2: // LDH A,(C)
@@ -2078,7 +2077,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
 
         case 0xF5: // PUSH AF
-            push(reg(WReg::AF).reg);
+            push(reg(WReg::AF));
             break;
 
         case 0xF6: // OR n
@@ -2090,7 +2089,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         case 0xF9: // LD SP,HL
             cycleExecuted();
-            builder.mov(spReg, reg(WReg::HL).reg);
+            builder.mov(spReg, reg(WReg::HL));
             break;
 
         case 0xFA: // LD A,(nn)
