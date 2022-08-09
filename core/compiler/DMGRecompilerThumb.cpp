@@ -909,11 +909,60 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         doJump(pc + off, flag, set);
     };
 
+    const auto call = [this, &instr, &pc, &builder, &getOff, &cycleExecuted, &syncCyclesExecuted, &writeMem](int flag = 0, bool set = true)
+    {
+        uint16_t addr = instr.opcode[1] | instr.opcode[2] << 8;
+        cycleExecuted();
+        cycleExecuted();
+
+        // condition
+        uint16_t *branchPtr = nullptr;
+        if(flag)
+        {
+            syncCyclesExecuted();
+
+            builder.mov(Reg::R2, flag);
+            builder.and_(Reg::R2, reg(DMGReg::F).reg); // tst?
+
+            branchPtr = builder.getPtr();
+            builder.b(set ? Condition::EQ : Condition::NE, 0);
+        }
+
+        cycleExecuted(); // delay
+
+        // push PC
+        builder.mov(Reg::R2, spReg);
+        writeMem(Reg::R2, static_cast<uint8_t>(pc >> 8), true);
+        writeMem(Reg::R2, static_cast<uint8_t>(pc), true);
+        builder.mov(spReg, Reg::R2);
+
+        syncCyclesExecuted();
+
+        load16BitValue(builder, Reg::R1, addr);
+
+        // exit but flag as a call so we can save the return addr
+        builder.bl(getOff(exitForCallPtr));
+
+        if(branchPtr)
+        {
+            // update branch
+            int off = (builder.getPtr() - (branchPtr + 1));
+            *branchPtr = (*branchPtr & 0xFF00) | off;
+        }
+
+        // exit if branch not taken
+        if(flag && (instr.flags & Op_Last))
+        {
+            load16BitValue(builder, Reg::R1, pc);
+            builder.bl(getOff(exitPtr));
+        }
+    };
+
     const auto reset = [this, &pc, &builder, &getOff, &cycleExecuted, &syncCyclesExecuted, &writeMem](int addr)
     {
         cycleExecuted(); // delay
 
-        // puch PC
+        // push PC
         builder.mov(Reg::R2, spReg);
         writeMem(Reg::R2, static_cast<uint8_t>(pc >> 8), true);
         writeMem(Reg::R2, static_cast<uint8_t>(pc), true);
@@ -1718,6 +1767,16 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             jump();
             break;
 
+        case 0xC4: // CALL NZ,nn
+        case 0xCC: // CALL Z,nn
+        case 0xD4: // CALL NC,nn
+        case 0xDC: // CALL C,nn
+        {
+            int flag = opcode & (1 << 4) ? DMGCPU::Flag_C : DMGCPU::Flag_Z;
+            call(flag, opcode & (1 << 3));
+            break;
+        }
+
         case 0xC5: // PUSH BC
         case 0xD5: // PUSH DE
         case 0xE5: // PUSH HL
@@ -1765,6 +1824,10 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
             break;
         }
+
+        case 0xCD: // CALL nn
+            call();
+            break;
 
         case 0xCE: // ADC n
         {
@@ -2269,7 +2332,7 @@ void DMGRecompilerThumb::compileEntry()
     builder.orr(Reg::R1, Reg::R2);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 56);
+    builder.ldr(Reg::R2, 64);
     builder.mov(Reg::R8, Reg::R2);
 
     // load SP
@@ -2288,11 +2351,17 @@ void DMGRecompilerThumb::compileEntry()
 
     builder.bx(Reg::R1);
 
+    // exit setting the call flag ... and saving LR
+    exitForCallPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
+    builder.mov(Reg::R0, 1);
+    builder.ldr(Reg::R2, 44);
+    builder.strb(Reg::R0, Reg::R2, 0);
+
     // exit saving LR
     saveAndExitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
     builder.mov(Reg::R0, Reg::LR);
-    builder.ldr(Reg::R2, 36);
+    builder.ldr(Reg::R2, 40);
     builder.str(Reg::R0, Reg::R2, 0);
 
     // exit
@@ -2330,12 +2399,17 @@ void DMGRecompilerThumb::compileEntry()
 
     // write cpu addr
     auto ptr = builder.getPtr();
-    //*ptr++ = 0; // align
+    *ptr++ = 0; // align
     *ptr++ = cpuPtr;
     *ptr++ = cpuPtr >> 16;
 
-    //write addr of tmpSavedPtr
-    auto addr = reinterpret_cast<uintptr_t>(&tmpSavedPtr);
+    // write addr of exitCallFlag
+    auto addr = reinterpret_cast<uintptr_t>(&exitCallFlag);
+    *ptr++ = addr;
+    *ptr++ = addr >> 16;
+
+    // write addr of tmpSavedPtr
+    addr = reinterpret_cast<uintptr_t>(&tmpSavedPtr);
     *ptr++ = addr;
     *ptr++ = addr >> 16;
 
