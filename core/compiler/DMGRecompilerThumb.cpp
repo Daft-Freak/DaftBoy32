@@ -907,6 +907,21 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         doJump(pc + off, flag, set);
     };
 
+    const auto reset = [this, &pc, &builder, &getOff, &cycleExecuted, &syncCyclesExecuted, &writeMem](int addr)
+    {
+        cycleExecuted(); // delay
+
+        // puch PC
+        builder.mov(Reg::R2, spReg);
+        writeMem(Reg::R2, static_cast<uint8_t>(pc >> 8), true);
+        writeMem(Reg::R2, static_cast<uint8_t>(pc), true);
+        builder.mov(spReg, Reg::R2);
+
+        // exit
+        syncCyclesExecuted();
+        load16BitValue(builder, Reg::R1, addr);
+        builder.bl(getOff(exitPtr));
+    };
 
     const auto ret = [this, &instr, &pc, &builder, &getOff, &cycleExecuted, &syncCyclesExecuted, &readMem](int flag = 0, bool set = true)
     {
@@ -1684,6 +1699,17 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             add(instr.opcode[1]);
             break;
         }
+
+        case 0xC7: // RST 0
+        case 0xCF: // RST 08
+        case 0xD7: // RST 10
+        case 0xDF: // RST 18
+        case 0xE7: // RST 20
+        case 0xEF: // RST 28
+        case 0xF7: // RST 30
+        case 0xFF: // RST 38
+            reset(opcode & 0x38);
+            break;
 
         case 0xC9: // RET
             ret();
