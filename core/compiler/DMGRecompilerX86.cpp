@@ -293,7 +293,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         {
             // accessing most ram shouldn't cause anything to be updated, so we don't need an accurate cycle count
             auto immAddr = std::get<uint16_t>(addr);
-            if(immAddr >> 8 == 0xFF)
+            if(immAddr >= 0xFF00 && immAddr < 0xFF80/*HRAM start*/ && immAddr != 0xFFFF/*IE*/)
                 syncCyclesExecuted();
 
             builder.mov(Reg32::ESI, immAddr);
