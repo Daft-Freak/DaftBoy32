@@ -230,7 +230,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     int cyclesThisInstr = 0;
     int delayedCyclesExecuted = 0;
 
-    bool checkInterrupts = false;
+    bool forceExitAfter = false;
 
     // mapping from opcodes
     static const RegInfo regMap8[]
@@ -1068,7 +1068,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.mov(Reg::R1, 0);
         builder.strb(Reg::R1, Reg::R2, enableInterruptsNextCycleOff);
 
-        checkInterrupts = true;
+        forceExitAfter = true;
     }
 
     switch(opcode)
@@ -2104,36 +2104,24 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
     if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
     {
-        // cycles -= executed
-        if(cyclesThisInstr) // 0 means we already did the sub
-            builder.sub(Reg::R0, cyclesThisInstr);
+        //exit may be forced after interrupts are enabled
+        if(!forceExitAfter)
+        {
+            // cycles -= executed
+            
+            if(cyclesThisInstr) // 0 means we already did the sub
+                builder.sub(Reg::R0, cyclesThisInstr);
 
-        lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
+            lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
 
-        auto loadSize = load16BitValueSize(pc);
+            auto loadSize = load16BitValueSize(pc);
 
-        // if <= 0 exit
-        builder.b(Condition::GT, loadSize + 4);
+            // if <= 0 exit
+            builder.b(Condition::GT, loadSize + 4);
+        }
+
         load16BitValue(builder, Reg::R1, pc);
         builder.bl(getOff(saveAndExitPtr));
-
-        // interrupt check after EI
-        if(checkInterrupts)
-        {
-            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-            auto serviceableInterruptsOff = reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr;
-            assert(serviceableInterruptsOff < 32);
-
-            // if servicableInterrupts != 0
-            builder.mov(Reg::R2, Reg::R8); // cpu ptr
-            builder.ldrb(Reg::R1, Reg::R2, serviceableInterruptsOff);
-            builder.cmp(Reg::R1, 0);
-            builder.b(Condition::EQ, loadSize + 4);
-
-            // exit
-            load16BitValue(builder, Reg::R1, pc); 
-            builder.bl(getOff(saveAndExitPtr));
-        }
     }
 
     return true;
