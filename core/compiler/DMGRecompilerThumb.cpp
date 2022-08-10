@@ -173,6 +173,7 @@ bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bloc
         numInstructions++;
     }
 
+    spWrite = false;
     lastInstrCycleCheck = nullptr;
     branchTargets.clear();
     forwardBranchesToPatch.clear();
@@ -290,11 +291,20 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         delayedCyclesExecuted = 0;
     };
 
-    auto setupMemAddr = [&builder, &syncCyclesExecuted](std::variant<Reg, uint16_t> addr)
+    auto setupMemAddr = [this, &builder, &syncCyclesExecuted](std::variant<Reg, uint16_t> addr, bool isStack)
     {
         if(std::holds_alternative<Reg>(addr))
         {
             auto reg = std::get<Reg>(addr);
+
+            // special case for stack read/write: skip sync
+            // (we verify that the stack isn't pointing at registers in DMGRecompiler)
+            // ... unless something set SP during the current block
+            if(isStack && !spWrite)
+            {
+                builder.mov(Reg::R1, reg);
+                return;
+            }
 
             // LDH (C) does this
             if(reg == Reg::R1)
@@ -328,7 +338,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         builder.push(pushMask, false);
 
-        setupMemAddr(addr);
+        setupMemAddr(addr, postInc); // assume postInc == stack
 
         builder.mov(Reg::R0, Reg::R8); // cpu pointer
 
@@ -368,7 +378,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         builder.push(pushMask, false);
 
-        setupMemAddr(addr);
+        setupMemAddr(addr, preDec); // assume preDec == stack
         get8BitValue(builder, Reg::R2, data);
         builder.mov(Reg::R3, Reg::R0); // cycle count
 
@@ -1095,6 +1105,10 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
             load16BitValue(builder, Reg::R1, instr.opcode[1] | instr.opcode[2] << 8);
             builder.mov(spReg, Reg::R1);
+
+            // pointing SP at regs is very evil
+            if(instr.opcode[1] < 0x80 && instr.opcode[2] == 0xFF)
+                spWrite = true;
 
             break;
         }
@@ -2071,6 +2085,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xF9: // LD SP,HL
             cycleExecuted();
             builder.mov(spReg, reg(WReg::HL));
+            spWrite = true; // don't know what's in there now
             break;
 
         case 0xFA: // LD A,(nn)

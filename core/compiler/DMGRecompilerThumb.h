@@ -16,4 +16,6 @@ private:
     void recompileExInstruction(OpInfo &instr, ThumbBuilder &builder);
 
     void compileEntry() override;
+
+    bool spWrite = false;
 };
