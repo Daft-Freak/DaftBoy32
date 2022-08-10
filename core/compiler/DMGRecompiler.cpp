@@ -53,6 +53,10 @@ void DMGRecompiler::handleBranch()
         if(cpu.pc < 0xFF00 && (cpu.oamDMADelay || cpu.oamDMACount))
             break;
 
+        // stack pointing to regs is... unusual
+        if(cpu.sp >= 0xFF00 && cpu.sp < 0xFF80)
+            break;
+
         uint8_t *codePtr = nullptr;
 
         auto mappedAddr = cpu.mem.makeBankedAddress(cpu.pc);
