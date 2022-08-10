@@ -1702,7 +1702,6 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xA3: // AND E
         case 0xA4: // AND H
         case 0xA5: // AND L
-        case 0xA7: // AND A
             bitAnd(regMap8[opcode & 7]);
             break;
         case 0xA6: // AND (HL)
@@ -1712,6 +1711,13 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             bitAnd(tmp);
             break;
         }
+        case 0xA7: // AND A
+            // A & A does nothing except update flags
+            clearFlags();
+            builder.lsr(Reg::R2, reg(WReg::AF), 8);
+            updateZ(false);
+            setFlag(DMGCPU::Flag_H);
+            break;    
 
         case 0xA8: // XOR B
         case 0xA9: // XOR C
@@ -1738,7 +1744,6 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         case 0xB3: // OR E
         case 0xB4: // OR H
         case 0xB5: // OR L
-        case 0xB7: // OR A
             bitOr(regMap8[opcode & 7]);
             break;
         case 0xB6: // OR (HL)
@@ -1748,6 +1753,12 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             bitOr(tmp);
             break;
         }
+        case 0xB7: // OR A
+            // A | A does nothing except update flags
+            clearFlags();
+            builder.lsr(Reg::R2, reg(WReg::AF), 8);
+            updateZ(false);
+            break;
 
         case 0xB8: // CP B
         case 0xB9: // CP C
