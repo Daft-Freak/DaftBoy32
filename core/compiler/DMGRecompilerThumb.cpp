@@ -321,7 +321,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             // accessing most ram shouldn't cause anything to be updated, so we don't need an accurate cycle count
             auto immAddr = std::get<uint16_t>(addr);
-            if(immAddr >> 8 == 0xFF)
+            if(immAddr >= 0xFF00 && immAddr < 0xFF80/*HRAM start*/ && immAddr != 0xFFFF/*IE*/)
                 syncCyclesExecuted();
 
             load16BitValue(builder, Reg::R1, immAddr, Reg::R3);
