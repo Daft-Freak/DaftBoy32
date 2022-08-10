@@ -137,21 +137,6 @@ static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value, Reg t
     }
 }
 
-static void load32BitValue(ThumbBuilder &builder, Reg dst, uint32_t value)
-{
-    // LDR literal + b over data + some alignment bits
-    // TODO: delay writing the value
-    bool aligned = reinterpret_cast<uintptr_t>(builder.getPtr()) & 2; // if we're misaligned here, we'll be aligned after the instruction 
-    builder.ldr(dst, aligned ? 4 : 0);
-    builder.b(aligned ? 6 : 4);
-
-    if(aligned)
-        builder.data(0);
-
-    builder.data(value);
-    builder.data(value >> 16);
-}
-
 bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo)
 {
     auto codePtr16 = reinterpret_cast<uint16_t *>(codePtr);
@@ -254,6 +239,31 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         spReg, // unless it's push/pop, then it's AF
     };
 
+    // all we need so far
+    uint32_t literals[2]{};
+
+    int curLiteral = 0;
+    std::vector<uint16_t *> ldrLiteralInstrs;
+
+    auto loadLiteral = [&builder, &literals, &curLiteral, &ldrLiteralInstrs](Reg reg, uint32_t val)
+    {
+        int index;
+        for(index = 0; index < curLiteral; index++)
+        {
+            if(literals[index] == val)
+                break;
+        }
+
+        if(index == curLiteral)
+        {
+            assert(curLiteral < std::size(literals));
+            literals[curLiteral++] = val;
+        }
+
+        ldrLiteralInstrs.push_back(builder.getPtr());
+        builder.ldr(reg, index << 2); //write literal index, patched later
+    };
+
     auto getOff = [&builder](uint8_t *ptr)
     {
         return ptr - reinterpret_cast<uint8_t *>(builder.getPtr());
@@ -328,7 +338,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         }
     };
 
-    auto readMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, RegInfo dst, bool postInc = false, int extraSave = 0)
+    auto readMem = [&builder, &loadLiteral, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, RegInfo dst, bool postInc = false, int extraSave = 0)
     {
         int pushMask = 1 << 0 | extraSave; // R0
 
@@ -343,7 +353,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.mov(Reg::R0, Reg::R8); // cpu pointer
 
         // get func ptr
-        load32BitValue(builder, Reg::R2, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem));
+        loadLiteral(Reg::R2, reinterpret_cast<uintptr_t>(&DMGRecompiler::readMem));
 
         builder.blx(Reg::R2); // do call
 
@@ -363,7 +373,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         cycleExecuted();
     };
 
-    auto writeMem = [&builder, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, std::variant<RegInfo, uint8_t> data, bool preDec = false)
+    auto writeMem = [&builder, &loadLiteral, &cycleExecuted, &syncCyclesExecuted, &setupMemAddr](std::variant<Reg, uint16_t> addr, std::variant<RegInfo, uint8_t> data, bool preDec = false)
     {
         int pushMask = 1 << 4; // R4
         if(preDec && std::holds_alternative<Reg>(addr))
@@ -385,7 +395,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.mov(Reg::R0, Reg::R8); // cpu pointer
 
         // get func ptr
-        load32BitValue(builder, Reg::R4, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem));
+        loadLiteral(Reg::R4, reinterpret_cast<uintptr_t>(&DMGRecompiler::writeMem));
 
         builder.blx(Reg::R4); // do call
 
@@ -2127,6 +2137,40 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     }
 
     syncCyclesExecuted();
+
+    // output literals
+    // TODO: output less than per-instruction
+    if(!ldrLiteralInstrs.empty())
+    {
+        auto dataPtr = builder.getPtr() + 1/*B*/;
+        if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
+        {
+            // not aligned
+            builder.b(curLiteral * 4 + 2);
+            builder.data(0);
+            dataPtr++;
+        }
+        else // aligned
+            builder.b(curLiteral * 4);
+
+        for(int i = 0; i < curLiteral; i++)
+        {
+            builder.data(literals[i]);
+            builder.data(literals[i] >> 16);
+        }
+
+        // patch
+        for(auto &ptr : ldrLiteralInstrs)
+        {
+            auto start = ptr + 1;
+            if(reinterpret_cast<uintptr_t>(start) & 2)
+                start++;
+
+            // update LDR imm
+            auto index = *ptr & 0xFF;
+            *ptr = (*ptr & 0xFF00) | ((dataPtr + index * 2) - start) >> 1;
+        }
+    }
 
     if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
     {
