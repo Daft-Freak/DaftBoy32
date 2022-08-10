@@ -47,7 +47,7 @@ public:
     bool getBreakpointTriggered() {return breakpoint;}
 
     uint32_t getCycleCount() const {return cycleCount;}
-    uint16_t getInternalTimer() const {return divCounter;}
+    uint16_t getInternalTimer() {updateTimer(); return divCounter;}
 
     bool getColourMode() const {return isGBC;} // CGB in CGB mode
     bool getDoubleSpeedMode() const {return doubleSpeed;}
@@ -122,7 +122,6 @@ private:
     unsigned int timerBit = 1 << 9;
     bool timerOldVal = false;
     uint32_t lastTimerUpdate = 0;
-    uint16_t lastTimerDiv = 0; // div register at time of last update
     uint32_t nextTimerInterrupt = 0;
 
     bool isGBC = false;

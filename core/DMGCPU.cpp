@@ -57,8 +57,6 @@ void DMGCPU::reset()
         isGBC = false;
     }
 
-    lastTimerDiv = divCounter;
-
     mem.setGBC(isGBC);
 
     apu.reset();
@@ -100,7 +98,6 @@ void DMGCPU::run(int ms)
                     // inlined cycleExecuted without the !halted stuff
                     cyclesToRun -= 4;
                     cycleCount += 4;
-                    divCounter += 4;
                     skip -= 4;
                 }
                 while(skip > 0);
@@ -146,6 +143,7 @@ uint8_t DMGCPU::readReg(uint16_t addr, uint8_t val)
         }
 
         case IO_DIV:
+            updateTimer();
             return divCounter >> 8;
 
         case IO_TIMA:
@@ -192,7 +190,7 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
             if(timerEnabled && (divCounter & timerBit))
                 incrementTimer();
 
-            divCounter = lastTimerDiv = 0;
+            divCounter = 0;
             timerOldVal = false;
 
             caclulateNextTimerInterrupt(cycleCount, divCounter);
@@ -2294,8 +2292,6 @@ void DMGCPU::cycleExecuted()
     cyclesToRun -= 4;
     cycleCount += 4;
 
-    divCounter += 4;
-
     updateOAMDMA();
 }
 
@@ -2305,20 +2301,20 @@ void DMGCPU::updateTimer()
 
     if(!timerEnabled && !timerReload)
     {
+        divCounter += cycleCount - lastTimerUpdate;
         lastTimerUpdate = cycleCount;
-        lastTimerDiv = divCounter;
         return;
     }
 
-    auto div = lastTimerDiv;
+    auto div = divCounter;
 
     auto passed = cycleCount - lastTimerUpdate;
 
     // skip ahead if we're not going to cause the bit to change
     if((div & (timerBit - 1)) + passed < timerBit && !timerReload)
     {
+        divCounter += passed;
         lastTimerUpdate = cycleCount;
-        lastTimerDiv = divCounter;
         return;
     }
 
@@ -2357,7 +2353,7 @@ void DMGCPU::updateTimer()
     while(passed > 0);
 
     lastTimerUpdate = cycleCount;
-    lastTimerDiv = divCounter;
+    divCounter = div;
 }
 
 void DMGCPU::incrementTimer()
