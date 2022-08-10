@@ -158,8 +158,8 @@ void DMGRecompiler::handleBranch()
         // we ran something, do the usual CPU update stuff
         // TODO: duplicated from CPU
 
-        // sync timer if interrupts enabled
-        if(cpu.nextTimerInterrupt)
+        // sync timer if needed
+        if(cpu.nextTimerInterrupt && (cpu.nextTimerInterrupt - cpu.cycleCount <= 0 || cpu.timerReload))
             cpu.updateTimer();
 
         // sync display if interrupts enabled
