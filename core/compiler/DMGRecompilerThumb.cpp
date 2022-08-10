@@ -2131,20 +2131,20 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
     if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
     {
         //exit may be forced after interrupts are enabled
-        if(!forceExitAfter)
-        {
-            // cycles -= executed
-            
-            if(cyclesThisInstr) // 0 means we already did the sub
-                builder.sub(Reg::R0, cyclesThisInstr);
+        if(forceExitAfter)
+            builder.b(cyclesThisInstr ? 4 : 2); // jump over the condition
 
-            lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
+        // cycles -= executed
+        
+        if(cyclesThisInstr) // 0 means we already did the sub
+            builder.sub(Reg::R0, cyclesThisInstr);
 
-            auto loadSize = load16BitValueSize(pc);
+        lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
 
-            // if <= 0 exit
-            builder.b(Condition::GT, loadSize + 4);
-        }
+        auto loadSize = load16BitValueSize(pc);
+
+        // if <= 0 exit
+        builder.b(Condition::GT, loadSize + 4);
 
         load16BitValue(builder, Reg::R1, pc);
         builder.bl(getOff(saveAndExitPtr));
