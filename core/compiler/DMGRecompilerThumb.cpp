@@ -869,7 +869,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             // update branch
             int off = (builder.getPtr() - (branchPtr + 1));
-            *branchPtr = (*branchPtr & 0xFF00) | off;
+            *branchPtr = (*branchPtr & 0xFF00) | (off - 1);
         }
 
         // exit if branch not taken
@@ -935,7 +935,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             // update branch
             int off = (builder.getPtr() - (branchPtr + 1));
-            *branchPtr = (*branchPtr & 0xFF00) | off;
+            *branchPtr = (*branchPtr & 0xFF00) | (off - 1);
         }
 
         // exit if branch not taken
@@ -995,7 +995,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         {
             // update branch
             int off = (builder.getPtr() - (branchPtr + 1));
-            *branchPtr = (*branchPtr & 0xFF00) | off;
+            *branchPtr = (*branchPtr & 0xFF00) | (off - 1);
         }
 
         // exit if branch not taken
