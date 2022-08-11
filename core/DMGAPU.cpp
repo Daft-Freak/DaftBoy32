@@ -192,7 +192,8 @@ uint8_t DMGAPU::readReg(uint16_t addr, uint8_t val)
         {
             auto vol = (cpu.getMem().readIOReg(IO_NR32) >> 5) & 0x3;
             auto ch3Val = (channelEnabled & 4) && vol ? ch3Sample : 0;
-            ch3Val /= (1 << (vol - 1));
+            if(vol)
+                ch3Val >>= vol - 1;
 
             vol = ch4EnvVolume;
             auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : 0;
@@ -797,7 +798,7 @@ void DMGAPU::sampleOutput()
     auto ch3Val = (channelEnabled & 4) && vol ? (ch3Sample * 2) - 0xF : 0;
 
     if(vol)
-        ch3Val /= (1 << (vol - 1));
+        ch3Val >>= vol - 1;
 
     vol = ch4EnvVolume;
     auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : -vol;
