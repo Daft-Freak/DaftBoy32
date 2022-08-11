@@ -111,4 +111,5 @@ protected:
     uint8_t *lastInstrCycleCheck = nullptr;
     std::map<uint16_t, uint8_t *> branchTargets;
     std::multimap<uint16_t, uint8_t *> forwardBranchesToPatch;
+    bool spWrite = false;
 };
