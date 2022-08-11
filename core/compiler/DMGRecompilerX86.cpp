@@ -161,6 +161,7 @@ bool DMGRecompilerX86::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockI
         numInstructions++;
     }
 
+    spWrite = false;
     lastInstrCycleCheck = nullptr;
     branchTargets.clear();
     forwardBranchesToPatch.clear();
@@ -282,11 +283,14 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         delayedCyclesExecuted = 0;
     };
 
-    auto setupMemAddr = [&builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr)
+    auto setupMemAddr = [this, &builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr, bool isStack)
     {
         if(std::holds_alternative<Reg16>(addr))
         {
-            syncCyclesExecuted();
+            // skip sync for stack read/write
+            if(!isStack || spWrite)
+                syncCyclesExecuted();
+
             builder.movzx(Reg32::ESI, std::get<Reg16>(addr));
         }
         else
@@ -308,7 +312,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         else
             callSave(builder);
 
-        setupMemAddr(addr);
+        setupMemAddr(addr, postInc);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompilerX86::readMem)); // function ptr
         builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
@@ -337,7 +341,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         if(preDec && std::holds_alternative<Reg16>(addr))
             builder.dec(std::get<Reg16>(addr));
 
-        setupMemAddr(addr);
+        setupMemAddr(addr, preDec);
 
         if(std::holds_alternative<Reg8>(data))
             builder.movzx(Reg32::EDX, std::get<Reg8>(data));
@@ -933,7 +937,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
             if(inHRAM)
                 len += cycleExecutedCallSize * 3 - (6 * 2 + 8 * 2) /*adjacent calls*/;
             else
-                len += cycleExecutedInlineSize * 3 - 6;
+                len += cycleExecutedInlineSize - 6;
 
             builder.jcc(set ? Condition::E : Condition::NE, len);
         }
@@ -982,7 +986,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
             if(inHRAM)
                 len += cycleExecutedCallSize * 3 - 8 * 3/*adjacent calls*/;
             else
-                len += cycleExecutedInlineSize * 2 - 8;
+                len += cycleExecutedInlineSize - 8;
 
             builder.jcc(set ? Condition::E : Condition::NE, len);
         }
@@ -1083,6 +1087,11 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
             cycleExecuted();
 
             builder.mov(static_cast<Reg32>(regMap16[opcode >> 4]), v);
+
+            // pointing SP at regs is very evil
+            if(instr.opcode[1] < 0x80 && instr.opcode[2] == 0xFF)
+                spWrite = true;
+
             break;
         }
         case 0x02: // LD (BC),A
@@ -1801,6 +1810,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         case 0xF9: // LD SP,HL
             cycleExecuted();
             builder.mov(spReg32, static_cast<Reg32>(reg(WReg::HL)));
+            spWrite = true;
             break;
         case 0xFA: // LD A,(nn)
         {
