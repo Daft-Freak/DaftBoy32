@@ -310,6 +310,52 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
         case IO_RP: // IR, not implemented
             if(!isGBC) return true;
             break;
+
+        // invalid reg
+        case 0x03:
+        case 0x08:
+        case 0x09:
+        case 0x0A:
+        case 0x0B:
+        case 0x0C:
+        case 0x0D:
+        case 0x0E:
+        case 0x4C:
+        case 0x4E:
+        case 0x57:
+        case 0x58:
+        case 0x59:
+        case 0x5A:
+        case 0x5B:
+        case 0x5C:
+        case 0x5D:
+        case 0x5E:
+        case 0x5F:
+        case 0x60:
+        case 0x61:
+        case 0x62:
+        case 0x63:
+        case 0x64:
+        case 0x65:
+        case 0x66:
+        case 0x67:
+        case 0x6D:
+        case 0x6E:
+        case 0x6F:
+        case 0x71:
+        case 0x72: //
+        case 0x73: // writable in CGB mode?
+        case 0x74: //
+        case 0x75: // partially writable in CGB mode?
+        case 0x78:
+        case 0x79:
+        case 0x7A:
+        case 0x7B:
+        case 0x7C:
+        case 0x7D:
+        case 0x7E:
+        case 0x7F:
+            return true;
     }
 
     return false;
