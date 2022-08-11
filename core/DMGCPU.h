@@ -105,6 +105,9 @@ private:
     void updateOAMDMA();
     void doGDMA();
 
+    void updateSerial();
+    void calculateNextSerialUpdate();
+
     static const uint32_t clockSpeed = 4194304;
 
     // internal state
@@ -132,6 +135,11 @@ private:
     const uint8_t *oamDMASrc = nullptr;
     uint8_t *oamDMADest = nullptr;
     bool gdmaTriggered;
+
+    bool serialStart = false, serialMaster = false;
+    uint8_t serialBits = 0;
+    uint32_t nextSerialBitCycle = 0;
+    uint32_t lastSerialUpdate = 0;
 
     // registers
     uint16_t regs[4];

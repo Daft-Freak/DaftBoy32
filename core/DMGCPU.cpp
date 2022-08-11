@@ -29,6 +29,9 @@ void DMGCPU::reset()
     oamDMACount = 0;
     oamDMADelay = 0;
 
+    serialStart = serialMaster = false;
+    lastSerialUpdate = 0;
+
     // values after boot rom
     pc = 0x100;
     sp = 0xFFFE;
@@ -92,6 +95,8 @@ void DMGCPU::run(int ms)
                 skip = std::min(skip, cyclesToRun);
                 if(nextTimerInterrupt)
                     skip = std::min(skip, static_cast<int>(nextTimerInterrupt - cycleCount));
+                if(nextSerialBitCycle)
+                    skip = std::min(skip, static_cast<int>(nextSerialBitCycle - cycleCount));
 
                 do
                 {
@@ -106,6 +111,9 @@ void DMGCPU::run(int ms)
             // sync timer if interrupts enabled
             if(nextTimerInterrupt)
                 updateTimer();
+
+            if(nextSerialBitCycle)
+                updateSerial();
 
             // sync display if interrupts enabled
             display.updateForInterrupts();
@@ -183,6 +191,21 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
 
     switch(addr & 0xFF)
     {
+        case IO_SC:
+            updateSerial();
+
+            serialMaster = data &  SC_IntClock;
+            serialStart = data & SC_StartTransfer;
+
+            if(serialStart)
+                serialBits = 8;
+
+            // TODO: GBC speed
+            calculateNextSerialUpdate();
+
+            mem.writeIOReg(IO_SC, data | (isGBC ? 0x7C : 0x7E)); // extra bit for GBC
+            return true;
+
         case IO_DIV:
             updateTimer();
 
@@ -2502,4 +2525,56 @@ void DMGCPU::doGDMA()
         cycleExecuted();
         exec -= 4;
     }
+}
+
+void DMGCPU::updateSerial()
+{
+    int clockDiv = clockSpeed / 8192; // TODO
+
+    auto cyclesPassed = cycleCount - lastSerialUpdate - 52; // offset to align clock
+
+    if(!serialMaster || !serialStart)
+    {
+        lastSerialUpdate += cyclesPassed & ~(clockDiv - 1);
+        return;
+    }
+
+    int bits = cyclesPassed / clockDiv;
+    if(bits > serialBits)
+        bits = serialBits;
+
+    if(!bits)
+        return;
+
+    // shift SB
+    auto &sb = mem.getIOReg(IO_SB);
+    sb <<= bits;
+
+    serialBits -= bits;
+
+    // TODO: we don't output it anywhere
+
+    if(serialBits == 0)
+    {
+        // clear start and trigger interrupt
+        mem.getIOReg(IO_SC) &= ~SC_StartTransfer;
+        flagInterrupt(Int_Serial);
+        serialStart = false;
+    }
+
+    lastSerialUpdate += bits * clockDiv;
+    calculateNextSerialUpdate();
+}
+
+void DMGCPU::calculateNextSerialUpdate()
+{
+    int clockDiv = clockSpeed / 8192; // TODO
+
+    if(!serialMaster || !serialStart)
+    {
+        nextSerialBitCycle = 0;
+        return;
+    }
+
+    nextSerialBitCycle = ((cycleCount - 1) & ~(clockDiv - 1)) + clockDiv + 52;
 }
