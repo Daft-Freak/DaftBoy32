@@ -745,7 +745,6 @@ void DMGAPU::updateFreq(int cyclesPassed)
 
             auto sampleByte = cpu.getMem().readIOReg(0x30 + (ch3SampleIndex / 2));
 
-            // calculate when this happened for read/write behaviour
             ch3LastAccessCycle = cpu.getCycleCount() - (ch3FreqTimerPeriod - timer);
 
             if(ch3SampleIndex & 1)
@@ -753,6 +752,12 @@ void DMGAPU::updateFreq(int cyclesPassed)
             else
                 ch3Sample = sampleByte >> 4;
         }
+
+        // calculate when this happened for read/write behaviour
+        // needs to be updated every time to get the correct value
+        // (updateFreq may be called multiple times in an update, and only in the last one is this right)
+        if(ch3SampleIndex) // TODO: this really wants to check if a sample has happened
+            ch3LastAccessCycle = cpu.getCycleCount() - (ch3FreqTimerPeriod - timer);
 
         ch3FreqTimer = timer;
     }
