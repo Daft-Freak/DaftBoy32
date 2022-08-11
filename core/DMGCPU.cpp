@@ -691,7 +691,16 @@ void DMGCPU::executeInstruction()
             if(speedSwitch)
             {
                 speedSwitch = false;
-                
+
+                // sync everything before the switch
+                display.update();
+                apu.update();
+                updateTimer();
+
+                const int switchTime = 128 * 1024 + 16;
+                cyclesToRun -= switchTime;
+                cycleCount += switchTime;
+
                 writeReg(0xFF00 | IO_DIV, 0); // this also syncs the APU
                 doubleSpeed = !doubleSpeed;
             }
