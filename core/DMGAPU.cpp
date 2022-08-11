@@ -429,6 +429,26 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
             if(data & NRx4_Trigger)
             {
+                // the -2/+1 here are suspicious...
+                if((channelEnabled & (1 << 2)) && !cpu.getColourMode() && ch3LastAccessCycle == cpu.getCycleCount() - 2)
+                {
+                    // triggering while active on DMG corrupts wave RAM
+                    int index = (ch3SampleIndex + 1) % 32;
+
+                    if(index < 8)
+                    {
+                        auto curByte = mem.readIOReg(0x30 + (index / 2));
+                        mem.writeIOReg(0x30, curByte); // replace first byte
+                    }
+                    else
+                    {
+                        mem.writeIOReg(0x30, mem.readIOReg(0x30 + ((index / 2) & ~3)));
+                        mem.writeIOReg(0x31, mem.readIOReg(0x31 + ((index / 2) & ~3)));
+                        mem.writeIOReg(0x32, mem.readIOReg(0x32 + ((index / 2) & ~3)));
+                        mem.writeIOReg(0x33, mem.readIOReg(0x33 + ((index / 2) & ~3)));
+                    }
+                }
+
                 ch3SampleIndex = 0;
                 ch3FreqTimer = ch3FreqTimerPeriod + 6; // there is a small delay
 
