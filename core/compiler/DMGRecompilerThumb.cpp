@@ -875,7 +875,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.bl(getOff(exitPtr));
         }
 
-        if(branchPtr)
+        if(branchPtr && !builder.getError())
         {
             // update branch
             int off = (builder.getPtr() - (branchPtr + 1));
@@ -941,7 +941,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         // exit but flag as a call so we can save the return addr
         builder.bl(getOff(exitForCallPtr));
 
-        if(branchPtr)
+        if(branchPtr && !builder.getError())
         {
             // update branch
             int off = (builder.getPtr() - (branchPtr + 1));
@@ -1001,7 +1001,7 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         builder.mov(Reg::R1, Reg::R2); // move popped PC value
         builder.bl(getOff(exitPtr));
 
-        if(branchPtr)
+        if(branchPtr && !builder.getError())
         {
             // update branch
             int off = (builder.getPtr() - (branchPtr + 1));
