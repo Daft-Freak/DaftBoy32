@@ -244,7 +244,8 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
             }
 
             caclulateNextTimerInterrupt(cycleCount, divCounter);
-            break;
+            mem.writeIOReg(IO_TAC, data | 0xF8);
+            return true;
         }
 
         case IO_IF:
