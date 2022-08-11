@@ -210,7 +210,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
     int cyclesThisInstr = 0;
     int delayedCyclesExecuted = 0;
 
-    bool checkInterrupts = false;
+    bool forceExitAfter = false;
 
     // AF = EAX
     // BC = ECX
@@ -1066,7 +1066,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         // enableInterruptsNextCycle = false
         builder.mov(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtr);
 
-        checkInterrupts = true;
+        forceExitAfter = true;
     }
 
     switch(opcode)
@@ -1837,6 +1837,10 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
 
     if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
     {
+        // exit may be forced after interrupts are enabled
+        if(forceExitAfter)
+            builder.jmp(cyclesThisInstr ? 5 : 2);
+
         // cycles -= executed
         if(cyclesThisInstr) // 0 means we already did the sub
             builder.sub(Reg32::EDI, cyclesThisInstr);
@@ -1847,18 +1851,6 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         builder.jcc(Condition::G, 11);
         builder.mov(pcReg32, pc);
         builder.call(saveAndExitPtr - builder.getPtr());
-
-        // interrupt check after EI
-        if(checkInterrupts)
-        {
-            auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-
-            // if servicableInterrupts != 0
-            builder.cmp(0, Reg64::R14, reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtr);
-            builder.jcc(Condition::E, 11);
-            builder.mov(pcReg32, pc);
-            builder.call(saveAndExitPtr - builder.getPtr());
-        }
     }
 
     return true;
