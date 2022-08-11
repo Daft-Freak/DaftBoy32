@@ -683,7 +683,22 @@ void DMGDisplay::drawSprites(uint16_t *scanLine, uint8_t *bgRaw)
         lineSprites[numLineSprites++] = i;
     }
 
-    // priority for lower address (GBC behaviour, TODO? sort by x for DMG)
+    if(!isColour && numLineSprites > 1)
+    {
+        // sort sprites by x
+        for(int i = 1; i < numLineSprites; i++)
+        {
+            int j = i;
+
+            while(j && oam[lineSprites[j] * 4 + 1] < oam[lineSprites[j - 1] * 4 + 1])
+            {
+                std::swap(lineSprites[j], lineSprites[j - 1]);
+                j--;
+            }
+        }
+    }
+
+    // TODO: the bg priority handling here isn't quite right
     for(int i = numLineSprites - 1; i >= 0; i--)
     {
         const int spriteId = lineSprites[i];
