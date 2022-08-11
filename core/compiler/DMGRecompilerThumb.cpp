@@ -165,6 +165,7 @@ bool DMGRecompilerThumb::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bloc
 
     if(builder.getError())
     {
+        ldrLiteralInstrs.clear();
         printf("recompile @%04X failed due to error (out of space?)\n", startPC);
         return false;
     }
@@ -239,15 +240,10 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         spReg, // unless it's push/pop, then it's AF
     };
 
-    // all we need so far
-    uint32_t literals[2]{};
-
-    int curLiteral = 0;
-    std::vector<uint16_t *> ldrLiteralInstrs;
-
-    auto loadLiteral = [&builder, &literals, &curLiteral, &ldrLiteralInstrs](Reg reg, uint32_t val)
+    // literal helpers
+    auto loadLiteral = [this, &builder](Reg reg, uint32_t val)
     {
-        int index;
+        unsigned int index;
         for(index = 0; index < curLiteral; index++)
         {
             if(literals[index] == val)
@@ -262,6 +258,56 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
 
         ldrLiteralInstrs.push_back(builder.getPtr());
         builder.ldr(reg, index << 2); //write literal index, patched later
+    };
+
+    auto outputLiterals = [this, &builder]()
+    {
+        if(!ldrLiteralInstrs.empty())
+        {
+            auto dataPtr = builder.getPtr() + 1/*B*/;
+            if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
+            {
+                // not aligned
+                builder.b(curLiteral * 4 + 2);
+                builder.data(0);
+                dataPtr++;
+            }
+            else // aligned
+                builder.b(curLiteral * 4);
+
+            for(unsigned int i = 0; i < curLiteral; i++)
+            {
+                builder.data(literals[i]);
+                builder.data(literals[i] >> 16);
+            }
+
+            // ran out of space
+            if(builder.getError())
+                return;
+
+            // patch
+            for(auto &ptr : ldrLiteralInstrs)
+            {
+                auto start = ptr + 1;
+                if(reinterpret_cast<uintptr_t>(start) & 2)
+                    start++;
+
+                // update LDR imm
+                auto index = *ptr & 0xFF;
+                auto off = ((dataPtr + index * 2) - start) >> 1;
+
+                assert(index < 2);
+                assert(off <= 0xFF);
+                *ptr = (*ptr & 0xFF00) | off;
+            }
+        }
+
+        // reset
+        ldrLiteralInstrs.clear();
+        curLiteral = 0;
+
+        for(auto &literal : literals)
+            literal = 0;
     };
 
     auto getOff = [&builder](uint8_t *ptr)
@@ -2133,44 +2179,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
             builder.resetPtr(oldPtr);
             load16BitValue(builder, Reg::R1, pc - instr.len);
             builder.bl(getOff(exitPtr));
+            outputLiterals();
             return false;
     }
 
     syncCyclesExecuted();
-
-    // output literals
-    // TODO: output less than per-instruction
-    if(!ldrLiteralInstrs.empty())
-    {
-        auto dataPtr = builder.getPtr() + 1/*B*/;
-        if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
-        {
-            // not aligned
-            builder.b(curLiteral * 4 + 2);
-            builder.data(0);
-            dataPtr++;
-        }
-        else // aligned
-            builder.b(curLiteral * 4);
-
-        for(int i = 0; i < curLiteral; i++)
-        {
-            builder.data(literals[i]);
-            builder.data(literals[i] >> 16);
-        }
-
-        // patch
-        for(auto &ptr : ldrLiteralInstrs)
-        {
-            auto start = ptr + 1;
-            if(reinterpret_cast<uintptr_t>(start) & 2)
-                start++;
-
-            // update LDR imm
-            auto index = *ptr & 0xFF;
-            *ptr = (*ptr & 0xFF00) | ((dataPtr + index * 2) - start) >> 1;
-        }
-    }
 
     if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
     {
@@ -2193,6 +2206,11 @@ bool DMGRecompilerThumb::recompileInstruction(uint16_t &pc, OpInfo &instr, Thumb
         load16BitValue(builder, Reg::R1, pc);
         builder.bl(getOff(saveAndExitPtr));
     }
+
+    // output literals if ~close to the limit or this is the last instruction
+    // this was definitely NOT set by decreasing until it didn't abort...
+    if((instr.flags & Op_Last) || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460))
+        outputLiterals();
 
     return true;
 }
