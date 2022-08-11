@@ -282,6 +282,10 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
             mem.writeIOReg(IO_IE, data);
             caclulateNextTimerInterrupt(cycleCount, divCounter);
             return true;
+
+        case IO_RP: // IR, not implemented
+            if(!isGBC) return true;
+            break;
     }
 
     return false;
