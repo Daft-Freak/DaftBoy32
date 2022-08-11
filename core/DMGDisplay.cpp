@@ -438,6 +438,14 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
             return true;
         }
 
+        case IO_OPRI:
+        {
+            if(!cpu.getColourMode())
+                return true;
+            // this is set by the bios
+            break;
+        }
+
         // update interrupt status
         case IO_IE:
         {
