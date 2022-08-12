@@ -596,7 +596,10 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 // might skip an update
                 int bit = cpu.getDoubleSpeedMode() ? (1 << 13) : (1 << 12);
                 if(cpu.getInternalTimer() & bit)
-                    frameSeqClock = 0;
+                {
+                    skipNextFrameSeqUpdate = true;
+                    frameSeqClock = 6; // adjust for the frame we skip (needs to be even to trigger length bugs)
+                }
 
                 enableCycle = cpu.getCycleCount();
             }
@@ -643,6 +646,13 @@ void DMGAPU::updateFrameSequencer()
     auto &mem = cpu.getMem();
 
     frameSeqClock = (frameSeqClock + 1) & 7;
+
+    if(skipNextFrameSeqUpdate)
+    {
+        // need to do this after the increment as we adjusted the clock back one
+        skipNextFrameSeqUpdate = false;
+        return;
+    }
 
     if((frameSeqClock & 1) == 0)
     {

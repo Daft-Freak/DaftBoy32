@@ -30,6 +30,8 @@ private:
     uint8_t channelEnabled = 0;
 
     uint8_t frameSeqClock = 0;
+    bool skipNextFrameSeqUpdate = false;
+
     // deferred updates
     uint32_t lastUpdateCycle = 0;
     uint16_t lastDivValue = 0;
