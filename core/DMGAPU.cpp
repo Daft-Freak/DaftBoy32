@@ -502,7 +502,7 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 ch4EnvVolume = mem.readIOReg(IO_NR42) >> 4;
                 ch4EnvTimer = mem.readIOReg(IO_NR42) & 0x7;
 
-                ch4FreqTimer = ch4FreqTimerPeriod;
+                ch4FreqTimer = ch4FreqTimerPeriod / 2 + 8; // delay
 
                 ch4LFSRBits = 0x7FFF;
 
