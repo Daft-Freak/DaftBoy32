@@ -299,6 +299,11 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
                 ch1FreqTimer = ch1FreqTimerPeriod + 8; // delay
 
+                // make sure frequency timer is aligned to 1MHz clock
+                // (outside double speed mode both writes will always be aligned)
+                if(cpu.getDoubleSpeedMode() && (cpu.getCycleCount() - enableCycle) & 4)
+                   ch1FreqTimer += 2;
+
                 // slightly smaller delay on restart
                 if(channelEnabled & (1 << 0))
                     ch1FreqTimer -= 4;
@@ -377,6 +382,11 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 ch2EnvTimer = mem.readIOReg(IO_NR22) & 0x7;
 
                 ch2FreqTimer = ch2FreqTimerPeriod + 8; // delay
+
+                // make sure frequency timer is aligned to 1MHz clock
+                // (outside double speed mode both writes will always be aligned)
+                if(cpu.getDoubleSpeedMode() && (cpu.getCycleCount() - enableCycle) & 4)
+                   ch2FreqTimer += 2;
 
                 // slightly smaller delay on restart
                 if(channelEnabled & (1 << 1))
@@ -504,6 +514,11 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
 
                 ch4FreqTimer = ch4FreqTimerPeriod / 2 + 8; // delay
 
+                // make sure frequency timer is aligned to 1MHz clock
+                // (outside double speed mode both writes will always be aligned)
+                if(cpu.getDoubleSpeedMode() && (cpu.getCycleCount() - enableCycle) & 4)
+                   ch4FreqTimer += 2;
+
                 ch4LFSRBits = 0x7FFF;
 
                 if(ch4Len == 0)
@@ -549,6 +564,8 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
                 int bit = cpu.getDoubleSpeedMode() ? (1 << 13) : (1 << 12);
                 if(cpu.getInternalTimer() & bit)
                     frameSeqClock = 0;
+
+                enableCycle = cpu.getCycleCount();
             }
 
             enabled = data & NR52_Enable;

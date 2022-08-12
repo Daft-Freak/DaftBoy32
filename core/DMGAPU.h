@@ -34,6 +34,8 @@ private:
     uint32_t lastUpdateCycle = 0;
     uint16_t lastDivValue = 0;
 
+    uint32_t enableCycle = 0; // used to align timers (only really need & 4)
+
     // channel 1
     bool ch1SweepEnable = false;
     bool ch1SweepCalcWithNeg = false; // for some wierdness
