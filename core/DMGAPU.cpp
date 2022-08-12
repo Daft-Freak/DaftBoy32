@@ -6,6 +6,32 @@
 #include "DMGMemory.h"
 #include "DMGRegs.h"
 
+// TODO: there is even more strangeness here
+static void nrx2Write(uint8_t old, uint8_t data, uint8_t &envVol, uint8_t &envTimer)
+{
+    int vol = envVol;
+
+    if((data & (1 << 3)) && (old & 7) == 0) // -> inc, old timer 0
+        vol++;
+
+    if((old ^ data) & (1 << 3)) // direction change
+    {
+        if(data & (1 << 3) && (old & 7)) // dec -> inc, old timer not 0
+            vol += 2;
+
+        vol = 16 - vol;
+    }
+
+    if(!(data & (1 << 3)) && (old & 7) == 0 && (data & 7)) // -> dec, old timer 0, new timer not 0
+        vol--;
+
+    envVol = vol & 0xF;
+
+    // apply immediately if enabling/disabling
+    if(!(old & 7) != !(data & 7))
+        envTimer = data & 7;
+}
+
 DMGAPU::DMGAPU(DMGCPU &cpu) : cpu(cpu)
 {}
 
@@ -260,6 +286,9 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
             // disable if DAC off
             if((data & 0xF8) == 0)
                 channelEnabled &= ~(1 << 0);
+
+            nrx2Write(mem.readIOReg(IO_NR12), data, ch1EnvVolume, ch1EnvTimer);
+
             break;
 
         case IO_NR13: // freq lo
@@ -354,6 +383,8 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
             // disable if DAC off
             if((data & 0xF8) == 0)
                 channelEnabled &= ~(1 << 1);
+
+            nrx2Write(mem.readIOReg(IO_NR22), data, ch2EnvVolume, ch2EnvTimer);
             break;
 
         case IO_NR23: // freq lo
@@ -486,6 +517,8 @@ bool DMGAPU::writeReg(uint16_t addr, uint8_t data)
             // disable if DAC off
             if((data & 0xF8) == 0)
                 channelEnabled &= ~(1 << 3);
+
+            nrx2Write(mem.readIOReg(IO_NR42), data, ch4EnvVolume, ch4EnvTimer);
             break;
 
         case IO_NR43: // clock/width
