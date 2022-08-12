@@ -741,7 +741,7 @@ void DMGAPU::updateFrameSequencer()
 void DMGAPU::updateFreq(int cyclesPassed)
 {
     // channel 1
-    if(channelEnabled & (1 << 0) && ch1EnvVolume)
+    if(channelEnabled & (1 << 0))
     {
         int timer = ch1FreqTimer;
         timer -= cyclesPassed;
@@ -756,7 +756,7 @@ void DMGAPU::updateFreq(int cyclesPassed)
     }
 
     // channel 2
-    if(channelEnabled & (1 << 1) && ch2EnvVolume)
+    if(channelEnabled & (1 << 1))
     {
         int timer = ch2FreqTimer;
         timer -= cyclesPassed;
@@ -800,7 +800,7 @@ void DMGAPU::updateFreq(int cyclesPassed)
     }
 
     // channel 4
-    if(channelEnabled & (1 << 3) && ch4EnvVolume)
+    if(channelEnabled & (1 << 3))
     {
         int timer = ch4FreqTimer;
         timer -= cyclesPassed;
