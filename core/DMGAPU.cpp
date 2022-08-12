@@ -656,9 +656,9 @@ void DMGAPU::updateFrameSequencer()
 
         if(ch1EnvTimer == 0 && (ch1EnvVol & 0x7))
         {
-            if(ch1EnvVol & (1 << 3) && ch1EnvVolume < 15)
+            if((ch1EnvVol & (1 << 3)) && ch1EnvVolume < 15)
                 ch1EnvVolume++;
-            else if(ch1EnvVolume > 0)
+            else if(!(ch1EnvVol & (1 << 3)) && ch1EnvVolume > 0)
                 ch1EnvVolume--;
 
             ch1EnvTimer = ch1EnvVol & 0x7;
@@ -668,9 +668,9 @@ void DMGAPU::updateFrameSequencer()
 
         if(ch2EnvTimer == 0 && (ch2EnvVol & 0x7))
         {
-            if(ch2EnvVol & (1 << 3) && ch2EnvVolume < 15)
+            if((ch2EnvVol & (1 << 3)) && ch2EnvVolume < 15)
                 ch2EnvVolume++;
-            else if(ch2EnvVolume > 0)
+            else if(!(ch2EnvVol & (1 << 3)) && ch2EnvVolume > 0)
                 ch2EnvVolume--;
 
             ch2EnvTimer = ch2EnvVol & 0x7;
@@ -680,9 +680,9 @@ void DMGAPU::updateFrameSequencer()
 
         if(ch4EnvTimer == 0 && (ch4EnvVol & 0x7))
         {
-            if(ch4EnvVol & (1 << 3) && ch4EnvVolume < 15)
+            if((ch4EnvVol & (1 << 3)) && ch4EnvVolume < 15)
                 ch4EnvVolume++;
-            else if(ch4EnvVolume > 0)
+            else if(!(ch4EnvVol & (1 << 3)) && ch4EnvVolume > 0)
                 ch4EnvVolume--;
 
             ch4EnvTimer = ch4EnvVol & 0x7;
