@@ -871,7 +871,11 @@ void DMGAPU::sampleOutput()
     // wait for the audio thread/interrupt to catch up
     while((writeOff + 1) % bufferSize == readOff) {}
 
+    auto masterVol = mem.readIOReg(IO_NR50);
     auto outputSelect = mem.readIOReg(IO_NR51);
+
+    int leftVol = ((masterVol >> 4) & 7) + 1; // SO2
+    int rightVol = (masterVol & 7) + 1; // SO1
 
     auto vol = ch1EnvVolume;
     auto ch1Val = (channelEnabled & 1) && this->ch1Val ? vol : -vol;
@@ -891,25 +895,25 @@ void DMGAPU::sampleOutput()
     int32_t sample = 0;
 
     if(outputSelect & 0x01)
-        sample += ch1Val;
+        sample += ch1Val * rightVol;
     if(outputSelect & 0x10)
-        sample += ch1Val;
+        sample += ch1Val * leftVol;
 
     if(outputSelect & 0x02)
-        sample += ch2Val;
+        sample += ch2Val * rightVol;
     if(outputSelect & 0x20)
-        sample += ch2Val;
+        sample += ch2Val * leftVol;
 
     if(outputSelect & 0x04)
-        sample += ch3Val;
+        sample += ch3Val * rightVol;
     if(outputSelect & 0x40)
-        sample += ch3Val;
+        sample += ch3Val * leftVol;
 
     if(outputSelect & 0x08)
-        sample += ch4Val;
+        sample += ch4Val * rightVol;
     if(outputSelect & 0x80)
-        sample += ch4Val;
+        sample += ch4Val * leftVol;
 
-    sampleData[writeOff] = sample * 0x111;
+    sampleData[writeOff] = sample * 0x22;
     writeOff = (writeOff + 1) % bufferSize;
 }
