@@ -869,7 +869,7 @@ void DMGAPU::sampleOutput()
     auto &mem = cpu.getMem();
 
     // wait for the audio thread/interrupt to catch up
-    while(writeOff == readOff - 1) {}
+    while((writeOff + 1) % bufferSize == readOff) {}
 
     auto outputSelect = mem.readIOReg(IO_NR51);
 
