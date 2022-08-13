@@ -242,7 +242,9 @@ void getROMBank(uint8_t bank, uint8_t *ptr)
 
 void updateCartRAM(uint8_t *cartRam, unsigned int size)
 {
-    blit::File f(loadedFilename + ".ram.tmp", blit::OpenMode::write);
+    auto saveFile = loadedFilename.substr(0, loadedFilename.find_last_of('.') + 1) + "sav";
+
+    blit::File f(saveFile + ".tmp", blit::OpenMode::write);
 
     if(f.write(0, size, (const char *)cartRam) != int(size))
         return;
@@ -259,9 +261,16 @@ void updateCartRAM(uint8_t *cartRam, unsigned int size)
 
     f.close();
 
-    blit::remove_file(loadedFilename + ".ram.old"); // remove old
-    blit::rename_file(loadedFilename + ".ram", loadedFilename + ".ram.old"); // move current -> old
-    blit::rename_file(loadedFilename + ".ram.tmp", loadedFilename + ".ram"); // move new -> current
+    // cleanup for .gb.ram -> .sav
+    if(blit::file_exists(loadedFilename + ".ram"))
+    {
+        blit::remove_file(loadedFilename + ".ram");
+        blit::remove_file(loadedFilename + ".ram.old");
+    }
+
+    blit::remove_file(saveFile + ".old"); // remove old
+    blit::rename_file(saveFile, saveFile + ".old"); // move current -> old
+    blit::rename_file(saveFile + ".tmp", saveFile); // move new -> current
 }
 
 void updateAudio(blit::AudioChannel &channel)
@@ -290,9 +299,15 @@ void openROM(std::string filename)
 
     cpu.reset();
 
-    if(blit::file_exists(filename + ".ram"))
+    auto saveFile = filename.substr(0, filename.find_last_of('.') + 1) + "sav";
+
+    // fallback
+    if(!blit::file_exists(saveFile))
+        saveFile = filename + ".ram";
+
+    if(blit::file_exists(saveFile))
     {
-        blit::File file(filename + ".ram");
+        blit::File file(saveFile);
         int ramLen = file.get_length();
 
         if(file.get_ptr())
@@ -357,7 +372,7 @@ void init()
     // embed test ROM
 #if 0
     blit::File::add_buffer_file("auto.gb", test_rom, test_rom_length);
-    blit::File::add_buffer_file("auto.gb.ram", test_ram, test_ram_length);
+    blit::File::add_buffer_file("auto.sav", test_ram, test_ram_length);
 #endif
 
     addAppendedFiles();
