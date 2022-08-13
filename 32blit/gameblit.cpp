@@ -261,16 +261,19 @@ void updateCartRAM(uint8_t *cartRam, unsigned int size)
 
     f.close();
 
+    blit::remove_file(saveFile + ".old"); // remove old
+    if(!blit::rename_file(saveFile, saveFile + ".old")) // move current -> old
+        return;
+
+    if(!blit::rename_file(saveFile + ".tmp", saveFile)) // move new -> current
+        return;
+
     // cleanup for .gb.ram -> .sav
     if(blit::file_exists(loadedFilename + ".ram"))
     {
         blit::remove_file(loadedFilename + ".ram");
         blit::remove_file(loadedFilename + ".ram.old");
     }
-
-    blit::remove_file(saveFile + ".old"); // remove old
-    blit::rename_file(saveFile, saveFile + ".old"); // move current -> old
-    blit::rename_file(saveFile + ".tmp", saveFile); // move new -> current
 }
 
 void updateAudio(blit::AudioChannel &channel)
