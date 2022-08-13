@@ -298,7 +298,9 @@ void openROM(std::string filename)
     if(romFile.get_length() > 256 * 1024)
         romFile.open(filename, blit::OpenMode::read | blit::OpenMode::cached);
 
-    cpu.getMem().setCartROM(romFile.get_ptr());
+    auto &mem = cpu.getMem();
+
+    mem.setCartROM(romFile.get_ptr());
 
     cpu.reset();
 
@@ -314,9 +316,9 @@ void openROM(std::string filename)
         int ramLen = file.get_length();
 
         if(file.get_ptr())
-            cpu.getMem().loadCartridgeRAM(file.get_ptr(), std::min(ramLen, cpu.getMem().getCartridgeRAMSize()));
+            mem.loadCartridgeRAM(file.get_ptr(), std::min(ramLen, mem.getCartridgeRAMSize()));
         else
-            file.read(0, cpu.getMem().getCartridgeRAMSize(), (char *)cpu.getMem().getCartridgeRAM());
+            file.read(0, mem.getCartridgeRAMSize(), (char *)mem.getCartridgeRAM());
 
         // save has RTC
         const int rtcDataSize = 48;
@@ -324,7 +326,7 @@ void openROM(std::string filename)
         {
             uint32_t rtc[12];
             file.read(ramLen - rtcDataSize, rtcDataSize, reinterpret_cast<char *>(rtc));
-            cpu.getMem().setRTCData(rtc);
+            mem.setRTCData(rtc);
         }
     }
 
