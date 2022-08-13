@@ -229,6 +229,11 @@ uint8_t DMGMemory::read(uint16_t addr) const
         if(!mbcRAMEnabled)
             return 0xFF;
 
+        if(mbcType == MBCType::MBC3)
+        {
+            return 0xFF;
+        }
+
         // only other way to get here is MBC2
         return cartRam[addr & 0x1FF];
     }
@@ -280,7 +285,7 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
             // 512 4-bit values
             if(mbcType == MBCType::MBC2)
                 cartRam[addr & 0x1FF] = data | 0xF0;
-            else
+            else if(regions[region])
                 const_cast<uint8_t *>(regions[region])[addr] = data;
             cartRamWritten = true;
         }
@@ -431,9 +436,13 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
         // MBC3/5 RAM banking
         if(mbcType == MBCType::MBC5 || mbcType == MBCType::MBC3)
         {
-            mbcRAMBank = mbcType == MBCType::MBC5 ? data & 0xF : data & 0x3;
-            updateRAMBank();
+            mbcRAMBank = data & 0xF;
 
+            // valid ranges for MBC3 are 0-3, 8-C (the second range being the RTC)
+            if(mbcType == MBCType::MBC3 && mbcRAMBank > 3)
+                regions[0xA] = regions[0xB] = nullptr;
+            else
+                updateRAMBank();
             // TODO: MBC3 bank >= 8 maps RTC regs
         }
         else // MBC1 high 2 bits of rom bank / ram bank
