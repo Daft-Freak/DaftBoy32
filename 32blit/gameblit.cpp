@@ -244,8 +244,18 @@ void updateCartRAM(uint8_t *cartRam, unsigned int size)
 {
     blit::File f(loadedFilename + ".ram.tmp", blit::OpenMode::write);
 
-    if(f.write(0, size, (const char *)cartRam) != size)
+    if(f.write(0, size, (const char *)cartRam) != int(size))
         return;
+
+    // save RTC
+    if(cpu.getMem().hasRTC())
+    {
+        uint32_t rtc[12];
+        cpu.getMem().getRTCData(rtc);
+
+        if(f.write(size, sizeof(rtc), (const char *)rtc) != sizeof(rtc))
+            return;
+    }
 
     f.close();
 
@@ -283,12 +293,21 @@ void openROM(std::string filename)
     if(blit::file_exists(filename + ".ram"))
     {
         blit::File file(filename + ".ram");
-        auto ramLen = file.get_length();
+        int ramLen = file.get_length();
 
         if(file.get_ptr())
-            cpu.getMem().loadCartridgeRAM(file.get_ptr(), ramLen);
+            cpu.getMem().loadCartridgeRAM(file.get_ptr(), std::min(ramLen, cpu.getMem().getCartridgeRAMSize()));
         else
             file.read(0, cpu.getMem().getCartridgeRAMSize(), (char *)cpu.getMem().getCartridgeRAM());
+
+        // save has RTC
+        const int rtcDataSize = 48;
+        if(ramLen % 8192 == rtcDataSize)
+        {
+            uint32_t rtc[12];
+            file.read(ramLen - rtcDataSize, rtcDataSize, reinterpret_cast<char *>(rtc));
+            cpu.getMem().setRTCData(rtc);
+        }
     }
 
     loaded = true;

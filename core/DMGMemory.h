@@ -38,6 +38,10 @@ public:
     int getCartridgeRAMSize() {return cartRamSize;}
     void setCartRamUpdateCallback(CartRamUpdateCallback callback);
 
+    bool hasRTC() const;
+    void getRTCData(uint32_t buf[12]);
+    void setRTCData(uint32_t buf[12]);
+
 private:
     void writeMBC(uint16_t addr, uint8_t data);
     void updateCurrentROMBank(unsigned int bank, int region);

@@ -371,6 +371,32 @@ void DMGMemory::setCartRamUpdateCallback(CartRamUpdateCallback callback)
     cartRamUpdateCallback = callback;
 }
 
+bool DMGMemory::hasRTC() const
+{
+    return mbcType == MBCType::MBC3 && (cartROMBank0[0x147] == 0x0F || cartROMBank0[0x147] == 0x10);
+}
+
+void DMGMemory::getRTCData(uint32_t buf[12])
+{
+    updateRTC();
+
+    // the "VBA-M" format
+    for(int i = 0; i < 10; i++)
+        buf[i] = rtcRegs[i];
+
+    // invalid timestamp
+    buf[10] = buf[11] = 0x7FFFFFFF;
+}
+
+void DMGMemory::setRTCData(uint32_t buf[12])
+{
+    // the "VBA-M" format
+    for(int i = 0; i < 10; i++)
+        rtcRegs[i] = buf[i];
+
+    // TODO: get elapsed time from timestamp
+}
+
 void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
 {
     if(mbcType == MBCType::None)
