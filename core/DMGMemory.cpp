@@ -84,6 +84,11 @@ void DMGMemory::reset()
     // clear vram
     memset(vram, 0, sizeof(vram));
 
+    // reset RTC
+    for(auto &reg : rtcRegs)
+        reg = 0;
+    rtcRegs[4] = 0x40; // start stopped
+
     // load first ROM bank for reading headers
     romBankCallback(0, cartROMBank0);
 
@@ -231,7 +236,11 @@ uint8_t DMGMemory::read(uint16_t addr) const
 
         if(mbcType == MBCType::MBC3)
         {
-            return 0xFF;
+            // RTC read
+            if(mbcRAMBank >= 8 && mbcRAMBank <= 0xC)
+                return rtcRegs[mbcRAMBank - 8 + 5];
+
+            return 0xFF; // invalid bank
         }
 
         // only other way to get here is MBC2
@@ -285,6 +294,29 @@ void DMGMemory::write(uint16_t addr, uint8_t data)
             // 512 4-bit values
             if(mbcType == MBCType::MBC2)
                 cartRam[addr & 0x1FF] = data | 0xF0;
+            else if(mbcType == MBCType::MBC3 && mbcRAMBank >= 8)
+            {
+                // RTC write
+                updateRTC();
+
+                switch(mbcRAMBank - 8)
+                {
+                    case 0: // seconds
+                        rtcMilliseconds = 0; // writing to seconds resets the millisecond counter?
+                        [[fallthrough]];
+                    case 1: // minutes
+                        data &= 0x3F;
+                        break;
+                    case 2: // hours
+                        data &= 0x1F;
+                        break;
+                    case 4: // control
+                        data &= 0xC1;
+                        break;
+                }
+
+                rtcRegs[mbcRAMBank - 8] = data;
+            }
             else if(regions[region])
                 const_cast<uint8_t *>(regions[region])[addr] = data;
             cartRamWritten = true;
@@ -443,7 +475,6 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
                 regions[0xA] = regions[0xB] = nullptr;
             else
                 updateRAMBank();
-            // TODO: MBC3 bank >= 8 maps RTC regs
         }
         else // MBC1 high 2 bits of rom bank / ram bank
         {
@@ -469,7 +500,6 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
     }
     else // < 0x8000
     {
-        // TODO: MBC3 clock latch
         if(mbcType == MBCType::MBC1 || mbcType == MBCType::MBC1M)
         {
             mbcRAMBankMode = data == 1;
@@ -480,6 +510,17 @@ void DMGMemory::writeMBC(uint16_t addr, uint8_t data)
                 updateCurrentROMBank(mbcROMBank & 0x60, 0);
             else
                 updateCurrentROMBank(0, 0);
+        }
+        else if(mbcType == MBCType::MBC3)
+        {
+            // RTC latch
+            if(data)
+            {
+                updateRTC();
+
+                for(int i = 0; i < 5; i++)
+                    rtcRegs[i + 5] = rtcRegs[i];
+            }
         }
     }
 }
@@ -531,4 +572,64 @@ void DMGMemory::updateCurrentROMBank(unsigned int bank, int region)
     romBankCallback(bank, it->ptr);
     it->bank = bank;
     cachedROMBanks.splice(cachedROMBanks.begin(), cachedROMBanks, it); // move it to the top
+}
+
+void DMGMemory::updateRTC()
+{
+    auto curTime = cpu.getCycleCount();
+
+    if((rtcRegs[4] & (1 << 6))) // halted
+    {
+        rtcUpdateTime = curTime;
+        return;
+    }
+
+    auto cpuClock = 4 * 1024 * 1024 * (cpu.getDoubleSpeedMode() ? 2 : 1);
+    auto elapsed = (curTime - rtcUpdateTime) * 1000 / cpuClock;
+
+    rtcUpdateTime += elapsed * cpuClock / 1000;
+
+    while(elapsed)
+    {
+        int step = std::min(elapsed, static_cast<unsigned>(1000 - rtcMilliseconds));
+        elapsed -= step;
+
+        rtcMilliseconds += step;
+
+        if(rtcMilliseconds != 1000)
+            continue;
+
+        rtcMilliseconds = 0;
+
+        // seconds
+        rtcRegs[0] = (rtcRegs[0] + 1) & 0x3F;
+
+        if(rtcRegs[0] != 60)
+            continue;
+
+        // minutes
+        rtcRegs[0] = 0;
+        rtcRegs[1] = (rtcRegs[1] + 1) & 0x3F;
+
+        if(rtcRegs[1] != 60)
+            continue;
+
+        // hours
+        rtcRegs[1] = 0;
+        rtcRegs[2] = (rtcRegs[2] + 1) & 0x1F;
+
+        if(rtcRegs[2] != 24)
+            continue;
+
+        // days
+        rtcRegs[2] = 0;
+        int days = rtcRegs[3] | (rtcRegs[4] & 1) << 8;
+        days++;
+
+        rtcRegs[3] = days & 0xFF;
+        rtcRegs[4] = (rtcRegs[4] & 0xC0) | ((days >> 8) & 1);
+
+        if(days > 0x1FF)
+            rtcRegs[4] |= 1 << 7; // day carry
+    }
 }

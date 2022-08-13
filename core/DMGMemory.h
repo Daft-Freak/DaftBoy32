@@ -42,6 +42,8 @@ private:
     void writeMBC(uint16_t addr, uint8_t data);
     void updateCurrentROMBank(unsigned int bank, int region);
 
+    void updateRTC();
+
     enum class MBCType : uint8_t
     {
         None = 0,
@@ -79,8 +81,13 @@ private:
 
     int mbcROMBank = 1, mbcRAMBank = 0;
     uint8_t cartRam[0x8000];
-    
+
     unsigned int cartRamSize = 0;
+
+    // RTC
+    uint8_t rtcRegs[10]; // internal / latched
+    uint16_t rtcMilliseconds = 0;
+    uint32_t rtcUpdateTime = 0;
 
     uint8_t cartROMBank0[0x4000];
     const uint8_t *cartROM = nullptr; // used if entire rom is loaded somewhere
