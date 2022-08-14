@@ -130,7 +130,7 @@ void DMGCPU::run(int ms)
             }
 
             // sync timer if interrupts enabled
-            if(nextTimerInterrupt && (nextTimerInterrupt - cycleCount <= 0 || timerReload))
+            if(nextTimerInterrupt && (static_cast<int>(nextTimerInterrupt - cycleCount) <= 0 || timerReload))
                 updateTimer();
 
             if(nextSerialBitCycle)
