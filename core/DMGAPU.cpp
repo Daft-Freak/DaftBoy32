@@ -892,28 +892,28 @@ void DMGAPU::sampleOutput()
     vol = ch4EnvVolume;
     auto ch4Val = (channelEnabled & 8) && this->ch4Val ? vol : -vol;
 
-    int32_t sample = 0;
+    int32_t left = 0, right = 0;
 
     if(outputSelect & 0x01)
-        sample += ch1Val * rightVol;
+        right += ch1Val * rightVol;
     if(outputSelect & 0x10)
-        sample += ch1Val * leftVol;
+        left += ch1Val * leftVol;
 
     if(outputSelect & 0x02)
-        sample += ch2Val * rightVol;
+        right += ch2Val * rightVol;
     if(outputSelect & 0x20)
-        sample += ch2Val * leftVol;
+        left += ch2Val * leftVol;
 
     if(outputSelect & 0x04)
-        sample += ch3Val * rightVol;
+        right += ch3Val * rightVol;
     if(outputSelect & 0x40)
-        sample += ch3Val * leftVol;
+        left += ch3Val * leftVol;
 
     if(outputSelect & 0x08)
-        sample += ch4Val * rightVol;
+        right += ch4Val * rightVol;
     if(outputSelect & 0x80)
-        sample += ch4Val * leftVol;
+        left += ch4Val * leftVol;
 
-    sampleData[writeOff] = sample * 0x22;
+    sampleData[writeOff] = (left + right) * 0x22;
     writeOff = (writeOff + 1) % bufferSize;
 }
