@@ -40,7 +40,7 @@ void DMGAPU::reset()
     enabled = true;
 
     lastUpdateCycle = 0;
-    lastDivValue = 0;
+    lastDivValue = cpu.getInternalTimer();
 
     frameSeqClock = 0;
     channelEnabled = 1;
