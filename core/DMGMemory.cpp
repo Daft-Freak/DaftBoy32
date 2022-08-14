@@ -617,7 +617,7 @@ void DMGMemory::updateRTC()
 
     while(elapsed)
     {
-        int step = std::min(elapsed, static_cast<unsigned>(1000 - rtcMilliseconds));
+        int step = std::min(elapsed, static_cast<uint32_t>(1000 - rtcMilliseconds));
         elapsed -= step;
 
         rtcMilliseconds += step;
