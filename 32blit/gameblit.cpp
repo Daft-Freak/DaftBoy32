@@ -262,8 +262,7 @@ void updateCartRAM(uint8_t *cartRam, unsigned int size)
     f.close();
 
     blit::remove_file(saveFile + ".old"); // remove old
-    if(!blit::rename_file(saveFile, saveFile + ".old")) // move current -> old
-        return;
+    blit::rename_file(saveFile, saveFile + ".old"); // move current -> old
 
     if(!blit::rename_file(saveFile + ".tmp", saveFile)) // move new -> current
         return;
