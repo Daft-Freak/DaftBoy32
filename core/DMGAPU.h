@@ -82,4 +82,5 @@ private:
     static const int bufferSize = 1024;
     volatile uint16_t readOff = 0, writeOff = 64;
     int16_t sampleData[bufferSize] = {0};
+    int32_t filterVal[2]{};
 };

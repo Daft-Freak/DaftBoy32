@@ -914,6 +914,16 @@ void DMGAPU::sampleOutput()
     if(outputSelect & 0x80)
         left += ch4Val * leftVol;
 
-    sampleData[writeOff] = (left + right) * 0x22;
+    left *= 0x22;
+    right *= 0x22;
+
+    // filter
+    int32_t outLeft = 0, outRight = 0;
+    outLeft = left - (filterVal[0] >> 16);
+    outRight = right - (filterVal[1] >> 16);
+    filterVal[0] = (left << 16) - (outLeft * 65014); // 65014 ~= 0.9920 * 0x10000
+    filterVal[1] = (right << 16) - (outRight * 65014);
+
+    sampleData[writeOff] = outLeft + outRight;
     writeOff = (writeOff + 1) % bufferSize;
 }
