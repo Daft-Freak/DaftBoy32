@@ -410,7 +410,10 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
             auto oamSrc = mem.readIOReg(IO_DMA);
 
             if((addr < 0x8000 || addr >= 0xA000) && (oamSrc < 0x80 || oamSrc >= 0xA0)) // external bus
-                return *oamDMASrc;
+            {
+                if(!isGBC || (addr < 0x8000) == (oamSrc < 0x80)) // CGB has seperate ROM/RAM buses?
+                    return *oamDMASrc;
+            }
             else if(addr >= 0x8000 && addr < 0xA000 && oamSrc >= 0x80 && oamSrc < 0xA0) // vram
                 return *oamDMASrc;
         }
@@ -422,9 +425,18 @@ uint8_t DMGCPU::readMem(uint16_t addr) const
 void DMGCPU::writeMem(uint16_t addr, uint8_t data)
 {
     // OAM DMA conflict
-    // proably more complicated than this
     if(oamDMACount && addr < 0xFF00)
-        return;
+    {
+        auto oamSrc = mem.readIOReg(IO_DMA);
+
+        if(!isGBC)
+            return; // always fails on DMG?
+
+        if((addr < 0x8000 && oamSrc < 0x80) || (addr >= 0xA000 && oamSrc >= 0xA0)) // external bus
+            return;
+        else if(addr >= 0x8000 && addr < 0xA000 && oamSrc >= 0x80 && oamSrc < 0xA0) // vram
+            return;
+    }
 
     mem.write(addr, data);
 }
