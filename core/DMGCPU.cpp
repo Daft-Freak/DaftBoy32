@@ -74,6 +74,15 @@ void DMGCPU::reset()
 
     mem.setGBC(isGBC);
 
+    if(isGBC)
+    {
+        // FF on DMG, mem reset doesn't know if we're in CGB mode yet...
+        mem.writeIOReg(0x72, 0);
+        mem.writeIOReg(0x73, 0);
+        mem.writeIOReg(0x74, 0);
+        mem.writeIOReg(0x75, 0x8F);
+    }
+
     apu.reset();
     display.reset();
 }
@@ -355,10 +364,6 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
         case 0x6E:
         case 0x6F:
         case 0x71:
-        case 0x72: //
-        case 0x73: // writable in CGB mode?
-        case 0x74: //
-        case 0x75: // partially writable in CGB mode?
         case 0x78:
         case 0x79:
         case 0x7A:
@@ -367,6 +372,17 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
         case 0x7D:
         case 0x7E:
         case 0x7F:
+            return true;
+
+        // unknown, but writable in CGB mode
+        case 0x72:
+        case 0x73:
+        case 0x74:
+            return !isGBC;
+
+        case 0x75:
+            if(isGBC)
+                mem.writeIOReg(0x75, data | 0x8F);
             return true;
     }
 
