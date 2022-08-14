@@ -130,7 +130,7 @@ void DMGCPU::run(int ms)
             }
 
             // sync timer if interrupts enabled
-            if(nextTimerInterrupt)
+            if(nextTimerInterrupt && (nextTimerInterrupt - cycleCount <= 0 || timerReload))
                 updateTimer();
 
             if(nextSerialBitCycle)
@@ -2433,18 +2433,19 @@ void DMGCPU::updateTimer()
 
     auto passed = cycleCount - lastTimerUpdate;
 
-    // skip ahead if we're not going to cause the bit to change
-    if((div & (timerBit - 1)) + passed < timerBit && !timerReload)
-    {
-        divCounter += passed;
-        lastTimerUpdate = cycleCount;
-        return;
-    }
-
     do
     {
-        div += 4;
-        passed -= 4;
+        // skip to next update
+        unsigned int step = 4;
+        uint32_t toNextUpdate = step;
+        if(!timerReload)
+        {
+            toNextUpdate = timerBit - (div & (timerBit - 1));
+            step = std::min(passed, toNextUpdate);
+        }
+
+        div += step;
+        passed -= step;
 
         // reload
         if(timerReload)
