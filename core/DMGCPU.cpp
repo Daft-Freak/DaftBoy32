@@ -42,13 +42,25 @@ void DMGCPU::reset()
     if(console == Console::CGB || (console == Console::Auto && mem.read(0x143) & 0x80))
     {
         isGBC = mem.read(0x143) & 0x80; // only set if a GBC game
-        // TODO: CGB in DMG mode likely needs some fixups
+
         reg(WReg::AF) = 0x1180;
         reg(WReg::BC) = 0x0000;
-        reg(WReg::DE) = 0x0008;
-        reg(WReg::HL) = 0x007C;
 
-        divCounter = 0x2678;
+        if(isGBC)
+        {
+            reg(WReg::DE) = 0xFF56;
+            reg(WReg::HL) = 0x000D;
+
+            divCounter = 0x1DB0; // TODO: somewhere around here
+        }
+        else // CGB in DMG mode
+        {
+            // TODO: B can be non-0
+            reg(WReg::DE) = 0x0008;
+            reg(WReg::HL) = 0x007C; // 991A if B is 43 or 58
+
+            divCounter = 0x2678;
+        }
     }
     else
     {
