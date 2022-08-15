@@ -63,6 +63,14 @@ void DMGAPU::reset()
     }
 }
 
+void DMGAPU::loadSaveState()
+{
+    // CPU already set all the regs
+    channelEnabled = cpu.getMem().readIOReg(IO_NR52) & 0xF;
+
+    lastDivValue = cpu.getInternalTimer();
+}
+
 void DMGAPU::update()
 {
     auto curCycle = cpu.getCycleCount();

@@ -4,6 +4,7 @@
 #include "DMGCPU.h"
 #include "DMGMemory.h"
 #include "DMGRegs.h"
+#include "DMGSaveState.h"
 
 DMGCPU::DMGCPU() : mem(*this), apu(*this), display(*this)
 {}
@@ -85,6 +86,157 @@ void DMGCPU::reset()
 
     apu.reset();
     display.reset();
+}
+
+void DMGCPU::loadSaveState(uint32_t fileLen, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc)
+{
+    // look for BESS
+    uint8_t buf[8];
+
+    if(readFunc(fileLen - 8, 8, buf) < 8)
+        return;
+
+    if(memcmp("BESS", buf + 4, 4) != 0)
+        return;
+
+    uint32_t bessStart = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
+
+    auto offset = bessStart;
+
+    // load BESS blocks
+    while(offset < fileLen)
+    {
+        if(readFunc(offset, 8, buf) < 8)
+            break;
+
+        auto blockLen = buf[4] | buf[5] << 8 | buf[6] << 16 | buf[7] << 24;
+
+        if(memcmp("END ", buf, 4) == 0)
+            break;
+        else if(memcmp("CORE", buf, 4) == 0)
+        {
+            BESSCore core;
+            readFunc(offset + 8, sizeof(core), reinterpret_cast<uint8_t *>(&core));
+
+            if(core.versionMajor != 1 || core.versionMinor < 1) // version check
+                return;
+
+            // model
+            bool unkModel = false;
+
+            if(core.model[0] == 'G')
+            {
+                console = Console::DMG;
+                unkModel = core.model[1] != 'D';
+            }
+            else if(core.model[0] == 'C')
+            {
+                console = Console::CGB;
+                unkModel = core.model[1] != 'C';
+            }
+            else
+                unkModel = true;
+
+            // we're not really trying to emulate a specific model, so ignore the third char
+
+            if(unkModel)
+                printf("Unhandled model %c%c%c%c\n", core.model[0], core.model[1], core.model[2], core.model[3]);
+
+            // load regs
+            pc = core.pc;
+            regs[0] = core.af;
+            regs[1] = core.bc;
+            regs[2] = core.de;
+            regs[3] = core.hl;
+            sp = core.sp;
+
+            // load internal state
+            masterInterruptEnable = core.ime != 0;
+
+            halted = core.execState == 1;
+            stopped = core.execState == 2;
+
+            // IO
+
+            // setup APU
+            writeReg(IO_NR52, 0);
+            writeReg(IO_NR52, core.ioRegs[IO_NR52]);
+
+            for(int i = IO_NR10; i < IO_NR52; i++)
+            {
+                if(i == IO_NR14 || i == IO_NR24 || i == IO_NR34 || i == IO_NR44)
+                    writeReg(i, core.ioRegs[i] & ~(NRx4_Counter | NRx4_Trigger)); // don't trigger or enable counter
+                else
+                    writeReg(i, core.ioRegs[i]);
+            }
+
+            // copy exact values
+            int numRegs = isGBC ? 128 : 76;
+            for(int i = 0; i < numRegs; i++)
+                mem.writeIOReg(i, core.ioRegs[i]);
+
+            divCounter = core.ioRegs[IO_DIV] << 8;
+
+            // timer sync
+            timerEnabled = false; // disable so that no glitches are triggered
+            writeReg(IO_TAC, core.ioRegs[IO_TAC]);
+
+            // after all IO, should update interrupt flags in CPU/display
+            writeReg(IO_IE, core.ie);
+
+            // RAM
+            auto size = std::min(core.ramSize, 0x8000u);
+            readFunc(core.ramOff, size, mem.getWRAM());
+
+            size = std::min(core.vramSize, 0x4000u);
+            readFunc(core.vramOff, size, mem.getVRAM());
+
+            size = std::min(core.cartRAMSize, static_cast<uint32_t>(mem.getCartridgeRAMSize()));
+            readFunc(core.cartRAMOff, size, mem.getCartridgeRAM());
+
+            size = std::min(core.oamSize, 0xA0u);
+            readFunc(core.oamOff, size, mem.getOAM());
+
+            size = std::min(core.hramSize, 127u);
+            uint8_t hram[127];
+            readFunc(core.hramOff, size, hram);
+            for(auto i = 0u; i < size; i++)
+                mem.writeIOReg(0x80 + i, hram[i]);
+
+            if(isGBC)
+            {
+                // make sure RAM banking is in sync
+                mem.write(0xFF00 | IO_VBK, core.ioRegs[IO_VBK]);
+                mem.write(0xFF00 | IO_SVBK, core.ioRegs[IO_SVBK]);
+
+                // sync CPU speed
+                doubleSpeed = core.ioRegs[IO_KEY1] & 0x80;
+                speedSwitch = core.ioRegs[IO_KEY1] & 1;
+            }
+
+            display.loadSaveState(core, readFunc);
+        }
+        else if(memcmp("MBC ", buf, 4) == 0)
+        {
+            // setup MBC
+            for(int off = 0; off < blockLen; off += 3)
+            {
+                uint8_t mbcWrite[3];
+                readFunc(offset + 8 + off, 3, mbcWrite);
+
+                uint16_t addr = mbcWrite[0] | mbcWrite[1] << 8;
+                mem.write(addr, mbcWrite[2]);
+            }
+        }
+        else if(memcmp("RTC ", buf, 4) == 0)
+        {
+            uint32_t rtcData[12];
+            readFunc(offset + 8, sizeof(rtcData), reinterpret_cast<uint8_t *>(rtcData));
+            mem.setRTCData(rtcData);
+        }
+
+        offset += blockLen + 8;
+    }
 }
 
 void DMGCPU::run(int ms)

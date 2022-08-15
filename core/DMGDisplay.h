@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 
+class BESSCore;
 class DMGCPU;
 class DMGMemory;
 
@@ -10,6 +12,8 @@ public:
     DMGDisplay(DMGCPU &cpu);
 
     void reset();
+
+    void loadSaveState(BESSCore &bess, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc);
 
     void update();
     void updateForInterrupts();

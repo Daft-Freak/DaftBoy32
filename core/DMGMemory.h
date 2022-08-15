@@ -31,6 +31,7 @@ public:
     uint8_t &getIOReg(uint8_t addr) {return iohram[addr];}
     void writeIOReg(uint8_t addr, uint8_t val) {iohram[addr] = val;}
 
+    uint8_t *getWRAM() {return wram;}
     uint8_t *getVRAM() {return vram;}
     uint8_t *getOAM() {return oam;}
 

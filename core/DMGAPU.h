@@ -10,6 +10,8 @@ public:
 
     void reset();
 
+    void loadSaveState();
+
     void update();
 
     int16_t getSample();

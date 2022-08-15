@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 
 #include "DMGAPU.h"
 #include "DMGDisplay.h"
@@ -28,6 +29,8 @@ public:
     DMGCPU();
 
     void reset();
+
+    void loadSaveState(uint32_t fileLen, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc);
 
     void run(int ms);
 

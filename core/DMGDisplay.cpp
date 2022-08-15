@@ -6,6 +6,7 @@
 #include "DMGCPU.h"
 #include "DMGMemory.h"
 #include "DMGRegs.h"
+#include "DMGSaveState.h"
 
 enum SpriteFlags
 {
@@ -66,6 +67,18 @@ void DMGDisplay::reset()
     // make sure the default palette gets set up for !GBC
     for(int i = IO_BGP; i <= IO_OBP1; i++)
         mem.write(0xFF00 | i, mem.readIOReg(i));
+}
+
+void DMGDisplay::loadSaveState(BESSCore &bess, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc)
+{
+    readFunc(bess.bgPalOff, bess.bgPalSize, reinterpret_cast<uint8_t *>(bgPalette));
+    readFunc(bess.objPalOff, bess.objPalSize, reinterpret_cast<uint8_t *>(objPalette));
+
+    // sync with loaded regs
+    enabled = bess.ioRegs[IO_LCDC] & LCDC_DisplayEnable;
+    y = bess.ioRegs[IO_LY];
+    statMode = bess.ioRegs[IO_STAT] & STAT_Mode;
+    compareMatch = bess.ioRegs[IO_STAT] & STAT_Coincidence;
 }
 
 void DMGDisplay::update()
