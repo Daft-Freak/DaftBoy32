@@ -109,7 +109,7 @@ void DMGAPU::update()
     }
 
     lastUpdateCycle = curCycle;
-    lastDivValue = cpu.getInternalTimer();
+    lastDivValue = cpu.getDoubleSpeedMode() ? oldDiv << 1 : oldDiv;
 }
 
 int16_t DMGAPU::getSample()
