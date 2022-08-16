@@ -1,6 +1,12 @@
 #pragma once
 #include <cstdint>
 
+struct BESSHeader
+{
+    char id[4];
+    uint32_t len;
+};
+
 struct BESSCore
 {
     uint16_t versionMajor;

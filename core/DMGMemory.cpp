@@ -4,6 +4,7 @@
 #include "DMGMemory.h"
 #include "DMGCPU.h"
 #include "DMGRegs.h"
+#include "DMGSaveState.h"
 
 DMGMemory::DMGMemory(DMGCPU &cpu) : cpu(cpu)
 {
@@ -219,6 +220,120 @@ void DMGMemory::reset()
     regions[0xD] = wram - 0xC000; // banked
     regions[0xE] = wram - 0xE000;
     regions[0xF] = nullptr;
+}
+
+void DMGMemory::saveMBCState(std::function<uint32_t(uint32_t, uint32_t, const uint8_t *)> writeFunc, uint32_t &offset)
+{
+    BESSHeader head;
+    memcpy(head.id, "MBC ", 4);
+    head.len = 0;
+
+    uint8_t data[3 * 4];
+
+    if(mbcType != MBCType::None)
+    {
+        // ram enable
+        data[head.len++] = 0x00;
+        data[head.len++] = 0x00; // 0000
+        data[head.len++] = mbcRAMEnabled ? 0xA : 0;
+    }
+
+    // MBC/RTC BESS blocks
+    switch(mbcType)
+    {
+        case MBCType::None:
+            break;
+
+        case MBCType::MBC1:
+            // rom bank low
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x20; // 2000
+            data[head.len++] = mbcROMBank & 0x1F;
+
+            // rom bank high/ram bank
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x40; // 4000
+            data[head.len++] = (mbcROMBank >> 5) & 0x3;
+
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x60; // 6000
+            data[head.len++] = mbcRAMBankMode ? 1 : 0;
+            break;
+
+        case MBCType::MBC1M:
+            // rom bank low
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x20; // 2000
+            data[head.len++] = mbcROMBank & 0xF;
+
+            // rom bank high/ram bank
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x40; // 4000
+            data[head.len++] = (mbcROMBank >> 4) & 0x3;
+
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x60; // 6000
+            data[head.len++] = mbcRAMBankMode ? 1 : 0;
+            break;
+
+        case MBCType::MBC2:
+            // rom bank
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x01; // 0100
+            data[head.len++] = mbcROMBank;
+            break;
+
+        case MBCType::MBC3:
+            // rom bank
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x20; // 2000
+            data[head.len++] = mbcROMBank & 0x7F;
+
+            // ram bank
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x40; // 4000
+            data[head.len++] = mbcRAMBank;
+            break;
+
+        case MBCType::MBC5:
+            // rom bank low
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x20; // 2000
+            data[head.len++] = mbcROMBank & 0xFF;
+
+            // rom bank high
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x30; // 3000
+            data[head.len++] = mbcROMBank >> 8;
+
+            // ram bank
+            data[head.len++] = 0x00;
+            data[head.len++] = 0x40; // 4000
+            data[head.len++] = mbcRAMBank;
+            break;
+    }
+
+    if(head.len)
+    {
+        writeFunc(offset, sizeof(head), reinterpret_cast<uint8_t *>(&head));
+        writeFunc(offset + sizeof(head), head.len, data);
+        offset += sizeof(head) + head.len;
+    }
+
+    if(hasRTC())
+    {
+        // MBC3 RTC
+        uint32_t rtcData[12];
+
+        memcpy(head.id, "RTC ", 4);
+        head.len = sizeof(rtcData);
+
+        getRTCData(rtcData);
+
+        writeFunc(offset, sizeof(head), reinterpret_cast<uint8_t *>(&head));
+        writeFunc(offset + sizeof(head), head.len, reinterpret_cast<uint8_t *>(rtcData));
+        offset += sizeof(head) + head.len;
+    }
 }
 
 uint8_t DMGMemory::read(uint16_t addr) const

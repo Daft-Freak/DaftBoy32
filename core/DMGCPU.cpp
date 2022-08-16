@@ -239,6 +239,123 @@ void DMGCPU::loadSaveState(uint32_t fileLen, std::function<uint32_t(uint32_t, ui
     }
 }
 
+void DMGCPU::saveSaveState(std::function<uint32_t(uint32_t, uint32_t, const uint8_t *)> writeFunc)
+{
+    // make sure everything is synced
+    updateTimer();
+    updateSerial();
+    apu.update();
+    display.update();
+
+    // a little header
+    writeFunc(0, 8, reinterpret_cast<const uint8_t *>("DAFTBOY"));
+    uint32_t offset = 8;
+
+    // BESS core block
+    BESSCore core;
+    core.versionMajor = 1;
+    core.versionMinor = 1;
+
+    if(console == Console::CGB || isGBC)
+    {
+        core.model[0] = 'C';
+        core.model[1] = 'C';
+    }
+    else
+    {
+        core.model[0] = 'G';
+        core.model[1] = 'D';
+    }
+
+    core.model[2] = ' ';
+    core.model[3] = ' ';
+
+    core.pc = pc;
+    core.af = regs[0];
+    core.bc = regs[1];
+    core.de = regs[2];
+    core.hl = regs[3];
+    core.sp = sp;
+
+    core.ime = masterInterruptEnable ? 1 : 0;
+    core.ie = mem.readIOReg(IO_IE);
+    core.execState = 0;
+    if(halted)
+        core.execState = 1;
+    else if(stopped)
+        core.execState = 2;
+
+    core.reserved = 0;
+
+    // IO
+    for(int i = 0; i < 128; i++)
+        core.ioRegs[i] = mem.readIOReg(i);
+
+    // make sure these get calculated
+    core.ioRegs[IO_DIV] = divCounter >> 8;
+    core.ioRegs[IO_NR52] = readReg(IO_NR52, core.ioRegs[IO_NR52]);
+    core.ioRegs[IO_STAT] = readReg(IO_STAT, core.ioRegs[IO_STAT]);
+    core.ioRegs[IO_LY] = readReg(IO_LY, core.ioRegs[IO_LY]);
+    core.ioRegs[IO_KEY1] = (doubleSpeed ? 0x80 : 0) | (speedSwitch ? 1 : 0);
+
+    // TODO: should emulate these
+    core.ioRegs[0x4C] = isGBC ? 0x80 : 0x04; // KEY0
+    core.ioRegs[0x50] = 1; // boot rom not mapped (as we don't even load it)
+
+    // RAM
+    core.ramOff = offset;
+    core.ramSize = isGBC ? 0x8000 : 0x2000;
+    writeFunc(offset, core.ramSize, mem.getWRAM());
+    offset += core.ramSize;
+
+    core.vramOff = offset;
+    core.vramSize = isGBC ? 0x4000 : 0x2000;
+    writeFunc(offset, core.vramSize, mem.getVRAM());
+    offset += core.vramSize;
+
+    core.cartRAMOff = offset;
+    core.cartRAMSize = mem.getCartridgeRAMSize();
+    writeFunc(offset, core.cartRAMSize, mem.getCartridgeRAM());
+    offset += core.cartRAMSize;
+
+    core.oamOff = offset;
+    core.oamSize = 0xA0;
+    writeFunc(offset, core.oamSize, mem.getOAM());
+    offset += core.oamSize;
+
+    core.hramOff = offset;
+    core.hramSize = 127;
+    auto hram = mem.mapAddress(0xFF80);
+    writeFunc(offset, core.hramSize, hram);
+    offset += core.hramSize + 1; // re-align
+
+    display.savePaletteState(core, writeFunc, offset);
+
+    // write BESS blocks
+    auto bessStart = offset;
+    BESSHeader head;
+
+    memcpy(head.id, "CORE", 4);
+    head.len = sizeof(core);
+    writeFunc(offset, sizeof(head), reinterpret_cast<const uint8_t *>(&head));
+    offset += sizeof(head);
+
+    writeFunc(offset, sizeof(core), reinterpret_cast<const uint8_t *>(&core));
+    offset += sizeof(core);
+
+    mem.saveMBCState(writeFunc, offset);
+
+    // END
+    memcpy(head.id, "END ", 4);
+    head.len = 0;
+    writeFunc(offset, sizeof(head), reinterpret_cast<const uint8_t *>(&head));
+    offset += sizeof(head);
+
+    // BESS footer
+    writeFunc(offset, 4, reinterpret_cast<const uint8_t *>(&bessStart));
+    writeFunc(offset + 4, 4, reinterpret_cast<const uint8_t *>("BESS"));
+}
+
 void DMGCPU::run(int ms)
 {
     int cycles = (clockSpeed * ms) / 1000;

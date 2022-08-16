@@ -81,6 +81,28 @@ void DMGDisplay::loadSaveState(BESSCore &bess, std::function<uint32_t(uint32_t, 
     compareMatch = bess.ioRegs[IO_STAT] & STAT_Coincidence;
 }
 
+void DMGDisplay::savePaletteState(BESSCore &bess, std::function<uint32_t(uint32_t, uint32_t, const uint8_t *)> writeFunc, uint32_t &offset)
+{
+    bool isColour = cpu.getColourMode();
+
+    if(!isColour)
+    {
+        bess.bgPalOff = bess.bgPalSize = 0;
+        bess.bgPalOff = bess.objPalOff = 0;
+        return;
+    }
+
+    bess.bgPalOff = offset;
+    bess.bgPalSize = sizeof(bgPalette);
+    writeFunc(offset, bess.bgPalSize, reinterpret_cast<uint8_t *>(bgPalette));
+    offset += bess.bgPalSize;
+
+    bess.objPalOff = offset;
+    bess.objPalSize = sizeof(objPalette);
+    writeFunc(offset, bess.objPalSize, reinterpret_cast<uint8_t *>(objPalette));
+    offset += bess.objPalSize;
+}
+
 void DMGDisplay::update()
 {
     auto curCycle = cpu.getCycleCount();

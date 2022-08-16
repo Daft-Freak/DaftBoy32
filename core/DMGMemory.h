@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <list>
 
 class DMGCPU;
@@ -19,6 +20,9 @@ public:
     void addROMCache(uint8_t *ptr, uint32_t size);
 
     void reset();
+
+    void saveMBCState(std::function<uint32_t(uint32_t, uint32_t, const uint8_t *)> writeFunc, uint32_t &offset);
+
     void setGBC(bool gbc) {isGBC = gbc;}
 
     uint8_t read(uint16_t addr) const;

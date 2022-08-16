@@ -31,6 +31,7 @@ public:
     void reset();
 
     void loadSaveState(uint32_t fileLen, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc);
+    void saveSaveState(std::function<uint32_t(uint32_t, uint32_t, const uint8_t *)> writeFunc);
 
     void run(int ms);
 

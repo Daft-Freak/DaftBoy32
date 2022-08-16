@@ -14,6 +14,7 @@ public:
     void reset();
 
     void loadSaveState(BESSCore &bess, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc);
+    void savePaletteState(BESSCore &bess, std::function<uint32_t(uint32_t, uint32_t, const uint8_t *)> writeFunc, uint32_t &offset);
 
     void update();
     void updateForInterrupts();
