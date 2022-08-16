@@ -3,6 +3,7 @@
 #include <functional>
 
 class BESSCore;
+class DaftState;
 class DMGCPU;
 class DMGMemory;
 
@@ -13,7 +14,8 @@ public:
 
     void reset();
 
-    void loadSaveState(BESSCore &bess, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc);
+    void loadSaveState(BESSCore &bess, DaftState &state, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc);
+    void saveState(DaftState &state);
     void savePaletteState(BESSCore &bess, std::function<uint32_t(uint32_t, uint32_t, const uint8_t *)> writeFunc, uint32_t &offset);
 
     void update();

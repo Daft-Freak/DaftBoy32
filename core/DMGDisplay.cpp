@@ -69,7 +69,7 @@ void DMGDisplay::reset()
         mem.write(0xFF00 | i, mem.readIOReg(i));
 }
 
-void DMGDisplay::loadSaveState(BESSCore &bess, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc)
+void DMGDisplay::loadSaveState(BESSCore &bess, DaftState &state, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc)
 {
     readFunc(bess.bgPalOff, bess.bgPalSize, reinterpret_cast<uint8_t *>(bgPalette));
     readFunc(bess.objPalOff, bess.objPalSize, reinterpret_cast<uint8_t *>(objPalette));
@@ -79,6 +79,28 @@ void DMGDisplay::loadSaveState(BESSCore &bess, std::function<uint32_t(uint32_t, 
     y = bess.ioRegs[IO_LY];
     statMode = bess.ioRegs[IO_STAT] & STAT_Mode;
     compareMatch = bess.ioRegs[IO_STAT] & STAT_Coincidence;
+
+    if(state.version)
+    {
+        windowY = state.windowY;
+        firstFrame = state.flags & State_DispFirstFrame;
+        statInterruptActive = state.statInterruptActive;
+        remainingScanlineCycles = state.remainingScalineCycles;
+        remainingModeCycles = state.remainingModeCycles;
+    }
+
+    lastUpdateCycle = cpu.getCycleCount();
+}
+
+void DMGDisplay::saveState(DaftState &state)
+{
+    state.windowY = windowY;
+    state.statInterruptActive = statInterruptActive;
+    state.remainingScalineCycles = remainingScanlineCycles;
+    state.remainingModeCycles = remainingModeCycles;
+
+    if(firstFrame)
+        state.flags |= State_DispFirstFrame;
 }
 
 void DMGDisplay::savePaletteState(BESSCore &bess, std::function<uint32_t(uint32_t, uint32_t, const uint8_t *)> writeFunc, uint32_t &offset)

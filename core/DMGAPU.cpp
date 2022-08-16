@@ -5,6 +5,7 @@
 #include "DMGCPU.h"
 #include "DMGMemory.h"
 #include "DMGRegs.h"
+#include "DMGSaveState.h"
 
 // TODO: there is even more strangeness here
 static void nrx2Write(uint8_t old, uint8_t data, uint8_t &envVol, uint8_t &envTimer)
@@ -63,12 +64,75 @@ void DMGAPU::reset()
     }
 }
 
-void DMGAPU::loadSaveState()
+void DMGAPU::loadSaveState(DaftState &state)
 {
     // CPU already set all the regs
     channelEnabled = cpu.getMem().readIOReg(IO_NR52) & 0xF;
 
+    if(state.version)
+    {
+        frameSeqClock = state.frameSeqClock;
+        enableCycle = state.enableCycle;
+        skipNextFrameSeqUpdate = state.flags & State_APUSkipNextFrameSeqUpdate;
+
+        ch1EnvVolume = state.envVolume[0];
+        ch2EnvVolume = state.envVolume[1];
+        ch4EnvVolume = state.envVolume[2];
+        ch1EnvTimer = state.envTimer[0];
+        ch2EnvTimer = state.envTimer[1];
+        ch4EnvTimer = state.envTimer[2];
+        ch1FreqTimer = state.freqTimer[0];
+        ch2FreqTimer = state.freqTimer[1];
+        ch3FreqTimer = state.freqTimer[2];
+        ch4FreqTimer = state.freqTimer[3];
+
+        ch1SweepTimer = state.ch1SweepTimer;
+        ch1DutyStep = state.ch1DutyStep;
+        ch1SweepCalcWithNeg = state.flags & State_APUCh1SweepCalcWithNeg;
+
+        ch2DutyStep = state.ch2DutyStep;
+
+        ch3Sample = state.ch3Sample;
+        ch3SampleIndex = state.ch3SampleIndex;
+
+        ch4LFSRBits = state.ch4LFSRBits;
+    }
+
     lastDivValue = cpu.getInternalTimer();
+    lastUpdateCycle = cpu.getCycleCount();
+}
+
+void DMGAPU::saveState(DaftState &state)
+{
+    state.frameSeqClock = frameSeqClock;
+    state.enableCycle = enableCycle;
+
+    if(skipNextFrameSeqUpdate)
+        state.flags |= State_APUSkipNextFrameSeqUpdate;
+
+    state.envVolume[0] = ch1EnvVolume;
+    state.envVolume[1] = ch2EnvVolume;
+    state.envVolume[2] = ch4EnvVolume;
+    state.envTimer[0] = ch1EnvTimer;
+    state.envTimer[1] = ch2EnvTimer;
+    state.envTimer[2] = ch4EnvTimer;
+    state.freqTimer[0] = ch1FreqTimer;
+    state.freqTimer[1] = ch2FreqTimer;
+    state.freqTimer[2] = ch3FreqTimer;
+    state.freqTimer[3] = ch4FreqTimer;
+
+    state.ch1SweepTimer = ch1SweepTimer;
+    state.ch1DutyStep = ch1DutyStep;
+
+    if(ch1SweepCalcWithNeg)
+        state.flags |= State_APUCh1SweepCalcWithNeg;
+
+    state.ch2DutyStep = ch2DutyStep;
+
+    state.ch3Sample = ch3Sample;
+    state.ch3SampleIndex = ch3SampleIndex;
+
+    state.ch4LFSRBits = ch4LFSRBits;
 }
 
 void DMGAPU::update()

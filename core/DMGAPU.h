@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 
+class DaftState;
 class DMGCPU;
 
 class DMGAPU
@@ -10,7 +11,8 @@ public:
 
     void reset();
 
-    void loadSaveState();
+    void loadSaveState(DaftState &state);
+    void saveState(DaftState &state);
 
     void update();
 

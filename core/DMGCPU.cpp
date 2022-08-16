@@ -90,9 +90,22 @@ void DMGCPU::reset()
 
 void DMGCPU::loadSaveState(uint32_t fileLen, std::function<uint32_t(uint32_t, uint32_t, uint8_t *)> readFunc)
 {
-    // look for BESS
     uint8_t buf[8];
 
+    // check if this is a DaftBoy save state
+    DaftState daftState{};
+    readFunc(0, 8, buf);
+
+    if(memcmp(buf, "DAFTBOY", 8) == 0)
+    {
+        readFunc(8, sizeof(daftState), reinterpret_cast<uint8_t *>(&daftState));
+
+        // check version
+        if(daftState.version != daftBoyStateVersion)
+            daftState.version = 0;
+    }
+
+    // look for BESS
     if(readFunc(fileLen - 8, 8, buf) < 8)
         return;
 
@@ -175,14 +188,51 @@ void DMGCPU::loadSaveState(uint32_t fileLen, std::function<uint32_t(uint32_t, ui
             for(int i = 0; i < numRegs; i++)
                 mem.writeIOReg(i, core.ioRegs[i]);
 
+            // timer/DIV
             divCounter = core.ioRegs[IO_DIV] << 8;
 
-            // timer sync
+            if(daftState.version)
+            {
+                divCounter |= daftState.divLow;
+                cycleCount = lastTimerUpdate = lastSerialUpdate = daftState.cycleCount;
+
+                timerReload = daftState.flags & State_TimerReload;
+                timerReloaded = daftState.flags & State_TimerReload;
+                timerOldVal = daftState.flags & State_TimerOldVal;
+            }
+
             timerEnabled = false; // disable so that no glitches are triggered
             writeReg(IO_TAC, core.ioRegs[IO_TAC]);
 
             // after all IO, should update interrupt flags in CPU/display
             writeReg(IO_IE, core.ie);
+
+            // more internals
+            if(daftState.version)
+            {
+                enableInterruptsNextCycle = daftState.flags & State_EnableInterruptsNextCycle;
+                haltBug = daftState.flags & State_HaltBug;
+
+                oamDMACount = daftState.oamDMACount;
+                oamDMADelay = daftState.oamDMADelay;
+
+                if(oamDMACount || oamDMADelay)
+                {
+                    auto off = oamDMADelay ? 0 : 0xA0 - oamDMACount;
+
+                    oamDMASrc = mem.mapAddress((core.ioRegs[IO_DMA] << 8) + off);
+                    oamDMADest = mem.getOAM() + off;
+                }
+
+                gdmaTriggered = daftState.flags & State_GDMATriggered;
+
+                if(daftState.flags & State_SerialStart)
+                {
+                    serialStart = true;
+                    serialMaster = core.ioRegs[IO_SC] & SC_IntClock;
+                    serialBits = daftState.serialBits;
+                }
+            }
 
             // RAM
             auto size = std::min(core.ramSize, UINT32_C(0x8000));
@@ -214,7 +264,8 @@ void DMGCPU::loadSaveState(uint32_t fileLen, std::function<uint32_t(uint32_t, ui
                 speedSwitch = core.ioRegs[IO_KEY1] & 1;
             }
 
-            display.loadSaveState(core, readFunc);
+            display.loadSaveState(core, daftState, readFunc);
+            apu.loadSaveState(daftState);
         }
         else if(memcmp("MBC ", buf, 4) == 0)
         {
@@ -250,6 +301,42 @@ void DMGCPU::saveSaveState(std::function<uint32_t(uint32_t, uint32_t, const uint
     // a little header
     writeFunc(0, 8, reinterpret_cast<const uint8_t *>("DAFTBOY"));
     uint32_t offset = 8;
+
+    // daftboy-specific bits
+    DaftState daftState{};
+    daftState.version = daftBoyStateVersion;
+    daftState.divLow = divCounter & 0xFF;
+    daftState.cycleCount = cycleCount;
+    daftState.oamDMACount = oamDMACount;
+    daftState.oamDMADelay = oamDMADelay;
+    daftState.serialBits = serialBits;
+
+    if(enableInterruptsNextCycle)
+        daftState.flags |= State_EnableInterruptsNextCycle;
+
+    if(haltBug)
+        daftState.flags |= State_HaltBug;
+
+    if(timerReload)
+        daftState.flags |= State_TimerReload;
+
+    if(timerReloaded)
+        daftState.flags |= State_TimerReloaded;
+
+    if(timerOldVal)
+        daftState.flags |= State_TimerOldVal;
+
+    if(gdmaTriggered)
+        daftState.flags |= State_GDMATriggered;
+
+    if(serialStart)
+        daftState.flags |= State_SerialStart;
+
+    display.saveState(daftState);
+    apu.saveState(daftState);
+
+    writeFunc(offset, sizeof(DaftState), reinterpret_cast<const uint8_t *>(&daftState));
+    offset += sizeof(DaftState);
 
     // BESS core block
     BESSCore core;

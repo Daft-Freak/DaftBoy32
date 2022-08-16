@@ -43,3 +43,76 @@ struct BESSCore
     uint32_t objPalOff;
 };
 static_assert(sizeof(BESSCore) == 208);
+
+inline const int daftBoyStateVersion = 1;
+
+enum StateFlags
+{
+    State_EnableInterruptsNextCycle = 1 << 0, // for EI
+    State_HaltBug                   = 1 << 1,
+
+    State_TimerReload               = 1 << 2,
+    State_TimerReloaded             = 1 << 3,
+    State_TimerOldVal = 1 << 4,
+
+    State_GDMATriggered = 1 << 5,
+
+    State_SerialStart = 1 << 6,
+
+    // display
+    State_DispFirstFrame = 1 << 7,
+
+    // APU
+    State_APUSkipNextFrameSeqUpdate = 1 << 8,
+    State_APUCh1SweepCalcWithNeg = 1 << 9
+};
+
+struct DaftState
+{
+    uint8_t version;
+
+    uint8_t reserved[2];
+
+    uint8_t divLow;
+
+    uint32_t flags;
+
+    uint32_t cycleCount;
+
+    uint8_t oamDMACount;
+    uint8_t oamDMADelay;
+
+    uint8_t serialBits;
+
+    // display
+    uint8_t windowY;
+    uint8_t statInterruptActive;
+    uint8_t padding;
+    uint16_t remainingScalineCycles;
+    uint16_t remainingModeCycles;
+
+    // APU
+    uint8_t frameSeqClock;
+    uint8_t padding2;
+    uint32_t enableCycle;
+
+    uint8_t envVolume[3];
+    uint8_t envTimer[3];
+    uint8_t ch3Sample;
+    uint8_t ch3SampleIndex;
+    uint32_t freqTimer[4]; // could be smaller
+
+    uint8_t ch1SweepTimer;
+    uint8_t ch1DutyStep;
+
+    uint8_t ch2DutyStep;
+
+    uint8_t padding3;
+    uint32_t ch3LastAccessCycle;
+
+    uint16_t ch4LFSRBits;
+
+    uint8_t padding4[2];
+};
+
+static_assert(sizeof(DaftState) == 64);
