@@ -111,6 +111,8 @@ void updateCartRAM(uint8_t *cartRam, unsigned int size);
 enum class MenuItem
 {
     SaveRAM,
+    LoadState,
+    SaveState,
     Reset,
     SwitchGame,
 };
@@ -118,6 +120,8 @@ enum class MenuItem
 Menu menu("Menu",
 {
     {static_cast<int>(MenuItem::SaveRAM), "Save Cart RAM"},
+    {static_cast<int>(MenuItem::LoadState), "Load State"},
+    {static_cast<int>(MenuItem::SaveState), "Save State"},
     {static_cast<int>(MenuItem::Reset), "Reset"},
     {static_cast<int>(MenuItem::SwitchGame), "Switch Game"}
 }, tallFont);
@@ -215,6 +219,35 @@ void onMenuItemPressed(const Menu::Item &item)
         case MenuItem::SaveRAM:
             updateCartRAM(cpu.getMem().getCartridgeRAM(), cpu.getMem().getCartridgeRAMSize());
             break;
+
+        case MenuItem::LoadState:
+        {
+            auto filename = loadedFilename.substr(0, loadedFilename.find_last_of('.') + 1) + "s0";
+            blit::File file(filename);
+
+            if(file.is_open())
+            {
+                cpu.loadSaveState(file.get_length(), [&file](uint32_t off, uint32_t len, uint8_t *buf) -> uint32_t
+                {
+                    auto ret = file.read(off, len, reinterpret_cast<char *>(buf));
+                    return ret < 0 ? 0 : ret;
+                });
+            }
+            break;
+        }
+
+        case MenuItem::SaveState:
+        {
+            auto filename = loadedFilename.substr(0, loadedFilename.find_last_of('.') + 1) + "s0";
+            blit::File file(filename, blit::OpenMode::write);
+
+            cpu.saveSaveState([&file](uint32_t off, uint32_t len, const uint8_t *buf) -> uint32_t
+            {
+                auto ret = file.write(off, len, reinterpret_cast<const char *>(buf));
+                return ret < 0 ? 0 : ret;
+            });
+            break;
+        }
 
         case MenuItem::Reset:
             cpu.reset();
