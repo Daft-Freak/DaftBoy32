@@ -275,11 +275,11 @@ const uint8_t *DMGMemory::mapAddress(uint16_t addr) const
     if(addr < 0xFE00)
         return regions[0xD] + addr - 0x2000; //echo (?)
     if(addr < 0xFEA0)
-        return oam;
+        return oam + (addr & 0xFF);
     if(addr < 0xFF00)
         return nullptr;
 
-    return iohram;
+    return iohram + (addr & 0xFF);
 }
 
 void DMGMemory::write(uint16_t addr, uint8_t data)
