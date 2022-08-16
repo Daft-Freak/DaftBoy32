@@ -57,13 +57,13 @@ enum IOReg
 
     IO_VBK = 0x4F,
 
-    IO_RP = 0x56,
-
     IO_HDMA1 = 0x51, // src high
     IO_HDMA2, // src low
     IO_HDMA3, // dest hi
     IO_HDMA4, // dest low
     IO_HDMA5, // len/mode/start
+
+    IO_RP = 0x56,
 
     IO_BCPS = 0x68,
     IO_BCPD,
