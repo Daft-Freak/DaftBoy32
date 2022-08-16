@@ -77,6 +77,9 @@ void DMGCPU::reset()
 
     if(isGBC)
     {
+        mem.writeIOReg(IO_VBK, 0);
+        mem.writeIOReg(IO_SVBK, 0);
+
         // FF on DMG, mem reset doesn't know if we're in CGB mode yet...
         mem.writeIOReg(0x72, 0);
         mem.writeIOReg(0x73, 0);
