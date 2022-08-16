@@ -185,19 +185,19 @@ void DMGCPU::loadSaveState(uint32_t fileLen, std::function<uint32_t(uint32_t, ui
             writeReg(IO_IE, core.ie);
 
             // RAM
-            auto size = std::min(core.ramSize, 0x8000u);
+            auto size = std::min(core.ramSize, UINT32_C(0x8000));
             readFunc(core.ramOff, size, mem.getWRAM());
 
-            size = std::min(core.vramSize, 0x4000u);
+            size = std::min(core.vramSize, UINT32_C(0x4000));
             readFunc(core.vramOff, size, mem.getVRAM());
 
             size = std::min(core.cartRAMSize, static_cast<uint32_t>(mem.getCartridgeRAMSize()));
             readFunc(core.cartRAMOff, size, mem.getCartridgeRAM());
 
-            size = std::min(core.oamSize, 0xA0u);
+            size = std::min(core.oamSize, UINT32_C(0xA0));
             readFunc(core.oamOff, size, mem.getOAM());
 
-            size = std::min(core.hramSize, 127u);
+            size = std::min(core.hramSize, UINT32_C(127));
             uint8_t hram[127];
             readFunc(core.hramOff, size, hram);
             for(auto i = 0u; i < size; i++)
