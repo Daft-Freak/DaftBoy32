@@ -204,8 +204,8 @@ void DMGCPU::loadSaveState(uint32_t fileLen, std::function<uint32_t(uint32_t, ui
             timerEnabled = false; // disable so that no glitches are triggered
             writeReg(IO_TAC, core.ioRegs[IO_TAC]);
 
-            // after all IO, should update interrupt flags in CPU/display
-            writeReg(IO_IE, core.ie);
+            // update interrupt status
+            serviceableInterrupts = core.ioRegs[IO_IF] & core.ie & 0x1F;
 
             // more internals
             if(daftState.version)

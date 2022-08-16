@@ -89,6 +89,10 @@ void DMGDisplay::loadSaveState(BESSCore &bess, DaftState &state, std::function<u
         remainingModeCycles = state.remainingModeCycles;
     }
 
+    // interrupts
+    const auto statInts = STAT_HBlankInt | STAT_VBlankInt | STAT_OAMInt | STAT_CoincidenceInt;
+    interruptsEnabled = (bess.ie & Int_VBlank) || ((bess.ie & Int_LCDStat) && (bess.ioRegs[IO_STAT] & statInts));
+
     lastUpdateCycle = cpu.getCycleCount();
 }
 
