@@ -986,8 +986,8 @@ void DMGAPU::sampleOutput()
     if(outputSelect & 0x80)
         left += ch4Val * leftVol;
 
-    left *= 0x22;
-    right *= 0x22;
+    left *= 0x20;
+    right *= 0x20;
 
     // filter
     int32_t outLeft = 0, outRight = 0;
