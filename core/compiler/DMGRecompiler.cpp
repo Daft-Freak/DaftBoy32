@@ -46,6 +46,9 @@ void DMGRecompiler::handleBranch()
         if(cpu.nextTimerInterrupt)
             cycles = std::min(cycles, static_cast<int>(cpu.nextTimerInterrupt - cpu.cycleCount));
 
+        if(cpu.nextSerialBitCycle)
+            cycles = std::min(cycles, static_cast<int>(cpu.nextSerialBitCycle - cpu.cycleCount));
+
         if(cycles <= 0)
             break;
 
@@ -168,6 +171,9 @@ void DMGRecompiler::handleBranch()
         // sync timer if needed
         if(cpu.nextTimerInterrupt && (static_cast<int>(cpu.nextTimerInterrupt - cpu.cycleCount) <= 0 || cpu.timerReload))
             cpu.updateTimer();
+
+        if(cpu.nextSerialBitCycle)
+            cpu.updateSerial();
 
         // sync display if interrupts enabled
         cpu.display.updateForInterrupts();
@@ -1063,6 +1069,9 @@ int DMGRecompiler::writeMem(DMGCPU *cpu, uint16_t addr, uint8_t data, int cycles
 
     if(cpu->nextTimerInterrupt)
         cycles = std::min(cycles, static_cast<int>(cpu->nextTimerInterrupt - cpu->cycleCount));
+
+    if(cpu->nextSerialBitCycle)
+        cycles = std::min(cycles, static_cast<int>(cpu->nextSerialBitCycle - cpu->cycleCount));
 
     return cycles;
 }
