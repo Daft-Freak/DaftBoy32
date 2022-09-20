@@ -376,8 +376,10 @@ void DMGRecompiler::analyse(uint16_t &pc, BlockInfo &blockInfo)
                 info.flags = Op_WriteH | Op_WriteN;
                 break;
             case 0x37: // SCF
-            case 0x3F: // CCF
                 info.flags = Op_WriteC | Op_WriteH | Op_WriteN;
+                break;
+            case 0x3F: // CCF
+                info.flags = Op_WriteC | Op_WriteH | Op_WriteN | Op_ReadC;
                 break;
             case 0x40: // LD B,B
             case 0x41: // LD B,C
