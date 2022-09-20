@@ -166,7 +166,7 @@ void DMGRecompiler::handleBranch()
         // TODO: duplicated from CPU
 
         // sync timer if needed
-        if(cpu.nextTimerInterrupt && (cpu.nextTimerInterrupt - cpu.cycleCount <= 0 || cpu.timerReload))
+        if(cpu.nextTimerInterrupt && (static_cast<int>(cpu.nextTimerInterrupt - cpu.cycleCount) <= 0 || cpu.timerReload))
             cpu.updateTimer();
 
         // sync display if interrupts enabled
