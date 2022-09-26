@@ -26,7 +26,9 @@ if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
     target_compile_definitions(DaftBoyAdvanceCore INTERFACE RECOMPILER_X86)
 elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
     target_sources(DaftBoyAdvanceCore INTERFACE
+        compiler/AGBRecompiler.cpp
         compiler/ThumbBuilder.cpp
+        compiler/AGBRecompilerThumb.cpp
     )
     target_compile_definitions(DaftBoyAdvanceCore INTERFACE RECOMPILER_THUMB)
 endif()
