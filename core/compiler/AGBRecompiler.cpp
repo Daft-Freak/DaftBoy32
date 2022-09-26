@@ -127,7 +127,7 @@ void AGBRecompiler::handleBranch()
         // code exited with a saved address for re-entry, store PC for later
         if(tmpSavedPtr)
         {
-            auto savedPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 4 : 8);
+            auto savedPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 2 : 4);
 
             // TODO: call exit
             /*if(exitCallFlag)
@@ -171,25 +171,394 @@ void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)
         maxBranch = std::max(maxBranch, target);
     };
 
-    auto pcPtr = std::as_const(mem).mapAddress(pc);
+    auto exit = [&pc, &done, &maxBranch](OpInfo &info)
+    {
+        info.flags |= Op_Exit;
+
+        if(pc > maxBranch)
+            done = true;
+    };
+
+    auto pcPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc));
 
     while(!done)
     {
         uint16_t opcode = *pcPtr++;
+        pc += 2;
 
         OpInfo info{};
         info.opcode = opcode;
 
-        switch(opcode)
+        switch(opcode >> 12)
         {
-            default:
-                printf("invalid op in analysis %04X\n", opcode);
-                info.opcode = ~0u;
-                done = true;
+            case 0x0: // format 1, move shifted
+            case 0x1: // formats 1-2
+            {
+                auto instOp = (opcode >> 11) & 0x3;
+                auto srcReg = (opcode >> 3) & 7;
+                auto dstReg = opcode & 7;
+
+                info.regsRead = 1 << srcReg;
+                info.regsWritten = 1 << dstReg;
+
+                if(instOp == 3) // format 2, add/sub
+                {
+                    bool isImm = opcode & (1 << 10);
+                    if(!isImm)
+                        info.regsRead |= 1 << ((opcode >> 6) & 7);
+
+                    info.flags = Op_WriteN | Op_WriteZ | Op_WriteC | Op_WriteV;
+                }
+                else // format 1, move shifted register
+                {
+                    auto offset = (opcode >> 6) & 0x1F;
+                    info.flags = Op_WriteN | Op_WriteZ;
+
+                    if(offset || instOp != 0) // LSL 0 (op 0) doesn't write C
+                        info.flags |= Op_WriteC;
+                }
+                break;
+            }
+
+            case 0x2: // format 3, mov/cmp immediate
+            case 0x3: // format 3, add/sub immediate
+            {
+                auto instOp = (opcode >> 11) & 0x3;
+                auto dstReg = (opcode >> 8) & 7;
+
+                if(instOp == 0) // MOV
+                {
+                    info.regsWritten = 1 << dstReg;
+                    info.flags = Op_WriteN | Op_WriteZ; // N is cleared
+                }
+                else
+                {
+                    info.regsRead = 1 << dstReg;
+
+                    if(instOp != 1) // CMP
+                        info.regsWritten = 1 << dstReg;
+
+                    info.flags |= Op_WriteN | Op_WriteZ | Op_WriteC | Op_WriteV;
+                }
+                break;
+            }
+
+            case 0x4: // formats 4-6
+            {
+                if(opcode & (1 << 11)) // format 6, PC-relative load
+                {
+                    auto dstReg = (opcode >> 8) & 7;
+
+                    info.regsRead = 1 << 15;
+                    info.regsWritten = 1 << dstReg;
+                    info.flags = Op_Load;
+                }
+                else if(opcode & (1 << 10)) // format 5, Hi reg/branch exchange
+                {
+                    auto op = (opcode >> 8) & 3;
+                    bool h1 = opcode & (1 << 7);
+                    bool h2 = opcode & (1 << 6);
+
+                    auto srcReg = ((opcode >> 3) & 7) + (h2 ? 8 : 0);
+                    auto dstReg = (opcode & 7) + (h1 ? 8 : 0);
+
+                    info.regsRead = 1 << srcReg;
+
+                    if(op == 0 || op == 2) // ADD/ MOV
+                    {
+                        info.regsWritten = 1 << dstReg;
+
+                        if(op == 0) // ADD
+                            info.regsRead |= 1 << dstReg;
+
+                        if(dstReg == 15) // writing PC, exit
+                            exit(info);
+                    }
+                    else if(op == 1) // CMP
+                    {
+                        info.regsRead |= 1 << dstReg;
+                        info.flags = Op_WriteN | Op_WriteZ | Op_WriteC | Op_WriteV; 
+                    }
+                    else if(op == 3) // BX
+                        exit(info);
+                }
+                else // format 4, alu
+                {
+                    auto instOp = (opcode >> 6) & 0xF;
+                    auto srcReg = (opcode >> 3) & 7;
+                    auto dstReg = opcode & 7;
+
+                    info.regsRead = 1 << srcReg | 1 << dstReg;
+                    info.regsWritten = 1 << dstReg;
+
+                    switch(instOp)
+                    {
+                        case 0x0: // AND
+                        case 0x1: // EOR
+                        case 0xC: // ORR
+                        case 0xE: // BIC
+                            info.flags = Op_WriteN | Op_WriteZ;
+                            break;
+
+                        case 0x2: // LSL
+                        case 0x3: // LSR
+                        case 0x4: // ASR
+                        case 0x7: // ROR
+                            info.flags = Op_ReadC | Op_WriteN | Op_WriteZ | Op_WriteC; // FIXME: doesn't write C if shift by 0 (ReadC as workaround)
+                            break;
+
+                        case 0x5: // ADC
+                        case 0x6: // SBC
+                            info.flags = Op_ReadC | Op_WriteN | Op_WriteZ | Op_WriteC | Op_WriteV;
+                            break;
+
+                        case 0x8: // TST
+                            info.regsWritten = 0; // doesn't write
+                            info.flags = Op_WriteN | Op_WriteZ;
+                            break;
+
+                        case 0x9: // NEG
+                            info.regsRead = 1 << srcReg; // dst is not read
+                            info.flags = Op_WriteN | Op_WriteZ | Op_WriteC | Op_WriteV;
+                            break;
+
+                        case 0xA: // CMP
+                        case 0xB: // CMN
+                            info.regsWritten = 0; // doesn't write
+                            info.flags = Op_WriteN | Op_WriteZ | Op_WriteC | Op_WriteV;
+                            break;
+
+                        case 0xD: // MUL
+                            info.flags = Op_WriteN | Op_WriteZ | Op_WriteC; // writes C, but value is "meaningless"
+                            break;
+
+                        case 0xF: // MVN
+                            info.regsRead = 1 << srcReg; // dst is not read
+                            info.flags = Op_WriteN | Op_WriteZ;
+                            break;
+                    }
+                }
+                break;
+            }
+
+            case 0x5: // formats 7-8
+            {
+                auto offReg = (opcode >> 6) & 7;
+                auto baseReg = (opcode >> 3) & 7;
+                auto dstReg = opcode & 7;
+                
+                info.regsRead = (1 << baseReg) | (1 << offReg);
+
+                if(opcode & (1 << 9)) // format 8, load/store sign-extended byte/halfword
+                {
+                    bool hFlag = opcode & (1 << 11);
+                    bool signEx = opcode & (1 << 10);
+
+                    if(signEx || hFlag) // LDRSH/LDRSB or LDRH
+                    {
+                        info.flags = Op_Load;
+                        info.regsWritten = 1 << dstReg;
+                    }
+                    else // STRH
+                    {
+                        info.flags = Op_Store;
+                        info.regsRead |= 1 << dstReg;
+                    }
+                }
+                else // format 7, load/store with reg offset
+                {
+                    bool isLoad = opcode & (1 << 11);
+
+                    if(isLoad)
+                    {
+                        info.flags = Op_Load;
+                        info.regsWritten = 1 << dstReg;
+                    }
+                    else
+                    {
+                        info.flags = Op_Store;
+                        info.regsRead |= 1 << dstReg;
+                    }
+                }
+                break;
+            }
+
+            case 0x6: // format 9, load/store with imm offset (words)
+            case 0x7: // ... (bytes)
+            case 0x8: // format 10, load/store halfword
+            {
+                bool isLoad = opcode & (1 << 11);
+                auto baseReg = (opcode >> 3) & 7;
+                auto dstReg = opcode & 7;
+
+                info.regsRead = 1 << baseReg;
+
+                if(isLoad)
+                {
+                    info.flags = Op_Load;
+                    info.regsWritten = 1 << dstReg;
+                }
+                else
+                {
+                    info.flags = Op_Store;
+                    info.regsRead |= 1 << dstReg;
+                }
+
+                break;
+            }
+
+            case 0x9: // format 11, SP-relative load/store
+            {
+                bool isLoad = opcode & (1 << 11);
+                auto dstReg = (opcode >> 8) & 7;
+
+                info.regsRead = 1 << 13; // SP
+
+                if(isLoad)
+                {
+                    info.flags = Op_Load;
+                    info.regsWritten = 1 << dstReg;
+                }
+                else
+                {
+                    info.flags = Op_Store;
+                    info.regsRead |= 1 << dstReg;
+                }
+
+                break;
+            }
+
+            case 0xA: // format 12, load address
+            {
+                bool isSP = opcode & (1 << 11);
+                auto dstReg = (opcode >> 8) & 7;
+
+                info.regsRead = isSP ? (1 << 13) : (1 << 15);
+                info.regsWritten = 1 << dstReg;
+
+                break;
+            }
+
+            case 0xB: // formats 13-14
+            {
+                if(opcode & (1 << 10)) // format 14, push/pop
+                {
+                    bool isLoad = opcode & (1 << 11);
+                    bool pclr = opcode & (1 << 8); // store LR/load PC
+                    uint8_t regList = opcode & 0xFF;
+
+                    info.regsRead = info.regsWritten = 1 << 13; // SP
+
+                    if(isLoad)
+                    {
+                        info.regsWritten |= regList;
+                        info.flags = Op_Load;
+
+                        if(pclr)
+                            exit(info);
+                    }
+                    else
+                    {
+                        info.regsRead |= regList;
+                        if(pclr)
+                            info.regsRead |= 1 << 14;
+
+                        info.flags = Op_Store;
+                    }
+                }
+                else // format 13, add offset to SP
+                    info.regsRead = info.regsWritten = 1 << 13; // SP
+                break;
+            }
+
+            case 0xC: // format 15, multiple load/store
+            {
+                bool isLoad = opcode & (1 << 11);
+                auto baseReg = (opcode >> 8) & 7;
+                uint8_t regList = opcode & 0xFF;
+
+                info.regsRead = info.regsWritten = 1 << baseReg;
+
+                if(isLoad)
+                {
+                    info.regsWritten |= regList;
+                    info.flags = Op_Load;
+                }
+                else
+                {
+                    info.regsRead |= regList;
+                    info.flags = Op_Store;
+                }
+                break;
+            }
+
+            case 0xD: // formats 16-17, conditional branch + SWI
+            {
+                auto cond = (opcode >> 8) & 0xF;
+                int offset = static_cast<int8_t>(opcode & 0xFF);
+                switch(cond & 0xE) // ignore lowest bit
+                {
+                    case 0x0: // BEQ/BNE
+                        info.flags = Op_ReadZ;
+                        break;
+                    case 0x2: // BCS/BCC
+                        info.flags = Op_ReadC;
+                        break;
+                    case 0x4: // BMI/BPL
+                        info.flags = Op_ReadN;
+                        break;
+                    case 0x6: // BVS/BVC
+                        info.flags = Op_ReadV;
+                        break;
+                    case 0x8: // BHI/BLS
+                        info.flags = Op_ReadZ | Op_ReadC;
+                        break;
+                    case 0xA: // BGE/BLT
+                        info.flags = Op_ReadN | Op_ReadV;
+                        break;
+                    case 0xC: // BGT/BLE
+                        info.flags = Op_ReadN | Op_ReadZ | Op_ReadC;
+                        break;
+                    
+                    case 0xE: // undef/SWI
+                        info.regsWritten = (1 << 14); // LR
+                        exit(info);
+                        break;
+                }
+
+                if(cond != 0xF)
+                {
+                    auto targetAddr = pc + 4 + offset * 2;
+                    info.flags |= Op_Branch;
+                    updateEnd(info, targetAddr);
+                }
+
+                break;
+            }
+
+            case 0xE: // format 18, unconditional branch
+            {
+                info.flags = Op_Branch;
+                if(pc > maxBranch)
+                    done = true;
+                break;
+            }
+
+            case 0xF: // format 19, long branch with link
+            {
+                bool high = opcode & (1 << 11);
+
+                if(!high)
+                    info.regsWritten = (1 << 14); // LR
+                else
+                    info.regsRead = info.regsWritten = (1 << 14); // LR
+
+                info.flags = Op_Exit;
+                break;
+            }
         }
 
-        if(info.opcode != ~0u)
-            blockInfo.instructions.push_back(info);
+        blockInfo.instructions.push_back(info);
     }
 
     auto endPC = pc;
