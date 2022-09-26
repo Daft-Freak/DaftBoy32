@@ -19,4 +19,16 @@ target_sources(DaftBoyAdvanceCore INTERFACE
     AGBMemory.cpp
 )
 
+if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+    target_sources(DaftBoyAdvanceCore INTERFACE
+        compiler/X86Builder.cpp
+    )
+    target_compile_definitions(DaftBoyAdvanceCore INTERFACE RECOMPILER_X86)
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
+    target_sources(DaftBoyAdvanceCore INTERFACE
+        compiler/ThumbBuilder.cpp
+    )
+    target_compile_definitions(DaftBoyAdvanceCore INTERFACE RECOMPILER_THUMB)
+endif()
+
 target_include_directories(DaftBoyAdvanceCore INTERFACE ${CMAKE_CURRENT_LIST_DIR})
