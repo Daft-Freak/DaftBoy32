@@ -69,7 +69,120 @@ bool AGBRecompilerThumb::compileTHUMB(uint8_t *&codePtr, uint32_t pc, BlockInfo 
 
 bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, ThumbBuilder &builder)
 {
-    return false;
+    pc += 2;
+
+    // literal helpers
+    auto loadLiteral = [this, &builder](Reg reg, uint32_t val)
+    {
+        unsigned int index;
+        for(index = 0; index < curLiteral; index++)
+        {
+            if(literals[index] == val)
+                break;
+        }
+
+        if(index == curLiteral)
+        {
+            assert(curLiteral < std::size(literals));
+            literals[curLiteral++] = val;
+        }
+
+        ldrLiteralInstrs.push_back(builder.getPtr());
+        builder.ldr(reg, index << 2); //write literal index, patched later
+    };
+
+    auto outputLiterals = [this, &builder]()
+    {
+        if(!ldrLiteralInstrs.empty())
+        {
+            auto dataPtr = builder.getPtr() + 1/*B*/;
+            if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
+            {
+                // not aligned
+                builder.b(curLiteral * 4 + 2);
+                builder.data(0);
+                dataPtr++;
+            }
+            else // aligned
+                builder.b(curLiteral * 4);
+
+            for(unsigned int i = 0; i < curLiteral; i++)
+            {
+                builder.data(literals[i]);
+                builder.data(literals[i] >> 16);
+            }
+
+            // ran out of space
+            if(builder.getError())
+                return;
+
+            // patch
+            for(auto ptr : ldrLiteralInstrs)
+            {
+                bool t2 = (*ptr & 0xFF7F) == 0xF85F;
+
+                auto start = ptr + 1;
+
+                if(reinterpret_cast<uintptr_t>(start) & 2)
+                    start++;
+
+                if(t2)
+                    ptr++;
+
+                // update LDR imm
+                auto index = *ptr & 0xFF;
+                assert(index < 2);
+
+                auto off = ((dataPtr + index * 2) - start);
+                
+                if(t2)
+                {
+                    off <<= 1;
+                    assert(off < 0xFFF);
+                    *ptr = (*ptr & 0xF000) | off;
+                }
+                else
+                {
+                    off >>= 1;
+                    assert(off <= 0xFF);
+                    *ptr = (*ptr & 0xFF00) | off;
+                }
+            }
+        }
+
+        // reset
+        ldrLiteralInstrs.clear();
+        curLiteral = 0;
+
+        for(auto &literal : literals)
+            literal = 0;
+    };
+
+    auto getOff = [&builder](uint8_t *ptr)
+    {
+        return ptr - reinterpret_cast<uint8_t *>(builder.getPtr());
+    };
+
+    auto oldPtr = builder.getPtr();
+
+    switch(instr.opcode >> 12)
+    {
+
+        default:
+            printf("unhandled op>>12 in recompile %X\n", instr.opcode >> 12);
+            builder.resetPtr(oldPtr);
+            loadLiteral(Reg::R12, pc); // -2 to ignore this instr, +2 for prefetch
+            builder.bl(getOff(exitPtr));
+            outputLiterals();
+            return false;
+    }
+
+    // output literals if ~close to the limit or this is the last instruction
+    // TODO: adjust this? (T2 encoding has x4 range forwards and can index backwards)
+    if((instr.flags & Op_Last) || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460))
+        outputLiterals();
+
+    return true;
 }
 
 void AGBRecompilerThumb::compileEntry()

@@ -158,13 +158,26 @@ void ThumbBuilder::ldr(LowReg t, LowReg n, uint8_t imm)
 }
 
 // literal
-void ThumbBuilder::ldr(LowReg t, uint16_t imm)
+void ThumbBuilder::ldr(Reg t, int16_t imm)
 {
     assert((imm & 3) == 0);
     assert(imm <= 1020);
 
-    int reg = static_cast<int>(t.val);
-    write(0x4800 | reg << 8 | imm >> 2);
+    int reg = static_cast<int>(t);
+
+    if(reg < 8 && imm > 0 && imm <= 1020 && !(imm & 3))
+        write(0x4800 | reg << 8 | imm >> 2);
+    else
+    {
+        bool u = imm >= 0;
+        if(!u)
+            imm = -imm;
+
+        assert(imm <= 4095);
+
+        write(0xF85F | (u ? (1 << 7) : 0));
+        write(reg << 12 | imm);
+    }
 }
 
 // imm

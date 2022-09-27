@@ -91,7 +91,7 @@ public:
     void ldm(uint16_t regList, Reg n, bool w = false); // v7M
 
     void ldr(LowReg t, LowReg n, uint8_t imm);
-    void ldr(LowReg t, uint16_t imm);
+    void ldr(Reg t, int16_t imm); // v7M if t >= 8 || imm < 0 || imm > 1020 || imm & 3
 
     void ldrb(LowReg t, LowReg n, uint8_t imm);
 
