@@ -569,31 +569,12 @@ void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)
     // cleanup
     pc = startPC;
 
-    // TODO: we end up scanning for branch targets a lot
-    auto findBranchTarget = [&blockInfo](uint16_t pc, uint16_t target, std::vector<OpInfo>::iterator it)
+    auto getBranchTarget = [](uint32_t pc, const OpInfo &instr)
     {
-        auto searchPC = pc;
-        if(target < pc)
-        {
-            auto prevIt = std::make_reverse_iterator(it + 1);
-    
-            for(; prevIt != blockInfo.instructions.rend() && searchPC >= target; ++prevIt)
-            {
-                searchPC -= 2;
-                if(searchPC == target)
-                    return prevIt.base() - 1;
-            }
-        }
-        else
-        {
-            for(auto nextIt = it + 1; nextIt != blockInfo.instructions.end() && searchPC <= target; searchPC += 2, ++nextIt)
-            {
-                if(searchPC == target)
-                    return nextIt;
-            }
-        }
-
-        return blockInfo.instructions.end();
+        if((instr.opcode >> 12) == 0xD) // conditional
+            return pc + 4 + static_cast<int8_t>(instr.opcode & 0xFF) * 2;
+        else // == 0xE, unconditional
+            return pc + 4 + (static_cast<int16_t>(instr.opcode << 5) >> 4); // sign extend and * 2
     };
 
     std::vector<uint8_t> origFlags; // there aren't enough bits in ->flags...
@@ -638,13 +619,13 @@ void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)
                     bool isConditional = next->flags & Op_ReadFlags;
 
                     // TODO:
-                    uint32_t target = 0;
-                    //auto targetInstr = findBranchTarget(nextPC, target, next);
-                    auto targetInstr = blockInfo.instructions.end();
+                    uint32_t target = getBranchTarget(nextPC, *next);
 
                     // bad branch, give up
-                    if(targetInstr == blockInfo.instructions.end())
+                    if(target < startPC || target >= endPC)
                         break;
+
+                    auto targetInstr = next + (target - pc) / 2 + 1;
 
                     if(!isConditional)
                     {
@@ -686,8 +667,7 @@ void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)
 
         if(instr.flags & Op_Branch)
         {
-            // TODO: get target
-            uint32_t target = startPC - 1;
+            uint32_t target = getBranchTarget(pc, instr);
 
             // not reachable, convert to exit
             if(target < startPC || target >= endPC)
@@ -698,17 +678,8 @@ void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)
             else
             {
                 // find and mark target
-                auto targetInstr = findBranchTarget(pc, target, it);
-
-                if(targetInstr != blockInfo.instructions.end())
-                    targetInstr->flags |= Op_BranchTarget;
-                else
-                {
-                    // failed to find target
-                    // may happen if there's a jump over some data
-                    instr.flags &= ~Op_Branch;
-                    instr.flags |= Op_Exit;
-                }
+                auto targetInstr = it + (target - pc) / 2 + 1;
+                targetInstr->flags |= Op_BranchTarget;
             }
         }
     }
