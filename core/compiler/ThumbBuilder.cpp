@@ -254,6 +254,14 @@ void ThumbBuilder::mov(Reg d, Reg m)
     write(0x4600 | (dReg & 8) << 4 | mReg << 3 | (dReg & 7));
 }
 
+void ThumbBuilder::mrs(Reg d, uint8_t sysm)
+{
+    int dReg = static_cast<int>(d);
+
+    write(0xF3EF);
+    write(0x8000 | (dReg << 8) | sysm);
+}
+
 void ThumbBuilder::mvn(LowReg d, LowReg m)
 {
     int dReg = static_cast<int>(d.val);

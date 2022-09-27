@@ -165,16 +165,57 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
     auto oldPtr = builder.getPtr();
 
+    auto passThrough = [&instr, &builder]()
+    {
+        builder.data(instr.opcode);
+
+        if(instr.flags & Op_WriteFlags)
+            builder.mrs(Reg::R11, 0); // CPSR
+    };
+
+    auto fail = [&]()
+    {
+        builder.resetPtr(oldPtr);
+        loadLiteral(Reg::R12, pc); // -2 to ignore this instr, +2 for prefetch
+        builder.bl(getOff(exitPtr));
+        outputLiterals();
+        return false;
+    };
+
     switch(instr.opcode >> 12)
     {
+        case 0x0: // format 1, move shifted
+        case 0x1: // formats 1-2
+        {
+            auto instOp = (instr.opcode >> 11) & 0x3;
+            auto offset = (instr.opcode >> 6) & 0x1F; // for shift
+            if(instOp == 0 && offset == 0)
+            {
+                printf("unhandled LSL 0\n");
+                return fail(); // TODO: preserve C
+            }
+            
+            passThrough();
+            break;
+        }
+
+        case 0x2: // format 3, mov/cmp immediate
+        case 0x3: // format 3, add/sub immediate
+        {
+            auto instOp = (instr.opcode >> 11) & 0x3;
+            if(instOp == 0)
+            {
+                printf("unhandled MOV imm\n");
+                return fail(); // TODO: preserve C/V
+            }
+
+            passThrough();
+            break;
+        }
 
         default:
             printf("unhandled op>>12 in recompile %X\n", instr.opcode >> 12);
-            builder.resetPtr(oldPtr);
-            loadLiteral(Reg::R12, pc); // -2 to ignore this instr, +2 for prefetch
-            builder.bl(getOff(exitPtr));
-            outputLiterals();
-            return false;
+            return fail();
     }
 
     // output literals if ~close to the limit or this is the last instruction
