@@ -572,9 +572,9 @@ void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)
     auto getBranchTarget = [](uint32_t pc, const OpInfo &instr)
     {
         if((instr.opcode >> 12) == 0xD) // conditional
-            return pc + 4 + static_cast<int8_t>(instr.opcode & 0xFF) * 2;
+            return pc + 2 + static_cast<int8_t>(instr.opcode & 0xFF) * 2;
         else // == 0xE, unconditional
-            return pc + 4 + (static_cast<int16_t>(instr.opcode << 5) >> 4); // sign extend and * 2
+            return pc + 2 + (static_cast<int16_t>(instr.opcode << 5) >> 4); // sign extend and * 2
     };
 
     std::vector<uint8_t> origFlags; // there aren't enough bits in ->flags...
