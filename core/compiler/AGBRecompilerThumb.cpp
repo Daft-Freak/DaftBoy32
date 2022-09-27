@@ -79,22 +79,28 @@ void AGBRecompilerThumb::compileEntry()
 
     auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
 
-    builder.push(0, true); // LR
+    builder.push(0b0100111111110000); // R4-11, LR
     
     // set the low bit so we stay in thumb mode
-    builder.mov(Reg::R2, 1);
-    builder.orr(Reg::R1, Reg::R2);
+    builder.orr(Reg::R12, Reg::R1, 1);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 20);
-    builder.mov(Reg::R8, Reg::R2);
+    builder.ldr(Reg::R2, 28);
+    builder.mov(Reg::R9, Reg::R2);
 
-    // TODO: load emu regs
+    builder.mov(Reg::R10, Reg::R0); // cycle count
 
-    builder.bx(Reg::R1);
+    // load emu regs
+    // the first 8 are never banked
+    int regsOff = reinterpret_cast<uintptr_t>(&cpu.regs) - cpuPtr;
+    builder.add(Reg::R2, regsOff); // add to cpu ptr
+    builder.mov(Reg::R8, Reg::R2); // store regs ptr
+    builder.ldm(0xFF, Reg::R2, false);
+
+    builder.bx(Reg::R12);
 
     // exit setting the call flag ... and saving LR
-    exitForCallPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
+    /*exitForCallPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
     builder.mov(Reg::R0, 1);
     builder.ldr(Reg::R2, 16);
     builder.strb(Reg::R0, Reg::R2, 0);
@@ -103,18 +109,20 @@ void AGBRecompilerThumb::compileEntry()
     saveAndExitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
     builder.mov(Reg::R0, Reg::LR);
-    builder.ldr(Reg::R2, 12);
-    builder.str(Reg::R0, Reg::R2, 0);
+    builder.ldr(Reg::R2, 16);
+    builder.str(Reg::R0, Reg::R2, 0);*/
 
     // exit
     exitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
-    // TODO:
-    // store PC
-    // store SP
     // save emu regs
+    builder.stm(0xFF, Reg::R8, false);
+
+    // store PC
+    builder.str(Reg::R12, Reg::R8, 4 * 15);
 
     // restore regs and return
+    builder.pop(0b0000111111110000); // R4-11
     builder.pop(0, true); // PC
 
     entryFunc = reinterpret_cast<CompiledFunc>(codeBuf + 1/*thumb*/);

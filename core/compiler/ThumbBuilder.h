@@ -88,6 +88,8 @@ public:
 
     void eor(LowReg dn, LowReg m);
 
+    void ldm(uint16_t regList, Reg n, bool w = false); // v7M
+
     void ldr(LowReg t, LowReg n, uint8_t imm);
     void ldr(LowReg t, uint16_t imm);
 
@@ -108,12 +110,17 @@ public:
     void nop();
 
     void orr(LowReg d, LowReg m);
+    void orr(Reg d, Reg n, uint8_t imm, bool s = false); // v7M
 
     void pop(uint8_t regList, bool pc);
+    void pop(uint16_t regList); // v7M
 
     void push(uint8_t regList, bool lr);
+    void push(uint16_t regList); // v7M
 
-    void str(LowReg t, LowReg n, uint8_t imm);
+    void stm(uint16_t regList, Reg n, bool w = false); // v7M
+
+    void str(Reg t, Reg n, uint16_t imm); // v7M if t/n >= 8 || imm > 124 || imm & 3
 
     void strb(LowReg t, LowReg n, uint8_t imm);
 
