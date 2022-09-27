@@ -315,9 +315,6 @@ void ThumbBuilder::stm(uint16_t regList, Reg n, bool w)
 // imm
 void ThumbBuilder::str(Reg t, Reg n, uint16_t imm)
 {
-    assert((imm & 3) == 0);
-    assert(imm <= 124);
-
     int tReg = static_cast<int>(t);
     int nReg = static_cast<int>(n);
 
