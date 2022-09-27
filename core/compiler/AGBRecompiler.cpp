@@ -54,7 +54,7 @@ void AGBRecompiler::handleBranch()
    
         uint8_t *codePtr = nullptr;
 
-        auto cpuPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 4 : 8);
+        auto cpuPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 2 : 4);
 
         // attempt to re-enter previous code
         int savedIndex = curSavedExit - 1;
@@ -154,6 +154,15 @@ void AGBRecompiler::handleBranch()
 
         if(cpu.currentInterrupts)
             break;
+    }
+
+    // if we executed anything, we need to refill the pipeline
+    if(cpu.cpsr & AGBCPU::Flag_T)
+    {
+        auto pc = cpu.loReg(AGBCPU::Reg::PC) - 2;
+        auto thumbPCPtr = reinterpret_cast<const uint16_t *>(cpu.pcPtr + pc);
+        cpu.decodeOp = *thumbPCPtr++;
+        cpu.fetchOp = *thumbPCPtr;
     }
 }
 
