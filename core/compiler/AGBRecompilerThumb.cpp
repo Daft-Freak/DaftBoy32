@@ -198,10 +198,14 @@ void AGBRecompilerThumb::compileEntry()
     builder.orr(Reg::R12, Reg::R1, 1);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 28);
+    builder.ldr(Reg::R2, 48);
     builder.mov(Reg::R9, Reg::R2);
 
     builder.mov(Reg::R10, Reg::R0); // cycle count
+
+    // load CPSR
+    int cpsrOff = reinterpret_cast<uintptr_t>(&cpu.cpsr) - cpuPtr;
+    builder.ldr(Reg::R11, Reg::R9, cpsrOff);
 
     // load emu regs
     // the first 8 are never banked
@@ -233,6 +237,14 @@ void AGBRecompilerThumb::compileEntry()
 
     // store PC
     builder.str(Reg::R12, Reg::R8, 4 * 15);
+
+    // update CPSR
+    builder.ldr(Reg::R0, Reg::R9, cpsrOff); // load old
+    builder.mov(Reg::R1, 0xFF);
+    builder.and_(Reg::R0, Reg::R1);
+
+    builder.orr(Reg::R11, Reg::R11, Reg::R0);
+    builder.str(Reg::R11, Reg::R9, cpsrOff);
 
     // restore regs and return
     builder.pop(0b0000111111110000); // R4-11

@@ -147,14 +147,21 @@ void ThumbBuilder::ldm(uint16_t regList, Reg n, bool w)
 }
 
 // imm
-void ThumbBuilder::ldr(LowReg t, LowReg n, uint8_t imm)
+void ThumbBuilder::ldr(Reg t, Reg n, uint16_t imm)
 {
-    assert((imm & 3) == 0);
-    assert(imm <= 124);
+    int tReg = static_cast<int>(t);
+    int nReg = static_cast<int>(n);
 
-    int tReg = static_cast<int>(t.val);
-    int nReg = static_cast<int>(n.val);
-    write(0x6800 | (imm >> 2) << 6 | nReg << 3 | tReg);
+    if(tReg < 8 && nReg < 8 && !(imm & 0xFF83))
+        write(0x6800 | (imm >> 2) << 6 | nReg << 3 | tReg);
+    else
+    {
+        assert(n != Reg::PC);
+        assert(imm <= 4095);
+
+        write(0xF8D0 | nReg);
+        write(tReg << 12 | imm);
+    }
 }
 
 // literal
@@ -264,6 +271,20 @@ void ThumbBuilder::orr(LowReg d, LowReg m)
     int dReg = static_cast<int>(d.val);
     int mReg = static_cast<int>(m.val);
     write(0x4300 | mReg << 3 | dReg);
+}
+
+void ThumbBuilder::orr(Reg d, Reg n, Reg m, bool s)
+{
+    assert(n != Reg::PC);
+
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    // TODO: shifted?
+    
+    write(0xEA40 | (s ? (1 << 4) : 0) | nReg);
+    write(dReg << 8 | mReg);
 }
 
 void ThumbBuilder::orr(Reg d, Reg n, uint8_t imm, bool s)
