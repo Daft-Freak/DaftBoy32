@@ -101,6 +101,8 @@ void AGBRecompiler::handleBranch()
 
                 FuncInfo info{};
 
+                info.cpsrMode = cpu.cpsr & 0x1F;
+
                 if(compileTHUMB(ptr, cpuPC, blockInfo))
                 {
                     info.startPtr = startPtr;
@@ -110,7 +112,10 @@ void AGBRecompiler::handleBranch()
                 
                 it = compiled.emplace(cpuPC, info).first;
             }
-            codePtr = it->second.startPtr;
+
+            // reject code if compiled for a different CPU mode
+            if(it->second.cpsrMode == (cpu.cpsr & 0x1F))
+                codePtr = it->second.startPtr;
         }
 
         auto startCycleCount = cpu.cycleCount;

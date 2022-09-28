@@ -87,6 +87,7 @@ protected:
         uint8_t *startPtr;
         uint8_t *endPtr;
         uint32_t endPC;
+        uint8_t cpsrMode;
     };
 
     std::map<uint32_t, FuncInfo> compiled;
