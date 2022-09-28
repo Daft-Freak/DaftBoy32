@@ -193,9 +193,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         case 0x1: // formats 1-2
         {
             auto instOp = (instr.opcode >> 11) & 0x3;
-            auto offset = (instr.opcode >> 6) & 0x1F; // for shift
-            if(instOp == 0 && offset == 0 && (instr.flags & Op_WriteFlags))
-                flagsIn(); // LSL 0, preserve C
+            if(instOp != 3 && (instr.flags & Op_WriteFlags))
+                flagsIn(); // MOV (shift), preserve V (and C for LSL 0)
             
             passThrough();
             break;
