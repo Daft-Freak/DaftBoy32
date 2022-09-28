@@ -211,6 +211,40 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x4: // formats 4-6
+        {
+            if(instr.opcode & (1 << 11)) // format 6, PC-relative load
+            {
+                printf("unhandled format 6 in recompile\n");
+                return fail();
+            }
+            else if(instr.opcode & (1 << 10)) // format 5, Hi reg/branch exchange
+            {
+                auto op = (instr.opcode >> 8) & 3;
+                bool h1 = instr.opcode & (1 << 7);
+                bool h2 = instr.opcode & (1 << 6);
+
+                if(op == 3/*BX*/ || h1 || h2)
+                {
+                    printf("unhandled format 5 in recompile (%s)\n", op == 3 ? "BX" : "hi");
+                    return fail();
+                }
+
+                passThrough();
+            }
+            else // format 4, alu
+            {
+                // most ops here either use or preserve some flags
+                // TODO: NEG/CMP/CMN don't
+                if(instr.flags & (Op_ReadFlags | Op_WriteFlags))
+                    flagsIn();
+
+                passThrough();
+            }
+
+            break;
+        }
+
         default:
             printf("unhandled op>>12 in recompile %X\n", instr.opcode >> 12);
             return fail();
