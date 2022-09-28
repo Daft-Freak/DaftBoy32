@@ -158,12 +158,11 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             literal = 0;
     };
 
-    auto getOff = [&builder](uint8_t *ptr)
+    auto exit = [&builder](uint8_t *ptr)
     {
-        return ptr - reinterpret_cast<uint8_t *>(builder.getPtr());
+        auto off = ptr - reinterpret_cast<uint8_t *>(builder.getPtr());
+        builder.bl(off);
     };
-
-    auto oldPtr = builder.getPtr();
 
     auto flagsIn = [&builder]()
     {
@@ -178,11 +177,13 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             builder.mrs(Reg::R11, 0); // CPSR
     };
 
+    auto oldPtr = builder.getPtr();
+
     auto fail = [&]()
     {
         builder.resetPtr(oldPtr);
         loadLiteral(Reg::R12, pc); // -2 to ignore this instr, +2 for prefetch
-        builder.bl(getOff(exitPtr));
+        exit(exitPtr);
         outputLiterals();
         return false;
     };
