@@ -165,6 +165,11 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
     auto oldPtr = builder.getPtr();
 
+    auto flagsIn = [&builder]()
+    {
+        builder.msr(Reg::R11, 2, 0); // CPSR
+    };
+
     auto passThrough = [&instr, &builder]()
     {
         builder.data(instr.opcode);
@@ -189,11 +194,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         {
             auto instOp = (instr.opcode >> 11) & 0x3;
             auto offset = (instr.opcode >> 6) & 0x1F; // for shift
-            if(instOp == 0 && offset == 0)
-            {
-                printf("unhandled LSL 0\n");
-                return fail(); // TODO: preserve C
-            }
+            if(instOp == 0 && offset == 0 && (instr.flags & Op_WriteFlags))
+                flagsIn(); // LSL 0, preserve C
             
             passThrough();
             break;
@@ -203,11 +205,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         case 0x3: // format 3, add/sub immediate
         {
             auto instOp = (instr.opcode >> 11) & 0x3;
-            if(instOp == 0)
-            {
-                printf("unhandled MOV imm\n");
-                return fail(); // TODO: preserve C/V
-            }
+            if(instOp == 0 && (instr.flags & Op_WriteFlags))
+                flagsIn(); // MOV, preverve C/V
 
             passThrough();
             break;

@@ -106,6 +106,7 @@ public:
     void mov(Reg d, Reg m);
 
     void mrs(Reg d, uint8_t sysm);
+    void msr(Reg n, uint8_t mask, uint8_t sysm);
 
     void mvn(LowReg d, LowReg m);
 
