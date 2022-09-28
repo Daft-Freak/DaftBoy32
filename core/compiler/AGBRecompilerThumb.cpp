@@ -224,13 +224,61 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 bool h1 = instr.opcode & (1 << 7);
                 bool h2 = instr.opcode & (1 << 6);
 
-                if(op == 3/*BX*/ || h1 || h2)
+                if(op == 3/*BX*/)
                 {
-                    printf("unhandled format 5 in recompile (%s)\n", op == 3 ? "BX" : "hi");
+                    printf("unhandled BX in recompile \n");
                     return fail();
                 }
 
-                passThrough();
+                if(h1 || h2)
+                {
+                    auto srcReg = static_cast<Reg>(((instr.opcode >> 3) & 7) + (h2 ? 8 : 0));
+                    auto dstReg = static_cast<Reg>((instr.opcode & 7) + (h1 ? 8 : 0));
+
+                    int dstRegIndex = 0;
+
+                    if(srcReg == Reg::PC || dstReg == Reg::PC)
+                    {
+                        printf("unhandled format 5 in recompile (PC access)\n");
+                        return fail();
+                    }
+
+                    // remap regs
+                    // (need to load anything > 8)
+                    if(h1)
+                    {
+                        dstRegIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(dstReg)));
+
+                        if(op != 2/*MOV*/)
+                            builder.ldr(Reg::R12, Reg::R8/*regs*/, dstRegIndex * 4);
+
+                        dstReg = Reg::R12;
+                    }
+
+                    if(h2)
+                    {
+                        int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(srcReg)));
+                        builder.ldr(Reg::R14, Reg::R8/*regs*/, regIndex * 4);
+                        srcReg = Reg::R14;
+                    }
+
+                    // then output ~the same instruction
+                    if(op == 0) // ADD
+                        builder.add(dstReg, srcReg);
+                    else if(op == 1) // CMP
+                        builder.cmp(dstReg, srcReg);
+                    else if(op == 2) // MOV
+                        builder.mov(dstReg, srcReg);
+
+                    // store back
+                    if(h1 && op != 1/*CMP*/)
+                        builder.str(dstReg, Reg::R8/*regs*/, dstRegIndex * 4);
+
+                    if(instr.flags & Op_WriteFlags) // only CMP
+                        builder.mrs(Reg::R11, 0); // CPSR
+                }
+                else
+                    passThrough();
             }
             else // format 4, alu
             {
