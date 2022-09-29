@@ -764,4 +764,18 @@ void AGBRecompiler::printInfo(BlockInfo &blockInfo)
     }
 }
 
-// TODO: wrappers around member funcs
+// wrappers around member funcs
+uint8_t AGBRecompiler::readMem8(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential)
+{
+    return cpu->readMem8(addr, cycles, sequential);
+}
+
+uint16_t AGBRecompiler::readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential)
+{
+    return cpu->readMem16(addr, cycles, sequential);
+}
+
+uint32_t AGBRecompiler::readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential)
+{
+    return cpu->readMem32(addr, cycles, sequential);
+}

@@ -164,6 +164,52 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             literal = 0;
     };
 
+    // function call helpers
+    auto readMem = [&builder, &loadLiteral](std::variant<Reg, uint32_t> addr, Reg dst, int width, bool sequential = false)
+    {
+        builder.push(0b1111, false); // R0-3
+
+        // address
+        if(std::holds_alternative<Reg>(addr))
+            builder.mov(Reg::R1, std::get<Reg>(addr));
+        else
+            loadLiteral(Reg::R1, std::get<uint32_t>(addr));
+
+        builder.mov(Reg::R0, Reg::R9); // CPU ptr
+        builder.add(Reg::R2, Reg::SP, 16); // cycles out
+        builder.mov(Reg::R3, sequential);
+
+        // get func pointer
+        // TODO: use aligned if address known and aligned
+        uintptr_t funcPtr;
+        if(width == 8)
+            funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::readMem8);
+        else if(width == 16)
+            funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::readMem16);
+        else
+        {
+            assert(width == 32);
+            funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::readMem32);
+        }
+
+        // call
+        loadLiteral(Reg::R12, funcPtr);
+        builder.blx(Reg::R12);
+
+        // move to dst... or tmp
+        if(static_cast<int>(dst) > 3)
+            builder.mov(dst, Reg::R0);
+        else
+            builder.mov(Reg::R12, Reg::R0);
+
+        builder.pop(0b1111, false); // R0-3
+
+        // REALLY move to dst
+        if(static_cast<int>(dst) <= 3)
+            builder.mov(dst, Reg::R12);
+    };
+
+    // output helpers
     auto exit = [&builder](uint8_t *ptr)
     {
         auto off = ptr - reinterpret_cast<uint8_t *>(builder.getPtr());
@@ -222,8 +268,12 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         {
             if(instr.opcode & (1 << 11)) // format 6, PC-relative load
             {
-                printf("unhandled format 6 in recompile\n");
-                return fail();
+                auto dstReg = static_cast<Reg>((instr.opcode >> 8) & 7);
+                uint8_t word = instr.opcode & 0xFF;
+
+                auto addr = ((pc + 2) & ~2) + (word << 2);
+                // TODO: could inline this?
+                readMem(addr, dstReg, 32);
             }
             else if(instr.opcode & (1 << 10)) // format 5, Hi reg/branch exchange
             {

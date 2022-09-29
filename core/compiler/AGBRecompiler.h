@@ -72,8 +72,10 @@ protected:
 
     virtual void compileEntry() = 0;
 
+    static uint8_t readMem8(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential);
+    static uint16_t readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential);
+    static uint32_t readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential);
     // TODO
-    //static uint8_t readMem(AGBCPU *cpu, uint16_t addr);
     //static int writeMem(AGBCPU *cpu, uint16_t addr, uint8_t data, int cyclesToRun);
 
     uint8_t *codeBuf = nullptr, *curCodePtr;

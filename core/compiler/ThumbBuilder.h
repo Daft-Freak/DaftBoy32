@@ -66,6 +66,7 @@ public:
     void adc(LowReg dn, LowReg m);
 
     void add(Reg dn, uint8_t imm);
+    void add(LowReg d, Reg n, uint8_t imm);
     void add(LowReg d, LowReg n, LowReg m);
     void add(Reg dn, Reg m);
 
