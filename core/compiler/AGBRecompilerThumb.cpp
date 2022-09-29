@@ -126,19 +126,25 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 if(reinterpret_cast<uintptr_t>(start) & 2)
                     start++;
 
-                if(t2)
-                    ptr++;
 
-                // update LDR imm
-                auto index = *ptr & 0xFF;
-                assert(index < 2);
+                // get back the index (we encoded it in the immediate value)
+                unsigned int index;
+
+                if(t2)
+                    index = (*(ptr + 1) & 0xFFF) >> 2;
+                else
+                    index = *ptr & 0xFF;
+
+                assert(index < std::size(literals));
 
                 auto off = ((dataPtr + index * 2) - start);
                 
+                // update LDR imm
                 if(t2)
                 {
                     off <<= 1;
                     assert(off < 0xFFF);
+                    ptr++;
                     *ptr = (*ptr & 0xF000) | off;
                 }
                 else
@@ -301,7 +307,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
     // output literals if ~close to the limit or this is the last instruction
     // TODO: adjust this? (T2 encoding has x4 range forwards and can index backwards)
-    if((instr.flags & Op_Last) || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460))
+    const int minLiterals = 1;
+    if((instr.flags & Op_Last) || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460) || curLiteral + minLiterals > std::size(literals))
         outputLiterals();
 
     return true;

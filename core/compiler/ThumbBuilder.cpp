@@ -175,12 +175,9 @@ void ThumbBuilder::ldr(Reg t, Reg n, uint16_t imm)
 // literal
 void ThumbBuilder::ldr(Reg t, int16_t imm)
 {
-    assert((imm & 3) == 0);
-    assert(imm <= 1020);
-
     int reg = static_cast<int>(t);
 
-    if(reg < 8 && imm > 0 && imm <= 1020 && !(imm & 3))
+    if(reg < 8 && imm >= 0 && imm <= 1020 && !(imm & 3))
         write(0x4800 | reg << 8 | imm >> 2);
     else
     {
