@@ -27,21 +27,24 @@ void ThumbBuilder::add(Reg dn, uint8_t imm)
 }
 
 //imm
-void ThumbBuilder::add(LowReg d, Reg n, uint8_t imm)
+void ThumbBuilder::add(Reg d, Reg n, uint8_t imm)
 {
-    int dReg = static_cast<int>(d.val);
+    int dReg = static_cast<int>(d);
     int nReg = static_cast<int>(n);
-    if(n == Reg::SP)
+    if(n == Reg::SP && dReg < 8)
     {
         // TODO: imm can be 0-1020
         assert((imm & 3) == 0);
         write(0xA800 | dReg << 8 | imm >> 2);
     }
+    else if(dReg < 8 && nReg < 8 && imm < 8)
+        write(0x1C00 | imm << 6 | nReg << 3 | dReg);
     else
     {
-        assert(nReg < 8);
-        assert(imm < 8);
-        write(0x1C00 | imm << 6 | nReg << 3 | dReg);
+        //TODO: "expanded" imm
+        bool s = true; // TODO
+        write(0xF100 | (s ? (1 << 8) : 0) | nReg);
+        write(dReg << 8 | imm);
     }
 }
 

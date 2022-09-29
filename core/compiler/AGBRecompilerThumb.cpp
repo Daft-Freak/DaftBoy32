@@ -350,6 +350,37 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x6: // format 9, load/store with imm offset (words)
+        case 0x7: // ... (bytes)
+        case 0x8: // format 10, load/store halfword
+        {
+            int width;
+            if((instr.opcode >> 12) == 0x6)
+                width = 32;
+            else if((instr.opcode >> 12) == 0x8)
+                width = 16;
+            else
+                width = 8;
+
+            auto baseReg = static_cast<Reg>((instr.opcode >> 3) & 7);
+            auto dstReg = static_cast<Reg>(instr.opcode & 7);
+            auto offset = ((instr.opcode >> 6) & 0x1F);
+
+            offset <<= (width / 16);
+
+            if(instr.flags & Op_Load)
+            {
+                builder.add(Reg::R12, baseReg, offset);
+                readMem(Reg::R12, dstReg, width);
+            }
+            else
+            {
+                printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
+                return fail();
+            }
+            break;
+        }
+
         default:
             printf("unhandled op>>12 in recompile %X\n", instr.opcode >> 12);
             return fail();
