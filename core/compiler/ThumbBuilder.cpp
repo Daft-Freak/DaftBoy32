@@ -10,10 +10,20 @@ void ThumbBuilder::adc(LowReg dn, LowReg m)
 }
 
 // imm
-void ThumbBuilder::add(LowReg dn, uint8_t imm)
+void ThumbBuilder::add(Reg dn, uint8_t imm)
 {
-    int dnReg = static_cast<int>(dn.val);
-    write(0x3000 | dnReg << 8 | imm);
+    int dnReg = static_cast<int>(dn);
+    if(dn == Reg::SP)
+    {
+        // TODO: imm can be 0-508
+        assert((imm & 3) == 0);
+        write(0xB000 | imm >> 2);
+    }
+    else
+    {
+        assert(dnReg < 8);
+        write(0x3000 | dnReg << 8 | imm);
+    }
 }
 
 // reg
@@ -407,10 +417,19 @@ void ThumbBuilder::sbc(LowReg dn, LowReg m)
 }
 
 // imm
-void ThumbBuilder::sub(LowReg dn, uint8_t imm)
+void ThumbBuilder::sub(Reg dn, uint8_t imm)
 {
-    int dnReg = static_cast<int>(dn.val);
-    write(0x3800 | dnReg << 8 | imm);
+    int dnReg = static_cast<int>(dn);
+    if(dn == Reg::SP)
+    {
+        assert((imm & 3) == 0);
+        write(0xB080 | imm >> 2);
+    }
+    else
+    {
+        assert(dnReg < 8);
+        write(0x3800 | dnReg << 8 | imm);
+    }
 }
 
 // reg

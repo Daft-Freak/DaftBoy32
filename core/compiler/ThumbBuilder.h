@@ -65,7 +65,7 @@ public:
 
     void adc(LowReg dn, LowReg m);
 
-    void add(LowReg dn, uint8_t imm);
+    void add(Reg dn, uint8_t imm);
     void add(LowReg d, LowReg n, LowReg m);
     void add(Reg dn, Reg m);
 
@@ -134,7 +134,7 @@ public:
 
     void sbc(LowReg dn, LowReg m);
 
-    void sub(LowReg dn, uint8_t imm);
+    void sub(Reg dn, uint8_t imm);
     void sub(LowReg d, LowReg n, LowReg m);
 
     void sxtb(LowReg d, LowReg m);

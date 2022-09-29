@@ -322,12 +322,14 @@ void AGBRecompilerThumb::compileEntry()
     auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
 
     builder.push(0b0100111111110000); // R4-11, LR
+
+    builder.sub(Reg::SP, 4); // make room for cycles temp (for read/write)
     
     // set the low bit so we stay in thumb mode
     builder.orr(Reg::R12, Reg::R1, 1);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 48);
+    builder.ldr(Reg::R2, 52);
     builder.mov(Reg::R9, Reg::R2);
 
     builder.mov(Reg::R10, Reg::R0); // cycle count
@@ -374,6 +376,8 @@ void AGBRecompilerThumb::compileEntry()
 
     builder.orr(Reg::R11, Reg::R11, Reg::R0);
     builder.str(Reg::R11, Reg::R9, cpsrOff);
+
+    builder.add(Reg::SP, 4);
 
     // restore regs and return
     builder.pop(0b0000111111110000); // R4-11
