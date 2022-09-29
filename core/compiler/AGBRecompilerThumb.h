@@ -17,8 +17,7 @@ private:
     void compileEntry() override;
 
     // literals
-    // (we only need two so far)
-    uint32_t literals[2]{};
+    uint32_t literals[8]{};
 
     unsigned int curLiteral = 0;
     std::vector<uint16_t *> ldrLiteralInstrs;
