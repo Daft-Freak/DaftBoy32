@@ -147,6 +147,8 @@ public:
     // not an instruction
     void data(uint16_t d);
 
+    bool isValidModifiedImmediate(uint32_t val);
+
     uint16_t *getPtr() const {return ptr;}
 
     void resetPtr(uint16_t *oldPtr);
@@ -155,6 +157,8 @@ public:
 
 private:
     void write(uint16_t hw);
+
+    uint32_t encodeModifiedImmediate(uint32_t val);
 
     uint16_t *ptr, *endPtr;
 
