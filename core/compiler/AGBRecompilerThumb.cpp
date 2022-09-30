@@ -315,21 +315,30 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     if(h2)
                     {
                         int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(srcReg)));
-                        builder.ldr(Reg::R14, Reg::R8/*regs*/, regIndex * 4);
+
+                        if(op == 2/*MOV*/ && !h1) // ship the mov
+                            builder.ldr(dstReg, Reg::R8/*regs*/, regIndex * 4);
+                        else
+                            builder.ldr(Reg::R14, Reg::R8/*regs*/, regIndex * 4);
+
                         srcReg = Reg::R14;
                     }
 
                     // then output ~the same instruction
                     if(op == 0) // ADD
+                    {
                         builder.add(dstReg, srcReg);
+
+                        if(h1) // store back
+                            builder.str(dstReg, Reg::R8/*regs*/, dstRegIndex * 4);
+                    }
                     else if(op == 1) // CMP
                         builder.cmp(dstReg, srcReg);
                     else if(op == 2) // MOV
-                        builder.mov(dstReg, srcReg);
-
-                    // store back
-                    if(h1 && op != 1/*CMP*/)
-                        builder.str(dstReg, Reg::R8/*regs*/, dstRegIndex * 4);
+                    {
+                        if(h1) // skip the mov
+                            builder.str(srcReg, Reg::R8/*regs*/, dstRegIndex * 4);
+                    }
 
                     if(instr.flags & Op_WriteFlags) // only CMP
                         builder.mrs(Reg::R11, 0); // CPSR
@@ -339,9 +348,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             }
             else // format 4, alu
             {
+                auto op = (instr.opcode >> 6) & 0xF;
                 // most ops here either use or preserve some flags
                 // TODO: NEG/CMP/CMN don't
-                if(instr.flags & (Op_ReadFlags | Op_WriteFlags))
+                if((instr.flags & (Op_ReadFlags | Op_WriteFlags)) && (op < 9 || op > 0xB)/*NEG, CMP, CMN*/)
                     flagsIn();
 
                 passThrough();
@@ -446,13 +456,16 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             auto dstReg = static_cast<Reg>(instr.opcode & 7);
             auto offset = ((instr.opcode >> 6) & 0x1F);
 
-            offset <<= (width / 16);
+            if(offset)
+            {
+                offset <<= (width / 16);
+
+                builder.add(Reg::R12, baseReg, offset);
+                baseReg = Reg::R12;
+            }
 
             if(instr.flags & Op_Load)
-            {
-                builder.add(Reg::R12, baseReg, offset);
-                readMem(Reg::R12, dstReg, width);
-            }
+                readMem(baseReg, dstReg, width);
             else
             {
                 printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
@@ -469,11 +482,11 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
             builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
 
-            if(instr.flags & Op_Load)
-            {
+            if(offset)
                 builder.add(Reg::R12, Reg::R12, offset);
+
+            if(instr.flags & Op_Load)
                 readMem(Reg::R12, dstReg, 32);
-            }
             else
             {
                 printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
