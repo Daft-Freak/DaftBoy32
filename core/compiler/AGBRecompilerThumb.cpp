@@ -381,6 +381,27 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x9: // format 11, SP-relative load/store
+        {
+            auto dstReg = static_cast<Reg>((instr.opcode >> 8) & 7);
+            auto offset = (instr.opcode & 0xFF) << 2;
+
+            int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
+            builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+
+            if(instr.flags & Op_Load)
+            {
+                builder.add(Reg::R12, Reg::R12, offset);
+                readMem(Reg::R12, dstReg, 32);
+            }
+            else
+            {
+                printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
+                return fail();
+            }
+            break;
+        }
+
         default:
             printf("unhandled op>>12 in recompile %X\n", instr.opcode >> 12);
             return fail();
