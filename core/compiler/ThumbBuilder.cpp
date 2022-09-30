@@ -49,13 +49,21 @@ void ThumbBuilder::add(Reg d, Reg n, uint32_t imm)
 }
 
 // reg
-void ThumbBuilder::add(LowReg d, LowReg n, LowReg m)
+void ThumbBuilder::add(Reg d, Reg n, Reg m)
 {
-    int dReg = static_cast<int>(d.val);
-    int nReg = static_cast<int>(n.val);
-    int mReg = static_cast<int>(m.val);
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
 
-    write(0x1800 | mReg << 6 | nReg << 3 | dReg);
+    if(dReg < 8 && nReg < 8 && mReg < 8)
+        write(0x1800 | mReg << 6 | nReg << 3 | dReg);
+    else
+    {
+        // TODO? m shift
+        bool s = true; // TODO
+        write(0xEB00 | (s ? (1 << 4) : 0) | nReg);
+        write(dReg << 8 | mReg);
+    }
 }
 
 // reg
@@ -469,6 +477,23 @@ void ThumbBuilder::sxtb(LowReg d, LowReg m)
     int dReg = static_cast<int>(d.val);
     int mReg = static_cast<int>(m.val);
     write(0xB240 | mReg << 3 | dReg);
+}
+
+void ThumbBuilder::sxth(LowReg d, LowReg m)
+{
+    int dReg = static_cast<int>(d.val);
+    int mReg = static_cast<int>(m.val);
+    write(0xB200 | mReg << 3 | dReg);
+}
+
+// imm
+void ThumbBuilder::tst(Reg n, uint32_t imm)
+{
+    int nReg = static_cast<int>(n);
+    auto exImm = encodeModifiedImmediate(imm);
+
+    write(0xF010 | nReg | exImm >> 16);
+    write(0x0F00 | (exImm & 0xFFFF));
 }
 
 void ThumbBuilder::uxtb(LowReg d, LowReg m)

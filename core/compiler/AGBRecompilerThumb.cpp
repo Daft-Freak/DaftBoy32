@@ -350,6 +350,86 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0x5: // formats 7-8
+        {
+            auto offReg = static_cast<Reg>((instr.opcode >> 6) & 7);
+            auto baseReg = static_cast<Reg>((instr.opcode >> 3) & 7);
+            auto dstReg = static_cast<Reg>(instr.opcode & 7);
+
+            builder.add(Reg::R12, baseReg, offReg);
+            
+            if(instr.opcode & (1 << 9)) // format 8, load/store sign-extended byte/halfword
+            {
+                bool hFlag = instr.opcode & (1 << 11);
+                bool signEx = instr.opcode & (1 << 10);
+                if(signEx)
+                {
+                    if(hFlag) // LDRSH... or SB if misaligned
+                    {
+                        // alignment check
+                        builder.tst(Reg::R12, 1);
+                        auto branchPtr = builder.getPtr();
+                        builder.b(Condition::NE, 0);
+
+                        // aligned load
+                        readMem(Reg::R12, dstReg, 16);
+                        builder.sxth(dstReg, dstReg);
+                        builder.b(0);
+
+                        if(!builder.getError())
+                        {
+                            // patch branch
+                            int off = (builder.getPtr() - (branchPtr + 1));
+                            *branchPtr = (*branchPtr & 0xFF00) | (off - 1);
+
+                            branchPtr = builder.getPtr() - 1;
+                        }
+
+                        // unaligned load
+                        // TODO: could de-dup a lot between these two
+                        readMem(Reg::R12, dstReg, 8);
+                        builder.sxtb(dstReg, dstReg);
+
+                        if(!builder.getError())
+                        {
+                            // patch branch
+                            int off = (builder.getPtr() - (branchPtr + 1));
+                            *branchPtr = (*branchPtr & 0xF800) | (off - 1);
+                        }
+                    }
+                    else // LDRSB
+                    {
+                        readMem(Reg::R12, dstReg, 8);
+                        builder.sxtb(dstReg, dstReg); // TODO: replace the mov from the call
+                    }
+                }
+                else
+                {
+                    if(hFlag) // LDRH
+                        readMem(Reg::R12, dstReg, 16);
+                    else
+                    {
+                        printf("unhandled format 8 in recompile (store)\n");
+                        return fail();
+                    }
+                }
+                
+            }
+            else // format 7, load/store with reg offset
+            {
+                bool isLoad = instr.opcode & (1 << 11);
+                bool isByte = instr.opcode & (1 << 10);
+                if(isLoad)
+                    readMem(Reg::R12, dstReg, isByte ? 8 : 32);
+                else
+                {
+                    printf("unhandled format 7 in recompile (store)\n");
+                    return fail();
+                }
+            }
+            break;
+        }
+
         case 0x6: // format 9, load/store with imm offset (words)
         case 0x7: // ... (bytes)
         case 0x8: // format 10, load/store halfword
