@@ -165,15 +165,23 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     };
 
     // function call helpers
-    auto readMem = [&builder, &loadLiteral](std::variant<Reg, uint32_t> addr, Reg dst, int width, bool sequential = false)
+    auto readMem = [&builder, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false)
     {
         builder.push(0b1111, false); // R0-3
 
         // address
-        if(std::holds_alternative<Reg>(addr))
-            builder.mov(Reg::R1, std::get<Reg>(addr));
+        if(std::holds_alternative<Reg>(offset))
+            builder.add(Reg::R1, base, std::get<Reg>(offset));
+        else if(base == Reg::PC) // precalculated
+            loadLiteral(Reg::R1, std::get<uint32_t>(offset));
         else
-            loadLiteral(Reg::R1, std::get<uint32_t>(addr));
+        {
+            auto offVal = std::get<uint32_t>(offset);
+            if(offVal)
+                builder.add(Reg::R1, base, offVal);
+            else
+                builder.mov(Reg::R1, base);
+        }
 
         builder.mov(Reg::R0, Reg::R9); // CPU ptr
         builder.add(Reg::R2, Reg::SP, 16); // cycles out
@@ -273,7 +281,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                 auto addr = ((pc + 2) & ~2) + (word << 2);
                 // TODO: could inline this?
-                readMem(addr, dstReg, 32);
+                readMem(Reg::PC, addr, dstReg, 32);
             }
             else if(instr.opcode & (1 << 10)) // format 5, Hi reg/branch exchange
             {
@@ -366,8 +374,6 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             auto baseReg = static_cast<Reg>((instr.opcode >> 3) & 7);
             auto dstReg = static_cast<Reg>(instr.opcode & 7);
 
-            builder.add(Reg::R12, baseReg, offReg);
-            
             if(instr.opcode & (1 << 9)) // format 8, load/store sign-extended byte/halfword
             {
                 bool hFlag = instr.opcode & (1 << 11);
@@ -377,12 +383,14 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     if(hFlag) // LDRSH... or SB if misaligned
                     {
                         // alignment check
+                        builder.add(Reg::R12, baseReg, offReg);
+
                         builder.tst(Reg::R12, 1);
                         auto branchPtr = builder.getPtr();
                         builder.b(Condition::NE, 0);
 
                         // aligned load
-                        readMem(Reg::R12, dstReg, 16);
+                        readMem(Reg::R12, 0u, dstReg, 16);
                         builder.sxth(dstReg, dstReg);
                         builder.b(0);
 
@@ -397,7 +405,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                         // unaligned load
                         // TODO: could de-dup a lot between these two
-                        readMem(Reg::R12, dstReg, 8);
+                        readMem(Reg::R12, 0u, dstReg, 8);
                         builder.sxtb(dstReg, dstReg);
 
                         if(!builder.getError())
@@ -409,14 +417,14 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     }
                     else // LDRSB
                     {
-                        readMem(Reg::R12, dstReg, 8);
+                        readMem(baseReg, offReg, dstReg, 8);
                         builder.sxtb(dstReg, dstReg); // TODO: replace the mov from the call
                     }
                 }
                 else
                 {
                     if(hFlag) // LDRH
-                        readMem(Reg::R12, dstReg, 16);
+                        readMem(baseReg, offReg, dstReg, 16);
                     else
                     {
                         printf("unhandled format 8 in recompile (store)\n");
@@ -429,8 +437,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             {
                 bool isLoad = instr.opcode & (1 << 11);
                 bool isByte = instr.opcode & (1 << 10);
+
                 if(isLoad)
-                    readMem(Reg::R12, dstReg, isByte ? 8 : 32);
+                    readMem(baseReg, offReg, dstReg, isByte ? 8 : 32);
                 else
                 {
                     printf("unhandled format 7 in recompile (store)\n");
@@ -456,16 +465,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             auto dstReg = static_cast<Reg>(instr.opcode & 7);
             auto offset = ((instr.opcode >> 6) & 0x1F);
 
-            if(offset)
-            {
-                offset <<= (width / 16);
-
-                builder.add(Reg::R12, baseReg, offset);
-                baseReg = Reg::R12;
-            }
+            offset <<= (width / 16);
 
             if(instr.flags & Op_Load)
-                readMem(baseReg, dstReg, width);
+                readMem(baseReg, offset, dstReg, width);
             else
             {
                 printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
@@ -482,11 +485,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
             builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
 
-            if(offset)
-                builder.add(Reg::R12, Reg::R12, offset);
-
             if(instr.flags & Op_Load)
-                readMem(Reg::R12, dstReg, 32);
+                readMem(Reg::R12, offset, dstReg, 32);
             else
             {
                 printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
