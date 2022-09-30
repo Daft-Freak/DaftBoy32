@@ -91,20 +91,34 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.ldr(reg, index << 2); //write literal index, patched later
     };
 
-    auto outputLiterals = [this, &builder]()
+    auto outputLiterals = [this, &builder](bool reachable = true)
     {
         if(!ldrLiteralInstrs.empty())
         {
-            auto dataPtr = builder.getPtr() + 1/*B*/;
-            if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
+            auto dataPtr = builder.getPtr();
+
+            if(!reachable)
+            {
+                // don't need to jump over
+                if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
+                {
+                    // still need to align though
+                    builder.data(0);
+                    dataPtr++;
+                }
+            }
+            else if(reinterpret_cast<uintptr_t>(dataPtr + 1) & 2)
             {
                 // not aligned
                 builder.b(curLiteral * 4 + 2);
                 builder.data(0);
-                dataPtr++;
+                dataPtr += 2;
             }
             else // aligned
+            {
                 builder.b(curLiteral * 4);
+                dataPtr++;
+            }
 
             for(unsigned int i = 0; i < curLiteral; i++)
             {
@@ -244,7 +258,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.resetPtr(oldPtr);
         loadLiteral(Reg::R12, pc); // -2 to ignore this instr, +2 for prefetch
         exit(exitPtr);
-        outputLiterals();
+        outputLiterals(false);
         return false;
     };
 
