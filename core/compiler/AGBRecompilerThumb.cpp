@@ -625,6 +625,25 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xA: // format 12, load address
+        {
+            bool isSP = instr.opcode & (1 << 11);
+            auto dstReg = static_cast<Reg>((instr.opcode >> 8) & 7);
+            auto word = (instr.opcode & 0xFF) << 2;
+
+            if(isSP)
+            {
+                int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
+                builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+                builder.add(dstReg, Reg::R12, word);
+            }
+            else
+                loadLiteral(dstReg, ((pc + 2) & ~2) + word);
+
+            instrCycles = pcSCycles;
+            break;
+        }
+
         case 0xB: // formats 13-14
         {
             if(instr.opcode & (1 << 10)) // format 14, push/pop
