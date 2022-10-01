@@ -549,8 +549,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     }
                     else
                     {
-                        printf("unhandled format 8 in recompile (store)\n");
-                        return fail();
+                        instrCycles = pcNCycles;
+                        writeMem(baseReg, offReg, dstReg, 16);
                     }
                 }
             }
@@ -566,8 +566,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 }
                 else
                 {
-                    printf("unhandled format 7 in recompile (store)\n");
-                    return fail();
+                    instrCycles = pcNCycles;
+                    writeMem(baseReg, offReg, dstReg, isByte ? 8 : 32);
                 }
             }
             break;
@@ -598,8 +598,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             }
             else
             {
-                printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
-                return fail();
+                instrCycles = pcNCycles;
+                writeMem(baseReg, offset, dstReg, width);
             }
             break;
         }
@@ -619,8 +619,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             }
             else
             {
-                printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
-                return fail();
+                instrCycles = pcNCycles;
+                writeMem(Reg::R12, offset, dstReg, 32);
             }
             break;
         }
