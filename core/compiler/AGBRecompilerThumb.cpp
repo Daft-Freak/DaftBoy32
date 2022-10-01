@@ -241,6 +241,73 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.pop(regSaveMask, false);
     };
 
+    auto writeMem = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg data, int width, bool sequential = false)
+    {
+        builder.push(0b1111, false); // R0-3
+        builder.sub(Reg::SP, 8); // args 5/6
+
+        // prevent data getting overriden with addr
+        if(data == Reg::R1)
+        {
+            // TODO: move directly to R2 if base/offset aren't there
+            builder.mov(Reg::R12, data);
+            data = Reg::R12;
+        }
+
+        // address
+        if(std::holds_alternative<Reg>(offset))
+            builder.add(Reg::R1, base, std::get<Reg>(offset));
+        else
+        {
+            auto offVal = std::get<uint32_t>(offset);
+            if(offVal)
+                builder.add(Reg::R1, base, offVal);
+            else
+                builder.mov(Reg::R1, base);
+        }
+
+        // data
+        builder.mov(Reg::R2, data);
+
+        int cyclesSPOff = 24;
+
+        // store initial cycles at first load/store
+        if(!hasLoadStore)
+        {
+            builder.mov(Reg::R0, instrCycles);
+            builder.str(Reg::R0, cyclesSPOff);
+            hasLoadStore = true;
+        }
+
+        builder.mov(Reg::R0, sequential);
+        builder.str(Reg::R0, 0);
+
+        builder.str(Reg::R10, Reg::SP, 4); // cycle count in
+        builder.mov(Reg::R0, Reg::R9); // CPU ptr
+        builder.add(Reg::R3, Reg::SP, cyclesSPOff); // cycles out
+
+        // get func pointer
+        uintptr_t funcPtr;
+        if(width == 8)
+            funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::writeMem8);
+        else if(width == 16)
+            funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::writeMem16);
+        else
+        {
+            assert(width == 32);
+            funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::writeMem32);
+        }
+
+        // call
+        loadLiteral(Reg::R12, funcPtr);
+        builder.blx(Reg::R12);
+
+        builder.mov(Reg::R10, Reg::R0); // new cycle count
+
+        builder.add(Reg::SP, 8);
+        builder.pop(0b1111, false); // R0-3
+    };
+
     // output helpers
     auto exit = [&builder](uint8_t *ptr)
     {

@@ -787,3 +787,24 @@ uint32_t AGBRecompiler::readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, bool 
 {
     return cpu->readMem32(addr, cycles, sequential);
 }
+
+int AGBRecompiler::writeMem8(AGBCPU *cpu, uint32_t addr, uint8_t data, int &cycles, bool sequential, int cyclesToRun)
+{
+    // TODO: invalidate code
+    cpu->writeMem8(addr, data, cycles, sequential);
+    return cyclesToRun; // TODO: update
+}
+
+int AGBRecompiler::writeMem16(AGBCPU *cpu, uint32_t addr, uint16_t data, int &cycles, bool sequential, int cyclesToRun)
+{
+    // TODO: invalidate code
+    cpu->writeMem16(addr, data, cycles, sequential);
+    return cyclesToRun; // TODO: update
+}
+
+int AGBRecompiler::writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cycles, bool sequential, int cyclesToRun)
+{
+    // TODO: invalidate code
+    cpu->writeMem32(addr, data, cycles, sequential);
+    return cyclesToRun; // TODO: update
+}
