@@ -249,9 +249,18 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         // prevent data getting overriden with addr
         if(data == Reg::R1)
         {
-            // TODO: move directly to R2 if base/offset aren't there
-            builder.mov(Reg::R12, data);
-            data = Reg::R12;
+            // move directly to R2 if base/offset aren't there
+            // TODO: check offset reg
+            if(base != Reg::R2 && !std::holds_alternative<Reg>(offset))
+            {
+                builder.mov(Reg::R2, data);
+                data = Reg::R2;
+            }
+            else
+            {
+                builder.mov(Reg::R12, data);
+                data = Reg::R12;
+            }
         }
 
         // address
@@ -267,7 +276,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         }
 
         // data
-        builder.mov(Reg::R2, data);
+        if(data != Reg::R2)
+            builder.mov(Reg::R2, data);
 
         int cyclesSPOff = 24;
 
