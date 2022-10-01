@@ -625,6 +625,34 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xB: // formats 13-14
+        {
+            if(instr.opcode & (1 << 10)) // format 14, push/pop
+            {
+                printf("unhandled format 14 in recompile\n");
+                return fail();
+            }
+            else // format 13, add offset to SP
+            {
+                bool isNeg = instr.opcode & (1 << 7);
+                int off = (instr.opcode & 0x7F) << 2;
+
+                int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
+
+                builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+
+                if(isNeg)
+                    builder.sub(Reg::R12, Reg::R12, off);
+                else
+                    builder.add(Reg::R12, Reg::R12, off);
+
+                builder.str(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+
+                instrCycles = pcSCycles;
+            }
+            break;
+        }
+
         default:
             printf("unhandled op>>12 in recompile %X\n", instr.opcode >> 12);
             return fail();
