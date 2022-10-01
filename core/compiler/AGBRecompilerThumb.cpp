@@ -410,15 +410,20 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                     int dstRegIndex = 0;
 
-                    if(srcReg == Reg::PC || dstReg == Reg::PC)
+                    if(instr.regsWritten & (1 << 15))
                     {
-                        printf("unhandled format 5 in recompile (PC access)\n");
+                        printf("unhandled format 5 in recompile (PC write)\n");
                         return fail();
                     }
 
                     // remap regs
                     // (need to load anything > 8)
-                    if(h1)
+                    if(dstReg == Reg::PC && op != 2)
+                    {
+                        loadLiteral(Reg::R12, pc + 2);
+                        dstReg = Reg::R12;
+                    }
+                    else if(h1)
                     {
                         dstRegIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(dstReg)));
 
@@ -428,7 +433,16 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         dstReg = Reg::R12;
                     }
 
-                    if(h2)
+                    if(srcReg == Reg::PC)
+                    {
+                        if(op == 2/*MOV*/ && !h1)
+                            loadLiteral(dstReg, pc + 2);
+                        else
+                            loadLiteral(Reg::R14, pc + 2);
+
+                        srcReg = Reg::R14;
+                    }
+                    else if(h2)
                     {
                         int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(srcReg)));
 
