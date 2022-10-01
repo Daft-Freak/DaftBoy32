@@ -642,7 +642,7 @@ void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)
                     if(target < startPC || target >= endPC)
                         break;
 
-                    auto targetInstr = next + (target - pc) / 2 + 1;
+                    auto targetInstr = next + (target - nextPC) / 2 + 1;
 
                     if(!isConditional)
                     {
