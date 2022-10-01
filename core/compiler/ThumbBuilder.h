@@ -66,7 +66,7 @@ public:
     void adc(LowReg dn, LowReg m);
 
     void add(Reg dn, uint8_t imm);
-    void add(Reg d, Reg n, uint32_t imm); // v7M if d >= 8 || r (n >= 8 and not SP) || imm > 0xFF
+    void add(Reg d, Reg n, uint32_t imm); // v7M if d >= 8 || (n >= 8 and not SP) || imm > 0xFF
     void add(Reg d, Reg n, Reg m); // v7M if d >= 8 || n >= 8 || m >= 8
     void add(Reg dn, Reg m);
 
@@ -137,7 +137,8 @@ public:
     void sbc(LowReg dn, LowReg m);
 
     void sub(Reg dn, uint8_t imm);
-    void sub(LowReg d, LowReg n, LowReg m);
+    void sub(Reg d, Reg n, uint32_t imm); // v7M if d >= 8 || n >= 8 || imm > 0xFF
+    void sub(Reg d, Reg n, Reg m); // v7M if d >= 8 || n >= 8 || m >= 8
 
     void sxtb(LowReg d, LowReg m);
 

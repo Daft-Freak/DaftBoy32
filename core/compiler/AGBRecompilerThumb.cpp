@@ -570,11 +570,26 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
     builder.str(Reg::R12, Reg::R9, cycleCountOff);
 
-    // TODO: cycles to run check
+    if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
+    {
+        // cycles -= executed
+        
+        if(hasLoadStore)
+            builder.sub(Reg::R10, Reg::R10, Reg::R14);
+        else
+            builder.sub(Reg::R10, Reg::R10, instrCycles);
+
+        //lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
+
+        // if <= 0 exit
+        builder.b(Condition::GT, 4 + 4);
+        loadLiteral(Reg::R12, pc + 2);
+        exit(saveAndExitPtr);
+    }
 
     // output literals if ~close to the limit or this is the last instruction
     // TODO: adjust this? (T2 encoding has x4 range forwards and can index backwards)
-    const int minLiterals = 2; // load can use 2
+    const int minLiterals = 3; // load can use 2 + 1 for exit from cycle check
     if((instr.flags & Op_Last) || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460) || curLiteral + minLiterals > std::size(literals))
         outputLiterals();
 
