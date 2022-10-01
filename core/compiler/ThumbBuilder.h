@@ -104,7 +104,7 @@ public:
 
     void lsr(LowReg d, LowReg m, uint8_t imm);
 
-    void mov(LowReg r, uint8_t imm);
+    void mov(Reg d, uint32_t imm); // v7M if d >= 8 || imm > 0xFF
     void mov(Reg d, Reg m);
 
     void mrs(Reg d, uint8_t sysm);
@@ -127,6 +127,7 @@ public:
     void stm(uint16_t regList, Reg n, bool w = false); // v7M
 
     void str(Reg t, Reg n, uint16_t imm); // v7M if t/n >= 8 || imm > 124 || imm & 3
+    void str(LowReg t, uint16_t imm);
 
     void strb(LowReg t, LowReg n, uint8_t imm);
 

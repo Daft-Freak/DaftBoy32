@@ -71,6 +71,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 {
     pc += 2;
 
+    // cycle counting
+    int instrCycles = 0;
+    bool hasLoadStore = false;
+
     // literal helpers
     auto loadLiteral = [this, &builder](Reg reg, uint32_t val)
     {
@@ -179,7 +183,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     };
 
     // function call helpers
-    auto readMem = [&builder, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false)
+    auto readMem = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false)
     {
         // R0-3, but not the dest reg
         int regSaveMask = 0b1111 & ~(1 << static_cast<int>(dst));
@@ -199,8 +203,18 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 builder.mov(Reg::R1, base);
         }
 
+        int spOff = regSaveMask == 0b1111 ? 16 : 12;
+
+        // store initial cycles at first load/store
+        if(!hasLoadStore)
+        {
+            builder.mov(Reg::R0, instrCycles);
+            builder.str(Reg::R0, spOff);
+            hasLoadStore = true;
+        }
+
         builder.mov(Reg::R0, Reg::R9); // CPU ptr
-        builder.add(Reg::R2, Reg::SP, regSaveMask == 0b1111 ? 16 : 12); // cycles out
+        builder.add(Reg::R2, Reg::SP, spOff); // cycles out
         builder.mov(Reg::R3, sequential);
 
         // get func pointer
@@ -258,6 +272,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         return false;
     };
 
+    auto pcSCycles = cpu.pcSCycles, pcNCycles = cpu.pcNCycles;
+
     switch(instr.opcode >> 12)
     {
         case 0x0: // format 1, move shifted
@@ -268,6 +284,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 flagsIn(); // MOV (shift), preserve V (and C for LSL 0)
             
             passThrough();
+            instrCycles = pcSCycles;
             break;
         }
 
@@ -279,6 +296,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 flagsIn(); // MOV, preverve C/V
 
             passThrough();
+            instrCycles = pcSCycles;
             break;
         }
 
@@ -290,6 +308,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 uint8_t word = instr.opcode & 0xFF;
 
                 auto addr = ((pc + 2) & ~2) + (word << 2);
+
+                instrCycles = pcSCycles + 1;
+                
                 // TODO: could inline this?
                 readMem(Reg::PC, addr, dstReg, 32);
             }
@@ -363,6 +384,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 }
                 else
                     passThrough();
+
+                instrCycles = pcSCycles;
             }
             else // format 4, alu
             {
@@ -373,6 +396,13 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     flagsIn();
 
                 passThrough();
+
+                if((op >= 2 && op <= 4) /*LSL, LSR, ASR*/ || op == 7/*ROR*/)
+                    instrCycles = pcSCycles + 1;
+                else if(op == 0xD/*MUL*/)
+                    instrCycles = pcSCycles + 1; // TODO: more cycles (dst 0/1 bytes)
+                else
+                    instrCycles = pcSCycles;
             }
 
             break;
@@ -390,6 +420,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 bool signEx = instr.opcode & (1 << 10);
                 if(signEx)
                 {
+                    instrCycles = pcSCycles + 1;
+                
                     if(hFlag) // LDRSH... or SB if misaligned
                     {
                         // alignment check
@@ -434,14 +466,16 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 else
                 {
                     if(hFlag) // LDRH
+                    {
+                        instrCycles = pcSCycles + 1;
                         readMem(baseReg, offReg, dstReg, 16);
+                    }
                     else
                     {
                         printf("unhandled format 8 in recompile (store)\n");
                         return fail();
                     }
                 }
-                
             }
             else // format 7, load/store with reg offset
             {
@@ -449,7 +483,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 bool isByte = instr.opcode & (1 << 10);
 
                 if(isLoad)
+                {
+                    instrCycles = pcSCycles + 1;
                     readMem(baseReg, offReg, dstReg, isByte ? 8 : 32);
+                }
                 else
                 {
                     printf("unhandled format 7 in recompile (store)\n");
@@ -478,7 +515,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             offset <<= (width / 16);
 
             if(instr.flags & Op_Load)
+            {
+                instrCycles = pcSCycles + 1;
                 readMem(baseReg, offset, dstReg, width);
+            }
             else
             {
                 printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
@@ -496,7 +536,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
 
             if(instr.flags & Op_Load)
+            {
+                instrCycles = pcSCycles + 1;
                 readMem(Reg::R12, offset, dstReg, 32);
+            }
             else
             {
                 printf("unhandled op>>12 in recompile %X (store)\n", instr.opcode >> 12);
@@ -509,6 +552,25 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             printf("unhandled op>>12 in recompile %X\n", instr.opcode >> 12);
             return fail();
     }
+
+    // cycles
+    auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+    auto cycleCountOff = reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr;
+    assert(cycleCountOff <= 4095);
+
+    builder.ldr(Reg::R12, Reg::R9, cycleCountOff);
+
+    if(hasLoadStore)
+    {
+        builder.ldr(Reg::R14, Reg::SP, 0);
+        builder.add(Reg::R12, Reg::R14);
+    }
+    else
+        builder.add(Reg::R12, Reg::R12, instrCycles);
+
+    builder.str(Reg::R12, Reg::R9, cycleCountOff);
+
+    // TODO: cycles to run check
 
     // output literals if ~close to the limit or this is the last instruction
     // TODO: adjust this? (T2 encoding has x4 range forwards and can index backwards)

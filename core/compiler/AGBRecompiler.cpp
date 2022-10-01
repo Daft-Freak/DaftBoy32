@@ -33,10 +33,12 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
         saved = {nullptr, 0};
 }
 
-void AGBRecompiler::handleBranch()
+int AGBRecompiler::handleBranch()
 {
     if(!codeBuf)
-        return;
+        return 0;
+
+    int cyclesExecuted = 0;
 
     while(true)
     {
@@ -126,8 +128,7 @@ void AGBRecompiler::handleBranch()
         else
             break;
 
-        // TODO: cycle count?
-        //cpu.cyclesToRun -= (cpu.cycleCount - startCycleCount);
+        cyclesExecuted += (cpu.cycleCount - startCycleCount);
 
         // code exited with a saved address for re-entry, store PC for later
         if(tmpSavedPtr)
@@ -162,13 +163,15 @@ void AGBRecompiler::handleBranch()
     }
 
     // if we executed anything, we need to refill the pipeline
-    if(cpu.cpsr & AGBCPU::Flag_T)
+    if(cyclesExecuted && (cpu.cpsr & AGBCPU::Flag_T))
     {
         auto pc = cpu.loReg(AGBCPU::Reg::PC) - 2;
         auto thumbPCPtr = reinterpret_cast<const uint16_t *>(cpu.pcPtr + pc);
         cpu.decodeOp = *thumbPCPtr++;
         cpu.fetchOp = *thumbPCPtr;
     }
+
+    return cyclesExecuted;
 }
 
 void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)

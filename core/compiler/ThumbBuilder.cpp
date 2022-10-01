@@ -283,10 +283,18 @@ void ThumbBuilder::lsr(LowReg d, LowReg m, uint8_t imm)
 }
 
 // imm
-void ThumbBuilder::mov(LowReg d, uint8_t imm)
+void ThumbBuilder::mov(Reg d, uint32_t imm)
 {
-    int reg = static_cast<int>(d.val);
-    write(0x2000 | reg << 8 | imm);
+    int reg = static_cast<int>(d);
+    if(reg < 8 && imm <= 0xFF)
+        write(0x2000 | reg << 8 | imm);
+    else
+    {
+        bool s = true;
+        auto exImm = encodeModifiedImmediate(imm);
+        write(0xF04F | (s ? (1 << 4) : 0) | exImm >> 16);
+        write((exImm & 0xFFFF) | reg << 8);
+    }
 }
 
 // reg
@@ -407,6 +415,16 @@ void ThumbBuilder::str(Reg t, Reg n, uint16_t imm)
         write(0xF8C0 | nReg);
         write(tReg << 12 | imm);
     }
+}
+
+// SP + imm
+void ThumbBuilder::str(LowReg t, uint16_t imm)
+{
+    assert(imm <= 1020);
+    assert(!(imm & 3));
+
+    int tReg = static_cast<int>(t.val);
+    write(0x9000 | tReg << 8 | imm >> 2);
 }
 
 // imm
