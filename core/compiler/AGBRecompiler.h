@@ -11,7 +11,7 @@ public:
     AGBRecompiler(AGBCPU &cpu);
     ~AGBRecompiler() = default;
 
-    int handleBranch();
+    int handleBranch(int cyclesToRun);
 
 protected:
     enum OpFlags

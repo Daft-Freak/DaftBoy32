@@ -33,7 +33,7 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
         saved = {nullptr, 0};
 }
 
-int AGBRecompiler::handleBranch()
+int AGBRecompiler::handleBranch(int cyclesToRun)
 {
     if(!codeBuf)
         return 0;
@@ -43,7 +43,7 @@ int AGBRecompiler::handleBranch()
     while(true)
     {
         // calculate cycles to run
-        int cycles = 1; // TODO
+        int cycles = std::min(cyclesToRun, static_cast<int>(cpu.nextUpdateCycle - cpu.cycleCount));
 
         if(cycles <= 0)
             break;
@@ -155,10 +155,15 @@ int AGBRecompiler::handleBranch()
             break;
 
         // TODO: CPU update stuff
-        cpu.updateTimers();
-        cpu.display.update();
+        if(static_cast<int>(cpu.nextUpdateCycle - cpu.cycleCount) <= 0)
+        {
+            cpu.updateTimers();
+            cpu.display.update();
 
-        if(cpu.currentInterrupts)
+            cpu.calculateNextUpdate(cpu.cycleCount);
+        }
+
+        if(cpu.currentInterrupts || cpu.dmaTriggered)
             break;
     }
 
