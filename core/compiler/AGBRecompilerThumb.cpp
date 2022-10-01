@@ -181,7 +181,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     // function call helpers
     auto readMem = [&builder, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false)
     {
-        builder.push(0b1111, false); // R0-3
+        // R0-3, but not the dest reg
+        int regSaveMask = 0b1111 & ~(1 << static_cast<int>(dst));
+        builder.push(regSaveMask, false);
 
         // address
         if(std::holds_alternative<Reg>(offset))
@@ -198,7 +200,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         }
 
         builder.mov(Reg::R0, Reg::R9); // CPU ptr
-        builder.add(Reg::R2, Reg::SP, 16); // cycles out
+        builder.add(Reg::R2, Reg::SP, regSaveMask == 0b1111 ? 16 : 12); // cycles out
         builder.mov(Reg::R3, sequential);
 
         // get func pointer
@@ -218,17 +220,11 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         loadLiteral(Reg::R12, funcPtr);
         builder.blx(Reg::R12);
 
-        // move to dst... or tmp
-        if(static_cast<int>(dst) > 3)
+        // move to dst
+        if(dst != Reg::R0)
             builder.mov(dst, Reg::R0);
-        else
-            builder.mov(Reg::R12, Reg::R0);
 
-        builder.pop(0b1111, false); // R0-3
-
-        // REALLY move to dst
-        if(static_cast<int>(dst) <= 3)
-            builder.mov(dst, Reg::R12);
+        builder.pop(regSaveMask, false);
     };
 
     // output helpers
