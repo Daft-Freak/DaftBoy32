@@ -43,7 +43,7 @@ void ThumbBuilder::add(Reg d, Reg n, uint32_t imm)
     {
         bool s = true; // TODO
         auto exImm = encodeModifiedImmediate(imm);
-        write(0xF100 | exImm >> 16 | (s ? (1 << 8) : 0) | nReg);
+        write(0xF100 | exImm >> 16 | (s ? (1 << 4) : 0) | nReg);
         write(dReg << 8 | (exImm & 0xFFFF));
     }
 }
