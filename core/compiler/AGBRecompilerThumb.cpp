@@ -596,7 +596,7 @@ void AGBRecompilerThumb::compileEntry()
     builder.orr(Reg::R12, Reg::R1, 1);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 52);
+    builder.ldr(Reg::R2, 60);
     builder.mov(Reg::R9, Reg::R2);
 
     builder.mov(Reg::R10, Reg::R0); // cycle count
@@ -618,14 +618,13 @@ void AGBRecompilerThumb::compileEntry()
     /*exitForCallPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
     builder.mov(Reg::R0, 1);
     builder.ldr(Reg::R2, 16);
-    builder.strb(Reg::R0, Reg::R2, 0);
+    builder.strb(Reg::R0, Reg::R2, 0);*/
 
     // exit saving LR
     saveAndExitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
-    builder.mov(Reg::R0, Reg::LR);
-    builder.ldr(Reg::R2, 16);
-    builder.str(Reg::R0, Reg::R2, 0);*/
+    builder.ldr(Reg::R10, 48);
+    builder.str(Reg::LR, Reg::R10, 0);
 
     // exit
     exitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
