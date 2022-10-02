@@ -79,6 +79,8 @@ protected:
     static int writeMem16(AGBCPU *cpu, uint32_t addr, uint16_t data, int &cycles, bool sequential, int cyclesToRun);
     static int writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cycles, bool sequential, int cyclesToRun);
 
+    static void updatePCInterworked(AGBCPU *cpu, uint32_t addr);
+
     uint8_t *codeBuf = nullptr, *curCodePtr;
     unsigned int codeBufSize;
 

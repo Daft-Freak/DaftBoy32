@@ -808,3 +808,17 @@ int AGBRecompiler::writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cy
     cpu->writeMem32(addr, data, cycles, sequential);
     return cyclesToRun; // TODO: update
 }
+
+void AGBRecompiler::updatePCInterworked(AGBCPU *cpu, uint32_t addr)
+{
+    if(addr & 1)
+    {
+        cpu->cpsr |= AGBCPU::Flag_T;
+        cpu->updateTHUMBPC(addr & ~1);
+    }
+    else
+    {
+        cpu->cpsr &= ~AGBCPU::Flag_T;
+        cpu->updateARMPC(addr);
+    }
+}

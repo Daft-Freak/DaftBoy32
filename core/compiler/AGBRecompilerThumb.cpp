@@ -343,6 +343,31 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.pop(0b1111, false); // R0-3
     };
 
+    auto writePC = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](std::variant<Reg, uint32_t> addr, bool interworked = false)
+    {
+        builder.push(0b1111, false); // R0-3
+
+        // address
+        if(std::holds_alternative<Reg>(addr))
+            builder.mov(Reg::R1, std::get<Reg>(addr));
+        else
+            loadLiteral(Reg::R1, std::get<uint32_t>(addr));
+
+        builder.mov(Reg::R0, Reg::R9); // CPU ptr
+
+        // get func pointer
+        uintptr_t funcPtr;
+        if(interworked)
+            funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::updatePCInterworked);
+        //else TODO
+
+        // call
+        loadLiteral(Reg::R12, funcPtr);
+        builder.blx(Reg::R12);
+
+        builder.pop(0b1111, false); // R0-3
+    };
+
     // output helpers
     auto exit = [&builder](uint8_t *ptr)
     {
@@ -424,8 +449,27 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                 if(op == 3/*BX*/)
                 {
-                    printf("unhandled BX in recompile \n");
-                    return fail();
+                    auto srcReg = static_cast<Reg>(((instr.opcode >> 3) & 7) + (h2 ? 8 : 0));
+
+                    if(srcReg == Reg::PC)
+                        writePC(pc + 2, true); // hmm, always ARM switch
+                    else
+                    {
+                        if(h2)
+                        {
+                            int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(srcReg)));
+                            builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+                            srcReg = Reg::R12;
+                        }
+
+                        writePC(srcReg, true);
+                    }
+
+                    instrCycles = pcSCycles * 2 + pcNCycles;
+                    syncCyclesExecuted();
+
+                    exit(exitNoPCPtr);
+                    break;
                 }
 
                 if(h1 || h2)
