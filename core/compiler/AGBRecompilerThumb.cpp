@@ -74,6 +74,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     // cycle counting
     int instrCycles = 0;
     bool hasLoadStore = false;
+    bool updatedCycleCount = false;
 
     // literal helpers
     auto loadLiteral = [this, &builder](Reg reg, uint32_t val)
@@ -182,9 +183,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             literal = 0;
     };
 
-    auto syncCyclesExecuted = [this, &builder, &instrCycles, &hasLoadStore]()
+    auto syncCyclesExecuted = [this, &builder, &instrCycles, &hasLoadStore, &updatedCycleCount]()
     {
-        if(!instrCycles)
+        if(!instrCycles || updatedCycleCount)
             return;
 
         auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
@@ -203,8 +204,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
         builder.str(Reg::R12, Reg::R9, cycleCountOff);
 
-        instrCycles = 0;
-        hasLoadStore = false;
+        updatedCycleCount = true;
     };
 
     // function call helpers
