@@ -963,12 +963,13 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         {
             uint32_t offset = static_cast<int16_t>(instr.opcode << 5) >> 4; // sign extend and * 2
 
-            if(instr.flags & Op_Branch)
+            // TODO:
+            /*if(instr.flags & Op_Branch)
             {
                 printf("unhandled op>>12 in recompile %X (branch)\n", instr.opcode >> 12);
                 return fail();
             }
-            else
+            else*/
             {
                 writePC(pc + 2 + offset);
 
