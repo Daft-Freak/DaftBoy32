@@ -783,11 +783,14 @@ void AGBRecompilerThumb::compileEntry()
     // exit
     exitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
-    // save emu regs
-    builder.stm(0xFF, Reg::R8, false);
-
     // store PC
     builder.str(Reg::R12, Reg::R8, 4 * 15);
+
+    // skip PC store
+    exitNoPCPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
+
+    // save emu regs
+    builder.stm(0xFF, Reg::R8, false);
 
     // update CPSR
     builder.ldr(Reg::R0, Reg::R9, cpsrOff); // load old
