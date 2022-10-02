@@ -749,8 +749,101 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         {
             if(instr.opcode & (1 << 10)) // format 14, push/pop
             {
-                printf("unhandled format 14 in recompile\n");
-                return fail();
+                bool isLoad = instr.opcode & (1 << 11);
+                bool pclr = instr.opcode & (1 << 8); // store LR/load PC
+                uint8_t regList = instr.opcode & 0xFF;
+
+                int spRegIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
+
+                // TODO: output here is nasty
+
+                if(isLoad) // POP
+                {
+                    instrCycles = pcSCycles + 1;
+
+                    uint32_t offset = 0;
+
+                    for(int i = 0; i < 8; i++)
+                    {
+                        if(regList & (1 << i))
+                        {
+                            auto reg = static_cast<Reg>(i);
+                            builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                            builder.bic(Reg::R12, Reg::R12, 3);
+                            readMem(Reg::R12, offset, reg, 32, true); // first N?
+                            offset += 4;
+                        }
+                    }
+
+                    if(pclr)
+                    {
+                        builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                        builder.bic(Reg::R12, Reg::R12, 3);
+                        readMem(Reg::R12, offset, Reg::R12, 32, true);
+                        writePC(Reg::R12);
+                        offset += 4;
+
+                        // TODO: cycles for branch (not implemented in CPU either)
+                    }
+
+                    // update SP
+                    builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                    builder.add(Reg::R12, Reg::R12, offset);
+                    builder.str(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+
+                    // exit if we set PC
+                    if(pclr)
+                    {
+                        syncCyclesExecuted();
+                        exit(exitNoPCPtr);
+                    }
+                }
+                else // PUSH
+                {
+                    instrCycles = pcNCycles;
+
+                    uint32_t offset = 0;
+
+                    if(pclr)
+                        offset += 4;
+
+                    for(int i = 0; i < 8; i++)
+                    {
+                        if(regList & (1 << i))
+                            offset += 4;
+                    }
+
+                    // update SP
+                    // TODO: should be done last but...
+                    builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                    builder.sub(Reg::R12, Reg::R12, offset);
+                    builder.str(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+
+                    offset = 0;
+
+                    for(int i = 0; i < 8; i++)
+                    {
+                        if(regList & (1 << i))
+                        {
+                            auto reg = static_cast<Reg>(i);
+                            builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                            builder.bic(Reg::R12, Reg::R12, 3);
+                            writeMem(Reg::R12, offset, reg, 32, true); // first N?
+                            offset += 4;
+                        }
+                    }
+
+                    if(pclr) // store LR
+                    {
+                        builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                        builder.bic(Reg::R12, Reg::R12, 3);
+
+                        int lrRegIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::LR));
+                        builder.ldr(Reg::R14, Reg::R8/*regs*/, lrRegIndex * 4);
+ 
+                        writeMem(Reg::R12, offset, Reg::R14, 32, true);
+                    }
+                }
             }
             else // format 13, add offset to SP
             {

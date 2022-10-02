@@ -78,6 +78,7 @@ public:
     void b(Condition cond, int imm);
     void b(int imm);
 
+    void bic(Reg d, Reg n, uint32_t imm, bool s = false); // v7M
     void bic(LowReg dn, LowReg m);
 
     void bl(int32_t off);

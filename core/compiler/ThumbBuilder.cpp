@@ -128,6 +128,17 @@ void ThumbBuilder::b(int imm)
     write(0xE000 | ((imm >> 1) & 0x7FF));
 }
 
+// imm
+void ThumbBuilder::bic(Reg d, Reg n, uint32_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    auto exImm = encodeModifiedImmediate(imm);
+
+    write(0xF020 | (s ? (1 << 4) : 0) | nReg | exImm >> 16);
+    write(dReg << 8 | (exImm & 0xFFFF));
+}
+
 void ThumbBuilder::bic(LowReg dn, LowReg m)
 {
     int mReg = static_cast<int>(m.val);
