@@ -867,6 +867,48 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xF: // format 19, long branch with link
+        {
+            bool high = instr.opcode & (1 << 11);
+            uint32_t offset = instr.opcode & 0x7FF;
+
+            int lrRegIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::LR));
+
+            // TODO: could optimise if we handle both halves together?
+            if(!high)
+            {
+                offset <<= 12;
+                if(offset & (1 << 22))
+                    offset |= 0xFF800000; //sign extend
+
+                loadLiteral(Reg::R12, pc + 2 + offset);
+
+                builder.str(Reg::R12, Reg::R8/*regs*/, lrRegIndex * 4);
+
+                instrCycles = pcSCycles;
+            }
+            else
+            {
+                // calc PC
+                builder.ldr(Reg::R12, Reg::R8/*regs*/, lrRegIndex * 4);
+                builder.add(Reg::R12, Reg::R12, offset << 1);
+
+                // set LR
+                loadLiteral(Reg::R14, pc | 1);
+                builder.str(Reg::R14, Reg::R8/*regs*/, lrRegIndex * 4);
+
+                // set PC
+                writePC(Reg::R12);
+
+                instrCycles = pcNCycles + pcSCycles * 2;
+                syncCyclesExecuted();
+
+                exit(exitForCallPtr);
+            }
+
+            break;
+        }
+
         default:
             printf("unhandled op>>12 in recompile %X\n", instr.opcode >> 12);
             return fail();
