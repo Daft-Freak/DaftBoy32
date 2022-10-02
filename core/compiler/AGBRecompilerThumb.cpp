@@ -749,7 +749,7 @@ void AGBRecompilerThumb::compileEntry()
     builder.orr(Reg::R12, Reg::R1, 1);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 60);
+    builder.ldr(Reg::R2, 64);
     builder.mov(Reg::R9, Reg::R2);
 
     builder.mov(Reg::R10, Reg::R0); // cycle count
@@ -757,6 +757,7 @@ void AGBRecompilerThumb::compileEntry()
     // load CPSR
     int cpsrOff = reinterpret_cast<uintptr_t>(&cpu.cpsr) - cpuPtr;
     builder.ldr(Reg::R11, Reg::R9, cpsrOff);
+    builder.and_(Reg::R11, Reg::R11, 0xF0000000); // only keep the condition flags
 
     // load emu regs
     // the first 8 are never banked

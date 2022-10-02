@@ -74,6 +74,18 @@ void ThumbBuilder::add(Reg dn, Reg m)
     write(0x4400 | (dnReg & 8) << 4 | mReg << 3 | (dnReg & 7));
 }
 
+// imm
+void ThumbBuilder::and_(Reg d, Reg n, uint32_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    auto exImm = encodeModifiedImmediate(imm);
+
+    write(0xF000 | (s ? (1 << 4) : 0) | nReg | exImm >> 16);
+    write(dReg << 8 | (exImm & 0xFFFF));
+}
+
+// reg
 void ThumbBuilder::and_(LowReg dn, LowReg m)
 {
     int mReg = static_cast<int>(m.val);

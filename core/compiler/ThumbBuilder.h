@@ -70,6 +70,7 @@ public:
     void add(Reg d, Reg n, Reg m); // v7M if d >= 8 || n >= 8 || m >= 8
     void add(Reg dn, Reg m);
 
+    void and_(Reg d, Reg n, uint32_t imm, bool s = false); // v7M
     void and_(LowReg dn, LowReg m);
 
     void asr(LowReg d, LowReg m, uint8_t imm);
