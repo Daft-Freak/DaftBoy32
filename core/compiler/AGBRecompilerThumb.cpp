@@ -31,6 +31,7 @@ bool AGBRecompilerThumb::compileTHUMB(uint8_t *&codePtr, uint32_t pc, BlockInfo 
     if(builder.getError())
     {
         ldrLiteralInstrs.clear();
+        curLiteral = 0;
         printf("recompile @%08X failed due to error (out of space?)\n", startPC);
         return false;
     }
