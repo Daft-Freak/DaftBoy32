@@ -152,6 +152,20 @@ void ThumbBuilder::bic(LowReg dn, LowReg m)
     write(0x4380 | mReg << 3 | dnReg);
 }
 
+void ThumbBuilder::bic(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, uint8_t shift)
+{
+    assert(shift < 32);
+
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    int type = static_cast<int>(shiftType);
+
+    write(0xEA20 | (s ? (1 << 4) : 0) | nReg);
+    write((shift & 0x1C) << 10 | dReg << 8 | (shift & 3) << 6 | type << 4 | mReg);
+}
+
 void ThumbBuilder::bl(int32_t off)
 {
     if(off < 0)
@@ -209,6 +223,20 @@ void ThumbBuilder::eor(LowReg dn, LowReg m)
     int mReg = static_cast<int>(m.val);
     int dnReg = static_cast<int>(dn.val);
     write(0x4040 | mReg << 3 | dnReg);
+}
+
+void ThumbBuilder::eor(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, uint8_t shift)
+{
+    assert(shift < 32);
+
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    int type = static_cast<int>(shiftType);
+
+    write(0xEA80 | (s ? (1 << 4) : 0) | nReg);
+    write((shift & 0x1C) << 10 | dReg << 8 | (shift & 3) << 6 | type << 4 | mReg);
 }
 
 void ThumbBuilder::ldm(uint16_t regList, Reg n, bool w)
@@ -370,18 +398,18 @@ void ThumbBuilder::orr(LowReg d, LowReg m)
     write(0x4300 | mReg << 3 | dReg);
 }
 
-void ThumbBuilder::orr(Reg d, Reg n, Reg m, bool s)
+void ThumbBuilder::orr(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, uint8_t shift)
 {
     assert(n != Reg::PC);
+    assert(shift <= 32);
 
     int dReg = static_cast<int>(d);
     int nReg = static_cast<int>(n);
     int mReg = static_cast<int>(m);
-
-    // TODO: shifted?
+    int type = static_cast<int>(shiftType);
     
     write(0xEA40 | (s ? (1 << 4) : 0) | nReg);
-    write(dReg << 8 | mReg);
+    write((shift & 0x1C) << 10 | dReg << 8 | (shift & 3) << 6 | type << 4 | mReg);
 }
 
 void ThumbBuilder::orr(Reg d, Reg n, uint8_t imm, bool s)

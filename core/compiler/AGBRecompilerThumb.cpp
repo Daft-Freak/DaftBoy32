@@ -867,6 +867,98 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xD:
+        {
+            auto cond = (instr.opcode >> 8) & 0xF;
+
+            if(cond == 0xF) // format 17, SWI
+            {
+                printf("unhandled SWI in recompile\n");
+                return fail();
+            }
+            else // format 16, conditional branch
+            {
+                int offset = static_cast<int8_t>(instr.opcode & 0xFF);
+
+                uint16_t *branchPtr = nullptr;
+
+                switch(cond)
+                {
+                    case 0x0: // BEQ
+                    case 0x1: // BNE
+                    case 0x2: // BCS
+                    case 0x3: // BCC
+                    case 0x4: // BMI
+                    case 0x5: // BPL
+                    case 0x6: // BVS
+                    case 0x7: // BVC
+                        builder.tst(Reg::R11, (instr.flags & Op_ReadFlags) << 28);
+
+                        branchPtr = builder.getPtr();
+                        builder.b(cond & 1 ? Condition::NE : Condition::EQ, 0);
+                        break;
+
+                    case 0x8: // BHI
+                    case 0x9: // BLS
+                        // C & !Z
+                        builder.bic(Reg::R12, Reg::R11, Reg::R11, false, ShiftType::LSR, 1); // cpsr & ~(cpsr >> 1) (Z is the bit above C)
+                        builder.tst(Reg::R12, AGBCPU::Flag_C);
+
+                        branchPtr = builder.getPtr();
+                        builder.b(cond & 1 ? Condition::NE : Condition::EQ, 0);
+                        break;
+
+                    case 0xA: // BGE
+                    case 0xB: // BLT
+                        // N != V (inverted)
+                        builder.eor(Reg::R12, Reg::R11, Reg::R11, false, ShiftType::LSR, 3); // cpsr ^ (cpsr >> 3) (N is 3 bits above V)
+                        builder.tst(Reg::R12, AGBCPU::Flag_V);
+
+                        branchPtr = builder.getPtr();
+                        builder.b(cond & 1 ? Condition::EQ : Condition::NE, 0);
+                        break;
+
+                    case 0xC: // BGT
+                    case 0xD: // BLE
+                        // N != V || Z (inverted)
+                        builder.eor(Reg::R12, Reg::R11, Reg::R11, false, ShiftType::LSR, 3); // cpsr ^ (cpsr >> 3) (N is 3 bits above V)
+                        builder.orr(Reg::R12, Reg::R12, Reg::R11, false, ShiftType::LSR, 2); // ...  | (cpsr >> 2) (Z is 2 bits above V)
+                        builder.tst(Reg::R12, AGBCPU::Flag_V);
+
+                        branchPtr = builder.getPtr();
+                        builder.b(cond & 1 ? Condition::EQ : Condition::NE, 0);
+                        break;
+
+                    default:
+                        printf("invalid format 16 in recompile (cond %i)\n", cond);
+                        return fail();
+                }
+
+                // TODO: actually branch
+                writePC(pc + 2 + offset * 2);
+
+                instrCycles = pcSCycles * 2 + pcNCycles;
+                syncCyclesExecuted();
+
+                // TODO: need to sub cycleCount for branch taken
+
+                exit(exitNoPCPtr);
+
+                if(branchPtr && !builder.getError())
+                {
+                    // update branch
+                    int off = (builder.getPtr() - (branchPtr + 1));
+                    *branchPtr = (*branchPtr & 0xFF00) | (off - 1);
+                }
+
+                // cycles for branch not taken?
+                instrCycles = pcSCycles;
+                updatedCycleCount = false;
+            }
+
+            break;
+        }
+
         case 0xE: // format 18, unconditional branch
         {
             uint32_t offset = static_cast<int16_t>(instr.opcode << 5) >> 4; // sign extend and * 2

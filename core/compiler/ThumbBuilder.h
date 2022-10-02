@@ -58,6 +58,14 @@ enum class Condition
     AL
 };
 
+enum class ShiftType
+{
+    LSL =0,
+    LSR,
+    ASR,
+    ROR
+};
+
 class ThumbBuilder final
 {
 public:
@@ -80,6 +88,7 @@ public:
 
     void bic(Reg d, Reg n, uint32_t imm, bool s = false); // v7M
     void bic(LowReg dn, LowReg m);
+    void bic(Reg d, Reg n, Reg m, bool s = false, ShiftType shiftType = ShiftType::LSL, uint8_t shift = 0); // v7M
 
     void bl(int32_t off);
 
@@ -91,6 +100,7 @@ public:
     void cmp(Reg n, Reg m);
 
     void eor(LowReg dn, LowReg m);
+    void eor(Reg d, Reg n, Reg m, bool s = false, ShiftType shiftType = ShiftType::LSL, uint8_t shift = 0); // v7M
 
     void ldm(uint16_t regList, Reg n, bool w = false); // v7M
 
@@ -117,7 +127,7 @@ public:
     void nop();
 
     void orr(LowReg d, LowReg m);
-    void orr(Reg d, Reg n, Reg m, bool s = false); // v7M
+    void orr(Reg d, Reg n, Reg m, bool s = false, ShiftType shiftType = ShiftType::LSL, uint8_t shift = 0); // v7M
     void orr(Reg d, Reg n, uint8_t imm, bool s = false); // v7M
 
     void pop(uint8_t regList, bool pc);
