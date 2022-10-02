@@ -182,6 +182,31 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             literal = 0;
     };
 
+    auto syncCyclesExecuted = [this, &builder, &instrCycles, &hasLoadStore]()
+    {
+        if(!instrCycles)
+            return;
+
+        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+        auto cycleCountOff = reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr;
+        assert(cycleCountOff <= 4095);
+
+        builder.ldr(Reg::R12, Reg::R9, cycleCountOff);
+
+        if(hasLoadStore)
+        {
+            builder.ldr(Reg::R14, Reg::SP, 0);
+            builder.add(Reg::R12, Reg::R14);
+        }
+        else
+            builder.add(Reg::R12, Reg::R12, instrCycles);
+
+        builder.str(Reg::R12, Reg::R9, cycleCountOff);
+
+        instrCycles = 0;
+        hasLoadStore = false;
+    };
+
     // function call helpers
     auto readMem = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false)
     {
@@ -692,21 +717,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     }
 
     // cycles
-    auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-    auto cycleCountOff = reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr;
-    assert(cycleCountOff <= 4095);
-
-    builder.ldr(Reg::R12, Reg::R9, cycleCountOff);
-
-    if(hasLoadStore)
-    {
-        builder.ldr(Reg::R14, Reg::SP, 0);
-        builder.add(Reg::R12, Reg::R14);
-    }
-    else
-        builder.add(Reg::R12, Reg::R12, instrCycles);
-
-    builder.str(Reg::R12, Reg::R9, cycleCountOff);
+    syncCyclesExecuted();
 
     if(!(instr.flags & Op_Last)) // TODO: also safe to omit if there's an unconditional exit
     {
@@ -714,7 +725,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         
         if(hasLoadStore)
             builder.sub(Reg::R10, Reg::R10, Reg::R14);
-        else
+        else if(instrCycles)
             builder.sub(Reg::R10, Reg::R10, instrCycles);
 
         //lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
