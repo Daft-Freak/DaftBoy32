@@ -809,6 +809,11 @@ int AGBRecompiler::writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cy
     return cyclesToRun; // TODO: update
 }
 
+void AGBRecompiler::updatePCTHUMB(AGBCPU *cpu, uint32_t addr)
+{
+    cpu->updateTHUMBPC(addr & ~1);
+}
+
 void AGBRecompiler::updatePCInterworked(AGBCPU *cpu, uint32_t addr)
 {
     if(addr & 1)

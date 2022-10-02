@@ -359,7 +359,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         uintptr_t funcPtr;
         if(interworked)
             funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::updatePCInterworked);
-        //else TODO
+        else
+            funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::updatePCTHUMB);
 
         // call
         loadLiteral(Reg::R12, funcPtr);
@@ -479,18 +480,15 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                     int dstRegIndex = 0;
 
-                    if(instr.regsWritten & (1 << 15))
-                    {
-                        printf("unhandled format 5 in recompile (PC write)\n");
-                        return fail();
-                    }
-
                     // remap regs
                     // (need to load anything > 8)
-                    if(dstReg == Reg::PC && op != 2)
+                    if(dstReg == Reg::PC)
                     {
-                        loadLiteral(Reg::R12, pc + 2);
-                        dstReg = Reg::R12;
+                        if(op != 2)
+                        {
+                            loadLiteral(Reg::R12, pc + 2);
+                            dstReg = Reg::R12;
+                        }
                     }
                     else if(h1)
                     {
@@ -528,14 +526,34 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     {
                         builder.add(dstReg, srcReg);
 
-                        if(h1) // store back
+                        if(dstReg == Reg::PC)
+                        {
+                            writePC(dstReg);
+
+                            instrCycles = pcSCycles * 2 + pcNCycles;
+                            syncCyclesExecuted();
+
+                            exit(exitNoPCPtr);
+                            break;
+                        }
+                        else if(h1) // store back
                             builder.str(dstReg, Reg::R8/*regs*/, dstRegIndex * 4);
                     }
                     else if(op == 1) // CMP
                         builder.cmp(dstReg, srcReg);
                     else if(op == 2) // MOV
                     {
-                        if(h1) // skip the mov
+                        if(dstReg == Reg::PC)
+                        {
+                            writePC(srcReg);
+
+                            instrCycles = pcSCycles * 2 + pcNCycles;
+                            syncCyclesExecuted();
+
+                            exit(exitNoPCPtr);
+                            break;
+                        }
+                        else if(h1) // skip the mov
                             builder.str(srcReg, Reg::R8/*regs*/, dstRegIndex * 4);
                     }
 
