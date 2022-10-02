@@ -867,6 +867,27 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xE: // format 18, unconditional branch
+        {
+            uint32_t offset = static_cast<int16_t>(instr.opcode << 5) >> 4; // sign extend and * 2
+
+            if(instr.flags & Op_Branch)
+            {
+                printf("unhandled op>>12 in recompile %X (branch)\n", instr.opcode >> 12);
+                return fail();
+            }
+            else
+            {
+                writePC(pc + 2 + offset);
+
+                instrCycles = pcSCycles * 2 + pcNCycles;
+                syncCyclesExecuted();
+
+                exit(exitNoPCPtr);
+            }
+            break;
+        }
+
         case 0xF: // format 19, long branch with link
         {
             bool high = instr.opcode & (1 << 11);
