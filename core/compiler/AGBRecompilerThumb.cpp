@@ -916,7 +916,7 @@ void AGBRecompilerThumb::compileEntry()
     builder.orr(Reg::R12, Reg::R1, 1);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 64);
+    builder.ldr(Reg::R2, 80);
     builder.mov(Reg::R9, Reg::R2);
 
     builder.mov(Reg::R10, Reg::R0); // cycle count
@@ -936,10 +936,11 @@ void AGBRecompilerThumb::compileEntry()
     builder.bx(Reg::R12);
 
     // exit setting the call flag ... and saving LR
-    /*exitForCallPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
-    builder.mov(Reg::R0, 1);
-    builder.ldr(Reg::R2, 16);
-    builder.strb(Reg::R0, Reg::R2, 0);*/
+    exitForCallPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
+    builder.mov(Reg::R12, 1);
+    builder.ldr(Reg::R10, 56);
+    builder.strb(Reg::R12, Reg::R10, 0);
+    builder.ldr(Reg::R12, Reg::R8, 4 * 15); // re-load PC (just for the store later...)
 
     // exit saving LR
     saveAndExitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());

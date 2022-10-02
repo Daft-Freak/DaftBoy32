@@ -135,13 +135,9 @@ int AGBRecompiler::handleBranch(int cyclesToRun)
         {
             auto savedPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 2 : 4);
 
-            // TODO: call exit
-            /*if(exitCallFlag)
-            {
-                // get return address from stack
-                auto &mem = cpu.getMem();
-                savedPC = mem.read(cpu.sp) | mem.read(cpu.sp + 1) << 8;
-            }*/
+            // get return address
+            if(exitCallFlag)
+                savedPC = cpu.reg(AGBCPU::Reg::LR) & ~1;
 
             savedExits[curSavedExit++] = {tmpSavedPtr, savedPC};
             curSavedExit %= savedExitsSize;
