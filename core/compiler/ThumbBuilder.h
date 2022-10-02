@@ -131,7 +131,7 @@ public:
     void str(Reg t, Reg n, uint16_t imm); // v7M if t/n >= 8 || imm > 124 || imm & 3
     void str(LowReg t, uint16_t imm);
 
-    void strb(LowReg t, LowReg n, uint8_t imm);
+    void strb(Reg t, Reg n, uint16_t imm); // v7M if t/n >= 8 || imm > 31
 
     void strh(LowReg t, LowReg n, uint8_t imm);
     void strh(LowReg t, LowReg n, LowReg m);

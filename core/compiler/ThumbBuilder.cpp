@@ -39,12 +39,18 @@ void ThumbBuilder::add(Reg d, Reg n, uint32_t imm)
     }
     else if(dReg < 8 && nReg < 8 && imm < 8)
         write(0x1C00 | imm << 6 | nReg << 3 | dReg);
-    else
+    else if(isValidModifiedImmediate(imm))
     {
         bool s = true; // TODO
         auto exImm = encodeModifiedImmediate(imm);
         write(0xF100 | exImm >> 16 | (s ? (1 << 4) : 0) | nReg);
         write(dReg << 8 | (exImm & 0xFFFF));
+    }
+    else // ADDW
+    {
+        assert(imm <= 0xFFF);
+        write(0xF200 | (imm & 0x800) >> 1 | nReg);
+        write((imm & 0x700) << 4 | dReg << 8 | (imm & 0xFF));
     }
 }
 
@@ -451,13 +457,20 @@ void ThumbBuilder::str(LowReg t, uint16_t imm)
 }
 
 // imm
-void ThumbBuilder::strb(LowReg t, LowReg n, uint8_t imm)
+void ThumbBuilder::strb(Reg t, Reg n, uint16_t imm)
 {
-    assert(imm <= 31);
+    int tReg = static_cast<int>(t);
+    int nReg = static_cast<int>(n);
 
-    int tReg = static_cast<int>(t.val);
-    int nReg = static_cast<int>(n.val);
-    write(0x7000 | imm << 6 | nReg << 3 | tReg);
+    if(tReg < 8 && nReg < 8 && imm < 32)
+        write(0x7000 | imm << 6 | nReg << 3 | tReg);
+    else
+    {
+        assert(imm <= 0xFFF);
+
+        write(0xF880 | nReg);
+        write(tReg << 12 | imm);
+    }
 }
 
 // imm
