@@ -435,8 +435,15 @@ void ThumbBuilder::pop(uint8_t regList, bool pc)
 
 void ThumbBuilder::pop(uint16_t regList)
 {
-    // TODO: one reg has a different encoding
-    ldm(regList, Reg::SP, true);
+    assert(regList);
+
+    if(!(regList & (regList - 1))) // one bit set / power of two
+    {
+        write(0xF85D);
+        write(0x0B04 | __builtin_ctz(regList) << 12);
+    }
+    else
+        ldm(regList, Reg::SP, true);
 }
 
 void ThumbBuilder::push(uint8_t regList, bool lr)
@@ -446,11 +453,19 @@ void ThumbBuilder::push(uint8_t regList, bool lr)
 
 void ThumbBuilder::push(uint16_t regList)
 {
+    assert(regList);
     assert(!(regList & (1 << 13)) && !(regList & (1 << 15))); // no SP or PC
 
-    // TODO: one reg has a different encoding
-    write(0xE92D);
-    write(regList);
+    if(!(regList & (regList - 1))) // one bit set / power of two
+    {
+        write(0xF84D);
+        write(0x0D04 | __builtin_ctz(regList) << 12);
+    }
+    else
+    {
+        write(0xE92D);
+        write(regList);
+    }
 }
 
 void ThumbBuilder::stm(uint16_t regList, Reg n, bool w)
