@@ -39,7 +39,7 @@ bool AGBRecompilerThumb::compileTHUMB(uint8_t *&codePtr, uint32_t pc, BlockInfo 
     if(numInstructions == 0)
     {
 #ifdef RECOMPILER_DEBUG
-        printf("recompile @%04X failed to handle any instructions\n", startPC);
+        printf("recompile @%08X failed to handle any instructions\n", startPC);
 #endif
         return false;
     }
@@ -50,7 +50,7 @@ bool AGBRecompilerThumb::compileTHUMB(uint8_t *&codePtr, uint32_t pc, BlockInfo 
     int len = endPtr - codePtr16;
 
     //debug
-    printf("recompile @%04X generated %i halfwords (%i instructions)\ncode:", startPC, len, numInstructions);
+    printf("recompile @%08X generated %i halfwords (%i instructions)\ncode:", startPC, len, numInstructions);
 
     for(auto p = codePtr16; p != endPtr; p++)
         printf(" %02X %02X", *p & 0xFF, *p >> 8);

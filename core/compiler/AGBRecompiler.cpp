@@ -104,7 +104,7 @@ int AGBRecompiler::handleBranch(int cyclesToRun)
                 analyseTHUMB(pc, blockInfo);
 
 #ifdef RECOMPILER_DEBUG
-                printf("analysed %04X-%04X (%zi instructions)\n", cpuPC, pc, blockInfo.instructions.size());
+                printf("analysed %08X-%08X (%zi instructions)\n", cpuPC, pc, blockInfo.instructions.size());
 #endif
 
                 FuncInfo info{};
