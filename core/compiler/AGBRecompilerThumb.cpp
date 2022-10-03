@@ -969,8 +969,27 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
             if(cond == 0xF) // format 17, SWI
             {
-                printf("unhandled SWI in recompile\n");
-                return fail();
+                // call helper func
+                builder.push(0b1111, false); // R0-3
+
+                builder.mov(Reg::R0, Reg::R9); // CPU ptr
+                builder.mov(Reg::R1, Reg::R11); // CPSR
+
+                auto funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::handleSWI);
+                loadLiteral(Reg::R12, funcPtr);
+                builder.blx(Reg::R12);
+
+                builder.pop(0b1111, false); // R0-3
+
+                // set LR
+                int lrRegIndex = static_cast<int>(AGBCPU::Reg::R14_svc);
+                loadLiteral(Reg::R12, pc);
+                builder.str(Reg::R12, Reg::R8/*regs*/, lrRegIndex * 4);
+
+                // exit
+                instrCycles = pcSCycles * 2 + pcNCycles;
+                syncCyclesExecuted();
+                exit(exitNoPCPtr);
             }
             else // format 16, conditional branch
             {

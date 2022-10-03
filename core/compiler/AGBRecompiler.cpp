@@ -829,3 +829,14 @@ void AGBRecompiler::updatePCInterworked(AGBCPU *cpu, uint32_t addr)
         cpu->updateARMPC(addr);
     }
 }
+
+// doesn't set LR
+void AGBRecompiler::handleSWI(AGBCPU *cpu, uint32_t cpsrCond)
+{
+    cpu->spsr[1/*svc*/] = (cpu->cpsr & ~0xF0000000) | cpsrCond;
+
+    cpu->cpsr = (cpu->cpsr & ~(0x1F | AGBCPU::Flag_T)) | AGBCPU::Flag_I | 0x13; //supervisor mode
+
+    cpu->modeChanged();
+    cpu->updateARMPC(8);
+}
