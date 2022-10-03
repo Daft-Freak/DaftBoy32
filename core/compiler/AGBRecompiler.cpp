@@ -546,7 +546,7 @@ void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)
                     
                     case 0xE: // undef/SWI
                         info.regsWritten = (1 << 14); // LR
-                        exit(info);
+                        info.flags = Op_Exit;
                         break;
                 }
 
