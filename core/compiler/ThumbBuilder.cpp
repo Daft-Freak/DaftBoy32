@@ -369,7 +369,7 @@ void ThumbBuilder::endPatch()
 
 void ThumbBuilder::write(uint16_t hw)
 {
-    if(ptr + 1 != endPtr)
+    if(ptr != endPtr)
         *ptr++ = hw;
     else
         error = true;
