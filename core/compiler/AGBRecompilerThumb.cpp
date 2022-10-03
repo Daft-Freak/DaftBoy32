@@ -28,6 +28,10 @@ bool AGBRecompilerThumb::compileTHUMB(uint8_t *&codePtr, uint32_t pc, BlockInfo 
         numInstructions++;
     }
 
+    lastInstrCycleCheck = nullptr;
+    branchTargets.clear();
+    forwardBranchesToPatch.clear();
+
     if(builder.getError())
     {
         ldrLiteralInstrs.clear();
@@ -412,6 +416,45 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         outputLiterals(false);
         return false;
     };
+
+    // handle branch targets
+    if(instr.flags & Op_BranchTarget)
+    {
+        // store for backwards jumps
+        if(lastInstrCycleCheck)
+            branchTargets.emplace(pc - 2, lastInstrCycleCheck); // after adjusting cycle count but before the jump
+        else
+        {
+            // this is the first instruction, so make a cycle check for the branch to go to
+            builder.b(4 + 4 + 2);
+            lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr());
+
+            // if <= 0 exit
+            builder.b(Condition::GT, 4 + 4);
+
+            auto pcOff = pc - cpu.loReg(AGBCPU::Reg::PC);
+            loadLiteral(Reg::R12, pcOff);
+            exit(saveAndExitPtr);
+
+            branchTargets.emplace(pc - 2, lastInstrCycleCheck);
+        }
+
+        // patch forwards jumps
+        // can't hit this for the first instruction, so the lastInstrCycleCheck will be valid
+        auto jumps = forwardBranchesToPatch.equal_range(pc - 2);
+        for(auto it = jumps.first; it != jumps.second; ++it)
+        {
+            auto off = lastInstrCycleCheck - (it->second + 2);
+
+            auto ptr = reinterpret_cast<uint16_t *>(it->second);
+
+            // patch in new branch
+            builder.patch(ptr, ptr + 2);
+            builder.b(off);
+            builder.endPatch();
+        }
+        forwardBranchesToPatch.erase(jumps.first, jumps.second);
+    }
 
     auto pcSCycles = cpu.pcSCycles, pcNCycles = cpu.pcNCycles;
 
@@ -1078,13 +1121,32 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         {
             uint32_t offset = static_cast<int16_t>(instr.opcode << 5) >> 4; // sign extend and * 2
 
-            // TODO:
-            /*if(instr.flags & Op_Branch)
+            if(instr.flags & Op_Branch)
             {
-                printf("unhandled op>>12 in recompile %X (branch)\n", instr.opcode >> 12);
-                return fail();
+                auto addr = pc + 2 + offset;
+                auto it = branchTargets.find(addr);
+
+                instrCycles = pcSCycles * 2 + pcNCycles;
+                syncCyclesExecuted();
+
+                // about to jump over this
+                builder.sub(Reg::R10, Reg::R10, instrCycles);
+                instrCycles = 0;
+
+                if(it != branchTargets.end())
+                {
+                    int off = it->second - reinterpret_cast<uint8_t *>(builder.getPtr());
+                    builder.b(off);
+                }
+                else
+                {
+                    forwardBranchesToPatch.emplace(addr, reinterpret_cast<uint8_t *>(builder.getPtr()));
+                    // leave some space for the branch
+                    builder.data(0xBF00); // NOP
+                    builder.data(0xBF00);
+                }
             }
-            else*/
+            else
             {
                 writePC(pc + 2 + offset);
 
@@ -1151,7 +1213,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         else if(instrCycles)
             builder.sub(Reg::R10, Reg::R10, instrCycles);
 
-        //lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
+        lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
 
         // if <= 0 exit
         builder.b(Condition::GT, 4 + 4);

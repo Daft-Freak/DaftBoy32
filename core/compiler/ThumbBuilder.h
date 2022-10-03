@@ -84,7 +84,7 @@ public:
     void asr(LowReg d, LowReg m, uint8_t imm);
 
     void b(Condition cond, int imm);
-    void b(int imm);
+    void b(int imm); // v7M if imm < -2044 || imm > 2048
 
     void bic(Reg d, Reg n, uint32_t imm, bool s = false); // v7M
     void bic(LowReg dn, LowReg m);

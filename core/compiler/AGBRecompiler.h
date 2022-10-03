@@ -115,8 +115,7 @@ protected:
 
     // compile state
     // TODO: make these temps
-    /*uint8_t *lastInstrCycleCheck = nullptr;
+    uint8_t *lastInstrCycleCheck = nullptr;
     std::map<uint32_t, uint8_t *> branchTargets;
     std::multimap<uint32_t, uint8_t *> forwardBranchesToPatch;
-    bool spWrite = false;*/
 };
