@@ -30,7 +30,7 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
     curCodePtr = codeBuf;
 
     for(auto &saved : savedExits)
-        saved = {nullptr, 0};
+        saved = {nullptr, 0, 0};
 }
 
 int AGBRecompiler::handleBranch(int cyclesToRun)
@@ -57,6 +57,7 @@ int AGBRecompiler::handleBranch(int cyclesToRun)
         uint8_t *codePtr = nullptr;
 
         auto cpuPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 2 : 4);
+        auto blockStartPC = cpuPC;
 
         // attempt to re-enter previous code
         int savedIndex = curSavedExit - 1;
@@ -68,13 +69,18 @@ int AGBRecompiler::handleBranch(int cyclesToRun)
 
             uint8_t *ptr;
             uint32_t pc;
-            std::tie(ptr, pc) = savedExits[savedIndex];
+            uint32_t startPC;
+            std::tie(ptr, pc, startPC) = savedExits[savedIndex];
 
             if(pc == cpuPC && ptr)
             {
                 codePtr = ptr;
                 curSavedExit = savedIndex;
-                savedExits[savedIndex] = {nullptr, 0};
+
+                cpu.loReg(AGBCPU::Reg::PC) = startPC + (isThumb ? 2 : 4); // compiled code depends on PC pointing to the start of the block
+                blockStartPC = startPC;
+
+                savedExits[savedIndex] = {nullptr, 0, 0};
                 break;
             }
         }
@@ -139,7 +145,7 @@ int AGBRecompiler::handleBranch(int cyclesToRun)
             if(exitCallFlag)
                 savedPC = cpu.reg(AGBCPU::Reg::LR) & ~1;
 
-            savedExits[curSavedExit++] = {tmpSavedPtr, savedPC};
+            savedExits[curSavedExit++] = {tmpSavedPtr, savedPC, blockStartPC};
             curSavedExit %= savedExitsSize;
 
             tmpSavedPtr = nullptr;

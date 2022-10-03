@@ -108,7 +108,7 @@ protected:
 
     static const int savedExitsSize = 16;
     int curSavedExit = 0;
-    std::tuple<uint8_t *, uint32_t> savedExits[savedExitsSize];
+    std::tuple<uint8_t *, uint32_t, uint32_t> savedExits[savedExitsSize];
 
     // compile state
     // TODO: make these temps
