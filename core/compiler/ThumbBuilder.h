@@ -171,6 +171,9 @@ public:
 
     void resetPtr(uint16_t *oldPtr);
 
+    void patch(uint16_t *patchPtr, uint16_t *patchEndPtr);
+    void endPatch();
+
     bool getError() const {return error;}
 
 private:
@@ -179,6 +182,7 @@ private:
     uint32_t encodeModifiedImmediate(uint32_t val);
 
     uint16_t *ptr, *endPtr;
+    uint16_t *savedPtr, *savedEndPtr;
 
     bool error = false; // super basic error handling
 };

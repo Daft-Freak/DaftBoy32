@@ -670,6 +670,24 @@ void ThumbBuilder::resetPtr(uint16_t *oldPtr)
     error = false;
 }
 
+void ThumbBuilder::patch(uint16_t *patchPtr, uint16_t *patchEndPtr)
+{
+    assert(patchPtr < ptr);
+    assert(patchEndPtr < ptr);
+
+    savedPtr = ptr;
+    savedEndPtr = endPtr;
+
+    ptr = patchPtr;
+    endPtr = patchEndPtr;
+}
+
+void ThumbBuilder::endPatch()
+{
+    ptr = savedPtr;
+    endPtr = savedEndPtr;
+}
+
 void ThumbBuilder::write(uint16_t hw)
 {
     if(ptr + 1 != endPtr)
