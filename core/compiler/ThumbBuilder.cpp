@@ -345,12 +345,18 @@ void ThumbBuilder::mov(Reg d, uint32_t imm)
     int reg = static_cast<int>(d);
     if(reg < 8 && imm <= 0xFF)
         write(0x2000 | reg << 8 | imm);
-    else
+    else if(isValidModifiedImmediate(imm))
     {
         bool s = true;
         auto exImm = encodeModifiedImmediate(imm);
         write(0xF04F | (s ? (1 << 4) : 0) | exImm >> 16);
         write((exImm & 0xFFFF) | reg << 8);
+    }
+    else // MOVW
+    {
+        assert(imm <= 0xFFFF);
+        write(0xF240 | (imm & 0x800) >> 1 | imm >> 12);
+        write((imm & 0x700) << 4 | reg << 8 | (imm & 0xFF));
     }
 }
 

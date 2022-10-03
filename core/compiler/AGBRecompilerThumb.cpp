@@ -87,6 +87,15 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 break;
         }
 
+        bool isHigh = static_cast<int>(reg) >= 8;
+
+        // use a MOV if the value will fit... and we would be using a 32bit instruction anyway
+        if(isHigh && (builder.isValidModifiedImmediate(val) || val <= 0xFFFF))
+        {
+            builder.mov(reg, val);
+            return;
+        }
+
         if(index == curLiteral)
         {
             assert(curLiteral < std::size(literals));
