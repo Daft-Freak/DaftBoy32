@@ -395,8 +395,11 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     auto fail = [&]()
     {
         builder.resetPtr(oldPtr);
-        loadLiteral(Reg::R12, pc); // -2 to ignore this instr, +2 for prefetch
+
+        auto pcOff = pc - cpu.loReg(AGBCPU::Reg::PC); // -2 to ignore this instr, +2 for prefetch
+        loadLiteral(Reg::R12, pcOff);
         exit(exitPtr);
+
         outputLiterals(false);
         return false;
     };
@@ -1044,7 +1047,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
         // if <= 0 exit
         builder.b(Condition::GT, 4 + 4);
-        loadLiteral(Reg::R12, pc + 2);
+
+        auto pcOff = pc + 2 - cpu.loReg(AGBCPU::Reg::PC);
+        loadLiteral(Reg::R12, pcOff);
         exit(saveAndExitPtr);
     }
 
@@ -1072,7 +1077,7 @@ void AGBRecompilerThumb::compileEntry()
     builder.orr(Reg::R12, Reg::R1, 1);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 80);
+    builder.ldr(Reg::R2, 84);
     builder.mov(Reg::R9, Reg::R2);
 
     builder.mov(Reg::R10, Reg::R0); // cycle count
@@ -1094,21 +1099,23 @@ void AGBRecompilerThumb::compileEntry()
     // exit setting the call flag ... and saving LR
     exitForCallPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
     builder.mov(Reg::R12, 1);
-    builder.ldr(Reg::R10, 56);
+    builder.ldr(Reg::R10, 60);
     builder.strb(Reg::R12, Reg::R10, 0);
-    builder.ldr(Reg::R12, Reg::R8, 4 * 15); // re-load PC (just for the store later...)
+    builder.mov(Reg::R12, 0);
 
     // exit saving LR
     saveAndExitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
-    builder.ldr(Reg::R10, 48);
+    builder.ldr(Reg::R10, 52);
     builder.str(Reg::LR, Reg::R10, 0);
 
     // exit
     exitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
-    // store PC
-    builder.str(Reg::R12, Reg::R8, 4 * 15);
+    // update PC
+    builder.ldr(Reg::R10, Reg::R8, 4 * 15);
+    builder.add(Reg::R10, Reg::R12);
+    builder.str(Reg::R10, Reg::R8, 4 * 15);
 
     // skip PC store
     exitNoPCPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
@@ -1134,7 +1141,7 @@ void AGBRecompilerThumb::compileEntry()
 
     // write cpu addr
     auto ptr = builder.getPtr();
-    *ptr++ = 0; // align
+    //*ptr++ = 0; // align
     *ptr++ = cpuPtr;
     *ptr++ = cpuPtr >> 16;
 
