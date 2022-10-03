@@ -218,7 +218,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     };
 
     // function call helpers
-    auto readMem = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false)
+    auto readMem = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false, int cyclesVarOff = 0)
     {
         // R0-3, but not the dest reg
         int regSaveMask = 0b1111 & ~(1 << static_cast<int>(dst));
@@ -238,7 +238,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 builder.mov(Reg::R1, base);
         }
 
-        int spOff = regSaveMask == 0b1111 ? 16 : 12;
+        int spOff = (regSaveMask == 0b1111 ? 16 : 12) + cyclesVarOff;
 
         // store initial cycles at first load/store
         if(!hasLoadStore)
@@ -276,7 +276,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.pop(regSaveMask, false);
     };
 
-    auto writeMem = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg data, int width, bool sequential = false)
+    auto writeMem = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg data, int width, bool sequential = false, int cyclesVarOff = 0)
     {
         builder.push(0b1111, false); // R0-3
         builder.sub(Reg::SP, 8); // args 5/6
@@ -314,7 +314,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         if(data != Reg::R2)
             builder.mov(Reg::R2, data);
 
-        int cyclesSPOff = 24;
+        int cyclesSPOff = 24 + cyclesVarOff;
 
         // store initial cycles at first load/store
         if(!hasLoadStore)
@@ -879,6 +879,90 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             break;
         }
 
+        case 0xC: // format 15, multiple load/store
+        {
+            bool isLoad = instr.opcode & (1 << 11);
+            auto baseReg = static_cast<Reg>((instr.opcode >> 8) & 7);
+            uint8_t regList = instr.opcode & 0xFF;
+
+            if(isLoad)
+                instrCycles = pcSCycles + 1;
+            else
+                instrCycles = pcNCycles;
+
+            if(!regList) // empty list load/stores PC (bug)
+            {
+                builder.mov(Reg::R12, baseReg);
+                builder.bic(Reg::R12, Reg::R12, 3);
+
+                if(isLoad)
+                {
+                    readMem(Reg::R12, 0u, Reg::R12, 32);
+                    writePC(Reg::R12);
+
+                    builder.add(baseReg, 0x40);
+
+                    // TODO: cycles for branch (not implemented in CPU either)
+
+                    syncCyclesExecuted();
+                    exit(exitNoPCPtr);
+                }
+                else
+                {
+                    loadLiteral(Reg::R14, pc + 4);
+                    writeMem(Reg::R12, 0u, Reg::R14, 32);
+                    builder.add(baseReg, 0x40);
+                }
+            }
+            else
+            {
+                // TODO: output here could also be improved
+
+                int endOff = 0;
+                for(int i = 0; i < 8; i++)
+                {
+                    if(regList & (1 << i))
+                        endOff += 4;
+                }
+
+                bool first = true, seq = false;
+                uint32_t offset = 0;
+
+                // prevent overriding base for loads
+                // "A LDM will always overwrite the updated base if the base is in the list."
+                if(isLoad && (regList & (1 << static_cast<int>(baseReg))))
+                    first = false;
+
+                builder.push(1 << 8); // need somewhere to store the address
+
+                builder.mov(Reg::R8, baseReg);
+                builder.bic(Reg::R8, Reg::R8, 3);
+
+                for(int i = 0; i < 8; i++)
+                {
+                    if(!(regList & (1 << i)))
+                        continue;
+
+                    auto reg = static_cast<Reg>(i);
+
+                    if(isLoad)
+                        readMem(Reg::R8, offset, reg, 32, seq, 4);
+                    else
+                        writeMem(Reg::R8, offset, reg, 32, seq, 4);
+
+                    if(first) // write-back
+                        builder.add(baseReg, endOff);
+
+                    first = false;
+                    seq = true;
+                    offset += 4;
+                }
+
+                builder.pop(1 << 8);
+            }
+            break;
+        }
+
         case 0xD:
         {
             auto cond = (instr.opcode >> 8) & 0xF;
@@ -1034,10 +1118,6 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
             break;
         }
-
-        default:
-            printf("unhandled op>>12 in recompile %X\n", instr.opcode >> 12);
-            return fail();
     }
 
     // cycles
