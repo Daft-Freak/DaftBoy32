@@ -1226,7 +1226,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     // output literals if ~close to the limit or this is the last instruction
     // TODO: adjust this? (T2 encoding has x4 range forwards and can index backwards)
     const int minLiterals = 3; // load can use 2 + 1 for exit from cycle check
-    if((instr.flags & Op_Last) || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460) || curLiteral + minLiterals > std::size(literals))
+    if((instr.flags & Op_Last) || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 400) || curLiteral + minLiterals > std::size(literals))
         outputLiterals();
 
     return true;
