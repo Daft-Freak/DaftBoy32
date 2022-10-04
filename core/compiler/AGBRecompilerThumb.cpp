@@ -7,7 +7,7 @@
 #include "AGBCPU.h"
 #include "ThumbBuilder.h"
 
-const Reg cpuRegsReg = Reg::R8;
+//const Reg cpuRegsReg = Reg::R8;
 const Reg cpuPtrReg = Reg::R9;
 const Reg cyclesToRunReg = Reg::R10;
 const Reg cpsrReg = Reg::R11;
@@ -412,14 +412,16 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     auto loadHiReg = [this, &builder](Reg dst, Reg r)
     {
         int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(r)));
-        builder.ldr(dst, cpuRegsReg, regIndex * 4);
+        int regsOff = reinterpret_cast<uintptr_t>(&cpu.regs) - reinterpret_cast<uintptr_t>(&cpu);
+        builder.ldr(dst, cpuPtrReg, regsOff + regIndex * 4);
         return dst;
     };
 
     auto storeHiReg = [this, &builder](Reg src, Reg r)
     {
         int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(r)));
-        builder.str(src, cpuRegsReg, regIndex * 4);
+        int regsOff = reinterpret_cast<uintptr_t>(&cpu.regs) - reinterpret_cast<uintptr_t>(&cpu);
+        builder.str(src, cpuPtrReg, regsOff + regIndex * 4);
     };
 
     auto oldPtr = builder.getPtr();
@@ -1256,7 +1258,7 @@ void AGBRecompilerThumb::compileEntry()
     builder.orr(Reg::R12, Reg::R1, 1);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 84);
+    builder.ldr(Reg::R2, 88);
     builder.mov(cpuPtrReg, Reg::R2);
 
     builder.mov(cyclesToRunReg, Reg::R0); // cycle count
@@ -1270,7 +1272,6 @@ void AGBRecompilerThumb::compileEntry()
     // the first 8 are never banked
     int regsOff = reinterpret_cast<uintptr_t>(&cpu.regs) - cpuPtr;
     builder.add(Reg::R2, regsOff); // add to cpu ptr
-    builder.mov(cpuRegsReg, Reg::R2); // store regs ptr
     builder.ldm(0xFF, Reg::R2, false);
 
     builder.bx(Reg::R12);
@@ -1278,29 +1279,30 @@ void AGBRecompilerThumb::compileEntry()
     // exit setting the call flag ... and saving LR
     exitForCallPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
     builder.mov(Reg::R12, 1);
-    builder.ldr(Reg::R10, 60);
+    builder.ldr(Reg::R10, 64);
     builder.strb(Reg::R12, Reg::R10, 0);
     builder.mov(Reg::R12, 0);
 
     // exit saving LR
     saveAndExitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
-    builder.ldr(Reg::R10, 52);
+    builder.ldr(Reg::R10, 56);
     builder.str(Reg::LR, Reg::R10, 0);
 
     // exit
     exitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
     // update PC
-    builder.ldr(Reg::R10, cpuRegsReg, 4 * 15);
+    builder.ldr(Reg::R10, cpuPtrReg, regsOff + 4 * 15);
     builder.add(Reg::R10, Reg::R12);
-    builder.str(Reg::R10, cpuRegsReg, 4 * 15);
+    builder.str(Reg::R10, cpuPtrReg, regsOff + 4 * 15);
 
     // skip PC store
     exitNoPCPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
     // save emu regs
-    builder.stm(0xFF, cpuRegsReg, false);
+    builder.add(Reg::R10, cpuPtrReg, regsOff);
+    builder.stm(0xFF, Reg::R10, false);
 
     // update CPSR
     builder.ldr(Reg::R0, cpuPtrReg, cpsrOff); // load old
@@ -1320,7 +1322,7 @@ void AGBRecompilerThumb::compileEntry()
 
     // write cpu addr
     auto ptr = builder.getPtr();
-    //*ptr++ = 0; // align
+    *ptr++ = 0; // align
     *ptr++ = cpuPtr;
     *ptr++ = cpuPtr >> 16;
 
