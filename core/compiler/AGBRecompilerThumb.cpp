@@ -7,6 +7,12 @@
 #include "AGBCPU.h"
 #include "ThumbBuilder.h"
 
+const Reg cpuRegsReg = Reg::R8;
+const Reg cpuPtrReg = Reg::R9;
+const Reg cyclesToRunReg = Reg::R10;
+const Reg cpsrReg = Reg::R11;
+// R12 used as tmp
+
 bool AGBRecompilerThumb::compileTHUMB(uint8_t *&codePtr, uint32_t pc, BlockInfo &blockInfo)
 {
     auto codePtr16 = reinterpret_cast<uint16_t *>(codePtr);
@@ -206,7 +212,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         auto cycleCountOff = reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr;
         assert(cycleCountOff <= 4095);
 
-        builder.ldr(Reg::R12, Reg::R9, cycleCountOff);
+        builder.ldr(Reg::R12, cpuPtrReg, cycleCountOff);
 
         if(hasLoadStore)
         {
@@ -216,7 +222,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         else
             builder.add(Reg::R12, Reg::R12, instrCycles);
 
-        builder.str(Reg::R12, Reg::R9, cycleCountOff);
+        builder.str(Reg::R12, cpuPtrReg, cycleCountOff);
 
         updatedCycleCount = true;
     };
@@ -252,7 +258,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             hasLoadStore = true;
         }
 
-        builder.mov(Reg::R0, Reg::R9); // CPU ptr
+        builder.mov(Reg::R0, cpuPtrReg); // CPU ptr
         builder.add(Reg::R2, Reg::SP, spOff); // cycles out
         builder.mov(Reg::R3, sequential);
 
@@ -331,8 +337,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.mov(Reg::R0, sequential);
         builder.str(Reg::R0, 0);
 
-        builder.str(Reg::R10, Reg::SP, 4); // cycle count in
-        builder.mov(Reg::R0, Reg::R9); // CPU ptr
+        builder.str(cyclesToRunReg, Reg::SP, 4); // cycle count in
+        builder.mov(Reg::R0, cpuPtrReg); // CPU ptr
         builder.add(Reg::R3, Reg::SP, cyclesSPOff); // cycles out
 
         // get func pointer
@@ -351,7 +357,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         loadLiteral(Reg::R12, funcPtr);
         builder.blx(Reg::R12);
 
-        builder.mov(Reg::R10, Reg::R0); // new cycle count
+        builder.mov(cyclesToRunReg, Reg::R0); // new cycle count
 
         builder.add(Reg::SP, 8);
         builder.pop(0b1111, false); // R0-3
@@ -367,7 +373,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         else
             loadLiteral(Reg::R1, std::get<uint32_t>(addr));
 
-        builder.mov(Reg::R0, Reg::R9); // CPU ptr
+        builder.mov(Reg::R0, cpuPtrReg); // CPU ptr
 
         // get func pointer
         uintptr_t funcPtr;
@@ -392,7 +398,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
     auto flagsIn = [&builder]()
     {
-        builder.msr(Reg::R11, 2, 0); // CPSR
+        builder.msr(cpsrReg, 2, 0); // CPSR
     };
 
     auto passThrough = [&instr, &builder]()
@@ -400,7 +406,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.data(instr.opcode);
 
         if(instr.flags & Op_WriteFlags)
-            builder.mrs(Reg::R11, 0); // CPSR
+            builder.mrs(cpsrReg, 0); // CPSR
     };
 
     auto oldPtr = builder.getPtr();
@@ -515,7 +521,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         if(h2)
                         {
                             int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(srcReg)));
-                            builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+                            builder.ldr(Reg::R12, cpuRegsReg, regIndex * 4);
                             srcReg = Reg::R12;
                         }
 
@@ -551,7 +557,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         dstRegIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(dstReg)));
 
                         if(op != 2/*MOV*/)
-                            builder.ldr(Reg::R12, Reg::R8/*regs*/, dstRegIndex * 4);
+                            builder.ldr(Reg::R12, cpuRegsReg, dstRegIndex * 4);
 
                         dstReg = Reg::R12;
                     }
@@ -570,9 +576,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(srcReg)));
 
                         if(op == 2/*MOV*/ && !h1) // ship the mov
-                            builder.ldr(dstReg, Reg::R8/*regs*/, regIndex * 4);
+                            builder.ldr(dstReg, cpuRegsReg, regIndex * 4);
                         else
-                            builder.ldr(Reg::R14, Reg::R8/*regs*/, regIndex * 4);
+                            builder.ldr(Reg::R14, cpuRegsReg, regIndex * 4);
 
                         srcReg = Reg::R14;
                     }
@@ -593,7 +599,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                             break;
                         }
                         else if(h1) // store back
-                            builder.str(dstReg, Reg::R8/*regs*/, dstRegIndex * 4);
+                            builder.str(dstReg, cpuRegsReg, dstRegIndex * 4);
                     }
                     else if(op == 1) // CMP
                         builder.cmp(dstReg, srcReg);
@@ -610,11 +616,11 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                             break;
                         }
                         else if(h1) // skip the mov
-                            builder.str(srcReg, Reg::R8/*regs*/, dstRegIndex * 4);
+                            builder.str(srcReg, cpuRegsReg, dstRegIndex * 4);
                     }
 
                     if(instr.flags & Op_WriteFlags) // only CMP
-                        builder.mrs(Reg::R11, 0); // CPSR
+                        builder.mrs(cpsrReg, 0); // CPSR
                 }
                 else
                     passThrough();
@@ -767,7 +773,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             auto offset = (instr.opcode & 0xFF) << 2;
 
             int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
-            builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+            builder.ldr(Reg::R12, cpuRegsReg, regIndex * 4);
 
             if(instr.flags & Op_Load)
             {
@@ -791,7 +797,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             if(isSP)
             {
                 int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
-                builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+                builder.ldr(Reg::R12, cpuRegsReg, regIndex * 4);
                 builder.add(dstReg, Reg::R12, word);
             }
             else
@@ -824,7 +830,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         if(regList & (1 << i))
                         {
                             auto reg = static_cast<Reg>(i);
-                            builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                            builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
                             builder.bic(Reg::R12, Reg::R12, 3);
                             readMem(Reg::R12, offset, reg, 32, true); // first N?
                             offset += 4;
@@ -833,7 +839,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                     if(pclr)
                     {
-                        builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                        builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
                         builder.bic(Reg::R12, Reg::R12, 3);
                         readMem(Reg::R12, offset, Reg::R12, 32, true);
                         writePC(Reg::R12);
@@ -843,9 +849,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     }
 
                     // update SP
-                    builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                    builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
                     builder.add(Reg::R12, Reg::R12, offset);
-                    builder.str(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                    builder.str(Reg::R12, cpuRegsReg, spRegIndex * 4);
 
                     // exit if we set PC
                     if(pclr)
@@ -871,9 +877,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                     // update SP
                     // TODO: should be done last but...
-                    builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                    builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
                     builder.sub(Reg::R12, Reg::R12, offset);
-                    builder.str(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                    builder.str(Reg::R12, cpuRegsReg, spRegIndex * 4);
 
                     offset = 0;
 
@@ -882,7 +888,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         if(regList & (1 << i))
                         {
                             auto reg = static_cast<Reg>(i);
-                            builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                            builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
                             builder.bic(Reg::R12, Reg::R12, 3);
                             writeMem(Reg::R12, offset, reg, 32, true); // first N?
                             offset += 4;
@@ -891,11 +897,11 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                     if(pclr) // store LR
                     {
-                        builder.ldr(Reg::R12, Reg::R8/*regs*/, spRegIndex * 4);
+                        builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
                         builder.bic(Reg::R12, Reg::R12, 3);
 
                         int lrRegIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::LR));
-                        builder.ldr(Reg::R14, Reg::R8/*regs*/, lrRegIndex * 4);
+                        builder.ldr(Reg::R14, cpuRegsReg, lrRegIndex * 4);
  
                         writeMem(Reg::R12, offset, Reg::R14, 32, true);
                     }
@@ -908,14 +914,14 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                 int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
 
-                builder.ldr(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+                builder.ldr(Reg::R12, cpuRegsReg, regIndex * 4);
 
                 if(isNeg)
                     builder.sub(Reg::R12, Reg::R12, off);
                 else
                     builder.add(Reg::R12, Reg::R12, off);
 
-                builder.str(Reg::R12, Reg::R8/*regs*/, regIndex * 4);
+                builder.str(Reg::R12, cpuRegsReg, regIndex * 4);
 
                 instrCycles = pcSCycles;
             }
@@ -1015,8 +1021,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 // call helper func
                 builder.push(0b1111, false); // R0-3
 
-                builder.mov(Reg::R0, Reg::R9); // CPU ptr
-                builder.mov(Reg::R1, Reg::R11); // CPSR
+                builder.mov(Reg::R0, cpuPtrReg); // CPU ptr
+                builder.mov(Reg::R1, cpsrReg); // CPSR
 
                 auto funcPtr = reinterpret_cast<uintptr_t>(AGBRecompiler::handleSWI);
                 loadLiteral(Reg::R12, funcPtr);
@@ -1027,7 +1033,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 // set LR
                 int lrRegIndex = static_cast<int>(AGBCPU::Reg::R14_svc);
                 loadLiteral(Reg::R12, pc);
-                builder.str(Reg::R12, Reg::R8/*regs*/, lrRegIndex * 4);
+                builder.str(Reg::R12, cpuRegsReg, lrRegIndex * 4);
 
                 // exit
                 instrCycles = pcSCycles * 2 + pcNCycles;
@@ -1050,7 +1056,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     case 0x5: // BPL
                     case 0x6: // BVS
                     case 0x7: // BVC
-                        builder.tst(Reg::R11, (instr.flags & Op_ReadFlags) << 28);
+                        builder.tst(cpsrReg, (instr.flags & Op_ReadFlags) << 28);
 
                         branchPtr = builder.getPtr();
                         builder.b(cond & 1 ? Condition::NE : Condition::EQ, 0);
@@ -1059,7 +1065,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     case 0x8: // BHI
                     case 0x9: // BLS
                         // C & !Z
-                        builder.bic(Reg::R12, Reg::R11, Reg::R11, false, ShiftType::LSR, 1); // cpsr & ~(cpsr >> 1) (Z is the bit above C)
+                        builder.bic(Reg::R12, cpsrReg, cpsrReg, false, ShiftType::LSR, 1); // cpsr & ~(cpsr >> 1) (Z is the bit above C)
                         builder.tst(Reg::R12, AGBCPU::Flag_C);
 
                         branchPtr = builder.getPtr();
@@ -1069,7 +1075,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     case 0xA: // BGE
                     case 0xB: // BLT
                         // N != V (inverted)
-                        builder.eor(Reg::R12, Reg::R11, Reg::R11, false, ShiftType::LSR, 3); // cpsr ^ (cpsr >> 3) (N is 3 bits above V)
+                        builder.eor(Reg::R12, cpsrReg, cpsrReg, false, ShiftType::LSR, 3); // cpsr ^ (cpsr >> 3) (N is 3 bits above V)
                         builder.tst(Reg::R12, AGBCPU::Flag_V);
 
                         branchPtr = builder.getPtr();
@@ -1079,8 +1085,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     case 0xC: // BGT
                     case 0xD: // BLE
                         // N != V || Z (inverted)
-                        builder.eor(Reg::R12, Reg::R11, Reg::R11, false, ShiftType::LSR, 3); // cpsr ^ (cpsr >> 3) (N is 3 bits above V)
-                        builder.orr(Reg::R12, Reg::R12, Reg::R11, false, ShiftType::LSR, 2); // ...  | (cpsr >> 2) (Z is 2 bits above V)
+                        builder.eor(Reg::R12, cpsrReg , cpsrReg, false, ShiftType::LSR, 3); // cpsr ^ (cpsr >> 3) (N is 3 bits above V)
+                        builder.orr(Reg::R12, Reg::R12, cpsrReg, false, ShiftType::LSR, 2); // ...  | (cpsr >> 2) (Z is 2 bits above V)
                         builder.tst(Reg::R12, AGBCPU::Flag_V);
 
                         branchPtr = builder.getPtr();
@@ -1097,7 +1103,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                 if(instr.flags & Op_Branch)
                 {
-                    builder.sub(Reg::R10, Reg::R10, instrCycles);
+                    builder.sub(cyclesToRunReg, cyclesToRunReg, instrCycles);
 
                     auto addr = pc + 2 + offset * 2;
                     auto it = branchTargets.find(addr);
@@ -1149,7 +1155,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 syncCyclesExecuted();
 
                 // about to jump over this
-                builder.sub(Reg::R10, Reg::R10, instrCycles);
+                builder.sub(cyclesToRunReg, cyclesToRunReg, instrCycles);
                 instrCycles = 0;
 
                 if(it != branchTargets.end())
@@ -1193,19 +1199,19 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                 loadLiteral(Reg::R12, pc + 2 + offset);
 
-                builder.str(Reg::R12, Reg::R8/*regs*/, lrRegIndex * 4);
+                builder.str(Reg::R12, cpuRegsReg, lrRegIndex * 4);
 
                 instrCycles = pcSCycles;
             }
             else
             {
                 // calc PC
-                builder.ldr(Reg::R12, Reg::R8/*regs*/, lrRegIndex * 4);
+                builder.ldr(Reg::R12, cpuRegsReg, lrRegIndex * 4);
                 builder.add(Reg::R12, Reg::R12, offset << 1);
 
                 // set LR
                 loadLiteral(Reg::R14, pc | 1);
-                builder.str(Reg::R14, Reg::R8/*regs*/, lrRegIndex * 4);
+                builder.str(Reg::R14, cpuRegsReg, lrRegIndex * 4);
 
                 // set PC
                 writePC(Reg::R12);
@@ -1228,9 +1234,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         // cycles -= executed
         
         if(hasLoadStore)
-            builder.sub(Reg::R10, Reg::R10, Reg::R14);
+            builder.sub(cyclesToRunReg, cyclesToRunReg, Reg::R14);
         else if(instrCycles)
-            builder.sub(Reg::R10, Reg::R10, instrCycles);
+            builder.sub(cyclesToRunReg, cyclesToRunReg, instrCycles);
 
         lastInstrCycleCheck = reinterpret_cast<uint8_t *>(builder.getPtr()); // save in case the next instr is a branch target
 
@@ -1267,20 +1273,20 @@ void AGBRecompilerThumb::compileEntry()
 
     // load cpu pointer
     builder.ldr(Reg::R2, 84);
-    builder.mov(Reg::R9, Reg::R2);
+    builder.mov(cpuPtrReg, Reg::R2);
 
-    builder.mov(Reg::R10, Reg::R0); // cycle count
+    builder.mov(cyclesToRunReg, Reg::R0); // cycle count
 
     // load CPSR
     int cpsrOff = reinterpret_cast<uintptr_t>(&cpu.cpsr) - cpuPtr;
-    builder.ldr(Reg::R11, Reg::R9, cpsrOff);
-    builder.and_(Reg::R11, Reg::R11, 0xF0000000); // only keep the condition flags
+    builder.ldr(cpsrReg, cpuPtrReg, cpsrOff);
+    builder.and_(cpsrReg, cpsrReg, 0xF0000000); // only keep the condition flags
 
     // load emu regs
     // the first 8 are never banked
     int regsOff = reinterpret_cast<uintptr_t>(&cpu.regs) - cpuPtr;
     builder.add(Reg::R2, regsOff); // add to cpu ptr
-    builder.mov(Reg::R8, Reg::R2); // store regs ptr
+    builder.mov(cpuRegsReg, Reg::R2); // store regs ptr
     builder.ldm(0xFF, Reg::R2, false);
 
     builder.bx(Reg::R12);
@@ -1302,23 +1308,23 @@ void AGBRecompilerThumb::compileEntry()
     exitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
     // update PC
-    builder.ldr(Reg::R10, Reg::R8, 4 * 15);
+    builder.ldr(Reg::R10, cpuRegsReg, 4 * 15);
     builder.add(Reg::R10, Reg::R12);
-    builder.str(Reg::R10, Reg::R8, 4 * 15);
+    builder.str(Reg::R10, cpuRegsReg, 4 * 15);
 
     // skip PC store
     exitNoPCPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
     // save emu regs
-    builder.stm(0xFF, Reg::R8, false);
+    builder.stm(0xFF, cpuRegsReg, false);
 
     // update CPSR
-    builder.ldr(Reg::R0, Reg::R9, cpsrOff); // load old
+    builder.ldr(Reg::R0, cpuPtrReg, cpsrOff); // load old
     builder.mov(Reg::R1, 0xFF);
     builder.and_(Reg::R0, Reg::R1);
 
-    builder.orr(Reg::R11, Reg::R11, Reg::R0);
-    builder.str(Reg::R11, Reg::R9, cpsrOff);
+    builder.orr(cpsrReg, cpsrReg, Reg::R0);
+    builder.str(cpsrReg, cpuPtrReg, cpsrOff);
 
     builder.add(Reg::SP, 4);
 
