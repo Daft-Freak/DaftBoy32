@@ -541,11 +541,13 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     auto dstReg = static_cast<Reg>((instr.opcode & 7) + (h1 ? 8 : 0));
 
                     int dstRegIndex = 0;
+                    bool pcWrite = false;
 
                     // remap regs
                     // (need to load anything > 8)
                     if(dstReg == Reg::PC)
                     {
+                        pcWrite = true;
                         if(op != 2)
                         {
                             loadLiteral(Reg::R12, pc + 2);
@@ -588,16 +590,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     {
                         builder.add(dstReg, srcReg);
 
-                        if(dstReg == Reg::PC)
-                        {
+                        if(pcWrite)
                             writePC(dstReg);
-
-                            instrCycles = pcSCycles * 2 + pcNCycles;
-                            syncCyclesExecuted();
-
-                            exit(exitNoPCPtr);
-                            break;
-                        }
                         else if(h1) // store back
                             builder.str(dstReg, cpuRegsReg, dstRegIndex * 4);
                     }
@@ -606,17 +600,18 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     else if(op == 2) // MOV
                     {
                         if(dstReg == Reg::PC)
-                        {
                             writePC(srcReg);
-
-                            instrCycles = pcSCycles * 2 + pcNCycles;
-                            syncCyclesExecuted();
-
-                            exit(exitNoPCPtr);
-                            break;
-                        }
                         else if(h1) // skip the mov
                             builder.str(srcReg, cpuRegsReg, dstRegIndex * 4);
+                    }
+
+                    if(pcWrite)
+                    {
+                        instrCycles = pcSCycles * 2 + pcNCycles;
+                        syncCyclesExecuted();
+
+                        exit(exitNoPCPtr);
+                        break;
                     }
 
                     if(instr.flags & Op_WriteFlags) // only CMP
