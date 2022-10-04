@@ -409,6 +409,19 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             builder.mrs(cpsrReg, 0); // CPSR
     };
 
+    auto loadHiReg = [this, &builder](Reg dst, Reg r)
+    {
+        int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(r)));
+        builder.ldr(dst, cpuRegsReg, regIndex * 4);
+        return dst;
+    };
+
+    auto storeHiReg = [this, &builder](Reg src, Reg r)
+    {
+        int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(r)));
+        builder.str(src, cpuRegsReg, regIndex * 4);
+    };
+
     auto oldPtr = builder.getPtr();
 
     auto fail = [&]()
@@ -519,11 +532,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     else
                     {
                         if(h2)
-                        {
-                            int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(srcReg)));
-                            builder.ldr(Reg::R12, cpuRegsReg, regIndex * 4);
-                            srcReg = Reg::R12;
-                        }
+                            srcReg = loadHiReg(Reg::R12, srcReg);
 
                         writePC(srcReg, true);
                     }
@@ -540,14 +549,12 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     auto srcReg = static_cast<Reg>(((instr.opcode >> 3) & 7) + (h2 ? 8 : 0));
                     auto dstReg = static_cast<Reg>((instr.opcode & 7) + (h1 ? 8 : 0));
 
-                    int dstRegIndex = 0;
-                    bool pcWrite = false;
+                    auto origDstReg = dstReg;
 
                     // remap regs
                     // (need to load anything > 8)
                     if(dstReg == Reg::PC)
                     {
-                        pcWrite = true;
                         if(op != 2)
                         {
                             loadLiteral(Reg::R12, pc + 2);
@@ -556,12 +563,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     }
                     else if(h1)
                     {
-                        dstRegIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(dstReg)));
-
                         if(op != 2/*MOV*/)
-                            builder.ldr(Reg::R12, cpuRegsReg, dstRegIndex * 4);
-
-                        dstReg = Reg::R12;
+                            dstReg = loadHiReg(Reg::R12, dstReg);
                     }
 
                     if(srcReg == Reg::PC)
@@ -575,14 +578,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     }
                     else if(h2)
                     {
-                        int regIndex = static_cast<int>(cpu.mapReg(static_cast<AGBCPU::Reg>(srcReg)));
-
                         if(op == 2/*MOV*/ && !h1) // ship the mov
-                            builder.ldr(dstReg, cpuRegsReg, regIndex * 4);
+                            loadHiReg(dstReg, srcReg);
                         else
-                            builder.ldr(Reg::R14, cpuRegsReg, regIndex * 4);
-
-                        srcReg = Reg::R14;
+                            srcReg = loadHiReg(Reg::R14, srcReg);
                     }
 
                     // then output ~the same instruction
@@ -590,10 +589,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     {
                         builder.add(dstReg, srcReg);
 
-                        if(pcWrite)
+                        if(origDstReg == Reg::PC)
                             writePC(dstReg);
                         else if(h1) // store back
-                            builder.str(dstReg, cpuRegsReg, dstRegIndex * 4);
+                            storeHiReg(dstReg, origDstReg);
                     }
                     else if(op == 1) // CMP
                         builder.cmp(dstReg, srcReg);
@@ -602,10 +601,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         if(dstReg == Reg::PC)
                             writePC(srcReg);
                         else if(h1) // skip the mov
-                            builder.str(srcReg, cpuRegsReg, dstRegIndex * 4);
+                            storeHiReg(srcReg, origDstReg);
                     }
 
-                    if(pcWrite)
+                    if(origDstReg == Reg::PC)
                     {
                         instrCycles = pcSCycles * 2 + pcNCycles;
                         syncCyclesExecuted();
@@ -767,8 +766,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             auto dstReg = static_cast<Reg>((instr.opcode >> 8) & 7);
             auto offset = (instr.opcode & 0xFF) << 2;
 
-            int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
-            builder.ldr(Reg::R12, cpuRegsReg, regIndex * 4);
+            loadHiReg(Reg::R12, Reg::SP);
 
             if(instr.flags & Op_Load)
             {
@@ -791,8 +789,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
             if(isSP)
             {
-                int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
-                builder.ldr(Reg::R12, cpuRegsReg, regIndex * 4);
+                loadHiReg(Reg::R12, Reg::SP);
                 builder.add(dstReg, Reg::R12, word);
             }
             else
@@ -810,8 +807,6 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 bool pclr = instr.opcode & (1 << 8); // store LR/load PC
                 uint8_t regList = instr.opcode & 0xFF;
 
-                int spRegIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
-
                 // TODO: output here is nasty
 
                 if(isLoad) // POP
@@ -825,7 +820,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         if(regList & (1 << i))
                         {
                             auto reg = static_cast<Reg>(i);
-                            builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
+                            loadHiReg(Reg::R12, Reg::SP);
                             builder.bic(Reg::R12, Reg::R12, 3);
                             readMem(Reg::R12, offset, reg, 32, true); // first N?
                             offset += 4;
@@ -834,7 +829,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                     if(pclr)
                     {
-                        builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
+                        loadHiReg(Reg::R12, Reg::SP);
                         builder.bic(Reg::R12, Reg::R12, 3);
                         readMem(Reg::R12, offset, Reg::R12, 32, true);
                         writePC(Reg::R12);
@@ -844,9 +839,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     }
 
                     // update SP
-                    builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
+                    loadHiReg(Reg::R12, Reg::SP);
                     builder.add(Reg::R12, Reg::R12, offset);
-                    builder.str(Reg::R12, cpuRegsReg, spRegIndex * 4);
+                    storeHiReg(Reg::R12, Reg::SP);
 
                     // exit if we set PC
                     if(pclr)
@@ -872,9 +867,9 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                     // update SP
                     // TODO: should be done last but...
-                    builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
+                    loadHiReg(Reg::R12, Reg::SP);
                     builder.sub(Reg::R12, Reg::R12, offset);
-                    builder.str(Reg::R12, cpuRegsReg, spRegIndex * 4);
+                    storeHiReg(Reg::R12, Reg::SP);
 
                     offset = 0;
 
@@ -883,7 +878,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         if(regList & (1 << i))
                         {
                             auto reg = static_cast<Reg>(i);
-                            builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
+                            loadHiReg(Reg::R12, Reg::SP);
                             builder.bic(Reg::R12, Reg::R12, 3);
                             writeMem(Reg::R12, offset, reg, 32, true); // first N?
                             offset += 4;
@@ -892,11 +887,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                     if(pclr) // store LR
                     {
-                        builder.ldr(Reg::R12, cpuRegsReg, spRegIndex * 4);
+                        loadHiReg(Reg::R12, Reg::SP);
                         builder.bic(Reg::R12, Reg::R12, 3);
 
-                        int lrRegIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::LR));
-                        builder.ldr(Reg::R14, cpuRegsReg, lrRegIndex * 4);
+                        loadHiReg(Reg::R14, Reg::LR);
  
                         writeMem(Reg::R12, offset, Reg::R14, 32, true);
                     }
@@ -907,16 +901,14 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 bool isNeg = instr.opcode & (1 << 7);
                 int off = (instr.opcode & 0x7F) << 2;
 
-                int regIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::SP));
-
-                builder.ldr(Reg::R12, cpuRegsReg, regIndex * 4);
+                loadHiReg(Reg::R12, Reg::SP);
 
                 if(isNeg)
                     builder.sub(Reg::R12, Reg::R12, off);
                 else
                     builder.add(Reg::R12, Reg::R12, off);
 
-                builder.str(Reg::R12, cpuRegsReg, regIndex * 4);
+                storeHiReg(Reg::R12, Reg::SP);
 
                 instrCycles = pcSCycles;
             }
@@ -1026,9 +1018,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 builder.pop(0b1111, false); // R0-3
 
                 // set LR
-                int lrRegIndex = static_cast<int>(AGBCPU::Reg::R14_svc);
                 loadLiteral(Reg::R12, pc);
-                builder.str(Reg::R12, cpuRegsReg, lrRegIndex * 4);
+                storeHiReg(Reg::R12, Reg::LR);
 
                 // exit
                 instrCycles = pcSCycles * 2 + pcNCycles;
@@ -1183,8 +1174,6 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             bool high = instr.opcode & (1 << 11);
             uint32_t offset = instr.opcode & 0x7FF;
 
-            int lrRegIndex = static_cast<int>(cpu.mapReg(AGBCPU::Reg::LR));
-
             // TODO: could optimise if we handle both halves together?
             if(!high)
             {
@@ -1194,19 +1183,19 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
                 loadLiteral(Reg::R12, pc + 2 + offset);
 
-                builder.str(Reg::R12, cpuRegsReg, lrRegIndex * 4);
+                storeHiReg(Reg::R12, Reg::LR);
 
                 instrCycles = pcSCycles;
             }
             else
             {
                 // calc PC
-                builder.ldr(Reg::R12, cpuRegsReg, lrRegIndex * 4);
+                loadHiReg(Reg::R12, Reg::LR);
                 builder.add(Reg::R12, Reg::R12, offset << 1);
 
                 // set LR
                 loadLiteral(Reg::R14, pc | 1);
-                builder.str(Reg::R14, cpuRegsReg, lrRegIndex * 4);
+                storeHiReg(Reg::R14, Reg::LR);
 
                 // set PC
                 writePC(Reg::R12);
