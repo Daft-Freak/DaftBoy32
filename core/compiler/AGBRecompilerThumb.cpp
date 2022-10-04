@@ -1092,15 +1092,34 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         return fail();
                 }
 
-                // TODO: actually branch
-                writePC(pc + 2 + offset * 2);
-
                 instrCycles = pcSCycles * 2 + pcNCycles;
                 syncCyclesExecuted();
 
-                // TODO: need to sub cycleCount for branch taken
+                if(instr.flags & Op_Branch)
+                {
+                    builder.sub(Reg::R10, Reg::R10, instrCycles);
 
-                exit(exitNoPCPtr);
+                    auto addr = pc + 2 + offset * 2;
+                    auto it = branchTargets.find(addr);
+
+                    if(it != branchTargets.end())
+                    {
+                        int off = it->second - reinterpret_cast<uint8_t *>(builder.getPtr());
+                        builder.b(off);
+                    }
+                    else
+                    {
+                        forwardBranchesToPatch.emplace(addr, reinterpret_cast<uint8_t *>(builder.getPtr()));
+                        // leave some space for the branch
+                        builder.data(0xBF00); // NOP
+                        builder.data(0xBF00);
+                    }
+                }
+                else
+                {
+                    writePC(pc + 2 + offset * 2);
+                    exit(exitNoPCPtr);
+                }
 
                 if(branchPtr && !builder.getError())
                 {
