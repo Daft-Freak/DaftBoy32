@@ -124,20 +124,17 @@ void ThumbBuilder::b(Condition cond, int imm)
 
 void ThumbBuilder::b(int imm)
 {
-    if(imm >= -2044 && imm <= 2048)
-    {
+    assert(!(imm & 1));
+
+    imm -= 2;
+
+    if(imm < 0)
         imm -= 2;
 
-        if(imm < 0)
-            imm -= 2;
-
+    if(imm >= -2048 && imm <= 2046)
         write(0xE000 | ((imm >> 1) & 0x7FF));
-    }
     else
     {
-        if(imm < 0)
-            imm -= 4;
-
         assert(imm >= -1048576 && imm <= 1048574);
         
         auto s = imm < 0 ? (1 << 10) : 0;
