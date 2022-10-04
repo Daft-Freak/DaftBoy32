@@ -780,7 +780,7 @@ uint8_t AGBRecompiler::readMem8(AGBCPU *cpu, uint32_t addr, int &cycles, bool se
     return cpu->readMem8(addr, cycles, sequential);
 }
 
-uint16_t AGBRecompiler::readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential)
+uint32_t AGBRecompiler::readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential)
 {
     return cpu->readMem16(addr, cycles, sequential);
 }
