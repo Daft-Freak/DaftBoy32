@@ -80,6 +80,8 @@ protected:
     static int writeMem16(AGBCPU *cpu, uint32_t addr, uint16_t data, int &cycles, bool sequential, int cyclesToRun);
     static int writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cycles, bool sequential, int cyclesToRun);
 
+    static int updateCyclesForWrite(AGBCPU *cpu, int cyclesToRun);
+
     static void updatePCTHUMB(AGBCPU *cpu, uint32_t addr);
     static void updatePCInterworked(AGBCPU *cpu, uint32_t addr);
 
