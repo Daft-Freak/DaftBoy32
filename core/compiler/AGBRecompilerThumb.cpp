@@ -289,13 +289,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.pop(regSaveMask, false);
     };
 
-    auto writeMem = [&builder, &instrCycles, &hasLoadStore, &storeCycleCount, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg data, int width, bool sequential = false, int cyclesVarOff = 0)
+    auto writeMemRaw = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg data, int width, bool sequential, bool setSequential, int cyclesSPOff)
     {
-        builder.push(0b1111, false); // R0-3
-        builder.sub(Reg::SP, 8); // args 5/6
-
-        storeCycleCount();
-
         // prevent data getting overriden with addr
         if(data == Reg::R1)
         {
@@ -329,8 +324,6 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         if(data != Reg::R2)
             builder.mov(Reg::R2, data);
 
-        int cyclesSPOff = 24 + cyclesVarOff;
-
         // store initial cycles at first load/store
         if(!hasLoadStore)
         {
@@ -339,10 +332,12 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             hasLoadStore = true;
         }
 
-        builder.mov(Reg::R0, sequential);
-        builder.str(Reg::R0, 0);
+        if(setSequential)
+        {
+            builder.mov(Reg::R0, sequential);
+            builder.str(Reg::R0, 0);
+        }
 
-        builder.str(cyclesToRunReg, Reg::SP, 4); // cycle count in
         builder.mov(Reg::R0, cpuPtrReg); // CPU ptr
         builder.add(Reg::R3, Reg::SP, cyclesSPOff); // cycles out
 
@@ -361,6 +356,18 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         // call
         loadLiteral(Reg::R12, funcPtr);
         builder.blx(Reg::R12);
+    };
+
+    auto writeMem = [&builder, &storeCycleCount, &writeMemRaw](Reg base, std::variant<Reg, uint32_t> offset, Reg data, int width, bool sequential = false, int cyclesVarOff = 0)
+    {
+        builder.push(0b1111, false); // R0-3
+        builder.sub(Reg::SP, 8); // args 5/6
+
+        storeCycleCount();
+
+        builder.str(cyclesToRunReg, Reg::SP, 4); // cycle count in
+
+        writeMemRaw(base, offset, data, width, sequential, true, 24 + cyclesVarOff);
 
         builder.mov(cyclesToRunReg, Reg::R0); // new cycle count
 
@@ -872,11 +879,18 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                             offset += 4;
                     }
 
-                    // update SP
-                    // TODO: should be done last but...
-                    loadHiReg(Reg::R12, Reg::SP);
-                    builder.sub(Reg::R12, Reg::R12, offset);
-                    storeHiReg(Reg::R12, Reg::SP);
+                    builder.push(0b10001111, false); // R0-3, R7
+                    builder.sub(Reg::SP, 8); // args 5/6
+
+                    storeCycleCount();
+
+                    builder.str(cyclesToRunReg, Reg::SP, 4); // cycle count in
+
+                    // calculate base addr
+                    auto baseReg = Reg::R7;
+                    loadHiReg(baseReg, Reg::SP);
+                    builder.bic(baseReg, baseReg, 3);
+                    builder.sub(baseReg, offset);
 
                     offset = 0;
 
@@ -885,22 +899,42 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         if(regList & (1 << i))
                         {
                             auto reg = static_cast<Reg>(i);
-                            loadHiReg(Reg::R12, Reg::SP);
-                            builder.bic(Reg::R12, Reg::R12, 3);
-                            writeMem(Reg::R12, offset, reg, 32, true); // first N?
+
+                            // restore reg if < 4
+                            if(offset && i < 4)
+                            {
+                                builder.ldr(Reg::R2, Reg::SP, 8 + i * 4);
+                                reg = Reg::R2;
+                            }
+                            else if(i == 7) // ... or 7, which we always overwrite with the base
+                            {
+                                builder.ldr(Reg::R2, Reg::SP, 8 + 4 * 4);
+                                reg = Reg::R2;
+                            }
+
+                            // set sequential for first two writes, the leave it as true
+                            writeMemRaw(baseReg, offset, reg, 32, offset > 0, offset <= 4, 28);
                             offset += 4;
                         }
                     }
 
                     if(pclr) // store LR
                     {
-                        loadHiReg(Reg::R12, Reg::SP);
-                        builder.bic(Reg::R12, Reg::R12, 3);
-
                         loadHiReg(Reg::R14, Reg::LR);
  
-                        writeMem(Reg::R12, offset, Reg::R14, 32, true);
+                        writeMemRaw(baseReg, offset, Reg::R14, 32, offset > 0, offset <= 4, 28);
+                        offset += 4;
                     }
+
+                    // update SP
+                    loadHiReg(baseReg, Reg::SP);
+                    builder.sub(baseReg, offset);
+                    storeHiReg(baseReg, Reg::SP);
+
+                    builder.mov(cyclesToRunReg, Reg::R0); // new cycle count
+
+                    builder.add(Reg::SP, 8);
+                    builder.pop(0b10001111, false); // R0-3, R7
                 }
             }
             else // format 13, add offset to SP
