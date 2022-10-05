@@ -7,7 +7,7 @@
 #include "AGBCPU.h"
 #include "ThumbBuilder.h"
 
-//const Reg cpuRegsReg = Reg::R8;
+const Reg cycleCountReg = Reg::R8;
 const Reg cpuPtrReg = Reg::R9;
 const Reg cyclesToRunReg = Reg::R10;
 const Reg cpsrReg = Reg::R11;
@@ -208,31 +208,34 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         if(!instrCycles || updatedCycleCount)
             return;
 
-        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
-        auto cycleCountOff = reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr;
-        assert(cycleCountOff <= 4095);
-
-        builder.ldr(Reg::R12, cpuPtrReg, cycleCountOff);
-
         if(hasLoadStore)
         {
             builder.ldr(Reg::R14, Reg::SP, 0);
-            builder.add(Reg::R12, Reg::R14);
+            builder.add(cycleCountReg, Reg::R14);
         }
         else
-            builder.add(Reg::R12, Reg::R12, instrCycles);
-
-        builder.str(Reg::R12, cpuPtrReg, cycleCountOff);
+            builder.add(cycleCountReg, cycleCountReg, instrCycles);
 
         updatedCycleCount = true;
     };
 
+    auto storeCycleCount = [this, &builder]()
+    {
+        auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
+        auto cycleCountOff = reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr;
+        assert(cycleCountOff <= 4095);
+
+        builder.str(cycleCountReg, cpuPtrReg, cycleCountOff);
+    };
+
     // function call helpers
-    auto readMem = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false, int cyclesVarOff = 0)
+    auto readMem = [&builder, &instrCycles, &hasLoadStore, &storeCycleCount, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false, int cyclesVarOff = 0)
     {
         // R0-3, but not the dest reg
         int regSaveMask = 0b1111 & ~(1 << static_cast<int>(dst));
         builder.push(regSaveMask, false);
+
+        storeCycleCount();
 
         // address
         if(std::holds_alternative<Reg>(offset))
@@ -286,10 +289,12 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.pop(regSaveMask, false);
     };
 
-    auto writeMem = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg data, int width, bool sequential = false, int cyclesVarOff = 0)
+    auto writeMem = [&builder, &instrCycles, &hasLoadStore, &storeCycleCount, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg data, int width, bool sequential = false, int cyclesVarOff = 0)
     {
         builder.push(0b1111, false); // R0-3
         builder.sub(Reg::SP, 8); // args 5/6
+
+        storeCycleCount();
 
         // prevent data getting overriden with addr
         if(data == Reg::R1)
@@ -1262,7 +1267,7 @@ void AGBRecompilerThumb::compileEntry()
     builder.orr(Reg::R12, Reg::R1, 1);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 88);
+    builder.ldr(Reg::R2, 96);
     builder.mov(cpuPtrReg, Reg::R2);
 
     builder.mov(cyclesToRunReg, Reg::R0); // cycle count
@@ -1271,6 +1276,12 @@ void AGBRecompilerThumb::compileEntry()
     int cpsrOff = reinterpret_cast<uintptr_t>(&cpu.cpsr) - cpuPtr;
     builder.ldr(cpsrReg, cpuPtrReg, cpsrOff);
     builder.and_(cpsrReg, cpsrReg, 0xF0000000); // only keep the condition flags
+
+    // load cycle count
+    auto cycleCountOff = reinterpret_cast<uintptr_t>(&cpu.cycleCount) - cpuPtr;
+    assert(cycleCountOff <= 4095);
+
+    builder.ldr(cycleCountReg, cpuPtrReg, cycleCountOff);
 
     // load emu regs
     // the first 8 are never banked
@@ -1283,14 +1294,14 @@ void AGBRecompilerThumb::compileEntry()
     // exit setting the call flag ... and saving LR
     exitForCallPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
     builder.mov(Reg::R12, 1);
-    builder.ldr(Reg::R10, 64);
+    builder.ldr(Reg::R10, 68);
     builder.strb(Reg::R12, Reg::R10, 0);
     builder.mov(Reg::R12, 0);
 
     // exit saving LR
     saveAndExitPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
 
-    builder.ldr(Reg::R10, 56);
+    builder.ldr(Reg::R10, 60);
     builder.str(Reg::LR, Reg::R10, 0);
 
     // exit
@@ -1303,6 +1314,9 @@ void AGBRecompilerThumb::compileEntry()
 
     // skip PC store
     exitNoPCPtr = reinterpret_cast<uint8_t *>(builder.getPtr());
+
+    // store cycle count
+    builder.str(cycleCountReg, cpuPtrReg, cycleCountOff);
 
     // save emu regs
     builder.add(Reg::R10, cpuPtrReg, regsOff);
