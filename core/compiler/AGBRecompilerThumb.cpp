@@ -229,14 +229,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
     };
 
     // function call helpers
-    auto readMem = [&builder, &instrCycles, &hasLoadStore, &storeCycleCount, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false, int cyclesVarOff = 0)
+    auto readMemRaw = [&builder, &instrCycles, &hasLoadStore, &storeCycleCount, &loadLiteral](Reg base, std::variant<Reg, uint32_t> offset, int width, bool sequential, int cyclesSPOff)
     {
-        // R0-3, but not the dest reg
-        int regSaveMask = 0b1111 & ~(1 << static_cast<int>(dst));
-        builder.push(regSaveMask, false);
-
-        storeCycleCount();
-
         // address
         if(std::holds_alternative<Reg>(offset))
             builder.add(Reg::R1, base, std::get<Reg>(offset));
@@ -251,18 +245,16 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 builder.mov(Reg::R1, base);
         }
 
-        int spOff = (regSaveMask == 0b1111 ? 16 : 12) + cyclesVarOff;
-
         // store initial cycles at first load/store
         if(!hasLoadStore)
         {
             builder.mov(Reg::R0, instrCycles);
-            builder.str(Reg::R0, spOff);
+            builder.str(Reg::R0, cyclesSPOff);
             hasLoadStore = true;
         }
 
         builder.mov(Reg::R0, cpuPtrReg); // CPU ptr
-        builder.add(Reg::R2, Reg::SP, spOff); // cycles out
+        builder.add(Reg::R2, Reg::SP, cyclesSPOff); // cycles out
         builder.mov(Reg::R3, sequential);
 
         // get func pointer
@@ -281,6 +273,17 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         // call
         loadLiteral(Reg::R12, funcPtr);
         builder.blx(Reg::R12);
+    };
+
+    auto readMem = [&builder, &storeCycleCount, &readMemRaw](Reg base, std::variant<Reg, uint32_t> offset, Reg dst, int width, bool sequential = false, int cyclesVarOff = 0)
+    {
+        // R0-3, but not the dest reg
+        int regSaveMask = 0b1111 & ~(1 << static_cast<int>(dst));
+        builder.push(regSaveMask, false);
+
+        storeCycleCount();
+
+        readMemRaw(base, offset, width, sequential, (regSaveMask == 0b1111 ? 16 : 12) + cyclesVarOff);
 
         // move to dst
         if(dst != Reg::R0)
@@ -375,9 +378,10 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         builder.pop(0b1111, false); // R0-3
     };
 
-    auto writePC = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](std::variant<Reg, uint32_t> addr, bool interworked = false)
+    auto writePC = [&builder, &instrCycles, &hasLoadStore, &loadLiteral](std::variant<Reg, uint32_t> addr, bool interworked = false, bool pushPop = true)
     {
-        builder.push(0b1111, false); // R0-3
+        if(pushPop)
+            builder.push(0b1111, false); // R0-3
 
         // address
         if(std::holds_alternative<Reg>(addr))
@@ -398,7 +402,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         loadLiteral(Reg::R12, funcPtr);
         builder.blx(Reg::R12);
 
-        builder.pop(0b1111, false); // R0-3
+        if(pushPop)
+            builder.pop(0b1111, false); // R0-3
     };
 
     // output helpers
@@ -821,36 +826,55 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 bool pclr = instr.opcode & (1 << 8); // store LR/load PC
                 uint8_t regList = instr.opcode & 0xFF;
 
-                // TODO: output here is nasty
-
                 if(isLoad) // POP
                 {
                     instrCycles = pcSCycles + 1;
 
                     uint32_t offset = 0;
 
+                    uint8_t regSaveMask = 0b1111; // R0-3
+                    if(!(regList & (1 << 7))) // also save R7 if we're not loading it
+                        regSaveMask |= 1 << 7;
+
+                    builder.push(regSaveMask, false);
+
+                    storeCycleCount();
+
+                    auto baseReg = Reg::R7;
+                    loadHiReg(baseReg, Reg::SP);
+                    builder.bic(baseReg, baseReg, 3);
+
                     for(int i = 0; i < 8; i++)
                     {
                         if(regList & (1 << i))
                         {
                             auto reg = static_cast<Reg>(i);
-                            loadHiReg(Reg::R12, Reg::SP);
-                            builder.bic(Reg::R12, Reg::R12, 3);
-                            readMem(Reg::R12, offset, reg, 32, true); // first N?
+                            readMemRaw(baseReg, offset, 32, offset > 0, regSaveMask == 0b1111 ? 16 : 20);
+
+                            // write to stack if < 4
+                            if(i < 4)
+                                builder.str(Reg::R0, Reg::SP, i * 4);
+                            else
+                                builder.mov(reg, Reg::R0);
+
                             offset += 4;
                         }
                     }
 
                     if(pclr)
                     {
+                        // TODO: don't need to re-calc if we didn't load R7
                         loadHiReg(Reg::R12, Reg::SP);
                         builder.bic(Reg::R12, Reg::R12, 3);
-                        readMem(Reg::R12, offset, Reg::R12, 32, true);
-                        writePC(Reg::R12);
+
+                        readMemRaw(Reg::R12, offset, 32, offset > 0, regSaveMask == 0b1111 ? 16 : 20);
+                        writePC(Reg::R0, false, false);
                         offset += 4;
 
                         // TODO: cycles for branch (not implemented in CPU either)
                     }
+
+                    builder.pop(regSaveMask, false);
 
                     // update SP
                     loadHiReg(Reg::R12, Reg::SP);
