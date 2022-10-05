@@ -532,9 +532,8 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 auto addr = ((pc + 2) & ~2) + (word << 2);
 
                 instrCycles = pcSCycles + 1;
-                
-                // TODO: could inline this?
-                readMem(Reg::PC, addr, dstReg, 32);
+
+                loadLiteral(dstReg, cpu.readMem32(addr, instrCycles));
             }
             else if(instr.opcode & (1 << 10)) // format 5, Hi reg/branch exchange
             {
