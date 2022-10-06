@@ -242,6 +242,7 @@ private:
 
     int serviceInterrupts();
 
+    int updateDMA();
     int dmaTransfer(int channel);
 
     void updateTimers();
