@@ -33,7 +33,7 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
         saved = {nullptr, 0, 0};
 }
 
-int AGBRecompiler::handleBranch(int cyclesToRun)
+int AGBRecompiler::run(int cyclesToRun)
 {
     if(!codeBuf)
         return 0;
