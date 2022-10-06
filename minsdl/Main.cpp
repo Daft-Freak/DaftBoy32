@@ -328,15 +328,19 @@ int main(int argc, char *argv[])
 
                 agbCPU.runFrame();
                 agbCPU.getAPU().update();
-                agbCPU.getDisplay().update();
 
                 if(turbo)
                 {
                     while(agbCPU.getAPU().getNumSamples())
                         agbCPU.getAPU().getSample();
 
-                    break;
+                    if(now - lastTick >= 10)
+                        break;
+
+                    now = SDL_GetTicks();
                 }
+                else
+                    agbCPU.getDisplay().update();
             }
         }
         else
