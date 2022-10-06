@@ -334,6 +334,8 @@ int main(int argc, char *argv[])
                 {
                     while(agbCPU.getAPU().getNumSamples())
                         agbCPU.getAPU().getSample();
+
+                    break;
                 }
             }
         }
