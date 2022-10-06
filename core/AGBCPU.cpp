@@ -12,6 +12,9 @@
 #include "AGBRegs.h"
 
 AGBCPU::AGBCPU() : apu(*this), display(*this), mem(*this)
+#ifdef RECOMPILER
+                 , compiler(*this)
+#endif
 {}
 
 void AGBCPU::reset()
@@ -353,6 +356,8 @@ void AGBCPU::writeMem32(uint32_t addr, uint32_t data, int &cycles, bool sequenti
 
 int AGBCPU::runCycles(int cycles)
 {
+    enterCompiledCode();
+
     while(cycles > 0)
     {
         uint32_t exec = 1;
@@ -362,6 +367,18 @@ int AGBCPU::runCycles(int cycles)
             exec = updateDMA();
         else if(!halted)
         {
+#ifdef RECOMPILER
+            if(attemptToEnterCompiledCode)
+            {
+                exec = compiler.run(cycles);
+                attemptToEnterCompiledCode = false;
+                if(!exec)
+                    continue;
+
+                cycleCount -= exec; // we've already added it...
+            }
+            else
+#endif
             // CPU
             exec = (cpsr & Flag_T) ? executeTHUMBInstruction() : executeARMInstruction();
         }
@@ -384,7 +401,7 @@ int AGBCPU::runCycles(int cycles)
                     interruptDelay -= exec;
             }
 
-            bool shouldUpdate = nextUpdateCycle - cycleCount <= exec;
+            bool shouldUpdate = static_cast<int>(nextUpdateCycle - cycleCount) <= static_cast<int>(exec);
 
             cycles -= exec;
             cycleCount += exec;
@@ -2344,6 +2361,8 @@ void AGBCPU::updateTHUMBPC(uint32_t pc)
     fetchOp = *thumbPCPtr;
 
     loReg(Reg::PC) = pc + 2; // pointing at last fetch
+
+    enterCompiledCode();
 }
 
 int AGBCPU::serviceInterrupts()
@@ -2630,6 +2649,13 @@ void AGBCPU::calculateNextUpdate(uint32_t cycleCount)
     assert(toUpdate >= 0 || nextUpdateCycle == cycleCount + toUpdate);
 
     nextUpdateCycle = cycleCount + toUpdate;
+}
+
+void AGBCPU::enterCompiledCode()
+{
+#ifdef RECOMPILER
+    attemptToEnterCompiledCode = true;
+#endif
 }
 
 // high-level BIOS emulation

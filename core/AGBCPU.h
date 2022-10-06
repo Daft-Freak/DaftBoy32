@@ -5,6 +5,18 @@
 #include "AGBDisplay.h"
 #include "AGBMemory.h"
 
+#ifdef RECOMPILER_X86
+//#define RECOMPILER
+//#include "compiler/AGBRecompilerX86.h"
+
+//using Recompiler = AGBRecompilerX86;
+#elif defined(RECOMPILER_THUMB)
+#define RECOMPILER
+#include "compiler/AGBRecompilerThumb.h"
+
+using Recompiler = AGBRecompilerThumb;
+#endif
+
 class AGBCPU final
 {
 public:
@@ -250,6 +262,8 @@ private:
 
     void calculateNextUpdate(uint32_t cycleCount);
 
+    void enterCompiledCode();
+
     void handleBIOSBranch(uint32_t pc);
     void handleSWI(int num);
 
@@ -320,4 +334,12 @@ private:
     AGBAPU apu;
     AGBDisplay display;
     AGBMemory mem;
+
+#ifdef RECOMPILER
+    bool attemptToEnterCompiledCode = false;
+
+    Recompiler compiler;
+    friend class AGBRecompiler; // needs access to internals
+    friend Recompiler;
+#endif
 };
