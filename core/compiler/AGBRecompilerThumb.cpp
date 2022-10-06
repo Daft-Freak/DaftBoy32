@@ -249,7 +249,7 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         if(!hasLoadStore)
         {
             builder.mov(Reg::R0, instrCycles);
-            builder.str(Reg::R0, cyclesSPOff);
+            builder.str(Reg::R0, Reg::SP, cyclesSPOff);
             hasLoadStore = true;
         }
 
@@ -331,14 +331,14 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
         if(!hasLoadStore)
         {
             builder.mov(Reg::R0, instrCycles);
-            builder.str(Reg::R0, cyclesSPOff);
+            builder.str(Reg::R0, Reg::SP, cyclesSPOff);
             hasLoadStore = true;
         }
 
         if(setSequential)
         {
             builder.mov(Reg::R0, sequential);
-            builder.str(Reg::R0, 0);
+            builder.str(Reg::R0, Reg::SP, 0);
         }
 
         builder.mov(Reg::R0, cpuPtrReg); // CPU ptr

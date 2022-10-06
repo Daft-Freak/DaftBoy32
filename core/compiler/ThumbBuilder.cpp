@@ -279,6 +279,8 @@ void ThumbBuilder::ldr(Reg t, Reg n, uint16_t imm)
 
     if(tReg < 8 && nReg < 8 && !(imm & 0xFF83))
         write(0x6800 | (imm >> 2) << 6 | nReg << 3 | tReg);
+    else if(tReg < 8 && n == Reg::SP && imm <= 1020 && !(imm & 3))
+        write(0x9800 | tReg << 8 | imm >> 2);
     else
     {
         assert(n != Reg::PC);
@@ -507,22 +509,14 @@ void ThumbBuilder::str(Reg t, Reg n, uint16_t imm)
 
     if(tReg < 8 && nReg < 8 && !(imm & 0xFF83))
         write(0x6000 | (imm >> 2) << 6 | nReg << 3 | tReg);
+    else if(tReg < 8 && n == Reg::SP && imm <= 1020 && !(imm & 3))
+        write(0x9000 | tReg << 8 | imm >> 2);
     else
     {
         assert(imm <= 4095);
         write(0xF8C0 | nReg);
         write(tReg << 12 | imm);
     }
-}
-
-// SP + imm
-void ThumbBuilder::str(LowReg t, uint16_t imm)
-{
-    assert(imm <= 1020);
-    assert(!(imm & 3));
-
-    int tReg = static_cast<int>(t.val);
-    write(0x9000 | tReg << 8 | imm >> 2);
 }
 
 // imm
