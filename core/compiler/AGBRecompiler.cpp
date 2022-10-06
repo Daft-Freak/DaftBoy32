@@ -53,15 +53,36 @@ int AGBRecompiler::run(int cyclesToRun)
 
         if(cycles <= 0)
             break;
-   
-        if(!attemptToRun(cycles, cyclesExecuted))
+
+        if(cpu.dmaTriggered)
+        {
+            int dmaCycles = cpu.updateDMA();
+            cpu.cycleCount += dmaCycles;
+            cyclesExecuted += dmaCycles;
+        }
+        else if(!attemptToRun(cycles, cyclesExecuted))
             break;
 
         // CPU not running, stop
         if(cpu.halted)
             break;
 
-        // TODO: CPU update stuff
+        if(cpu.currentInterrupts)
+        {
+            assert(cpu.interruptDelay <= cyclesExecuted);
+
+            int intrCycles = cpu.serviceInterrupts();
+            cyclesExecuted += intrCycles;
+            cpu.cycleCount += intrCycles;
+
+            if(cpu.interruptDelay)
+            {
+                cpu.interruptDelay = 0;
+                cpu.calculateNextUpdate(cpu.cycleCount);
+            }
+        }
+
+        // CPU update stuff
         if(static_cast<int>(cpu.nextUpdateCycle - cpu.cycleCount) <= 0)
         {
             cpu.updateTimers();
@@ -69,9 +90,6 @@ int AGBRecompiler::run(int cyclesToRun)
 
             cpu.calculateNextUpdate(cpu.cycleCount);
         }
-
-        if(cpu.currentInterrupts || cpu.dmaTriggered)
-            break;
     }
 
     // if we executed anything, we need to refill the pipeline
