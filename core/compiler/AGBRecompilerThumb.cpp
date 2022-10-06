@@ -1016,8 +1016,6 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
             }
             else
             {
-                // TODO: output here could also be improved
-
                 int endOff = 0;
                 for(int i = 0; i < 8; i++)
                 {
@@ -1025,18 +1023,27 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                         endOff += 4;
                 }
 
-                bool first = true, seq = false;
+                bool writeBack = true;
                 uint32_t offset = 0;
 
                 // prevent overriding base for loads
                 // "A LDM will always overwrite the updated base if the base is in the list."
                 if(isLoad && (regList & (1 << static_cast<int>(baseReg))))
-                    first = false;
+                    writeBack = false;
 
-                builder.push(1 << 8); // need somewhere to store the address
+                uint16_t regSaveMask = 0b100001111; // R0-3, R8
+                int numSavedRegs = 5;
 
-                builder.mov(Reg::R8, baseReg);
-                builder.bic(Reg::R8, Reg::R8, 3);
+                builder.push(regSaveMask);
+
+                if(!isLoad)
+                    builder.sub(Reg::SP, 8); // args 5/6
+
+                storeCycleCount();
+
+                auto tmpBaseReg = Reg::R8;
+                builder.mov(tmpBaseReg, baseReg);
+                builder.bic(tmpBaseReg, tmpBaseReg, 3); // TODO: if not SRAM
 
                 for(int i = 0; i < 8; i++)
                 {
@@ -1046,19 +1053,53 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                     auto reg = static_cast<Reg>(i);
 
                     if(isLoad)
-                        readMem(Reg::R8, offset, reg, 32, seq, 4);
-                    else
-                        writeMem(Reg::R8, offset, reg, 32, seq, 4);
+                    {
+                        readMemRaw(tmpBaseReg, offset, 32, offset > 0, 4 * numSavedRegs);
 
-                    if(first) // write-back
+                        // write to stack if < 4
+                        if(i < 4)
+                            builder.str(Reg::R0, Reg::SP, i * 4);
+                        else
+                            builder.mov(reg, Reg::R0);
+                    }
+                    else
+                    {
+                        // restore reg if < 4
+                        if(offset && i < 4)
+                        {
+                            builder.ldr(Reg::R2, Reg::SP, 8 + i * 4);
+                            reg = Reg::R2;
+                        }
+
+                        // set sequential for first two writes, the leave it as true
+                        writeMemRaw(tmpBaseReg, offset, reg, 32, offset > 0, offset <= 4, 4 * numSavedRegs + 8);
+
+                        // save cycle count on last store
+                        int mask = ~((1 << (i + 1)) - 1);
+                        if(!(regList & mask))
+                            builder.mov(cyclesToRunReg, Reg::R0); // new cycle count
+                    }
+
+                    if(writeBack) // write-back
+                    {
+                        int iBaseReg = static_cast<int>(baseReg);
+                        if(iBaseReg < 4)
+                            builder.ldr(baseReg, Reg::SP, iBaseReg * 4 + (isLoad ? 0 : 8));
+
                         builder.add(baseReg, endOff);
 
-                    first = false;
-                    seq = true;
+                        if(iBaseReg < 4)
+                            builder.str(baseReg, Reg::SP, iBaseReg * 4 + (isLoad ? 0 : 8));
+                    }
+
+                    writeBack = false;
                     offset += 4;
                 }
 
-                builder.pop(1 << 8);
+                if(!isLoad)
+                    builder.add(Reg::SP, 8);
+
+                builder.pop(regSaveMask);
             }
             break;
         }
