@@ -359,19 +359,7 @@ int AGBCPU::runCycles(int cycles)
 
         // DMA
         if(dmaTriggered)
-        {
-            exec = 0;
-            auto trig = dmaTriggered;
-            for(int chan = 0; chan < 4 && trig; chan++, trig >>= 1)
-            {
-                if(trig & 1)
-                    exec += dmaTransfer(chan);
-
-                // channel still active, don't update next channel
-                if(dmaActive & (1 << chan))
-                    break;
-            }
-        }
+            exec = updateDMA();
         else if(!halted)
         {
             // CPU
@@ -2377,6 +2365,24 @@ int AGBCPU::serviceInterrupts()
     updateARMPC(0x18);
 
     return pcSCycles * 2 + pcNCycles; // I'm assuming this is like a branch...
+}
+
+int AGBCPU::updateDMA()
+{
+    int ret = 0;
+
+    auto trig = dmaTriggered;
+    for(int chan = 0; chan < 4 && trig; chan++, trig >>= 1)
+    {
+        if(trig & 1)
+            ret += dmaTransfer(chan);
+
+        // channel still active, don't update next channel
+        if(dmaActive & (1 << chan))
+            break;
+    }
+
+    return ret;
 }
 
 int AGBCPU::dmaTransfer(int channel)
