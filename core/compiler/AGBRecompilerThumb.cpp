@@ -1110,6 +1110,14 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
 
             if(cond == 0xF) // format 17, SWI
             {
+                // set LR
+                loadLiteral(Reg::R12, pc);
+
+                // not using storeReg, need to write reg from another bank
+                int regIndex = static_cast<int>(AGBCPU::Reg::R14_svc);
+                int regsOff = reinterpret_cast<uintptr_t>(&cpu.regs) - reinterpret_cast<uintptr_t>(&cpu);
+                builder.str(Reg::R12, cpuPtrReg, regsOff + regIndex * 4);
+
                 // call helper func
                 builder.push(0b1111, false); // R0-3
 
@@ -1121,14 +1129,6 @@ bool AGBRecompilerThumb::recompileInstruction(uint32_t &pc, OpInfo &instr, Thumb
                 builder.blx(Reg::R12);
 
                 builder.pop(0b1111, false); // R0-3
-
-                // set LR
-                loadLiteral(Reg::R12, pc);
-
-                // not using storeReg, need to write reg from another bank
-                int regIndex = static_cast<int>(AGBCPU::Reg::R14_svc);
-                int regsOff = reinterpret_cast<uintptr_t>(&cpu.regs) - reinterpret_cast<uintptr_t>(&cpu);
-                builder.str(Reg::R12, cpuPtrReg, regsOff + regIndex * 4);
 
                 // exit
                 instrCycles = pcSCycles * 2 + pcNCycles;
