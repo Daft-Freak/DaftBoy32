@@ -42,16 +42,16 @@ int AGBRecompiler::handleBranch(int cyclesToRun)
 
     while(true)
     {
-        // calculate cycles to run
-        int cycles = std::min(cyclesToRun - cyclesExecuted, static_cast<int>(cpu.nextUpdateCycle - cpu.cycleCount));
-
-        if(cycles <= 0)
-            break;
-
         bool isThumb = cpu.cpsr & AGBCPU::Flag_T;
 
         // TODO
         if(!isThumb)
+            break;
+
+        // calculate cycles to run
+        int cycles = std::min(cyclesToRun - cyclesExecuted, static_cast<int>(cpu.nextUpdateCycle - cpu.cycleCount));
+
+        if(cycles <= 0)
             break;
    
         uint8_t *codePtr = nullptr;
