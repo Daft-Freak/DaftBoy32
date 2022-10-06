@@ -54,103 +54,8 @@ int AGBRecompiler::run(int cyclesToRun)
         if(cycles <= 0)
             break;
    
-        uint8_t *codePtr = nullptr;
-
-        auto cpuPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 2 : 4);
-        auto blockStartPC = cpuPC;
-
-        // attempt to re-enter previous code
-        int savedIndex = curSavedExit - 1;
-        for(int i = 0; i < savedExitsSize; i++, savedIndex--)
-        {
-            // wrap
-            if(savedIndex < 0)
-                savedIndex += savedExitsSize;
-
-            uint8_t *ptr;
-            uint32_t pc;
-            uint32_t startPC;
-            std::tie(ptr, pc, startPC) = savedExits[savedIndex];
-
-            if(pc == cpuPC && ptr)
-            {
-                codePtr = ptr;
-                curSavedExit = savedIndex;
-
-                cpu.loReg(AGBCPU::Reg::PC) = startPC + (isThumb ? 2 : 4); // compiled code depends on PC pointing to the start of the block
-                blockStartPC = startPC;
-
-                savedExits[savedIndex] = {nullptr, 0, 0};
-                break;
-            }
-        }
-
-        if(!codePtr)
-        {
-            // lookup compiled code
-            auto it = compiled.find(cpuPC);
-
-            if(it == compiled.end())
-            {
-                if(!entryFunc)
-                    compileEntry();
-
-                // attempt compile
-                auto ptr = curCodePtr;
-                auto startPtr = ptr;
-                auto pc = cpuPC;
-
-                BlockInfo blockInfo;
-                analyseTHUMB(pc, blockInfo);
-
-#ifdef RECOMPILER_DEBUG
-                printf("analysed %08X-%08X (%zi instructions)\n", cpuPC, pc, blockInfo.instructions.size());
-#endif
-
-                FuncInfo info{};
-
-                info.cpsrMode = cpu.cpsr & 0x1F;
-
-                if(compileTHUMB(ptr, cpuPC, blockInfo))
-                {
-                    info.startPtr = startPtr;
-                    info.endPtr = curCodePtr = ptr;
-                    info.endPC = pc;
-                }
-                
-                it = compiled.emplace(cpuPC, info).first;
-            }
-
-            // reject code if compiled for a different CPU mode
-            if(it->second.cpsrMode == (cpu.cpsr & 0x1F))
-                codePtr = it->second.startPtr;
-        }
-
-        auto startCycleCount = cpu.cycleCount;
-
-        // run the code if valid, or stop
-        if(codePtr)
-            entryFunc(cycles, codePtr);
-        else
+        if(!attemptToRun(cycles, cyclesExecuted))
             break;
-
-        cyclesExecuted += (cpu.cycleCount - startCycleCount);
-
-        // code exited with a saved address for re-entry, store PC for later
-        if(tmpSavedPtr)
-        {
-            auto savedPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 2 : 4);
-
-            // get return address
-            if(exitCallFlag)
-                savedPC = cpu.reg(AGBCPU::Reg::LR) & ~1;
-
-            savedExits[curSavedExit++] = {tmpSavedPtr, savedPC, blockStartPC};
-            curSavedExit %= savedExitsSize;
-
-            tmpSavedPtr = nullptr;
-            exitCallFlag = false;
-        }
 
         // CPU not running, stop
         if(cpu.halted)
@@ -179,6 +84,111 @@ int AGBRecompiler::run(int cyclesToRun)
     }
 
     return cyclesExecuted;
+}
+
+
+bool AGBRecompiler::attemptToRun(int cyclesToRun, int &cyclesExecuted)
+{
+    uint8_t *codePtr = nullptr;
+
+    bool isThumb = cpu.cpsr & AGBCPU::Flag_T;
+    auto cpuPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 2 : 4);
+    auto blockStartPC = cpuPC;
+
+    // attempt to re-enter previous code
+    int savedIndex = curSavedExit - 1;
+    for(int i = 0; i < savedExitsSize; i++, savedIndex--)
+    {
+        // wrap
+        if(savedIndex < 0)
+            savedIndex += savedExitsSize;
+
+        uint8_t *ptr;
+        uint32_t pc;
+        uint32_t startPC;
+        std::tie(ptr, pc, startPC) = savedExits[savedIndex];
+
+        if(pc == cpuPC && ptr)
+        {
+            codePtr = ptr;
+            curSavedExit = savedIndex;
+
+            cpu.loReg(AGBCPU::Reg::PC) = startPC + (isThumb ? 2 : 4); // compiled code depends on PC pointing to the start of the block
+            blockStartPC = startPC;
+
+            savedExits[savedIndex] = {nullptr, 0, 0};
+            break;
+        }
+    }
+
+    if(!codePtr)
+    {
+        // lookup compiled code
+        auto it = compiled.find(cpuPC);
+
+        if(it == compiled.end())
+        {
+            if(!entryFunc)
+                compileEntry();
+
+            // attempt compile
+            auto ptr = curCodePtr;
+            auto startPtr = ptr;
+            auto pc = cpuPC;
+
+            BlockInfo blockInfo;
+            analyseTHUMB(pc, blockInfo);
+
+#ifdef RECOMPILER_DEBUG
+            printf("analysed %08X-%08X (%zi instructions)\n", cpuPC, pc, blockInfo.instructions.size());
+#endif
+
+            FuncInfo info{};
+
+            info.cpsrMode = cpu.cpsr & 0x1F;
+
+            if(compileTHUMB(ptr, cpuPC, blockInfo))
+            {
+                info.startPtr = startPtr;
+                info.endPtr = curCodePtr = ptr;
+                info.endPC = pc;
+            }
+            
+            it = compiled.emplace(cpuPC, info).first;
+        }
+
+        // reject code if compiled for a different CPU mode
+        if(it->second.cpsrMode == (cpu.cpsr & 0x1F))
+            codePtr = it->second.startPtr;
+    }
+
+    auto startCycleCount = cpu.cycleCount;
+
+    // run the code if valid, or stop
+    if(codePtr)
+        entryFunc(cyclesToRun, codePtr);
+    else
+        return false;
+
+    cyclesExecuted += (cpu.cycleCount - startCycleCount);
+
+    // code exited with a saved address for re-entry, store PC for later
+    if(tmpSavedPtr)
+    {
+        auto savedPC = cpu.loReg(AGBCPU::Reg::PC) - (isThumb ? 2 : 4);
+
+        // get return address
+        if(exitCallFlag)
+            savedPC = cpu.reg(AGBCPU::Reg::LR) & ~1;
+
+        savedExits[curSavedExit++] = {tmpSavedPtr, savedPC, blockStartPC};
+        curSavedExit %= savedExitsSize;
+
+        tmpSavedPtr = nullptr;
+        exitCallFlag = false;
+    }
+
+    return true;
 }
 
 void AGBRecompiler::analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo)

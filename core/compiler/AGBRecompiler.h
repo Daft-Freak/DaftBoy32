@@ -64,6 +64,8 @@ protected:
 
     AGBCPU &cpu;
 
+    bool attemptToRun(int cyclesToRun, int &cyclesExecuted);
+
     void analyseTHUMB(uint32_t &pc, BlockInfo &blockInfo);
 
     void printInfo(BlockInfo &blockInfo);
