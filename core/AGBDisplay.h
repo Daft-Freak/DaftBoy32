@@ -39,4 +39,5 @@ private:
     unsigned int remainingScanlineDots = scanlineDots;
     unsigned int remainingModeDots = screenWidth;
     uint16_t *screenData; // rgb555
+    uint16_t lastBGData[4][screenWidth]; // used for mosaic
 };
