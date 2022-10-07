@@ -478,8 +478,16 @@ static bool drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
             int curY = refPointY;
             int16_t a = mem.readIOReg(IO_BG2PA), c = mem.readIOReg(IO_BG2PC);
 
+            int xMosaic = (control & BGCNT_Mosaic) ? (mosaic & 0xF) : 0;
+
             for(int x = 0; x < 240; x++, outPtr++, curX += a, curY += c)
             {
+                if(xMosaic && x % (xMosaic + 1))
+                {
+                    *outPtr = *(outPtr - 1);
+                    continue;
+                }
+
                 int px = curX >> 8;
                 int py = curY >> 8;
                 if(px < 0 || px >= 240 || py < 0 || py >= 160)
@@ -502,8 +510,16 @@ static bool drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
             int curY = refPointY;
             int16_t a = mem.readIOReg(IO_BG2PA), c = mem.readIOReg(IO_BG2PC);
 
+            int xMosaic = (control & BGCNT_Mosaic) ? (mosaic & 0xF) : 0;
+
             for(int x = 0; x < 240; x++, outPtr++, curX += a, curY += c)
             {
+                if(xMosaic && x % (xMosaic + 1))
+                {
+                    *outPtr = *(outPtr - 1);
+                    continue;
+                }
+
                 int px = curX >> 8;
                 int py = curY >> 8;
                 if(px < 0 || px >= 240 || py < 0 || py >= 160 || !inPtr[px + py * 240])
@@ -525,8 +541,16 @@ static bool drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
             int curY = refPointY;
             int16_t a = mem.readIOReg(IO_BG2PA), c = mem.readIOReg(IO_BG2PC);
 
+            int xMosaic = (control & BGCNT_Mosaic) ? (mosaic & 0xF) : 0;
+
             for(int x = 0; x < 240; x++, outPtr++, curX += a, curY += c)
             {
+                if(xMosaic && x % (xMosaic + 1))
+                {
+                    *outPtr = *(outPtr - 1);
+                    continue;
+                }
+
                 int px = curX >> 8;
                 int py = curY >> 8;
                 if(px < 0 || px >= 160 || py < 0 || py >= 128)
