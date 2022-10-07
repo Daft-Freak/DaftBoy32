@@ -499,10 +499,6 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
         {16, 32, 32, 64}, // wide
     };
 
-    // extra mask so we can ignore the regular one for windows
-    // though really we only need the mask for windows anyway...
-    uint8_t winMask[240]{0};
-
     auto charPtr = vram + 0x10000;
 
     bool isBitmapMode = (dispControl & DISPCNT_Mode) > 2;
@@ -588,6 +584,8 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
         if(effect == 2 /*window*/)
             priority = 4; // fake extra priority level
 
+        bool isWin = priority == 4;
+
         // palette
         auto spritePal = palRam + 256;
 
@@ -625,7 +623,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
             int ty = ((spriteH / 2) << 8) + (sx - halfW) * c + (sy - halfH) * d;
 
             auto out = scanLine[priority] + (spriteX + sx);
-            auto outMask = (priority == 4 ? winMask : objMask) + (spriteX + sx);
+            auto outMask = objMask + (spriteX + sx);
             auto outEnd = scanLine[priority] + 240;
 
             if(!(attr0 & Attr0_SinglePal))
@@ -652,7 +650,9 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                 {
                     auto tilePtr = charPtr + tile * 32 + (tx >> 11) * 64 + ((ty >> 8) & 7) * 8 + ((tx >> 8) & 7);
 
-                    if(*tilePtr)
+                    if(isWin)
+                        *out = *tilePtr;
+                    else if(*tilePtr)
                     {
                         *out = spritePal[*tilePtr] | 0x8000;
                         *outMask = 1 + effect;
@@ -663,7 +663,9 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                     uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (tile + (tx >> 11)) * 32)[(ty >> 8) & 7];
                     tileRow >>= ((tx >> 8) & 7) * 4;
 
-                    if(tileRow & 0xF)
+                    if(isWin)
+                        *out = (tileRow & 0xF);
+                    else if(tileRow & 0xF)
                     {
                         *out = spritePal[tileRow & 0xF] | 0x8000;
                         *outMask = 1 + effect;
@@ -687,7 +689,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
 
             int xOff = sx & 7;
             auto out = scanLine[priority] + (spriteX + sx);
-            auto outMask = (priority == 4 ? winMask : objMask) + (spriteX + sx);
+            auto outMask = objMask + (spriteX + sx);
             auto outEnd = scanLine[priority] + 240;
 
             int tilesX = spriteW >> 3;
@@ -711,7 +713,10 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         cyclesRemaining--;
 
                         auto palIndex = *tilePtr;
-                        if(!*out && palIndex)
+                        
+                        if(isWin)
+                            *out = *out || palIndex;
+                        else if(!*out && palIndex)
                         {
                             *out = spritePal[palIndex] | 0x8000;
                             *outMask = 1 + effect;
@@ -749,7 +754,9 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                     for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, tileRow >>= 4, out++, outMask++)
                     {
                         cyclesRemaining--;
-                        if(!*out && (tileRow & 0xF))
+                        if(isWin)
+                            *out = *out || (tileRow & 0xF);
+                        else if(!*out && (tileRow & 0xF))
                         {
                             *out = spritePal[tileRow & 0xF] | 0x8000;
                             *outMask = 1 + effect;
