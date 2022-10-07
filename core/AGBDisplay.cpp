@@ -501,6 +501,8 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
 
     auto charPtr = vram + 0x10000;
 
+    uint8_t objPriority[240];
+
     bool isBitmapMode = (dispControl & DISPCNT_Mode) > 2;
 
     // entire scanline, or just visible if "h-blank free"
@@ -622,21 +624,22 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
             int tx = ((spriteW / 2) << 8) + (sx - halfW) * a + (sy - halfH) * b;
             int ty = ((spriteH / 2) << 8) + (sx - halfW) * c + (sy - halfH) * d;
 
-            auto out = scanLine[priority] + (spriteX + sx);
+            auto out = scanLine[isWin ? priority : 0] + (spriteX + sx);
             auto outMask = objMask + (spriteX + sx);
-            auto outEnd = scanLine[priority] + 240;
+            auto outPrio = objPriority + (spriteX + sx);
+            auto outEnd = scanLine[isWin ? priority : 0] + 240;
 
             if(!(attr0 & Attr0_SinglePal))
                 spritePal += ((attr2 & Attr2_Pal) >> 8);
 
-            for(int x = sx; x < halfW * 2 && out != outEnd && cyclesRemaining > 1; x++, out++, outMask++, tx += a, ty += c)
+            for(int x = sx; x < halfW * 2 && out != outEnd && cyclesRemaining > 1; x++, out++, outMask++, outPrio++, tx += a, ty += c)
             {
                 cyclesRemaining -= 2;
 
                 if(tx < 0 || ty < 0 || tx >= (spriteW << 8) || ty >= (spriteH << 8))
                     continue;
 
-                if(*out)
+                if(*out && (isWin || *outPrio <= priority))
                     continue;
 
                 auto tile = startTile;
@@ -652,10 +655,14 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
 
                     if(isWin)
                         *out = *tilePtr;
-                    else if(*tilePtr)
+                    else
                     {
-                        *out = spritePal[*tilePtr] | 0x8000;
-                        *outMask = 1 + effect;
+                        *outPrio = priority;
+                        if(*tilePtr)
+                        {
+                            *out = spritePal[*tilePtr] | 0x8000;
+                            *outMask = 1 + effect;
+                        }
                     }
                 }
                 else
@@ -665,10 +672,14 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
 
                     if(isWin)
                         *out = (tileRow & 0xF);
-                    else if(tileRow & 0xF)
+                    else
                     {
-                        *out = spritePal[tileRow & 0xF] | 0x8000;
-                        *outMask = 1 + effect;
+                        *outPrio = priority;
+                        if(tileRow & 0xF)
+                        {
+                            *out = spritePal[tileRow & 0xF] | 0x8000;
+                            *outMask = 1 + effect;
+                        }
                     }
                 }
             }
@@ -688,9 +699,10 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                 startTile += (sy >> 3) * 32;
 
             int xOff = sx & 7;
-            auto out = scanLine[priority] + (spriteX + sx);
+            auto out = scanLine[isWin ? priority : 0] + (spriteX + sx);
             auto outMask = objMask + (spriteX + sx);
-            auto outEnd = scanLine[priority] + 240;
+            auto outPrio = objPriority + (spriteX + sx);
+            auto outEnd = scanLine[isWin ? priority : 0] + 240;
 
             int tilesX = spriteW >> 3;
 
@@ -708,7 +720,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         tilePtr += xOff;
 
                     // pixels in tile
-                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, out++, outMask++)
+                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, out++, outMask++, outPrio++)
                     {
                         cyclesRemaining--;
 
@@ -716,10 +728,14 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         
                         if(isWin)
                             *out = *out || palIndex;
-                        else if(!*out && palIndex)
+                        else if(!*out || *outPrio > priority)
                         {
-                            *out = spritePal[palIndex] | 0x8000;
-                            *outMask = 1 + effect;
+                            *outPrio = priority;
+                            if(palIndex)
+                            {
+                                *out = spritePal[palIndex] | 0x8000;
+                                *outMask = 1 + effect;
+                            }
                         }
 
                         if(hFlip)
@@ -751,21 +767,38 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                     if(xOff)
                         tileRow >>= (xOff * 4);
 
-                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, tileRow >>= 4, out++, outMask++)
+                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, tileRow >>= 4, out++, outMask++, outPrio++)
                     {
                         cyclesRemaining--;
                         if(isWin)
                             *out = *out || (tileRow & 0xF);
-                        else if(!*out && (tileRow & 0xF))
+                        else if(!*out || *outPrio > priority)
                         {
-                            *out = spritePal[tileRow & 0xF] | 0x8000;
-                            *outMask = 1 + effect;
+                            *outPrio = priority;
+                            if(tileRow & 0xF)
+                            {
+                                *out = spritePal[tileRow & 0xF] | 0x8000;
+                                *outMask = 1 + effect;
+                            }
                         }
                     }
 
                     xOff = 0;
                 }
             }
+        }
+    }
+
+    // split layers
+    if(usedPriorities & 0b1110)
+    {
+        for(int x = 0; x < 240; x++)
+        {
+            if(!scanLine[0][x] || objPriority[x] == 0)
+                continue;
+
+            scanLine[objPriority[x]][x] = scanLine[0][x];
+            scanLine[0][x] = 0;
         }
     }
 
