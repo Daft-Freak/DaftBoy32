@@ -1683,10 +1683,11 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t pc)
             carry = cpsr & Flag_C;
             int shift = op2 & 0x1F;
 
-            if(op2)
-                carry = op1 & (1 << (shift - 1)) ? Flag_C : 0;
-
             reg(dstReg) = res = (op1 >> shift) | (op1 << (32 - shift));
+
+            if(op2)
+                carry = res & (1 << 31) ? Flag_C : 0;
+
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
             return pcSCycles + 1;
         }
