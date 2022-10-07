@@ -43,6 +43,8 @@ enum AGBIOReg
     IO_WININ = 0x48,
     IO_WINOUT = 0x4A,
 
+    IO_MOSAIC = 0x4C,
+
     IO_BLDCNT = 0x50,
     IO_BLDALPHA = 0x52,
     IO_BLDY = 0x54,

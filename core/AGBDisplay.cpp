@@ -45,12 +45,9 @@ enum OAMAttr2Bits
 static const int screenBlockTiles = 32; // 32x32
 
 // draw screen block 4/8 helpers
-static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
+static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, int xMosaic, uint16_t xOffset)
 {
     auto validDataEnd = vram + 0x10000;
-
-    int tx = (x + xOffset) & 7;
-    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
     bool hasData = false;
 
@@ -92,6 +89,34 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 
         return tileRow;
     };
+
+    // mosaic
+    // TODO: optimise
+    if(xMosaic)
+    {
+        int alignX = x + xOffset - (x % (xMosaic + 1));
+        for(; x < 240; x += xMosaic + 1, alignX += xMosaic + 1)
+        {
+            int bx = (alignX >> 3) & (screenBlockTiles - 1);
+
+            uint16_t *tilePal;
+            uint32_t tileRow = getTileRow(bx, tilePal);
+            tileRow >>= ((alignX & 7) * 4);
+
+            if(tileRow & 0xF)
+                *scanLine = tilePal[tileRow & 0xF] | 0x8000;
+            else
+                *scanLine = 0;
+
+            auto v = *scanLine++;
+            for(int m = 0; m < xMosaic; m++)
+                *scanLine++ = v;
+        }
+        return hasData;
+    }
+
+    int tx = (x + xOffset) & 7;
+    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
     // left edge
     if(tx)
@@ -149,12 +174,9 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     return hasData;
 }
 
-static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
+static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, int xMosaic, uint16_t xOffset)
 {
     auto validDataEnd = vram + 0x10000;
-
-    int tx = (x + xOffset) & 7;
-    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
     bool hasData = false;
 
@@ -190,6 +212,34 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     };
 
     auto tilePal = palRam;
+
+    // mosaic
+    // TODO: optimise
+    if(xMosaic)
+    {
+        int alignX = x + xOffset - (x % (xMosaic + 1));
+        for(; x < 240; x += xMosaic + 1, alignX += xMosaic + 1)
+        {
+            int bx = (alignX >> 3) & (screenBlockTiles - 1);
+
+            uint64_t tileRow = getTileRow(bx);
+            auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow);
+            tilePtr += (alignX & 7);
+
+            if(*tilePtr)
+                *scanLine = tilePal[*tilePtr] | 0x8000;
+            else
+                *scanLine = 0;
+
+            auto v = *scanLine++;
+            for(int m = 0; m < xMosaic; m++)
+                *scanLine++ = v;
+        }
+        return hasData;
+    }
+
+    int tx = (x + xOffset) & 7;
+    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
     // left edge
     if(tx)
@@ -252,12 +302,22 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 
 // bg layer helpers
 // hopefully this gets mostly inlined
-static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t xOffset, uint16_t yOffset)
+static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t mosaic, uint16_t xOffset, uint16_t yOffset)
 {
     int screenSize = (control & BGCNT_ScreenSize) >> 14;
 
-    int ty = (y + yOffset) & 7;
-    int by = (y + yOffset) >> 3;
+    // apply vertical mosaic
+    int my = y;
+    int xMosaic = 0;
+    if((control & (BGCNT_Mosaic)) && mosaic & 0xFF)
+    {
+        xMosaic = mosaic & 0xF;
+        int yMosaic = (mosaic >> 4) & 0xF;
+        my -= y % (yMosaic + 1);
+    }
+
+    int ty = (my + yOffset) & 7;
+    int by = (my + yOffset) >> 3;
 
     int blockIndex = 0;
 
@@ -282,9 +342,9 @@ static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
     int x = 0;
     bool hasData;
     if(control & BGCNT_SinglePal)
-        hasData = drawScreenBlock8(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
+        hasData = drawScreenBlock8(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xMosaic, xOffset);
     else
-        hasData = drawScreenBlock4(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
+        hasData = drawScreenBlock4(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xMosaic, xOffset);
 
     // possible second block
     if(x < 240)
@@ -294,9 +354,9 @@ static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
             screenPtr += screenBlockTiles * screenBlockTiles;
 
         if(control & BGCNT_SinglePal)
-            hasData = drawScreenBlock8(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset) || hasData;
+            hasData = drawScreenBlock8(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xMosaic, xOffset) || hasData;
         else
-            hasData = drawScreenBlock4(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset) || hasData;
+            hasData = drawScreenBlock4(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xMosaic, xOffset) || hasData;
     }
 
     return hasData;
@@ -378,28 +438,28 @@ static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
 }
 
 // these two are always "text" mode
-static bool drawBG0(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+static bool drawBG0(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t mosaic)
 {
     if((dispControl & DISPCNT_Mode) > 1)
         return false;
 
-    return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG0HOFS), mem.readIOReg(IO_BG0VOFS));
+    return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mosaic, mem.readIOReg(IO_BG0HOFS), mem.readIOReg(IO_BG0VOFS));
 }
 
-static bool drawBG1(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control)
+static bool drawBG1(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t mosaic)
 {
     if((dispControl & DISPCNT_Mode) > 1)
         return false;
 
-    return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG1HOFS), mem.readIOReg(IO_BG1VOFS));
+    return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mosaic, mem.readIOReg(IO_BG1HOFS), mem.readIOReg(IO_BG1VOFS));
 }
 
-static bool drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t refPointX, int32_t refPointY)
+static bool drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t mosaic, int32_t refPointX, int32_t refPointY)
 {
     switch(dispControl & DISPCNT_Mode)
     {
         case 0: // "text" mode
-            return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG2HOFS), mem.readIOReg(IO_BG2VOFS));
+            return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mosaic, mem.readIOReg(IO_BG2HOFS), mem.readIOReg(IO_BG2VOFS));
         case 1: // affine mode
         case 2:
             return drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG2PA), mem.readIOReg(IO_BG2PC));
@@ -475,10 +535,10 @@ static bool drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
     }
 }
 
-static bool drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t refPointX, int32_t refPointY)
+static bool drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t mosaic, int32_t refPointX, int32_t refPointY)
 {
     if((dispControl & DISPCNT_Mode) == 0)
-        return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mem.readIOReg(IO_BG3HOFS), mem.readIOReg(IO_BG3VOFS));
+        return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mosaic, mem.readIOReg(IO_BG3HOFS), mem.readIOReg(IO_BG3VOFS));
     else if((dispControl & DISPCNT_Mode) == 2)
         return drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG3PA), mem.readIOReg(IO_BG3PC));
     
@@ -1114,6 +1174,8 @@ void AGBDisplay::drawScanLine(int y)
         layerEnables &= winLayers;
     }
 
+    auto mosaic = mem.readIOReg(IO_MOSAIC);
+
     // draw sprites first
     int spritePriorities;
     if(layerEnables & Layer_OBJ)
@@ -1147,25 +1209,25 @@ void AGBDisplay::drawScanLine(int y)
     // draw enabled layers
     if(layerEnables & Layer_BG0)
     {
-        if(!drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control))
+        if(!drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control, mosaic))
             layerEnables &= ~Layer_BG0; // pretend it's not enabled if there's nothing in it
     }
 
     if(layerEnables & Layer_BG1)
     {
-        if(!drawBG1(mem, y, bgData[1], palRAM, vram, dispControl, bg1Control))
+        if(!drawBG1(mem, y, bgData[1], palRAM, vram, dispControl, bg1Control, mosaic))
             layerEnables &= ~Layer_BG1;
     }
 
     if(layerEnables & Layer_BG2)
     {
-        if(!drawBG2(mem, y, bgData[2], palRAM, vram, dispControl, bg2Control, refPointX[0], refPointY[0]))
+        if(!drawBG2(mem, y, bgData[2], palRAM, vram, dispControl, bg2Control, mosaic, refPointX[0], refPointY[0]))
             layerEnables &= ~Layer_BG2;
     }
 
     if(layerEnables & Layer_BG3)
     {
-        if(!drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, refPointX[1], refPointY[1]))
+        if(!drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, mosaic, refPointX[1], refPointY[1]))
             layerEnables &= ~Layer_BG3;
     }
 
