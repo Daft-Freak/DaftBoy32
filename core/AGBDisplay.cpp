@@ -357,12 +357,17 @@ static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
     return hasData;
 }
 
-static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, int32_t xOffset, int32_t yOffset, int16_t a, int16_t c)
+static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t mosaic, int32_t xOffset, int32_t yOffset, int16_t a, int16_t c)
 {
     int screenSize = (control & BGCNT_ScreenSize) >> 14;
 
     int curX = xOffset;
     int curY = yOffset;
+
+    // apply vertical mosaic
+    int xMosaic = 0;
+    if(control & BGCNT_Mosaic)
+        xMosaic = mosaic & 0xF;
 
     int numTiles = 16 << screenSize; // 16-128
 
@@ -382,6 +387,12 @@ static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
 
         int ty = (curY >> 8) & 7;
         int by = curY >> 11;
+
+        if(xMosaic && x % (xMosaic + 1))
+        {
+            *scanLine = *(scanLine - 1);
+            continue;
+        }
 
         // wrap/clamp
         if(bx < 0 || bx >= numTiles)
@@ -457,7 +468,7 @@ static bool drawBG2(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
             return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mosaic, mem.readIOReg(IO_BG2HOFS), mem.readIOReg(IO_BG2VOFS));
         case 1: // affine mode
         case 2:
-            return drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG2PA), mem.readIOReg(IO_BG2PC));
+            return drawAffineBG(scanLine, palRam, vram, dispControl, control, mosaic, refPointX, refPointY, mem.readIOReg(IO_BG2PA), mem.readIOReg(IO_BG2PC));
         case 3: // 16-bit fullscreen bitmap
         {
             auto inPtr = reinterpret_cast<uint16_t *>(vram);
@@ -535,7 +546,7 @@ static bool drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
     if((dispControl & DISPCNT_Mode) == 0)
         return drawTextBG(y, scanLine, palRam, vram, dispControl, control, mosaic, mem.readIOReg(IO_BG3HOFS), mem.readIOReg(IO_BG3VOFS));
     else if((dispControl & DISPCNT_Mode) == 2)
-        return drawAffineBG(scanLine, palRam, vram, dispControl, control, refPointX, refPointY, mem.readIOReg(IO_BG3PA), mem.readIOReg(IO_BG3PC));
+        return drawAffineBG(scanLine, palRam, vram, dispControl, control, mosaic, refPointX, refPointY, mem.readIOReg(IO_BG3PA), mem.readIOReg(IO_BG3PC));
     
     return false;
 }
