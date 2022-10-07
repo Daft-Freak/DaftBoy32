@@ -1221,6 +1221,7 @@ void AGBDisplay::drawScanLine(int y)
         else if(!drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control, mosaic))
             layerEnables &= ~Layer_BG0; // pretend it's not enabled if there's nothing in it
 
+        // TODO: may need to force extra draws for mosaic + window
         if((bg0Control & BGCNT_Mosaic) && (mosaic & 0xFF))
             memcpy(lastBGData[0], bgData[0], screenWidth * 2);
     }
@@ -1254,7 +1255,7 @@ void AGBDisplay::drawScanLine(int y)
         else if(!drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, mosaic, refPointX[1], refPointY[1]))
             layerEnables &= ~Layer_BG3;
 
-        if((bg2Control & BGCNT_Mosaic) && (mosaic & 0xFF))
+        if((bg3Control & BGCNT_Mosaic) && (mosaic & 0xFF))
             memcpy(lastBGData[3], bgData[3], screenWidth * 2);
     }
 
