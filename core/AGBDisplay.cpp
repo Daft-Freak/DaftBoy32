@@ -1349,11 +1349,11 @@ void AGBDisplay::drawScanLine(int y)
                     int nextMask;
                     int nextLayer = i + 1;
 
-                    // find next non-transparent layer (also not the same layer (objects))
+                    // find next non-transparent layer
                     do
                     {
                         std::tie(nextData, nextMask) = layers[nextLayer++];
-                    } while(nextMask && (!nextData[x] || !(curLayerEnables & nextMask) || nextMask == mask));
+                    } while(nextMask && (!nextData[x] || !(curLayerEnables & nextMask)));
 
                     nextMask = nextMask ? nextMask << 8 : (1 << 13); // shift up, handle 0 for backdrop
 
