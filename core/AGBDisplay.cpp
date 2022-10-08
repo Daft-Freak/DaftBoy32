@@ -575,7 +575,7 @@ static bool drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
     return false;
 }
 
-static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t objMask[240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl)
+static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t objMask[240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t mosaic)
 {
     int usedPriorities = 0;
     auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
@@ -661,6 +661,17 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
         int sx = std::max(0, -spriteX);
         int sy = y - spriteY;
 
+        // mosaic
+        int xMosaic = 0;
+        if((attr0 & Attr0_Mosaic) && (mosaic & 0xFF00))
+        {
+            xMosaic = (mosaic >> 8) & 0xF;
+            int yMosaic = mosaic >> 12;
+
+            int my = y - y % (yMosaic + 1);
+            sy = std::max(0, my - spriteY);
+        }
+
         // first half of "object" VRAM is not usable for objects in bitmap modes
         // TODO: what if part of the sprite is in valid RAM?
         if(isBitmapMode && startTile < 512)
@@ -722,6 +733,8 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
             if(!(attr0 & Attr0_SinglePal))
                 spritePal += ((attr2 & Attr2_Pal) >> 8);
 
+            bool validData = false;
+
             for(int x = sx; x < halfW * 2 && out != outEnd && cyclesRemaining > 1; x++, out++, outMask++, outPrio++, tx += a, ty += c)
             {
                 cyclesRemaining -= 2;
@@ -738,6 +751,16 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                     tile += (ty >> 11) * (spriteW >> 3) * (attr0 & Attr0_SinglePal ? 2 : 1);
                 else
                     tile += (ty >> 11) * 32;
+
+                // horizontal mosaic
+                if(xMosaic && (out - scanLine[0]) % (xMosaic + 1) && validData)
+                {
+                    *out = *(out - 1);
+                    if(!isWin)
+                        *outMask = 1 + effect;
+
+                    continue;
+                }
 
                 if(attr0 & Attr0_SinglePal)
                 {
@@ -772,6 +795,8 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         }
                     }
                 }
+
+                validData = true;
             }
         }
         else
@@ -821,7 +846,14 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         else if(!*out || *outPrio > priority)
                         {
                             *outPrio = priority;
-                            if(palIndex)
+
+                            // horizontal mosaic
+                            if(xMosaic && (out - scanLine[0]) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
+                            {
+                                *out = *(out - 1);
+                                *outMask = 1 + effect;
+                            }
+                            else if(palIndex)
                             {
                                 *out = spritePal[palIndex] | 0x8000;
                                 *outMask = 1 + effect;
@@ -865,7 +897,14 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         else if(!*out || *outPrio > priority)
                         {
                             *outPrio = priority;
-                            if(tileRow & 0xF)
+
+                            // horizontal mosaic
+                            if(xMosaic && (out - scanLine[0]) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
+                            {
+                                *out = *(out - 1);
+                                *outMask = 1 + effect;
+                            }
+                            else if(tileRow & 0xF)
                             {
                                 *out = spritePal[tileRow & 0xF] | 0x8000;
                                 *outMask = 1 + effect;
@@ -1210,7 +1249,7 @@ void AGBDisplay::drawScanLine(int y)
     // draw sprites first
     int spritePriorities;
     if(layerEnables & Layer_OBJ)
-        spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl);
+        spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl, mosaic);
     else
         spritePriorities = 0;
 
