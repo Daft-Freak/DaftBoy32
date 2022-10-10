@@ -425,15 +425,12 @@ static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
             tileIndex = tilePtr[bx];
 
         // 8bit tiles
-        uint64_t tileRow = 0;
+        uint8_t palIndex = 0;
         auto thisTilePtr = charPtr + tileIndex * 64;
 
         if(thisTilePtr < validDataEnd)
-            tileRow = reinterpret_cast<uint64_t *>(thisTilePtr)[ty];
+            palIndex = thisTilePtr[ty * 8 + tx];
 
-        auto tileDataPtr = reinterpret_cast<uint8_t *>(&tileRow) + tx;
-
-        auto palIndex = *tileDataPtr++;
         if(palIndex)
             *scanLine = palRam[palIndex] | 0x8000;
         else
