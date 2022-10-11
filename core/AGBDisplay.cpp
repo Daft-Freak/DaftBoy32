@@ -914,6 +914,12 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
     // split layers
     if(usedPriorities & 0b1110)
     {
+        for(int i = 1; i < 4; i++)
+        {
+            if(usedPriorities & (1 << i))
+                memset(scanLine[i], 0, 240 * 2);
+        }
+
         for(int x = 0; x < 240; x++)
         {
             if(!scanLine[0][x] || objPriority[x] == 0)
@@ -1202,8 +1208,8 @@ void AGBDisplay::drawScanLine(int y)
     }
 
     uint16_t bgData[4][screenWidth];
-    uint16_t objData[5][screenWidth]{0}; // four priority levels for objs +1 for obj window
-    uint8_t objMask[240]{0}; // 1 = sprite here, 2 = semi-transparent sprite
+    uint16_t objData[5][screenWidth]; // four priority levels for objs +1 for obj window
+    uint8_t objMask[240]; // 1 = sprite here, 2 = semi-transparent sprite
 
     int layerEnables = dispControl >> 8;
     bool windowEnabled = false;
@@ -1242,7 +1248,15 @@ void AGBDisplay::drawScanLine(int y)
     // draw sprites first
     int spritePriorities;
     if(layerEnables & Layer_OBJ)
+    {
+        memset(objData[0], 0, screenWidth * 2);
+        memset(objMask, 0, screenWidth);
+
+        if(dispControl & DISPCNT_OBJWindowOn)
+            memset(objData[4], 0, screenWidth * 2);
+
         spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl, mosaic);
+    }
     else
         spritePriorities = 0;
 
