@@ -380,6 +380,8 @@ static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
 
     bool wrap = control & BGCNT_Wrap;
 
+    bool ret = false;
+
     for(int x = 0; x < 240; x++, scanLine++, curX += a, curY += c)
     {
         int tx = (curX >> 8) & 7;
@@ -428,12 +430,15 @@ static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
         uint8_t palIndex = *(charPtr + tileIndex * 64 + ty * 8 + tx);
 
         if(palIndex)
+        {
             *scanLine = palRam[palIndex] | 0x8000;
+            ret = true;
+        }
         else
             *scanLine = 0;
     }
 
-    return true; // TODO?
+    return ret;
 }
 
 // these two are always "text" mode
