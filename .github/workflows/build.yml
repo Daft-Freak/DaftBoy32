@@ -48,10 +48,10 @@ jobs:
             cmake-args: -D32BLIT_DIR=$GITHUB_WORKSPACE/32blit-sdk
             brew-packages: sdl2 sdl2_image sdl2_net
 
-          #- os: windows-latest
-          #  name: Visual Studio
-          #  release-suffix: WIN64
-          #  cmake-args: -D32BLIT_DIR=$GITHUB_WORKSPACE/32blit-sdk
+          - os: windows-latest
+            name: Visual Studio
+            release-suffix: WIN64
+            cmake-args: -D32BLIT_DIR=$GITHUB_WORKSPACE/32blit-sdk
 
     runs-on: ${{matrix.os}}
 
