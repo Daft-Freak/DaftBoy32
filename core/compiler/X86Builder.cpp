@@ -218,7 +218,7 @@ void X86Builder::cmp(Reg32 dst, uint32_t imm)
 }
 
 // imm -> reg, 8 bit
-void X86Builder::cmp(Reg8 dst, int8_t imm)
+void X86Builder::cmp(Reg8 dst, uint8_t imm)
 {
     auto dstReg = static_cast<int>(dst);
 
