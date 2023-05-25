@@ -22,3 +22,7 @@ else()
 endif()
 
 target_link_libraries(DaftBoySDL DaftBoyCore DaftBoyAdvanceCore SDL2::SDL2)
+
+if(SDL2_SDL2main_FOUND)
+    target_link_libraries(DaftBoySDL SDL2::SDL2main)
+endif()
