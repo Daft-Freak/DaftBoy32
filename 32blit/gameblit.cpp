@@ -131,10 +131,20 @@ bool menuOpen = false;
 bool redwawBG = true;
 uint32_t lastUpdate = 0;
 
-int log2i(unsigned int x)
+#ifdef _MSC_VER
+#include <intrin.h>
+static int log2i(unsigned int x)
+{
+    unsigned long idx = 0;
+    _BitScanReverse(&idx, x);
+    return idx;
+}
+#else
+static int log2i(unsigned int x)
 {
     return 8 * sizeof(unsigned int) - __builtin_clz(x) - 1;
 }
+#endif
 
 // assuming RLE/palette and that data is the right size
 void packedToRGB(const uint8_t *packed_data, uint8_t *data)
