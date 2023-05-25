@@ -139,7 +139,7 @@ public:
 
     void cmp(Reg8 dst, Reg8 src);
     void cmp(Reg32 dst, uint32_t imm);
-    void cmp(Reg8 dst, int8_t imm);
+    void cmp(Reg8 dst, uint8_t imm);
     void cmp(uint8_t imm, Reg64 base, int disp = 0);
 
     void dec(Reg16 r);
