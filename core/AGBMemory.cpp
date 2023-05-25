@@ -5,6 +5,7 @@
 
 #include "AGBCPU.h"
 #include "AGBRegs.h"
+#include "GCCBuiltin.h"
 
 enum MemoryRegion
 {

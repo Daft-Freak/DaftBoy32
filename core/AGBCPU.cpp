@@ -10,6 +10,7 @@
 #include "AGBCPU.h"
 #include "AGBMemory.h"
 #include "AGBRegs.h"
+#include "GCCBuiltin.h"
 
 AGBCPU::AGBCPU() : apu(*this), display(*this), mem(*this)
 {}

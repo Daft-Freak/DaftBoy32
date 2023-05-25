@@ -7,6 +7,7 @@
 #include "AGBCPU.h"
 #include "AGBMemory.h"
 #include "AGBRegs.h"
+#include "GCCBuiltin.h"
 
 enum LayerEnabled
 {
