@@ -2,8 +2,8 @@
 #include <cstdint>
 #include <functional>
 
-class BESSCore;
-class DaftState;
+struct BESSCore;
+struct DaftState;
 class DMGCPU;
 class DMGMemory;
 

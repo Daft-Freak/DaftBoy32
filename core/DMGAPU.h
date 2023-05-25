@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-class DaftState;
+struct DaftState;
 class DMGCPU;
 
 class DMGAPU
