@@ -93,7 +93,7 @@ static void audioCallback(void *userdata, Uint8 *stream, int len)
 
 static uint8_t *readSave(const std::string &savePath, size_t &saveSize)
 {
-    std::ifstream saveFile(savePath);
+    std::ifstream saveFile(savePath, std::ios::binary);
 
     if(!saveFile)
     {
@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
     std::string ext = romFilename.substr(romFilename.find_last_of('.'));
     isAGB = ext == ".gba";
 
-    romFile.open(romFilename);
+    romFile.open(romFilename, std::ios::binary);
 
     if(!romFile)
     {
@@ -214,7 +214,7 @@ int main(int argc, char *argv[])
         // need the bios for now
         if(useBIOS)
         {
-            std::ifstream biosFile(basePath + "bios.gba");
+            std::ifstream biosFile(basePath + "bios.gba", std::ios::binary);
             if(biosFile)
             {
                 biosFile.read(reinterpret_cast<char *>(agbBIOSROM), sizeof(agbBIOSROM));
@@ -437,7 +437,7 @@ int main(int argc, char *argv[])
         if(size && !turbo)
         {
             auto saveFilename = romFilename.substr(0, romFilename.length() - 3) + "sav";
-            std::ofstream saveFile(saveFilename);
+            std::ofstream saveFile(saveFilename, std::ios::out | std::ios::binary);
             saveFile.write(reinterpret_cast<char *>(agbCPU.getMem().getCartridgeSave()), size);
 
             if(!saveFile)
@@ -448,7 +448,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::ofstream saveFile(romFilename + ".ram");
+        std::ofstream saveFile(romFilename + ".ram", std::ios::out | std::ios::binary);
         saveFile.write(reinterpret_cast<char *>(dmgCPU.getMem().getCartridgeRAM()), dmgCPU.getMem().getCartridgeRAMSize());
     }
 
