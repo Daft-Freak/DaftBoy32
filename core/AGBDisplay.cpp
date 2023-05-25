@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstring>
+#include <tuple>
 
 #include "AGBDisplay.h"
 
