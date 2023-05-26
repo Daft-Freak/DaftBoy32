@@ -8,9 +8,17 @@
 #include "X86Builder.h"
 
 // size of the code to call these functions
+#ifdef _WIN32
+// extra stack adjustment
+static const int cycleExecutedCallSize = 23 + 8;
+static const int readMemRegCallSize = 30 + 8;
+// ... and extra prefixes
+static const int writeMemRegImmCallSize = 36 + 10; // this is only accurate for call (addr = SP)
+#else
 static const int cycleExecutedCallSize = 23;
 static const int readMemRegCallSize = 30;
 static const int writeMemRegImmCallSize = 36; // this is only accurate for call (addr = SP)
+#endif
 
 static const int cycleExecutedInlineSize = 5;
 
@@ -21,6 +29,14 @@ static const Reg16 pcReg16 = Reg16::R12W;
 static const Reg32 spReg32 = Reg32::R13D;
 static const Reg16 spReg16 = Reg16::R13W;
 static const Reg8 spReg8 = Reg8::R13B; // mostly for the adds with the strange flags
+
+#ifdef _WIN32
+static const Reg64 argumentRegs64[]{Reg64::RCX, Reg64::RDX, Reg64::R8, Reg64::R9};
+static const Reg32 argumentRegs32[]{Reg32::ECX, Reg32::EDX, Reg32::R8D, Reg32::R9D};
+#else
+static const Reg64 argumentRegs64[]{Reg64::RDI, Reg64::RSI, Reg64::RDX, Reg64::RCX}; // + R8/9 but we don't use > 4 args
+static const Reg32 argumentRegs32[]{Reg32::EDI, Reg32::ESI, Reg32::EDX, Reg32::ECX};
+#endif
 
 inline constexpr Reg8 reg(DMGCPU::Reg r)
 {
@@ -58,6 +74,10 @@ static void callSave(X86Builder &builder)
     builder.push(Reg64::RDX);
     builder.push(Reg64::RDI);
     // builder.sub(Reg64::RSP, 8); // align stack
+
+#ifdef _WIN32
+    builder.sub(Reg64::RSP, 32); // shadow space
+#endif
 }
 
 static void callSaveOrSkip(X86Builder &builder)
@@ -76,11 +96,22 @@ static void callSaveOrSkip(X86Builder &builder)
         builder.push(Reg64::RDI);
     }
     else
+    {
         callSave(builder);
+        return;
+    }
+
+#ifdef _WIN32
+    builder.sub(Reg64::RSP, 32); // shadow space
+#endif
 }
 
 static void callRestore(X86Builder &builder)
 {
+#ifdef _WIN32
+    builder.add(Reg64::RSP, 32); // shadow space
+#endif
+
     // builder.add(Reg64::RSP, 8); // alignment
     builder.pop(Reg64::RDI);
     builder.pop(Reg64::RDX);
@@ -94,6 +125,10 @@ static void callRestore(X86Builder &builder, Reg32 dstReg)
     assert(dstReg != Reg32::EAX && dstReg != Reg32::EDX && dstReg != Reg32::ECX);
 
     builder.mov(dstReg, Reg32::EAX);
+
+#ifdef _WIN32
+    builder.add(Reg64::RSP, 32); // shadow space
+#endif
 
     // builder.add(Reg64::RSP, 8); // alignment
     builder.pop(dstReg == Reg32::EDI ? Reg64::RSI : Reg64::RDI); // use RSI to pop the unneeded value
@@ -111,6 +146,10 @@ static void callRestore(X86Builder &builder, Reg8 dstReg)
 
     if(!isPoppedReg)
         builder.mov(dstReg, Reg8::AL);
+
+#ifdef _WIN32
+    builder.add(Reg64::RSP, 32); // shadow space
+#endif
 
     // builder.add(Reg64::RSP, 8); // alignment
     builder.pop(Reg64::RDI);
@@ -261,7 +300,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         callSaveOrSkip(builder);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompilerX86::cycleExecuted)); // function ptr
-        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
+        builder.mov(argumentRegs64[0], Reg64::R14); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder);
@@ -291,7 +330,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
             if(!isStack || spWrite)
                 syncCyclesExecuted();
 
-            builder.movzx(Reg32::ESI, std::get<Reg16>(addr));
+            builder.movzx(argumentRegs32[1], std::get<Reg16>(addr));
         }
         else
         {
@@ -300,7 +339,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
             if(immAddr >= 0xFF00 && immAddr < 0xFF80/*HRAM start*/ && immAddr != 0xFFFF/*IE*/)
                 syncCyclesExecuted();
 
-            builder.mov(Reg32::ESI, immAddr);
+            builder.mov(argumentRegs32[1], immAddr);
         }
     };
 
@@ -315,7 +354,7 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         setupMemAddr(addr, postInc);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompilerX86::readMem)); // function ptr
-        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
+        builder.mov(argumentRegs64[0], Reg64::R14); // cpu/this ptr
 
         builder.call(Reg64::RAX); // do call
 
@@ -341,17 +380,36 @@ bool DMGRecompilerX86::recompileInstruction(uint16_t &pc, OpInfo &instr, X86Buil
         if(preDec && std::holds_alternative<Reg16>(addr))
             builder.dec(std::get<Reg16>(addr));
 
+#ifndef _WIN32
+        // setup addr first (data writes DX)
         setupMemAddr(addr, preDec);
+#endif
 
         if(std::holds_alternative<Reg8>(data))
-            builder.movzx(Reg32::EDX, std::get<Reg8>(data));
+        {
+#ifdef _WIN32
+            // argumentRegs[2] is R8, can't mov from xH to there
+            auto reg8 = std::get<Reg8>(data);
+            if(reg8 == Reg8::AH || reg8 == Reg8::BH || reg8 == Reg8::CH || reg8 == Reg8::DH)
+            {
+                builder.mov(Reg8::AL, reg8);
+                data = Reg8::AL;
+            }
+#endif
+            builder.movzx(argumentRegs32[2], std::get<Reg8>(data));
+        }
         else
-            builder.mov(Reg32::EDX, std::get<uint8_t>(data));
+            builder.mov(argumentRegs32[2], std::get<uint8_t>(data));
 
-        builder.mov(Reg32::ECX, Reg32::EDI); // cycle count
+#ifdef _WIN32
+        // setup addr after data (addr writes DX)
+        setupMemAddr(addr, preDec);
+#endif
+
+        builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(&DMGRecompilerX86::writeMem)); // function ptr
-        builder.mov(Reg64::RDI, Reg64::R14); // cpu/this ptr
+        builder.mov(argumentRegs64[0], Reg64::R14); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
 
         callRestore(builder, Reg32::EDI);
@@ -2027,6 +2085,14 @@ void DMGRecompilerX86::compileEntry()
     builder.push(Reg64::R14);
     builder.push(Reg64::RBX);
 
+#ifdef _WIN32
+    builder.push(Reg64::RSI);
+    builder.push(Reg64::RDI);
+
+    builder.mov(Reg64::RDI, argumentRegs64[0]); // move cycle count
+    builder.mov(Reg64::RSI, argumentRegs64[1]); // code ptr
+#endif
+
     // store pointer to CPU
     auto cpuPtr = reinterpret_cast<uintptr_t>(&cpu);
     builder.mov(Reg64::R14, cpuPtr);
@@ -2070,6 +2136,12 @@ void DMGRecompilerX86::compileEntry()
     builder.mov(spReg16, Reg64::R14, true, spPtr);
 
     // restore
+
+#ifdef _WIN32
+    builder.pop(Reg64::RDI);
+    builder.pop(Reg64::RSI);
+#endif
+
     builder.pop(Reg64::RBX);
     builder.pop(Reg64::R14);
     builder.pop(Reg64::R13);
