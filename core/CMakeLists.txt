@@ -7,7 +7,7 @@ target_sources(DaftBoyCore INTERFACE
     DMGMemory.cpp
 )
 
-if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
     target_sources(DaftBoyCore INTERFACE
         compiler/DMGRecompiler.cpp
         compiler/X86Builder.cpp
