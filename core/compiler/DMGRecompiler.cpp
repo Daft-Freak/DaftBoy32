@@ -3,14 +3,16 @@
 #ifdef __linux__
 #include <sys/mman.h>
 #include <unistd.h>
+#elif defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
 #endif
 
 #include "DMGRecompiler.h"
 
 #include "DMGCPU.h"
 #include "DMGMemory.h"
-
-// this is currently linux/x86-64 specific
 
 DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
 {
@@ -25,6 +27,14 @@ DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
 
     if(codeBuf == MAP_FAILED)
         perror("failed to allocate code buffer (mmap failed)");
+#elif defined(_WIN32)
+    SYSTEM_INFO sysInfo;
+    GetSystemInfo(&sysInfo);
+    auto pageSize = sysInfo.dwPageSize;
+    int numPages = 256;
+
+    codeBufSize = pageSize * numPages;
+    codeBuf = reinterpret_cast<uint8_t *>(VirtualAlloc(nullptr, codeBufSize, MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 #endif
 
     curCodePtr = codeBuf;
