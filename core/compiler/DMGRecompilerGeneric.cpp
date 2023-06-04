@@ -11,6 +11,8 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
     fallback.codeBuf = codeBuf;
     fallback.curCodePtr = codeBuf;
 
+    SourceInfo sourceInfo;
+
     uint16_t regsOffset = reinterpret_cast<uintptr_t>(&cpu.regs) - reinterpret_cast<uintptr_t>(&cpu);
 
     sourceInfo.registers.emplace_back(SourceRegInfo{"tmp", 16, SourceRegType::Temp, 0, 0, 0xFFFF});
@@ -44,6 +46,14 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
     sourceInfo.flags.emplace_back(SourceFlagInfo{'H', 5, SourceFlagType::HalfCarry});
     sourceInfo.flags.emplace_back(SourceFlagInfo{'N', 6, SourceFlagType::Negative});
     sourceInfo.flags.emplace_back(SourceFlagInfo{'Z', 7, SourceFlagType::Zero});
+
+    sourceInfo.pcSize = 16;
+    sourceInfo.pcOffset = reinterpret_cast<uintptr_t>(&cpu.pc) - reinterpret_cast<uintptr_t>(&cpu);
+
+    sourceInfo.exitCallFlag = &exitCallFlag;
+    sourceInfo.savedExitPtr = &tmpSavedPtr;
+
+    target.init(sourceInfo, &cpu);
 }
 
 bool DMGRecompilerGeneric::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo) 
@@ -59,43 +69,25 @@ bool DMGRecompilerGeneric::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bl
     printBlock(pc, genBlock);
     printf("\n\n");
 
+    auto oldCodePtr = codePtr;
+    target.compile(codePtr, pc, genBlock);
+
+    codePtr = oldCodePtr;
     return fallback.compile(codePtr, pc, blockInfo);
 }
 
 void DMGRecompilerGeneric::compileEntry()
 {
+
+    auto entryPtr = curCodePtr;
+    target.compileEntry(curCodePtr, codeBufSize);
+    entryFunc = reinterpret_cast<CompiledFunc>(entryPtr);
+
     // hax
-    fallback.compileEntry();
-
-    auto len = fallback.curCodePtr - fallback.codeBuf;
-    curCodePtr += len;
-
-    // patch tmpSavedPtr/exitForCall
-    auto ptr = fallback.saveAndExitPtr + 4;
-    uint64_t addr = reinterpret_cast<uintptr_t>(&tmpSavedPtr);
-
-    *ptr++ = addr;
-    *ptr++ = addr >> 8;
-    *ptr++ = addr >> 16;
-    *ptr++ = addr >> 24;
-    *ptr++ = addr >> 32;
-    *ptr++ = addr >> 40;
-    *ptr++ = addr >> 48;
-    *ptr++ = addr >> 56;
-
-    ptr = fallback.exitForCallPtr + 2;
-    addr = reinterpret_cast<uintptr_t>(&exitCallFlag);
-
-    *ptr++ = addr;
-    *ptr++ = addr >> 8;
-    *ptr++ = addr >> 16;
-    *ptr++ = addr >> 24;
-    *ptr++ = addr >> 32;
-    *ptr++ = addr >> 40;
-    *ptr++ = addr >> 48;
-    *ptr++ = addr >> 56;
-
-    entryFunc = reinterpret_cast<CompiledFunc>(codeBuf);
+    fallback.curCodePtr = curCodePtr;
+    fallback.exitPtr = target.exitPtr;
+    fallback.saveAndExitPtr = target.saveAndExitPtr;
+    fallback.exitForCallPtr = target.exitForCallPtr;
 }
 
 bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBlockInfo &genBlock)
@@ -1173,6 +1165,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
 void DMGRecompilerGeneric::printBlock(uint16_t pc, GenBlockInfo &block)
 {
+    auto &sourceInfo = target.getSourceInfo();
+
     struct OpMeta
     {
         const char *name;
