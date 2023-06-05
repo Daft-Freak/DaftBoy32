@@ -36,7 +36,7 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
     sourceInfo.registers.emplace_back(SourceRegInfo{"D  ", 8, SourceRegType::General, 3, 0xFF00, 0xFFFF});
     sourceInfo.registers.emplace_back(SourceRegInfo{"E  ", 8, SourceRegType::General, 3, 0x00FF, 0xFFFF});
     sourceInfo.registers.emplace_back(SourceRegInfo{"H  ", 8, SourceRegType::General, 4, 0xFF00, 0xFFFF});
-    sourceInfo.registers.emplace_back(SourceRegInfo{"L  ", 8, SourceRegType::General, 5, 0x00FF, 0xFFFF});
+    sourceInfo.registers.emplace_back(SourceRegInfo{"L  ", 8, SourceRegType::General, 4, 0x00FF, 0xFFFF});
 
     // extra temps
     sourceInfo.registers.emplace_back(SourceRegInfo{"tm2", 16, SourceRegType::Temp, 0, 0, 0xFFFF});
