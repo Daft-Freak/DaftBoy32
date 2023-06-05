@@ -497,7 +497,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
             case 0x36: // LD (HL),n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(store(GenReg::HL, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(store(GenReg::HL, GenReg::Temp, 2), instr.len, instr.flags);
                 break;
     
             // SCF
@@ -1089,7 +1089,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
             case 0xEA: // LD (nn),A
                 addInstruction(loadImm16(instr.opcode + 1));
-                addInstruction(store(GenReg::Temp, GenReg::A), instr.len, instr.flags);
+                addInstruction(store(GenReg::Temp, GenReg::A, 2), instr.len, instr.flags);
                 break;
 
             case 0xEE: // XOR n
