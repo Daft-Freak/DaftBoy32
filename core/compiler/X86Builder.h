@@ -213,6 +213,8 @@ public:
 
     void test(Reg8 dst, uint8_t imm);
 
+    void xchg(Reg8 dst, Reg8 src);
+
     void xor_(Reg8 dst, Reg8 src);
     void xor_(Reg8 dst, uint8_t imm);
 
