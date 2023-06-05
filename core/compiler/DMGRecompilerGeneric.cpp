@@ -53,6 +53,9 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
     sourceInfo.exitCallFlag = &exitCallFlag;
     sourceInfo.savedExitPtr = &tmpSavedPtr;
 
+    sourceInfo.cycleCount = &cpu.cycleCount;
+    sourceInfo.cycleExecuted = reinterpret_cast<void (*)(void *)>(DMGRecompilerGeneric::cycleExecuted);
+
     target.init(sourceInfo, &cpu);
 }
 
@@ -70,7 +73,11 @@ bool DMGRecompilerGeneric::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bl
     printf("\n\n");
 
     auto oldCodePtr = codePtr;
-    target.compile(codePtr, pc, genBlock);
+    if(success && target.compile(codePtr, codeBuf + codeBufSize, pc, genBlock))
+    {
+        //fallback.curCodePtr = codePtr; //
+        //return true;
+    }
 
     codePtr = oldCodePtr;
     return fallback.compile(codePtr, pc, blockInfo);

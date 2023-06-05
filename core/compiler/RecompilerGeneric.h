@@ -50,6 +50,19 @@ enum class GenCondition : uint8_t
     Always
 };
 
+enum GenOpFlags
+{
+    GenOp_ReadFlags = 0xF,
+
+    GenOp_WriteFlags = 0xF << 4,
+
+    GenOp_Branch = 1 << 8,
+    GenOp_BranchTarget = 1 << 9,
+    GenOp_Exit = 1 << 10,
+
+    GenOp_Last = 1 << 13,
+};
+
 struct GenOpInfo
 {
     GenOpcode opcode;
@@ -114,4 +127,7 @@ struct SourceInfo
     // emulator interface
     bool *exitCallFlag;
     uint8_t **savedExitPtr;
+
+    uint32_t *cycleCount;
+    void (*cycleExecuted)(void *cpu);
 };
