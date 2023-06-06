@@ -55,6 +55,8 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
 
     sourceInfo.cycleCount = &cpu.cycleCount;
     sourceInfo.cycleExecuted = reinterpret_cast<void (*)(void *)>(DMGRecompilerGeneric::cycleExecuted);
+    sourceInfo.readMem = reinterpret_cast<uint8_t (*)(void *, uint16_t)>(DMGRecompilerGeneric::readMem);
+    sourceInfo.writeMem = reinterpret_cast<int (*)(void *, uint16_t, uint8_t, int)>(DMGRecompilerGeneric::writeMem);
 
     target.init(sourceInfo, &cpu);
 }

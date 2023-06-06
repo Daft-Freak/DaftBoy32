@@ -130,4 +130,7 @@ struct SourceInfo
 
     uint32_t *cycleCount;
     void (*cycleExecuted)(void *cpu);
+
+    uint8_t (*readMem)(void *cpu, uint16_t addr);
+    int (*writeMem)(void *cpu, uint16_t addr, uint8_t data, int cyclesToRun);
 };
