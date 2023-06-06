@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <variant>
 
 #include "X86Target.h"
 #include "X86Builder.h"
@@ -10,10 +11,6 @@ static const Reg64 cpuPtrReg = Reg64::R14;
 // only an output at the end, could be anything
 static const Reg32 pcReg32 = Reg32::R12D;
 static const Reg16 pcReg16 = Reg16::R12W;
-
-static const Reg32 spReg32 = Reg32::R13D;
-static const Reg16 spReg16 = Reg16::R13W;
-static const Reg8 spReg8 = Reg8::R13B; // mostly for the adds with the strange flags
 
 #ifdef _WIN32
 static const Reg64 argumentRegs64[]{Reg64::RCX, Reg64::RDX, Reg64::R8, Reg64::R9};
@@ -43,6 +40,11 @@ static Reg8 swapRegHalf(Reg8 reg)
 
 // call helpers
 // FIXME: DMG specific bits
+static bool isCallSaved(Reg16 reg)
+{
+    return reg == Reg16::AX || reg == Reg16::CX || reg == Reg16::DX || reg == Reg16::DI;
+}
+
 static void callSave(X86Builder &builder)
 {
     builder.push(Reg64::RAX);
@@ -249,6 +251,94 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         delayedCyclesExecuted = 0;
     };
 
+    // load/store helpers
+    auto setupMemAddr = [this, &builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr)
+    {
+        //FIXME: DMG specific "should sync" logic
+        if(std::holds_alternative<Reg16>(addr))
+        {
+            // skip sync for stack read/write
+            //if(!isStack || spWrite) // TODO?
+                syncCyclesExecuted();
+
+            builder.movzx(argumentRegs32[1], std::get<Reg16>(addr));
+        }
+        else
+        {
+            // accessing most ram shouldn't cause anything to be updated, so we don't need an accurate cycle count
+            auto immAddr = std::get<uint16_t>(addr);
+            if(immAddr >= 0xFF00 && immAddr < 0xFF80/*HRAM start*/ && immAddr != 0xFFFF/*IE*/)
+                syncCyclesExecuted();
+
+            builder.mov(argumentRegs32[1], immAddr);
+        }
+    };
+
+    auto readMem = [this, &builder, &setupMemAddr](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
+    {
+        // can skip push/pop if we don't need AX/CX/DX
+        if(!std::holds_alternative<Reg16>(addr) || !isCallSaved(std::get<Reg16>(addr)))
+            callSaveOrSkip(builder);
+        else
+            callSave(builder);
+
+        setupMemAddr(addr);
+
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.readMem)); // function ptr
+        builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
+
+        builder.call(Reg64::RAX); // do call
+
+        callRestore(builder, dstReg);
+    };
+
+    auto writeMem = [this, &builder, &setupMemAddr](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
+    {
+        // can skip push/pop if we don't need AX/CX/DX
+        bool noPopAddr = !std::holds_alternative<Reg16>(addr) || !isCallSaved(std::get<Reg16>(addr));
+        bool noPopData = !std::holds_alternative<Reg8>(data) || std::get<Reg8>(data) == Reg8::BL || std::get<Reg8>(data) == Reg8::BH;
+
+        if(noPopAddr && noPopData)
+            callSaveOrSkip(builder);
+        else
+            callSave(builder);
+
+#ifndef _WIN32
+        // setup addr first (data writes DX)
+        setupMemAddr(addr);
+#endif
+
+        if(std::holds_alternative<Reg8>(data))
+        {
+#ifdef _WIN32
+            // argumentRegs[2] is R8, can't mov from xH to there
+            auto reg8 = std::get<Reg8>(data);
+            if(isXHReg(reg8))
+            {
+                builder.mov(Reg8::AL, reg8);
+                data = Reg8::AL;
+            }
+#endif
+            builder.movzx(argumentRegs32[2], std::get<Reg8>(data));
+        }
+        else
+            builder.mov(argumentRegs32[2], std::get<uint8_t>(data));
+
+#ifdef _WIN32
+        // setup addr after data (addr writes DX)
+        setupMemAddr(addr);
+#endif
+
+        builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
+
+        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.writeMem)); // function ptr
+        builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
+        builder.call(Reg64::RAX); // do call
+
+        callRestore(builder, Reg32::EDI);
+    };
+
+
     // do instructions
     int numInstructions = 0;
     uint8_t *opStartPtr = nullptr;
@@ -373,6 +463,42 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 }
                 else
                     badRegSize(regSize);
+
+                break;
+            }
+
+            case GenOpcode::Load:
+            {
+                // TODO: store data width somewhere
+                auto addrSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(addrSize == 16)
+                {
+                    auto addr = checkReg16(instr.src[0]);
+                    auto dst = checkReg8(instr.dst[0]);
+                    if(addr && dst)
+                        readMem(*addr, *dst);
+                }
+                else
+                    badRegSize(addrSize);
+
+                break;
+            }
+
+            case GenOpcode::Store:
+            {
+                // TODO: store data width somewhere
+                auto addrSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(addrSize == 16)
+                {
+                    auto addr = checkReg16(instr.src[0]);
+                    auto data = checkReg8(instr.src[1]);
+                    if(addr && data)
+                        writeMem(*addr, *data);
+                }
+                else
+                    badRegSize(addrSize);
 
                 break;
             }
