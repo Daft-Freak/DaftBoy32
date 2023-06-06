@@ -229,6 +229,7 @@ private:
 
     void encodeModRM(int reg, int baseReg, int disp); // mod 0-2
     void encodeModRM(int reg1, int reg2Op = 0); // mod 3
+    void encodeModRMReg8(int reg1, int reg2); // mod 3 (extra validation fot 8bit regs)
     void encodeREX(bool w, int reg, int index, int base);
 
     uint8_t *ptr, *endPtr;
