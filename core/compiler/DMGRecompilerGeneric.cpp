@@ -44,7 +44,7 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
 
     sourceInfo.flags.emplace_back(SourceFlagInfo{'C', 4, SourceFlagType::Carry});
     sourceInfo.flags.emplace_back(SourceFlagInfo{'H', 5, SourceFlagType::HalfCarry});
-    sourceInfo.flags.emplace_back(SourceFlagInfo{'N', 6, SourceFlagType::Negative});
+    sourceInfo.flags.emplace_back(SourceFlagInfo{'N', 6, SourceFlagType::WasSub});
     sourceInfo.flags.emplace_back(SourceFlagInfo{'Z', 7, SourceFlagType::Zero});
 
     sourceInfo.pcSize = 16;
