@@ -105,7 +105,7 @@ enum class SourceFlagType : uint8_t
 {
     Carry = 0,
     HalfCarry,
-    Negative,
+    WasSub, // the Z80 N flag
     Zero
 };
 
