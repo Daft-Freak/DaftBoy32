@@ -914,7 +914,7 @@ void X86Builder::endPatch()
 
 void X86Builder::write(uint8_t b)
 {
-    if(ptr + 1 != endPtr)
+    if(ptr != endPtr)
         *ptr++ = b;
     else
         error = true;
