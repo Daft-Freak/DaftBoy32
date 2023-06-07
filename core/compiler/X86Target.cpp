@@ -963,8 +963,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             // patch the condition jump
                             if(branchPtr && !builder.getError())
                             {
+                                auto off = builder.getPtr() - branchPtr - 2;
                                 builder.patch(branchPtr, branchPtr + 2);
-                                builder.jcc(flagSet ? Condition::E : Condition::NE, builder.getPtr() - branchPtr);
+                                builder.jcc(flagSet ? Condition::E : Condition::NE, off);
                                 builder.endPatch();
                             }
                         }
