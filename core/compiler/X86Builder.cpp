@@ -846,6 +846,24 @@ void X86Builder::resetPtr(uint8_t *oldPtr)
     error = false;
 }
 
+void X86Builder::patch(uint8_t *patchPtr, uint8_t *patchEndPtr)
+{
+    assert(patchPtr < ptr);
+    assert(patchEndPtr < ptr);
+
+    savedPtr = ptr;
+    savedEndPtr = endPtr;
+
+    ptr = patchPtr;
+    endPtr = patchEndPtr;
+}
+
+void X86Builder::endPatch()
+{
+    ptr = savedPtr;
+    endPtr = savedEndPtr;
+}
+
 void X86Builder::write(uint8_t b)
 {
     if(ptr + 1 != endPtr)
