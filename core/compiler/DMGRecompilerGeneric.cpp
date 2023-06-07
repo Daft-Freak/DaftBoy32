@@ -486,15 +486,15 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x34: // INC (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp2));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2, 0));
-                addInstruction(store(GenReg::HL, GenReg::Temp2, 2), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2, 0), 0, instr.flags);
+                addInstruction(store(GenReg::HL, GenReg::Temp2, 2), instr.len);
                 break;
 
             case 0x35: // DEC (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp2));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2, 0));
-                addInstruction(store(GenReg::HL, GenReg::Temp2, 2), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2, 0), 0, instr.flags);
+                addInstruction(store(GenReg::HL, GenReg::Temp2, 2), instr.len);
                 break;
 
             case 0x36: // LD (HL),n
