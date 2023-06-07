@@ -209,6 +209,8 @@ public:
 
     void stc();
 
+    void sub(Reg32 dst, Reg32 src);
+    void sub(Reg16 dst, Reg16 src);
     void sub(Reg8 dst, Reg8 src);
     void sub(Reg8 dst, uint8_t imm);
     void sub(Reg64 dst, int8_t imm);
