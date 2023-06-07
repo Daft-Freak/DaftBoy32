@@ -781,6 +781,24 @@ void X86Builder::stc()
     write(0xF9); // opcode
 }
 
+// reg -> reg
+void X86Builder::sub(Reg32 dst, Reg32 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x29); // opcode, w = 1
+    encodeModRM(dstReg, srcReg);
+}
+
+// reg -> reg, 16 bit
+void X86Builder::sub(Reg16 dst, Reg16 src)
+{
+    write(0x66); // 16 bit override
+    sub(static_cast<Reg32>(dst), static_cast<Reg32>(src));
+}
+
 // reg -> reg, 8bit
 void X86Builder::sub(Reg8 dst, Reg8 src)
 {
