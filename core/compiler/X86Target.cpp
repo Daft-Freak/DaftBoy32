@@ -520,12 +520,35 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             {
                 auto condition = static_cast<GenCondition>(instr.src[0]);
                 auto regSize = sourceInfo.registers[instr.src[1]].size;
-                if((instr.flags & GenOp_Exit) && condition == GenCondition::Always)
+                if((instr.flags & GenOp_Exit))
                 {
                     if(regSize == 16)
                     {
                         if(auto src = checkReg16(instr.src[1]))
                         {
+                            uint8_t *branchPtr = nullptr;
+                            bool flagSet = false;
+
+                            // condition
+                            if(condition != GenCondition::Always)
+                            {
+                                auto f = checkReg8(flagsReg);
+
+                                syncCyclesExecuted();
+                                // TODO: only if unhandled
+                                builder.mov(pcReg32, pc);
+
+                                flagSet = condition == GenCondition::Equal || condition == GenCondition::CarrySet;
+                                auto flag = condition == GenCondition::Equal || condition == GenCondition::NotEqual ? SourceFlagType::Zero : SourceFlagType::Carry;
+
+                                if(f)
+                                {
+                                    builder.test(*f, 1 << getFlagInfo(flag).bit);
+                                    branchPtr = builder.getPtr();
+                                    builder.jcc(flagSet ? Condition::E : Condition::NE, 1); // patch later
+                                }
+                            }
+
                             // need to sync cycles *before* the jump out
                             if(instrCycles)
                             {
@@ -535,8 +558,19 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             }
                             syncCyclesExecuted();
 
+                            // if branch sub cycles else
                             builder.movzx(pcReg32, *src);
+    
+                            // TODO: handle branch
                             builder.jmp(exitPtr - builder.getPtr()); // exit
+
+                            // patch the condition jump
+                            if(branchPtr && !builder.getError())
+                            {
+                                builder.patch(branchPtr, branchPtr + 2);
+                                builder.jcc(flagSet ? Condition::E : Condition::NE, builder.getPtr() - branchPtr);
+                                builder.endPatch();
+                            }
                         }
                     }
                     else
@@ -544,7 +578,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 }
                 else
                 {
-                    printf("unhandled gen op %i\n", instr.opcode);
+                    printf("unhandled branch\n");
+
                     err = true;
                 }
                 break;
