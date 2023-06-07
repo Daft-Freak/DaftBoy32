@@ -308,6 +308,9 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
         return ret;
     };
 
+    auto preserveC = DMGCPU::Flag_C >> 4;
+    auto preserveZ = DMGCPU::Flag_Z >> 4;
+
     bool ret = true;
 
     bool branchTargetOnNext = false;
@@ -368,7 +371,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x2C: // INC L
             case 0x3C: // INC A
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, inFlags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, inFlags | preserveC);
                 break;
 
             case 0x05: // DEC B
@@ -379,7 +382,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x2D: // DEC L
             case 0x3D: // DEC A
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, inFlags);
+                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, inFlags | preserveC);
                 break;
 
             case 0x0B: // DEC BC
@@ -412,7 +415,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x19: // ADD HL,DE
             case 0x29: // ADD HL,HL
             case 0x39: // ADD HL,SP
-                addInstruction(alu(GenOpcode::Add, regMap16[instr.opcode[0] >> 4], GenReg::HL, 2), instr.len, inFlags);
+                addInstruction(alu(GenOpcode::Add, regMap16[instr.opcode[0] >> 4], GenReg::HL, 2), instr.len, inFlags | preserveZ);
                 break;
 
             case 0x0A: // LD A,(BC)
@@ -487,7 +490,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 op.opcode = GenOpcode::Not;
                 op.cycles = 1;
                 op.src[0] = op.dst[0] = static_cast<uint8_t>(GenReg::A);
-                addInstruction(op, instr.len, inFlags);
+                addInstruction(op, instr.len, inFlags | preserveC | preserveZ);
                 break;
             }
 
@@ -962,7 +965,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 else if(instr.opcode[1] < 0x80) // BIT
                 {
                     addInstruction(loadImm(1 << bit, 0));
-                    addInstruction(alu(GenOpcode::And, reg, GenReg::Temp), instr.len, inFlags); // no writeback, so this is always the end
+                    addInstruction(alu(GenOpcode::And, reg, GenReg::Temp), instr.len, inFlags | preserveC); // no writeback, so this is always the end
                 }
                 else if(instr.opcode[1] < 0xC0) // RES
                 {

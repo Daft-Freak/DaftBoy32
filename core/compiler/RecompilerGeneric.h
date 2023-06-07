@@ -52,7 +52,7 @@ enum class GenCondition : uint8_t
 
 enum GenOpFlags
 {
-    GenOp_ReadFlags = 0xF,
+    GenOp_PreserveFlags = 0xF,
 
     GenOp_WriteFlags = 0xF << 4,
 
