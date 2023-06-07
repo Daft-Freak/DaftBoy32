@@ -636,7 +636,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_ReadFlags));
+                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -663,7 +663,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                assert(!(instr.flags & GenOp_ReadFlags));
+                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -733,7 +733,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_ReadFlags));
+                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -760,7 +760,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_ReadFlags));
+                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -788,7 +788,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_ReadFlags));
+                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -831,7 +831,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_ReadFlags));
+                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -874,7 +874,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_ReadFlags));
+                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
