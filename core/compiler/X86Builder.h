@@ -222,6 +222,9 @@ public:
 
     void resetPtr(uint8_t *oldPtr);
 
+    void patch(uint8_t *patchPtr, uint8_t *patchEndPtr);
+    void endPatch();
+
     bool getError() const {return error;}
 
 private:
@@ -233,6 +236,7 @@ private:
     void encodeREX(bool w, int reg, int index, int base);
 
     uint8_t *ptr, *endPtr;
+    uint8_t *savedPtr, *savedEndPtr;
 
     bool error = false; // super basic error handling
 };
