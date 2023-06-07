@@ -310,6 +310,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
     bool ret = true;
 
+    bool branchTargetOnNext = false;
+
     for(auto &instr : block.instructions)
     {
         pc += instr.len;
@@ -318,6 +320,13 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
         // remove unused flags
         inFlags &= ~(Op_ReadFlags | Op_Load | Op_Store);
+
+        if(branchTargetOnNext)
+        {
+            // make sure the instruction after a conditional call/ret is a branch target
+            inFlags |= Op_BranchTarget;
+            branchTargetOnNext = false;
+        }
 
         switch(instr.opcode[0])
         {
@@ -721,6 +730,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0xD8: // RET C
             {
                 // same code as RET, but with an inverted conditional jump over it...
+                branchTargetOnNext = true;
+
                 auto cond = invCondMap[(instr.opcode[0] >> 3) & 3];
                 addInstruction(loadImm(pc));
                 addInstruction(jump(cond, GenReg::Temp, 1), 0, Op_Branch | (inFlags & 0xF)); // move the cond read here
@@ -794,6 +805,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0xD4: // CALL NC,nn
             case 0xDC: // CALL C,nn
             {
+                branchTargetOnNext = true;
+
                 auto cond = invCondMap[(instr.opcode[0] >> 3) & 3];
                 addInstruction(loadImm(pc, 2));
                 addInstruction(jump(cond, GenReg::Temp, 1), 0, Op_Branch | (inFlags & 0xF)); // move the cond read here
