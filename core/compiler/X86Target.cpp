@@ -349,6 +349,102 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         callRestore(builder, Reg32::EDI);
     };
 
+    // neededFlags is what we need to output
+    // updateFlags is what we can output from the result
+    // oneFlags is is what is alwyas set to 1
+    // preservedFlags is what is... preserved
+    const auto setFlags = [this, &builder](std::optional<Reg8> result, uint8_t &neededFlags, uint8_t updateFlags, uint8_t oneFlags = 0, uint8_t preservedFlags = 0)
+    {
+        if(!flagsReg)
+            return;
+
+        // FIXME: assuming 8bit flags reg
+        auto f = *mapReg8(flagsReg);
+
+        updateFlags &= neededFlags;  // mask out unneeded
+
+        // remap "always one" flags to bits in reg
+        uint8_t mappedOneFlags = 0;
+
+        for(int i = 0; i < 4; i++)
+        {
+            if(oneFlags & (1 << (i + 4))) // +4 as it's the write flags
+                mappedOneFlags |= 1 << sourceInfo.flags[i].bit;
+        }
+
+        // preserved flags should have been preserved already
+        // so F should have all other bits zero
+
+        bool setF = preservedFlags != 0;
+        bool haveOpFlags = true; // assuming nothing has destroyed flags before this
+
+        if(haveOpFlags && (updateFlags & flagWriteMask(SourceFlagType::Carry)))
+        {
+            auto &cFlag = getFlagInfo(SourceFlagType::Carry);
+
+            // copy + shift if not set
+            if(!setF)
+            {
+                builder.setcc(Condition::B, f);
+                builder.shl(f, cFlag.bit); // shift to position
+                setF = true;
+            }
+            else
+            {
+                builder.jcc(Condition::AE, 3); // if !carry
+                builder.or_(f, 1 << cFlag.bit); // set C
+            }
+
+            haveOpFlags = false;
+            neededFlags &= ~flagWriteMask(SourceFlagType::Carry);
+        }
+
+        if((updateFlags & flagWriteMask(SourceFlagType::Zero)))
+        {
+            auto &zFlag = getFlagInfo(SourceFlagType::Zero);
+
+            if(haveOpFlags)
+            {
+                if(!setF)
+                {
+                    builder.setcc(Condition::E, f);
+                    builder.shl(f, zFlag.bit); // shift to position
+                    setF = true;
+                }
+                else
+                {
+                    builder.jcc(Condition::NE, 3); // if != 0
+                    builder.or_(f, 1 << zFlag.bit); // set Z
+                }
+
+                haveOpFlags = false;
+                neededFlags &= ~flagWriteMask(SourceFlagType::Zero);
+            }
+            else if(result)
+            {
+                // reconstruct from result
+                builder.cmp(*result, 0);
+                builder.jcc(Condition::NE, 3); // if != 0
+                builder.or_(f, 1 << zFlag.bit); // set Z
+
+                neededFlags &= ~flagWriteMask(SourceFlagType::Zero);
+            }
+        }
+
+        if(neededFlags && !setF) // some flags left and no write, make sure constant flags are set
+        {
+            builder.mov(f, mappedOneFlags);
+            neededFlags &= ~oneFlags;
+            setF = true;
+        }
+
+        // still haven't set always one flags
+        if(neededFlags & oneFlags)
+        {
+            builder.or_(f, mappedOneFlags);
+            neededFlags &= ~oneFlags;
+        }
+    };
 
     // do instructions
     int numInstructions = 0;
@@ -425,6 +521,38 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             err = true;
         };
     
+        // helpers to deal with restrictions
+        auto maybeSwapHReg = [&builder](std::optional<Reg8> &src, std::optional<Reg8> &dst)
+        {
+            // if there's a reg that requires REX and an xH reg, swap the halves over and read/write xL instead
+            std::optional<Reg8> swapReg;
+            if(isXHReg(*dst) && requiresREX(*src))
+                swapReg = dst = swapRegHalf(*dst);
+            else if(isXHReg(*src) && requiresREX(*dst))
+                swapReg = src = swapRegHalf(*src);
+
+            if(swapReg)
+                builder.xchg(*swapReg, swapRegHalf(*swapReg));
+
+            return swapReg;
+        };
+
+        auto unswapReg = [&builder](std::optional<Reg8> swapReg)
+        {
+            if(swapReg)
+                builder.xchg(*swapReg, swapRegHalf(*swapReg));
+        };
+
+        auto checkSingleSource = [&err, &instr]
+        {
+            if(instr.src[0] != instr.dst[0])
+            {
+                // this just needs an extra mov to fix, but nothing generates these yet
+                printf("unhandled src[0] != dst in op %i\n", int(instr.opcode));
+                err = true;
+            }
+        };
+    
         switch(instr.opcode)
         {
             case GenOpcode::NOP:
@@ -456,20 +584,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                     if(src && dst)
                     {
-                        // if there's a reg that requires REX and an xH reg, swap the halves over and read/write xL instead
-                        std::optional<Reg8> swapReg;
-                        if(isXHReg(*dst) && requiresREX(*src))
-                            swapReg = dst = swapRegHalf(*dst);
-                        else if(isXHReg(*src) && requiresREX(*dst))
-                            swapReg = src = swapRegHalf(*src);
-
-                        if(swapReg)
-                            builder.xchg(*swapReg, swapRegHalf(*swapReg));
-                        
+                        auto swapReg = maybeSwapHReg(src, dst);
                         builder.mov(*dst, *src);
-
-                        if(swapReg)
-                            builder.xchg(*swapReg, swapRegHalf(*swapReg));
+                        unswapReg(swapReg);
                     }
                 }
                 else
@@ -514,7 +631,286 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 break;
             }
 
-            // ...
+            case GenOpcode::And:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_ReadFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src && dst)
+                    {
+                        auto swapReg = maybeSwapHReg(src, dst);
+                        builder.and_(*dst, *src);
+                        unswapReg(swapReg);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero), flagWriteMask(SourceFlagType::HalfCarry));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::Compare:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                assert(!(instr.flags & GenOp_ReadFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.src[0]);
+                    auto f = checkReg8(flagsReg);
+
+                    if(src && dst && f)
+                    {
+                        auto cMask = flagWriteMask(SourceFlagType::Carry);
+                        auto zMask = flagWriteMask(SourceFlagType::Zero);
+                        auto hMask = flagWriteMask(SourceFlagType::HalfCarry);
+
+                        if(instr.flags & hMask)
+                        {
+                            // half cmp
+                            // this makes a lot of assumptions, but is only used for DMG anyway
+                            if(isXHReg(*src))
+                            {
+                                builder.mov(*f, *src);
+                                builder.mov(Reg8::SIL, *f);
+                            }
+                            else
+                                builder.mov(Reg8::SIL, *src);
+
+                            builder.mov(*f, *dst);
+
+                            builder.and_(*f, 0xF);
+                            builder.and_(Reg8::SIL, 0xF);
+
+                            builder.cmp(*f, Reg8::SIL);
+                            builder.setcc(Condition::B, Reg8::SIL);
+                        }
+
+                        auto swapReg = maybeSwapHReg(src, dst);
+                        builder.cmp(*dst, *src);
+                        unswapReg(swapReg);
+
+                        if((instr.flags & (cMask | zMask)) == (cMask | zMask))
+                            builder.setcc(Condition::E, Reg8::R10B); // save zero if carry also set, should be safe to use tmp here
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags({}, flags, cMask | zMask, flagWriteMask(SourceFlagType::WasSub));
+
+                        // half carry
+                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        {
+                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
+                            builder.or_(*f, Reg8::SIL);
+                        }
+
+                        if(flags & zMask)
+                        {
+                            builder.shl(Reg8::R10B, getFlagInfo(SourceFlagType::Zero).bit);
+                            builder.or_(*f, Reg8::R10B);
+                        }
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::Or:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_ReadFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src && dst)
+                    {
+                        auto swapReg = maybeSwapHReg(src, dst);
+                        builder.or_(*dst, *src);
+                        unswapReg(swapReg);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+            case GenOpcode::Xor:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_ReadFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src && dst)
+                    {
+                        auto swapReg = maybeSwapHReg(src, dst);
+                        builder.xor_(*dst, *src);
+                        unswapReg(swapReg);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::ShiftLeft:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_ReadFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src && dst)
+                    {
+                        assert(*src != *dst);
+
+                        // can only shift by CL
+                        bool swap = *src != Reg8::CL;
+
+                        // swap with whatever is currently in CL
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // if it was the dst swap the args around
+                        if(dst == Reg8::CL)
+                            builder.shlCL(*src);
+                        else
+                            builder.shlCL(*dst);
+
+                        // restore
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | flagWriteMask(SourceFlagType::Zero));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::ShiftRightArith:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_ReadFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src && dst)
+                    {
+                        assert(*src != *dst);
+
+                        // can only shift by CL
+                        bool swap = *src != Reg8::CL;
+
+                        // swap with whatever is currently in CL
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // if it was the dst swap the args around
+                        if(dst == Reg8::CL)
+                            builder.sarCL(*src);
+                        else
+                            builder.sarCL(*dst);
+
+                        // restore
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | flagWriteMask(SourceFlagType::Zero));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::ShiftRightLogic:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_ReadFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src && dst)
+                    {
+                        assert(*src != *dst);
+
+                        // can only shift by CL
+                        bool swap = *src != Reg8::CL;
+
+                        // swap with whatever is currently in CL
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // if it was the dst swap the args around
+                        if(dst == Reg8::CL)
+                            builder.shrCL(*src);
+                        else
+                            builder.shrCL(*dst);
+
+                        // restore
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | flagWriteMask(SourceFlagType::Zero));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
 
             case GenOpcode::Jump:
             {
