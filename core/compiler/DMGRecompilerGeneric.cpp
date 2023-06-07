@@ -314,6 +314,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
     {
         pc += instr.len;
 
+        auto inFlags = instr.flags;
+
+        // remove unused flags
+        inFlags &= ~(Op_ReadFlags | Op_Load | Op_Store);
+
         switch(instr.opcode[0])
         {
             case 0x00: // NOP
@@ -321,7 +326,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 GenOpInfo op{};
                 op.opcode = GenOpcode::NOP;
                 op.cycles = 1;
-                addInstruction(op, instr.len, instr.flags);
+                addInstruction(op, instr.len, inFlags);
                 break;
             }
 
@@ -330,12 +335,12 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x21: // LD HL,nn
             case 0x31: // LD SP,nn
                 addInstruction(loadImm16(instr.opcode + 1));
-                addInstruction(move(GenReg::Temp, regMap16[instr.opcode[0] >> 4]), instr.len, instr.flags);
+                addInstruction(move(GenReg::Temp, regMap16[instr.opcode[0] >> 4]), instr.len, inFlags);
                 break;
 
             case 0x02: // LD (BC),A
             case 0x12: // LD (DE),A
-                addInstruction(store(regMap16[instr.opcode[0] >> 4], GenReg::A, 2), instr.len, instr.flags);
+                addInstruction(store(regMap16[instr.opcode[0] >> 4], GenReg::A, 2), instr.len, inFlags);
                 break;
             
             case 0x03: // INC BC
@@ -343,7 +348,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x23: // INC HL
             case 0x33: // INC SP
                 addInstruction(loadImm(1));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, regMap16[instr.opcode[0] >> 4]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, regMap16[instr.opcode[0] >> 4]), instr.len, inFlags);
                 break;
 
             case 0x04: // INC B
@@ -354,7 +359,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x2C: // INC L
             case 0x3C: // INC A
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, inFlags);
                 break;
 
             case 0x05: // DEC B
@@ -365,7 +370,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x2D: // DEC L
             case 0x3D: // DEC A
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, inFlags);
                 break;
 
             case 0x0B: // DEC BC
@@ -373,7 +378,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x2B: // DEC HL
             case 0x3B: // DEC SP
                 addInstruction(loadImm(1));
-                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, regMap16[instr.opcode[0] >> 4]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, regMap16[instr.opcode[0] >> 4]), instr.len, inFlags);
                 break;
 
             case 0x06: // LD B,n
@@ -384,12 +389,12 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x2E: // LD L,n
             case 0x3E: // LD A,n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(move(GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, instr.flags);
+                addInstruction(move(GenReg::Temp, regMap8[instr.opcode[0] >> 3]), instr.len, inFlags);
                 break;
 
             case 0x07: // RLCA
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::RotateLeft, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::RotateLeft, GenReg::Temp), instr.len, inFlags);
                 break;
 
             // ld (nn) sp
@@ -398,17 +403,17 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x19: // ADD HL,DE
             case 0x29: // ADD HL,HL
             case 0x39: // ADD HL,SP
-                addInstruction(alu(GenOpcode::Add, regMap16[instr.opcode[0] >> 4], GenReg::HL, 2), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, regMap16[instr.opcode[0] >> 4], GenReg::HL, 2), instr.len, inFlags);
                 break;
 
             case 0x0A: // LD A,(BC)
             case 0x1A: // LD A,(DE)
-                addInstruction(load(regMap16[instr.opcode[0] >> 4], GenReg::A, 2), instr.len, instr.flags);
+                addInstruction(load(regMap16[instr.opcode[0] >> 4], GenReg::A, 2), instr.len, inFlags);
                 break;
 
             case 0x0F: // RRCA
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::RotateRight, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::RotateRight, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0x10: // STOP
@@ -416,23 +421,23 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 GenOpInfo op{};
                 op.opcode = GenOpcode::DMG_Stop;
                 op.cycles = 1;
-                addInstruction(op, instr.len, instr.flags);
+                addInstruction(op, instr.len, inFlags);
                 break;
             }
 
             case 0x17: // RLA
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::RotateLeftCarry, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::RotateLeftCarry, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0x18: // JR m
                 addInstruction(loadImm(pc + static_cast<int8_t>(instr.opcode[1])));
-                addInstruction(jump(), instr.len, instr.flags);
+                addInstruction(jump(), instr.len, inFlags);
                 break;
 
             case 0x1F: // RLA
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::RotateRightCarry, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::RotateRightCarry, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0x20: // JR NZ,n
@@ -442,14 +447,14 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             {
                 auto cond = condMap[(instr.opcode[0] >> 3) & 3];
                 addInstruction(loadImm(pc + static_cast<int8_t>(instr.opcode[1])));
-                addInstruction(jump(cond), instr.len, instr.flags);
+                addInstruction(jump(cond), instr.len, inFlags);
                 break;
             }
 
             case 0x22: // LDI (HL),A
                 addInstruction(store(GenReg::HL, GenReg::A));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::HL), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::HL), instr.len, inFlags);
                 break;
             
             case 0x27: // DAA
@@ -457,14 +462,14 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 GenOpInfo op{};
                 op.opcode = GenOpcode::DMG_DAA;
                 op.cycles = 1;
-                addInstruction(op, instr.len, instr.flags);
+                addInstruction(op, instr.len, inFlags);
                 break;
             }
 
             case 0x2A: // LDI A,(HL)
                 addInstruction(load(GenReg::HL, GenReg::A));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::HL), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::HL), instr.len, inFlags);
                 break;
 
             case 0x2F: // CPL
@@ -473,33 +478,33 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 op.opcode = GenOpcode::Not;
                 op.cycles = 1;
                 op.src[0] = op.dst[0] = static_cast<uint8_t>(GenReg::A);
-                addInstruction(op, instr.len, instr.flags);
+                addInstruction(op, instr.len, inFlags);
                 break;
             }
 
             case 0x32: // LDD (HL),A
                 addInstruction(store(GenReg::HL, GenReg::A));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::HL), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::HL), instr.len, inFlags);
                 break;
 
             case 0x34: // INC (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp2));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2, 0), 0, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2, 0), 0, inFlags);
                 addInstruction(store(GenReg::HL, GenReg::Temp2, 2), instr.len);
                 break;
 
             case 0x35: // DEC (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp2));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2, 0), 0, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2, 0), 0, inFlags);
                 addInstruction(store(GenReg::HL, GenReg::Temp2, 2), instr.len);
                 break;
 
             case 0x36: // LD (HL),n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(store(GenReg::HL, GenReg::Temp, 2), instr.len, instr.flags);
+                addInstruction(store(GenReg::HL, GenReg::Temp, 2), instr.len, inFlags);
                 break;
     
             // SCF
@@ -507,7 +512,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x3A: // LDD A,(HL)
                 addInstruction(load(GenReg::HL, GenReg::A));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::HL), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::HL), instr.len, inFlags);
                 break;
 
             // CCF
@@ -561,7 +566,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x7C: // LD A,H
             case 0x7D: // LD A,L
             case 0x7F: // LD A,A
-                addInstruction(move(regMap8[instr.opcode[0] & 7], regMap8[(instr.opcode[0] >> 3) & 7]), instr.len, instr.flags);
+                addInstruction(move(regMap8[instr.opcode[0] & 7], regMap8[(instr.opcode[0] >> 3) & 7]), instr.len, inFlags);
                 break;
 
             case 0x46: // LD B,(HL)
@@ -571,7 +576,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x66: // LD H,(HL)
             case 0x6E: // LD L,(HL)
             case 0x7E: // LD A,(HL)
-                addInstruction(load(GenReg::HL, regMap8[(instr.opcode[0] >> 3) & 7], 2), instr.len, instr.flags);
+                addInstruction(load(GenReg::HL, regMap8[(instr.opcode[0] >> 3) & 7], 2), instr.len, inFlags);
                 break;
 
             case 0x70: // LD (HL),B
@@ -581,7 +586,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x74: // LD (HL),H
             case 0x75: // LD (HL),L
             case 0x77: // LD (HL),A
-                addInstruction(store(GenReg::HL, regMap8[instr.opcode[0] & 7], 2), instr.len, instr.flags);
+                addInstruction(store(GenReg::HL, regMap8[instr.opcode[0] & 7], 2), instr.len, inFlags);
                 break;
 
             case 0x76: // HALT
@@ -589,7 +594,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 GenOpInfo op{};
                 op.opcode = GenOpcode::DMG_Halt;
                 op.cycles = 1;
-                addInstruction(op, instr.len, instr.flags);
+                addInstruction(op, instr.len, inFlags);
                 break;
             }
 
@@ -600,7 +605,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x84: // ADD A,H
             case 0x85: // ADD A,L
             case 0x87: // ADD A,A
-                addInstruction(alu(GenOpcode::Add, regMap8[instr.opcode[0] & 7]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, regMap8[instr.opcode[0] & 7]), instr.len, inFlags);
                 break;
             case 0x86: // ADD (HL)
             {
@@ -608,7 +613,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(load(GenReg::HL, GenReg::Temp));
 
                 // add dst + tmp -> dst
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp), instr.len, inFlags);
                 break;
             }
 
@@ -619,11 +624,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x8C: // ADC A,F
             case 0x8D: // ADC A,H
             case 0x8F: // ADC A,A
-                addInstruction(alu(GenOpcode::AddWithCarry, regMap8[instr.opcode[0] & 7]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::AddWithCarry, regMap8[instr.opcode[0] & 7]), instr.len, inFlags);
                 break;
             case 0x8E: // ADC (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp));
-                addInstruction(alu(GenOpcode::AddWithCarry, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::AddWithCarry, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0x90: // SUB B
@@ -633,11 +638,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x94: // SUB H
             case 0x95: // SUB L
             case 0x97: // SUB A
-                addInstruction(alu(GenOpcode::Subtract, regMap8[instr.opcode[0] & 7]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Subtract, regMap8[instr.opcode[0] & 7]), instr.len, inFlags);
                 break;
             case 0x96: // SUB (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp));
-                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0x98: // SBC B
@@ -647,11 +652,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x9C: // SBC H
             case 0x9D: // SBC L
             case 0x9F: // SBC A
-                addInstruction(alu(GenOpcode::SubtractWithCarry, regMap8[instr.opcode[0] & 7]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::SubtractWithCarry, regMap8[instr.opcode[0] & 7]), instr.len, inFlags);
                 break;
             case 0x9E: // SBC (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp));
-                addInstruction(alu(GenOpcode::SubtractWithCarry, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::SubtractWithCarry, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xA0: // AND B
@@ -661,11 +666,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0xA4: // AND H
             case 0xA5: // AND L
             case 0xA7: // AND A
-                addInstruction(alu(GenOpcode::And, regMap8[instr.opcode[0] & 7]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::And, regMap8[instr.opcode[0] & 7]), instr.len, inFlags);
                 break;
             case 0xA6: // AND (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp));
-                addInstruction(alu(GenOpcode::And, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::And, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xA8: // XOR B
@@ -675,11 +680,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0xAC: // XOR H
             case 0xAD: // XOR L
             case 0xAF: // XOR A
-                addInstruction(alu(GenOpcode::Xor, regMap8[instr.opcode[0] & 7]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Xor, regMap8[instr.opcode[0] & 7]), instr.len, inFlags);
                 break;
             case 0xAE: // XOR (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp));
-                addInstruction(alu(GenOpcode::Xor, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Xor, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xB0: // OR B
@@ -689,11 +694,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0xB4: // OR H
             case 0xB5: // OR L
             case 0xB7: // OR A
-                addInstruction(alu(GenOpcode::Or, regMap8[instr.opcode[0] & 7]), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Or, regMap8[instr.opcode[0] & 7]), instr.len, inFlags);
                 break;
             case 0xB6: // OR (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp));
-                addInstruction(alu(GenOpcode::Or, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Or, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xB8: // CP B
@@ -703,11 +708,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0xBC: // CP H
             case 0xBD: // CP L
             case 0xBF: // CP A
-                addInstruction(compare(regMap8[instr.opcode[0] & 7]), instr.len, instr.flags);
+                addInstruction(compare(regMap8[instr.opcode[0] & 7]), instr.len, inFlags);
                 break;
             case 0xBE: // CP (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp));
-                addInstruction(compare(GenReg::Temp), instr.len, instr.flags);
+                addInstruction(compare(GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xC0: // RET NZ
@@ -718,7 +723,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 // same code as RET, but with an inverted conditional jump over it...
                 auto cond = invCondMap[(instr.opcode[0] >> 3) & 3];
                 addInstruction(loadImm(pc));
-                addInstruction(jump(cond, GenReg::Temp, 1), 0, Op_Branch | (instr.flags & 0xF)); // move the cond read here
+                addInstruction(jump(cond, GenReg::Temp, 1), 0, Op_Branch | (inFlags & 0xF)); // move the cond read here
 
                 // pop PC
                 // low
@@ -737,7 +742,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::SP, 0));
 
-                addInstruction(jump(GenCondition::Always, GenReg::Temp2, 1), instr.len, instr.flags & ~0xF);
+                addInstruction(jump(GenCondition::Always, GenReg::Temp2, 1), instr.len, inFlags & ~0xF);
                 break;
             }
 
@@ -764,7 +769,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 }
 
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::SP), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::SP), instr.len, inFlags);
 
                 break;
             }
@@ -776,12 +781,12 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             {
                 auto cond = condMap[(instr.opcode[0] >> 3) & 3];
                 addInstruction(loadImm16(instr.opcode + 1));
-                addInstruction(jump(cond), instr.len, instr.flags);
+                addInstruction(jump(cond), instr.len, inFlags);
                 break;
             }
             case 0xC3: // JP nn
                 addInstruction(loadImm16(instr.opcode + 1));
-                addInstruction(jump(), instr.len, instr.flags);
+                addInstruction(jump(), instr.len, inFlags);
                 break;
 
             case 0xC4: // CALL NZ,nn
@@ -791,7 +796,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             {
                 auto cond = invCondMap[(instr.opcode[0] >> 3) & 3];
                 addInstruction(loadImm(pc, 2));
-                addInstruction(jump(cond, GenReg::Temp, 1), 0, Op_Branch | (instr.flags & 0xF)); // move the cond read here
+                addInstruction(jump(cond, GenReg::Temp, 1), 0, Op_Branch | (inFlags & 0xF)); // move the cond read here
 
                 // push PC
                 // high
@@ -808,7 +813,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
                 // jump
                 addInstruction(loadImm16(instr.opcode + 1, 0));
-                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, instr.flags & ~0xF);
+                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, inFlags & ~0xF);
                 break;
             }
 
@@ -827,14 +832,14 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 // low
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::SP, 0));
-                addInstruction(store(GenReg::SP, lowHalf(reg), 2), instr.len, instr.flags);
+                addInstruction(store(GenReg::SP, lowHalf(reg), 2), instr.len, inFlags);
 
                 break;
             }
 
             case 0xC6: // ADD n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xC7: // RST 0
@@ -861,7 +866,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
                 // jump
                 addInstruction(loadImm(instr.opcode[0] & 0x38, 0));
-                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, instr.flags);
+                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, inFlags);
                 break;
             }
 
@@ -884,7 +889,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::SP, 0));
 
-                addInstruction(jump(GenCondition::Always, GenReg::Temp2, 1), instr.len, instr.flags);
+                addInstruction(jump(GenCondition::Always, GenReg::Temp2, 1), instr.len, inFlags);
                 break;
             }
 
@@ -910,7 +915,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                         if(isMem)
                             addInstruction(alu(op, GenReg::Temp, reg, 0));
                         else
-                            addInstruction(alu(op, GenReg::Temp, reg), instr.len, instr.flags);
+                            addInstruction(alu(op, GenReg::Temp, reg), instr.len, inFlags);
                     };
 
                     switch(instr.opcode[1] & ~7)
@@ -944,7 +949,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 else if(instr.opcode[1] < 0x80) // BIT
                 {
                     addInstruction(loadImm(1 << bit, 0));
-                    addInstruction(alu(GenOpcode::And, reg, GenReg::Temp), instr.len, instr.flags); // no writeback, so this is always the end
+                    addInstruction(alu(GenOpcode::And, reg, GenReg::Temp), instr.len, inFlags); // no writeback, so this is always the end
                 }
                 else if(instr.opcode[1] < 0xC0) // RES
                 {
@@ -959,7 +964,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                         addInstruction(aluOp);
                     }
                     else // this is the end
-                        addInstruction(aluOp, instr.len, instr.flags);
+                        addInstruction(aluOp, instr.len, inFlags);
                 }
                 else // SET
                 {
@@ -974,11 +979,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                         addInstruction(aluOp);
                     }
                     else // this is the end
-                        addInstruction(aluOp, instr.len, instr.flags);
+                        addInstruction(aluOp, instr.len, inFlags);
                 }
 
                 if(isMem && (instr.opcode[1] >= 0x80 || instr.opcode[1] < 0x40)) // BIT doesn't write back
-                    addInstruction(store(GenReg::HL, reg, 2), instr.len, instr.flags);
+                    addInstruction(store(GenReg::HL, reg, 2), instr.len, inFlags);
 
                 break;
             }
@@ -1000,18 +1005,18 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
                 // jump
                 addInstruction(loadImm16(instr.opcode + 1, 0));
-                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, instr.flags);
+                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, inFlags);
                 break;
             }
 
             case 0xCE: // ADC n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(alu(GenOpcode::AddWithCarry, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::AddWithCarry, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xD6: // SUB n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xD9: // RETI
@@ -1039,13 +1044,13 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::SP, 0));
 
-                addInstruction(jump(GenCondition::Always, GenReg::Temp2, 1), instr.len, instr.flags);
+                addInstruction(jump(GenCondition::Always, GenReg::Temp2, 1), instr.len, inFlags);
                 break;
             }
 
             case 0xDE: // SBC n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(alu(GenOpcode::SubtractWithCarry, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::SubtractWithCarry, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xE0: // LDH (n),A
@@ -1055,7 +1060,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 op.cycles = 1;
                 op.imm = 0xFF00 | instr.opcode[1];
                 addInstruction(op);
-                addInstruction(store(GenReg::Temp, GenReg::A, 2), instr.len, instr.flags);
+                addInstruction(store(GenReg::Temp, GenReg::A, 2), instr.len, inFlags);
                 break;
             }
 
@@ -1066,13 +1071,13 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 op.imm = 0xFF00;
                 addInstruction(op);
                 addInstruction(alu(GenOpcode::Or, GenReg::C, GenReg::Temp, 0));
-                addInstruction(store(GenReg::Temp, GenReg::A, 2), instr.len, instr.flags);
+                addInstruction(store(GenReg::Temp, GenReg::A, 2), instr.len, inFlags);
                 break;
             }
 
             case 0xE6: // AND n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(alu(GenOpcode::And, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::And, GenReg::Temp), instr.len, inFlags);
                 break;
 
             /*
@@ -1081,18 +1086,18 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             */
 
             case 0xE9: // JP (HL)
-                addInstruction(jump(GenCondition::Always, GenReg::HL, 1), instr.len, instr.flags);
+                addInstruction(jump(GenCondition::Always, GenReg::HL, 1), instr.len, inFlags);
                 break;
 
 
             case 0xEA: // LD (nn),A
                 addInstruction(loadImm16(instr.opcode + 1));
-                addInstruction(store(GenReg::Temp, GenReg::A, 2), instr.len, instr.flags);
+                addInstruction(store(GenReg::Temp, GenReg::A, 2), instr.len, inFlags);
                 break;
 
             case 0xEE: // XOR n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(alu(GenOpcode::Xor, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Xor, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xF0: // LDH A,(n)
@@ -1102,7 +1107,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 op.cycles = 1;
                 op.imm = 0xFF00 | instr.opcode[1];
                 addInstruction(op);
-                addInstruction(load(GenReg::Temp, GenReg::A, 2), instr.len, instr.flags);
+                addInstruction(load(GenReg::Temp, GenReg::A, 2), instr.len, inFlags);
                 break;
             }
 
@@ -1113,7 +1118,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 op.imm = 0xFF00;
                 addInstruction(op);
                 addInstruction(alu(GenOpcode::Or, GenReg::C, GenReg::Temp, 0));
-                addInstruction(load(GenReg::Temp, GenReg::A, 2), instr.len, instr.flags);
+                addInstruction(load(GenReg::Temp, GenReg::A, 2), instr.len, inFlags);
                 break;
             }
 
@@ -1122,22 +1127,22 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 GenOpInfo op{};
                 op.opcode = GenOpcode::DMG_DI;
                 op.cycles = 1;
-                addInstruction(op, instr.len, instr.flags);
+                addInstruction(op, instr.len, inFlags);
                 break;
             }
 
             case 0xF6: // OR n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(alu(GenOpcode::Or, GenReg::Temp), instr.len, instr.flags);
+                addInstruction(alu(GenOpcode::Or, GenReg::Temp), instr.len, inFlags);
                 break;
 
             case 0xF9: // LD SP,HL
-                addInstruction(move(GenReg::HL, GenReg::SP, 2), instr.len, instr.flags);
+                addInstruction(move(GenReg::HL, GenReg::SP, 2), instr.len, inFlags);
                 break;
 
             case 0xFA: // LD A,(nn)
                 addInstruction(loadImm16(instr.opcode + 1));
-                addInstruction(load(GenReg::Temp, GenReg::A, 2), instr.len, instr.flags);
+                addInstruction(load(GenReg::Temp, GenReg::A, 2), instr.len, inFlags);
                 break;
 
             case 0xFB: // EI
@@ -1145,13 +1150,13 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 GenOpInfo op{};
                 op.opcode = GenOpcode::DMG_EI;
                 op.cycles = 1;
-                addInstruction(op, instr.len, instr.flags);
+                addInstruction(op, instr.len, inFlags);
                 break;
             }
 
             case 0xFE: // CP n
                 addInstruction(loadImm(instr.opcode[1]));
-                addInstruction(compare(GenReg::Temp), instr.len, instr.flags);
+                addInstruction(compare(GenReg::Temp), instr.len, inFlags);
                 break;
 
             default:
@@ -1160,7 +1165,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 ret = false;
                 GenOpInfo op{};
                 op.opcode = GenOpcode::NOP; // nop with no cycles
-                addInstruction(op, instr.len, instr.flags);
+                addInstruction(op, instr.len, inFlags);
             }
         }
     }
@@ -1223,11 +1228,21 @@ void DMGRecompilerGeneric::printBlock(uint16_t pc, GenBlockInfo &block)
         "alw",
     };
 
+    // flag info
     char flagChars[]{'X', 'X', 'X', 'X'};
+
+    int carryMask = 0, zeroMask = 0;
 
     int i = 0;
     for(auto &flag : sourceInfo.flags)
+    {
+        if(flag.type == SourceFlagType::Carry)
+            carryMask = 1 << i;
+        else if(flag.type == SourceFlagType::Zero)
+            zeroMask = 1 << i;
+
         flagChars[i++] = flag.label;
+    }
     
 
     uint16_t lastPC = 1;
@@ -1301,13 +1316,28 @@ void DMGRecompilerGeneric::printBlock(uint16_t pc, GenBlockInfo &block)
         }
 
         // flags
-        if(instr.flags & 0xFF)
+
+        // work out flags read
+        uint8_t flagsRead = 0;
+        if(instr.opcode == GenOpcode::AddWithCarry || instr.opcode == GenOpcode::SubtractWithCarry || instr.opcode == GenOpcode::RotateLeftCarry || instr.opcode == GenOpcode::RotateRightCarry)
+            flagsRead = carryMask;
+        else if(instr.opcode == GenOpcode::Jump)
+        {
+            auto cond = static_cast<GenCondition>(instr.src[0]);
+            if(cond == GenCondition::CarryClear || cond == GenCondition::CarrySet)
+                flagsRead = carryMask;
+            else if(cond != GenCondition::Always)
+                flagsRead = zeroMask;
+        }
+        // else anything that reads a flags register directly
+
+        if((instr.flags & 0xFF) || flagsRead)
         {
             printf(" flags %c%c%c%c -> %c%c%c%c", 
-                    instr.flags & 0x01 ? flagChars[0] : '-',
-                    instr.flags & 0x02 ? flagChars[1] : '-',
-                    instr.flags & 0x04 ? flagChars[2] : '-',
-                    instr.flags & 0x08 ? flagChars[3] : '-',
+                    flagsRead   & 0x01 ? flagChars[0] : '-',
+                    flagsRead   & 0x02 ? flagChars[1] : '-',
+                    flagsRead   & 0x04 ? flagChars[2] : '-',
+                    flagsRead   & 0x08 ? flagChars[3] : '-',
                     instr.flags & 0x10 ? flagChars[0] : '-',
                     instr.flags & 0x20 ? flagChars[1] : '-',
                     instr.flags & 0x40 ? flagChars[2] : '-',
