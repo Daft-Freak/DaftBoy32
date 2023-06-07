@@ -124,7 +124,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
         H,
         L,
 
-        Temp2, // used by inc/dec (hl), ext ops (HL), call and ret
+        Temp2, // used by inc/dec (hl), ext ops (HL) and ret
         Temp3, // used by ret
     };
 
@@ -789,12 +789,9 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0xD4: // CALL NC,nn
             case 0xDC: // CALL C,nn
             {
-                addInstruction(loadImm16(instr.opcode + 1));
-                addInstruction(move(GenReg::Temp, GenReg::Temp2)); // store addr for later
-
                 auto cond = invCondMap[(instr.opcode[0] >> 3) & 3];
-                addInstruction(loadImm(pc));
-                addInstruction(jump(cond, GenReg::Temp, 0), 0, Op_Branch | (instr.flags & 0xF)); // move the cond read here
+                addInstruction(loadImm(pc, 2));
+                addInstruction(jump(cond, GenReg::Temp, 1), 0, Op_Branch | (instr.flags & 0xF)); // move the cond read here
 
                 // push PC
                 // high
@@ -810,7 +807,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(store(GenReg::SP, GenReg::Temp));
 
                 // jump
-                addInstruction(jump(GenCondition::Always, GenReg::Temp2, 1), instr.len, instr.flags & ~0xF);
+                addInstruction(loadImm16(instr.opcode + 1, 0));
+                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, instr.flags & ~0xF);
                 break;
             }
 
@@ -987,14 +985,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
             case 0xCD: // CALL nn
             {
-                addInstruction(loadImm16(instr.opcode + 1));
-                addInstruction(move(GenReg::Temp, GenReg::Temp2)); // store addr for later
-
                 // push PC
                 // high
-                addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::SP, 0));
-                addInstruction(loadImm(pc >> 8, 0));
+                addInstruction(loadImm(1));
+                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::SP));
+                addInstruction(loadImm(pc >> 8));
                 addInstruction(store(GenReg::SP, GenReg::Temp));
 
                 // low
@@ -1004,7 +999,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(store(GenReg::SP, GenReg::Temp));
 
                 // jump
-                addInstruction(jump(GenCondition::Always, GenReg::Temp2, 1), instr.len, instr.flags);
+                addInstruction(loadImm16(instr.opcode + 1, 0));
+                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, instr.flags);
                 break;
             }
 
