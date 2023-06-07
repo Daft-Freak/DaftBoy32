@@ -29,10 +29,17 @@ private:
     std::optional<Reg32> mapReg32(uint8_t index);
     std::optional<Reg64> mapReg64(uint8_t index);
 
+    SourceFlagInfo &getFlagInfo(SourceFlagType flag);
+    uint8_t flagWriteMask(SourceFlagType flag);
+    bool writesFlag(uint16_t opFlags, SourceFlagType flag);
+
     SourceInfo sourceInfo;
     void *cpuPtr;
 
     std::map<uint8_t, Reg32> regAlloc;
+
+    uint8_t flagsReg = 0;
+    uint8_t flagMap[4]; // map from SourceFlagType to flags bit
 
 public: // FIXME
     uint8_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;

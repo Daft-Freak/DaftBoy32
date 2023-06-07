@@ -179,16 +179,27 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
     int i = 1;
     for(auto it = sourceInfo.registers.begin() + 1; it != sourceInfo.registers.end(); ++it, i++)
     {
+        if(it->type == SourceRegType::Flags)
+            flagsReg = i;
+
         if(it->alias || it->type != SourceRegType::General)
+            continue;
+
+        if(allocOff == std::size(regList))
             continue;
 
         regAlloc.emplace(i, regList[allocOff]);
 
         allocOff++;
-
-        if(allocOff == std::size(regList))
-            break;
     }
+
+    // map flags
+    for(auto & f : flagMap)
+        f = 0xFF;
+
+    i = 0;
+    for(auto it = sourceInfo.flags.begin(); it != sourceInfo.flags.end(); ++it, i++)
+        flagMap[static_cast<int>(it->type)] = i;
 
     this->sourceInfo = std::move(sourceInfo);
     this->cpuPtr = cpuPtr;
@@ -798,4 +809,26 @@ std::optional<Reg64> X86Target::mapReg64(uint8_t index)
         return static_cast<Reg64>(*reg32);
 
     return {};
+}
+
+SourceFlagInfo &X86Target::getFlagInfo(SourceFlagType flag)
+{
+    auto iFlag = static_cast<int>(flag);
+    assert(flagMap[iFlag] != 0xFF);
+
+    return sourceInfo.flags[flagMap[iFlag]];
+}
+
+uint8_t X86Target::flagWriteMask(SourceFlagType flag)
+{
+    auto iFlag = static_cast<int>(flag);
+    if(flagMap[iFlag] == 0xFF) // source does not have this flag
+        return 0;
+
+    return 1 << (flagMap[iFlag] + 4);
+}
+
+bool X86Target::writesFlag(uint16_t opFlags, SourceFlagType flag)
+{
+    return opFlags & flagWriteMask(flag);
 }
