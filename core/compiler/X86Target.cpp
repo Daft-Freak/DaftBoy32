@@ -1225,10 +1225,7 @@ std::optional<Reg8> X86Target::mapReg8(uint8_t index)
         {
             // SPL/BPL/SIL/DIL (require REX)
             if(*reg32 == Reg32::ESP || *reg32 == Reg32::EBP || *reg32 == Reg32::ESI || *reg32 == Reg32::EDI)
-            {
-                if(!reg.alias || reg.aliasMask == 0xFF)
-                    return static_cast<Reg8>(static_cast<int>(*reg32) + 0x10);
-            }
+                return static_cast<Reg8>(static_cast<int>(*reg32) + 0x10);
     
             return static_cast<Reg8>(*reg32);
         }
