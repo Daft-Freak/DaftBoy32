@@ -929,7 +929,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                     {
                         addInstruction(loadImm(shift, 0));
                         if(isMem)
-                            addInstruction(alu(op, GenReg::Temp, reg, 0));
+                            addInstruction(alu(op, GenReg::Temp, reg, 0), 0, inFlags & GenOp_WriteFlags);
                         else
                             addInstruction(alu(op, GenReg::Temp, reg), instr.len, inFlags);
                     };
@@ -979,7 +979,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                     {
                         // there's another op
                         aluOp.cycles = 0;
-                        addInstruction(aluOp);
+                        addInstruction(aluOp, 0, inFlags & GenOp_WriteFlags);
                     }
                     else // this is the end
                         addInstruction(aluOp, instr.len, inFlags);
@@ -994,14 +994,14 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                     {
                         // there's another op
                         aluOp.cycles = 0;
-                        addInstruction(aluOp);
+                        addInstruction(aluOp, 0, inFlags & GenOp_WriteFlags);
                     }
                     else // this is the end
                         addInstruction(aluOp, instr.len, inFlags);
                 }
 
                 if(isMem && (instr.opcode[1] >= 0x80 || instr.opcode[1] < 0x40)) // BIT doesn't write back
-                    addInstruction(store(GenReg::HL, reg, 2), instr.len, inFlags);
+                    addInstruction(store(GenReg::HL, reg, 2), instr.len, inFlags & ~GenOp_WriteFlags);
 
                 break;
             }
