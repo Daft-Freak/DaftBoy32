@@ -782,6 +782,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 {
                     addInstruction(loadImm(0xF0, 0));
                     addInstruction(alu(GenOpcode::And, GenReg::Temp, GenReg::F, 0));
+
+                    inFlags &= ~GenOp_WriteFlags; // marked as writing all flags, but we don't want to set that on the add
                 }
 
                 addInstruction(loadImm(1, 0));
