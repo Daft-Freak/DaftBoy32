@@ -39,7 +39,8 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
     sourceInfo.registers.emplace_back(SourceRegInfo{"L  ", 8, SourceRegType::General, 4, 0x00FF, 0xFFFF});
 
     // extra temps
-    sourceInfo.registers.emplace_back(SourceRegInfo{"tm2", 16, SourceRegType::Temp, 0, 0, 0xFFFF});
+    sourceInfo.registers.emplace_back(SourceRegInfo{"t2h", 16, SourceRegType::Temp, 0, 0, 0xFFFF});
+    sourceInfo.registers.emplace_back(SourceRegInfo{"t2b",  8, SourceRegType::Temp, 14, 0xFF, 0xFFFF});
     sourceInfo.registers.emplace_back(SourceRegInfo{"tm3", 16, SourceRegType::Temp, 0, 0, 0xFFFF});
 
     sourceInfo.flags.emplace_back(SourceFlagInfo{'C', 4, SourceFlagType::Carry});
@@ -124,7 +125,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
         H,
         L,
 
-        Temp2, // used by inc/dec (hl), ext ops (HL) and ret
+        Temp2, // used by ret
+        Temp2B, // byte alias (used by inc/dec (hl) and ext ops (HL))
         Temp3, // used by ret
     };
 
@@ -137,7 +139,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
         GenReg::E,
         GenReg::H,
         GenReg::L,
-        GenReg::Temp2,
+        GenReg::Temp2B,
         GenReg::A,
     };
 
@@ -501,17 +503,17 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 break;
 
             case 0x34: // INC (HL)
-                addInstruction(load(GenReg::HL, GenReg::Temp2));
+                addInstruction(load(GenReg::HL, GenReg::Temp2B));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2, 0), 0, inFlags | preserveC);
-                addInstruction(store(GenReg::HL, GenReg::Temp2, 2), instr.len);
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2B, 0), 0, inFlags | preserveC);
+                addInstruction(store(GenReg::HL, GenReg::Temp2B, 2), instr.len);
                 break;
 
             case 0x35: // DEC (HL)
-                addInstruction(load(GenReg::HL, GenReg::Temp2));
+                addInstruction(load(GenReg::HL, GenReg::Temp2B));
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::Temp2, 0), 0, inFlags | preserveC);
-                addInstruction(store(GenReg::HL, GenReg::Temp2, 2), instr.len);
+                addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::Temp2B, 0), 0, inFlags | preserveC);
+                addInstruction(store(GenReg::HL, GenReg::Temp2B, 2), instr.len);
                 break;
 
             case 0x36: // LD (HL),n
