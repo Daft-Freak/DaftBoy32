@@ -1057,9 +1057,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             builder.jcc(Condition::G, 11);
             builder.mov(pcReg32, pc);
             builder.call(saveAndExitPtr - builder.getPtr());
-        }
 
-        cyclesThisInstr = 0;
+            cyclesThisInstr = 0;
+        }
 
         if(newEmuOp)
             numInstructions++;
