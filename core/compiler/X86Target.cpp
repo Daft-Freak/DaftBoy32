@@ -352,8 +352,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     // neededFlags is what we need to output
     // updateFlags is what we can output from the result
     // oneFlags is is what is alwyas set to 1
-    // preservedFlags is what is... preserved
-    const auto setFlags = [this, &builder](std::optional<Reg8> result, uint8_t &neededFlags, uint8_t updateFlags, uint8_t oneFlags = 0, uint8_t preservedFlags = 0)
+    // hasPreservedFlags is set if some flags were preserved (we can't write flags directly here)
+    const auto setFlags = [this, &builder](std::optional<Reg8> result, uint8_t &neededFlags, uint8_t updateFlags, uint8_t oneFlags = 0, bool hasPreservedFlags = false)
     {
         if(!flagsReg)
             return;
@@ -375,7 +375,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         // preserved flags should have been preserved already
         // so F should have all other bits zero
 
-        bool setF = preservedFlags != 0;
+        bool setF = hasPreservedFlags;
         bool haveOpFlags = true; // assuming nothing has destroyed flags before this
 
         if(haveOpFlags && (updateFlags & flagWriteMask(SourceFlagType::Carry)))
@@ -520,7 +520,19 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             printf("unhandled reg size %i in op %i\n", size, int(instr.opcode));
             err = true;
         };
-    
+
+        auto translatePreserveMask = [this, &instr]()
+        {
+            uint8_t ret = 0;
+            for(int i = 0; i < 4; i++)
+            {
+                if(instr.flags & (1 << i))
+                    ret |= 1 << sourceInfo.flags[i].bit;
+            }
+
+            return ret;
+        };
+
         // helpers to deal with restrictions
         auto maybeSwapHReg = [&builder](std::optional<Reg8> &src, std::optional<Reg8> &dst)
         {
@@ -543,10 +555,13 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 builder.xchg(*swapReg, swapRegHalf(*swapReg));
         };
 
-        auto checkSingleSource = [&err, &instr]
+        auto checkSingleSource = [&err, &instr](bool canSwapSrcs = false)
         {
             if(instr.src[0] != instr.dst[0])
             {
+                if(instr.src[1] == instr.dst[0] && canSwapSrcs)
+                    return;
+
                 // this just needs an extra mov to fix, but nothing generates these yet
                 printf("unhandled src[0] != dst in op %i\n", int(instr.opcode));
                 err = true;
@@ -635,23 +650,36 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
+                checkSingleSource(true);
 
                 if(regSize == 8)
                 {
                     auto src = checkReg8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
+                    // d = s0 & d -> d = d & s0
+                    if(instr.src[1] == instr.dst[0])
+                        src = checkReg8(instr.src[0]);
+
                     if(src && dst)
                     {
+                        // preserve flags (BIT)
+                        uint8_t preserveMask = 0;
+                        if((instr.flags & GenOp_PreserveFlags) && (instr.flags & GenOp_WriteFlags))
+                        {
+                            preserveMask = translatePreserveMask();
+                            auto f = checkReg8(flagsReg);
+                            if(f)
+                                builder.and_(*f, preserveMask);
+                        }
+
                         auto swapReg = maybeSwapHReg(src, dst);
                         builder.and_(*dst, *src);
                         unswapReg(swapReg);
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero), flagWriteMask(SourceFlagType::HalfCarry));
+                        setFlags({}, flags, flagWriteMask(SourceFlagType::Zero), flagWriteMask(SourceFlagType::HalfCarry), preserveMask);
                     }
                 }
                 else

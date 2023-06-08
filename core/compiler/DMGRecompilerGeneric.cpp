@@ -965,7 +965,9 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 else if(instr.opcode[1] < 0x80) // BIT
                 {
                     addInstruction(loadImm(1 << bit, 0));
-                    addInstruction(alu(GenOpcode::And, reg, GenReg::Temp), instr.len, inFlags | preserveC); // no writeback, so this is always the end
+                    auto andOp = alu(GenOpcode::And, GenReg::Temp, reg);
+                    andOp.dst[0] = andOp.src[1]; // don't need the result, set to temp
+                    addInstruction(andOp, instr.len, inFlags | preserveC); // no writeback, so this is always the end
                 }
                 else if(instr.opcode[1] < 0xC0) // RES
                 {
