@@ -336,7 +336,7 @@ void DMGRecompiler::analyse(uint16_t &pc, BlockInfo &blockInfo)
             case 0x39: // ADD HL,SP
                 info.regsRead = regMap16[opcode >> 4] | Reg_H | Reg_L;
                 info.regsWritten = Reg_H | Reg_L;
-                info.flags = Op_WriteFlags;
+                info.flags = Op_WriteC | Op_WriteH | Op_WriteN; // Z preserved
                 break;
             case 0x0A: // LD A,(BC)
             case 0x1A: // LD A,(DE)
