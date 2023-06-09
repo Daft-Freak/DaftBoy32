@@ -203,6 +203,7 @@ public:
     void shr(Reg32 r, uint8_t count);
     void shr(Reg8 r, uint8_t count);
 
+    void shlCL(Reg32 dst);
     void shlCL(Reg8 dst);
     void shl(Reg32 r, uint8_t count);
     void shl(Reg8 r, uint8_t count);
