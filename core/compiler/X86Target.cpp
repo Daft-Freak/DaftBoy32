@@ -672,6 +672,184 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 break;
             }
 
+            case GenOpcode::Add:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+
+                uint8_t preserveMask = translatePreserveMask();
+                auto f = checkReg8(flagsReg);
+
+                // preserve flags
+                if(preserveMask && (instr.flags & GenOp_WriteFlags) && f)
+                    builder.and_(*f, preserveMask);
+
+                if(regSize == 16)
+                {
+                    auto src = checkReg16(instr.src[1]);
+                    auto dst = checkReg16(instr.dst[0]);
+                    
+                    if(src && dst && f)
+                    {
+                        // calc half carry
+                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        {
+                            // copy
+                            builder.mov(Reg32::R11D, static_cast<Reg32>(*src));
+                            builder.mov(Reg32::ESI, static_cast<Reg32>(*dst));
+
+                            // mask and add
+                            builder.and_(Reg32::R11D, 0xFFF);
+                            builder.and_(Reg32::ESI, 0xFFF);
+                            builder.add(Reg32::ESI, Reg32::R11D);
+
+                            // compare and set h bit
+                            builder.cmp(Reg32::ESI, 0xFFF);
+                            builder.setcc(Condition::A, Reg8::SIL);
+                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
+                        }
+
+                        builder.add(*dst, *src);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags({}, flags, flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
+
+                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                            builder.or_(*f, Reg8::SIL);
+                    }
+                }
+                else if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src && dst && f)
+                    {
+                        auto origDst = *dst;
+
+                        // calc half carry
+                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        {
+                            assert(*dst != Reg8::AL);
+                            builder.push(Reg64::RAX);
+
+                            if(*dst != Reg8::AH)
+                            {
+                                if(requiresREX(*dst)) // INC (HL)
+                                {
+                                    builder.mov(Reg8::AL, *dst);
+                                    builder.mov(Reg8::AH, Reg8::AL);
+                                }
+                                else
+                                    builder.mov(Reg8::AH, *dst);
+                            }
+                            builder.mov(Reg8::AL, *src);
+
+                            builder.and_(Reg32::EAX, 0x0F0F); // mask both
+
+                            builder.add(Reg8::AH, Reg8::AL);
+                            builder.cmp(Reg8::AH, 0xF);
+
+                            builder.pop(Reg64::RAX);
+
+                            builder.setcc(Condition::A, Reg8::SIL);
+                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
+                        }
+
+                        auto swapReg = maybeSwapHReg(src, dst);
+                        builder.add(*dst, *src);
+                        unswapReg(swapReg);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(origDst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
+
+                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                            builder.or_(*f, Reg8::SIL);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::AddWithCarry:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_PreserveFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+                    auto f = checkReg8(flagsReg);
+
+                    if(src && dst && f)
+                    {
+                        auto origDst = *dst;
+
+                        auto carryBit = getFlagInfo(SourceFlagType::Carry).bit;
+
+                        // calc half carry
+                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        {
+                            assert(*dst != Reg8::AL);
+                            builder.push(Reg64::RAX);
+
+                            // check carry
+                            builder.test(*f, 1 << carryBit); // sets CF to 0
+                            builder.setcc(Condition::NE, Reg8::SIL);
+
+                            if(*dst != Reg8::AH)
+                            {
+                                if(requiresREX(*dst)) // INC (HL)
+                                {
+                                    builder.mov(Reg8::AL, *dst);
+                                    builder.mov(Reg8::AH, Reg8::AL);
+                                }
+                                else
+                                    builder.mov(Reg8::AH, *dst);
+                            }
+                            builder.mov(Reg8::AL, *src);
+
+                            builder.and_(Reg32::EAX, 0x0F0F); // mask both
+
+                            builder.add(Reg8::AL, Reg8::SIL); // add carry
+                            builder.add(Reg8::AH, Reg8::AL);
+                            builder.cmp(Reg8::AH, 0xF);
+
+                            builder.pop(Reg64::RAX);
+
+                            builder.setcc(Condition::A, Reg8::SIL);
+                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
+                        }
+
+                        // carry in
+                        builder.test(*f, 1 << carryBit); // sets CF to 0
+                        builder.jcc(Condition::E, 1); // not set
+                        builder.stc(); // CF = 1
+
+                        auto swapReg = maybeSwapHReg(src, dst);
+                        builder.adc(*dst, *src);
+                        unswapReg(swapReg);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(origDst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry));
+
+                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                            builder.or_(*f, Reg8::SIL);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
             case GenOpcode::And:
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
@@ -817,6 +995,164 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
                         setFlags({}, flags, flagWriteMask(SourceFlagType::Zero));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::Subtract:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+
+                uint8_t preserveMask = translatePreserveMask();
+                auto f = checkReg8(flagsReg);
+
+                // preserve flags
+                if(preserveMask && (instr.flags & GenOp_WriteFlags) && f)
+                    builder.and_(*f, preserveMask);
+
+                if(regSize == 16)
+                {
+                    // should be DEC, which sets no flags
+                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
+                    else
+                    {
+                        auto src = checkReg16(instr.src[1]);
+                        auto dst = checkReg16(instr.dst[0]);
+
+                        if(src && dst)
+                            builder.sub(*dst, *src);
+                    }
+                }
+                else if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src && dst && f)
+                    {
+                        auto origDst = *dst;
+
+                        // calc half carry
+                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        {
+                            assert(*dst != Reg8::AL);
+                            builder.push(Reg64::RAX);
+
+                            if(*dst != Reg8::AH)
+                            {
+                                if(requiresREX(*dst)) // DEC (HL)
+                                {
+                                    builder.mov(Reg8::AL, *dst);
+                                    builder.mov(Reg8::AH, Reg8::AL);
+                                }
+                                else
+                                    builder.mov(Reg8::AH, *dst);
+                            }
+                            builder.mov(Reg8::AL, *src);
+
+                            builder.and_(Reg32::EAX, 0x0F0F); // mask both
+
+                            builder.sub(Reg8::AH, Reg8::AL);
+                            builder.cmp(Reg8::AH, 0);
+
+                            builder.pop(Reg64::RAX);
+
+                            builder.setcc(Condition::L, Reg8::SIL);
+                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
+                        }
+
+                        auto swapReg = maybeSwapHReg(src, dst);
+                        builder.sub(*dst, *src);
+                        unswapReg(swapReg);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(origDst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub), preserveMask);
+
+                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                            builder.or_(*f, Reg8::SIL);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::SubtractWithCarry:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+
+                assert(!(instr.flags & GenOp_PreserveFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+                    auto f = checkReg8(flagsReg);
+
+                    if(src && dst && f)
+                    {
+                        auto origDst = *dst;
+
+                        auto carryBit = getFlagInfo(SourceFlagType::Carry).bit;
+
+                        // calc half carry
+                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        {
+                            assert(*dst != Reg8::AL);
+                            builder.push(Reg64::RAX);
+
+                            // check carry
+                            builder.test(*f, 1 << carryBit); // sets CF to 0
+                            builder.setcc(Condition::NE, Reg8::SIL);
+
+                            if(*dst != Reg8::AH)
+                            {
+                                if(requiresREX(*dst)) // DEC (HL)
+                                {
+                                    builder.mov(Reg8::AL, *dst);
+                                    builder.mov(Reg8::AH, Reg8::AL);
+                                }
+                                else
+                                    builder.mov(Reg8::AH, *dst);
+                            }
+                            builder.mov(Reg8::AL, *src);
+
+                            builder.and_(Reg32::EAX, 0x0F0F); // mask both
+
+                            builder.add(Reg8::AL, Reg8::SIL); // add carry
+                            builder.sub(Reg8::AH, Reg8::AL);
+                            builder.cmp(Reg8::AH, 0);
+
+                            builder.pop(Reg64::RAX);
+
+                            builder.setcc(Condition::L, Reg8::SIL);
+                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
+                        }
+
+                        // carry in
+                        builder.test(*f, 1 << carryBit); // sets CF to 0
+                        builder.jcc(Condition::E, 1); // not set
+                        builder.stc(); // CF = 1
+
+                        auto swapReg = maybeSwapHReg(src, dst);
+                        builder.sbb(*dst, *src);
+                        unswapReg(swapReg);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(origDst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub));
+
+                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                            builder.or_(*f, Reg8::SIL);
                     }
                 }
                 else
