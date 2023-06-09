@@ -353,7 +353,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     // updateFlags is what we can output from the result
     // oneFlags is is what is alwyas set to 1
     // hasPreservedFlags is set if some flags were preserved (we can't write flags directly here)
-    const auto setFlags = [this, &builder](std::optional<Reg8> result, uint8_t &neededFlags, uint8_t updateFlags, uint8_t oneFlags = 0, bool hasPreservedFlags = false)
+    const auto setFlags = [this, &builder](std::optional<Reg8> result, uint8_t &neededFlags, uint8_t updateFlags, uint8_t oneFlags = 0, bool hasPreservedFlags = false, bool isRotate = false)
     {
         if(!flagsReg)
             return;
@@ -403,7 +403,16 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         {
             auto &zFlag = getFlagInfo(SourceFlagType::Zero);
 
-            if(haveOpFlags)
+            bool haveZFlag = haveOpFlags && !isRotate;  // rotates don't set Z
+
+            if(!haveZFlag && result)
+            {
+                // reconstruct from result
+                builder.cmp(*result, 0);
+                haveZFlag = true;
+            }
+
+            if(haveZFlag)
             {
                 if(!setF)
                 {
@@ -418,15 +427,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 }
 
                 haveOpFlags = false;
-                neededFlags &= ~flagWriteMask(SourceFlagType::Zero);
-            }
-            else if(result)
-            {
-                // reconstruct from result
-                builder.cmp(*result, 0);
-                builder.jcc(Condition::NE, 3); // if != 0
-                builder.or_(f, 1 << zFlag.bit); // set Z
-
                 neededFlags &= ~flagWriteMask(SourceFlagType::Zero);
             }
         }
@@ -573,7 +573,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 err = true;
             }
         };
-    
+
         switch(instr.opcode)
         {
             case GenOpcode::NOP:
@@ -1208,6 +1208,199 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         // flags (sets H and N to 1)
                         if((instr.flags & GenOp_WriteFlags) && f)
                             builder.or_(*f, (1 << getFlagInfo(SourceFlagType::HalfCarry).bit) | (1 << getFlagInfo(SourceFlagType::WasSub).bit));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::RotateLeft:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_PreserveFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    bool setZ = !(instr.flags & GenOp_MagicAlt1); // RLCA sets Z to 0, RLC A sets Z based on the result
+                    bool setC = !(instr.flags & GenOp_MagicAlt2); // SWAP sets C to 0 (translated to rot by 4)
+
+                    if(src && dst)
+                    {
+                        assert(*src != *dst);
+
+                        // can only shift by CL
+                        bool swap = *src != Reg8::CL;
+
+                        // swap with whatever is currently in CL
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // if it was the dst swap the args around
+                        if(dst == Reg8::CL)
+                            builder.rolCL(*src);
+                        else
+                            builder.rolCL(*dst);
+
+                        // restore
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, (setC ? flagWriteMask(SourceFlagType::Carry) : 0) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, false, true);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::RotateLeftCarry:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_PreserveFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+                    auto f = checkReg8(flagsReg);
+
+                    bool setZ = !(instr.flags & GenOp_MagicAlt1);
+
+                    if(src && dst && f)
+                    {
+                        assert(*src != *dst);
+
+                        // carry in
+                        builder.test(*f, 1 << getFlagInfo(SourceFlagType::Carry).bit); // sets CF to 0
+                        builder.jcc(Condition::E, 1); // not set
+                        builder.stc(); // CF = 1
+
+                        // can only shift by CL
+                        bool swap = *src != Reg8::CL;
+
+                        // swap with whatever is currently in CL
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // if it was the dst swap the args around
+                        if(dst == Reg8::CL)
+                            builder.rclCL(*src);
+                        else
+                            builder.rclCL(*dst);
+
+                        // restore
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, false, true);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::RotateRight:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_PreserveFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    bool setZ = !(instr.flags & GenOp_MagicAlt1);
+
+                    if(src && dst)
+                    {
+                        assert(*src != *dst);
+
+                        // can only shift by CL
+                        bool swap = *src != Reg8::CL;
+
+                        // swap with whatever is currently in CL
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // if it was the dst swap the args around
+                        if(dst == Reg8::CL)
+                            builder.rorCL(*src);
+                        else
+                            builder.rorCL(*dst);
+
+                        // restore
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, false, true);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::RotateRightCarry:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+                assert(!(instr.flags & GenOp_PreserveFlags));
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+                    auto f = checkReg8(flagsReg);
+
+                    bool setZ = !(instr.flags & GenOp_MagicAlt1);
+
+                    if(src && dst && f)
+                    {
+                        assert(*src != *dst);
+
+                        // carry in
+                        builder.test(*f, 1 << getFlagInfo(SourceFlagType::Carry).bit); // sets CF to 0
+                        builder.jcc(Condition::E, 1); // not set
+                        builder.stc(); // CF = 1
+
+                        // can only shift by CL
+                        bool swap = *src != Reg8::CL;
+
+                        // swap with whatever is currently in CL
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // if it was the dst swap the args around
+                        if(dst == Reg8::CL)
+                            builder.rcrCL(*src);
+                        else
+                            builder.rcrCL(*dst);
+
+                        // restore
+                        if(swap)
+                            builder.xchg(*src, Reg8::CL);
+
+                        // flags
+                        uint8_t flags = instr.flags & GenOp_WriteFlags;
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, false, true);
                     }
                 }
                 else
