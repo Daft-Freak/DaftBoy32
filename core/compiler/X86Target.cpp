@@ -639,7 +639,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     auto addr = checkReg16(instr.src[0]);
                     auto dst = checkReg8(instr.dst[0]);
                     if(addr && dst)
+                    {
                         readMem(*addr, *dst);
+
+                        // zero-extend if not 8 bit dest (a temp)
+                        // TODO: merge with the mov in callRestore
+                        if(sourceInfo.registers[instr.dst[0]].size != 8)
+                            builder.movzx(static_cast<Reg32>(*dst), *dst);
+                    }
                 }
                 else
                     badRegSize(addrSize);
