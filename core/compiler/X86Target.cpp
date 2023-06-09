@@ -586,11 +586,24 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(regSize == 16)
                 {
-                    auto src = checkReg32(instr.src[0]);
+                    // use 32-bit mov to save some bytes
                     auto dst = checkReg32(instr.dst[0]);
 
-                    if(src && dst)
-                        builder.mov(*dst, *src);
+                    if(sourceInfo.registers[instr.src[0]].size == 8)
+                    {
+                        // 8 -> 16 bit
+                        auto src = checkReg8(instr.src[0]);
+
+                        if(src && dst)
+                            builder.movzx(*dst, *src);
+                    }
+                    else
+                    {
+                        auto src = checkReg32(instr.src[0]);
+
+                        if(src && dst)
+                            builder.mov(*dst, *src);
+                    }
                 }
                 else if(regSize == 8)
                 {
