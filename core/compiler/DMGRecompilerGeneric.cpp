@@ -1087,15 +1087,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             }
 
             case 0xE2: // LDH (C),A
-            {
-                GenOpInfo op{};
-                op.opcode = GenOpcode::LoadImm;
-                op.imm = 0xFF00;
-                addInstruction(op);
-                addInstruction(alu(GenOpcode::Or, GenReg::C, GenReg::Temp, 0));
+                addInstruction(loadImm(0xFF00, 0));
+                addInstruction(move(GenReg::C, GenReg::Temp2, 0));
+                addInstruction(alu(GenOpcode::Or, GenReg::Temp2, GenReg::Temp, 0));
                 addInstruction(store(GenReg::Temp, GenReg::A, 2), instr.len, inFlags);
                 break;
-            }
 
             case 0xE6: // AND n
                 addInstruction(loadImm(instr.opcode[1]));
@@ -1134,15 +1130,11 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             }
 
             case 0xF2: // LDH A,(C)
-            {
-                GenOpInfo op{};
-                op.opcode = GenOpcode::LoadImm;
-                op.imm = 0xFF00;
-                addInstruction(op);
-                addInstruction(alu(GenOpcode::Or, GenReg::C, GenReg::Temp, 0));
+                addInstruction(loadImm(0xFF00, 0));
+                addInstruction(move(GenReg::C, GenReg::Temp2, 0));
+                addInstruction(alu(GenOpcode::Or, GenReg::Temp2, GenReg::Temp, 0));
                 addInstruction(load(GenReg::Temp, GenReg::A, 2), instr.len, inFlags);
                 break;
-            }
 
             case 0xF3: // DI
             {
