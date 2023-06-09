@@ -1180,7 +1180,34 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero));
+                        setFlags({}, flags, flagWriteMask(SourceFlagType::Zero));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::Not:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+
+                if(regSize == 8)
+                {
+                    if(auto dst = checkReg8(instr.dst[0]))
+                    {
+                        // preserve flags
+                        auto f = checkReg8(flagsReg);
+                        if((instr.flags & GenOp_PreserveFlags) && (instr.flags & GenOp_WriteFlags) && f)
+                            builder.and_(*f, translatePreserveMask());
+
+                        builder.not_(*dst);
+
+                        // flags (sets H and N to 1)
+                        if((instr.flags & GenOp_WriteFlags) && f)
+                            builder.or_(*f, (1 << getFlagInfo(SourceFlagType::HalfCarry).bit) | (1 << getFlagInfo(SourceFlagType::WasSub).bit));
                     }
                 }
                 else
