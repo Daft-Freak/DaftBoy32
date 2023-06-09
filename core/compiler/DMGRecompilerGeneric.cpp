@@ -408,7 +408,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
             case 0x07: // RLCA
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::RotateLeft, GenReg::Temp), instr.len, inFlags);
+                addInstruction(alu(GenOpcode::RotateLeft, GenReg::Temp), instr.len, inFlags | GenOp_MagicAlt1);
                 break;
 
             // ld (nn) sp
@@ -427,7 +427,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
             case 0x0F: // RRCA
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::RotateRight, GenReg::Temp), instr.len, inFlags);
+                addInstruction(alu(GenOpcode::RotateRight, GenReg::Temp), instr.len, inFlags | GenOp_MagicAlt1);
                 break;
 
             case 0x10: // STOP
@@ -441,7 +441,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
             case 0x17: // RLA
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::RotateLeftCarry, GenReg::Temp), instr.len, inFlags);
+                addInstruction(alu(GenOpcode::RotateLeftCarry, GenReg::Temp), instr.len, inFlags | GenOp_MagicAlt1);
                 break;
 
             case 0x18: // JR m
@@ -449,9 +449,9 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(jump(), instr.len, inFlags);
                 break;
 
-            case 0x1F: // RLA
+            case 0x1F: // RRA
                 addInstruction(loadImm(1, 0));
-                addInstruction(alu(GenOpcode::RotateRightCarry, GenReg::Temp), instr.len, inFlags);
+                addInstruction(alu(GenOpcode::RotateRightCarry, GenReg::Temp), instr.len, inFlags | GenOp_MagicAlt1);
                 break;
 
             case 0x20: // JR NZ,n
@@ -933,7 +933,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                     {
                         addInstruction(loadImm(shift, 0));
                         if(isMem)
-                            addInstruction(alu(op, GenReg::Temp, reg, 0), 0, inFlags & GenOp_WriteFlags);
+                            addInstruction(alu(op, GenReg::Temp, reg, 0), 0, inFlags & (GenOp_WriteFlags | GenOp_MagicAlt1 | GenOp_MagicAlt2));
                         else
                             addInstruction(alu(op, GenReg::Temp, reg), instr.len, inFlags);
                     };
@@ -959,6 +959,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                             addShift(GenOpcode::ShiftRightArith);
                             break;
                         case 0x30: // SWAP
+                            inFlags |= GenOp_MagicAlt2;
                             addShift(GenOpcode::RotateLeft, 4);
                             break;
                         case 0x38: // SRL
