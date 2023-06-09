@@ -181,14 +181,18 @@ public:
 
     void push(Reg64 r);
 
+    void rclCL(Reg8 dst);
     void rcl(Reg8 r, uint8_t count);
 
+    void rcrCL(Reg8 dst);
     void rcr(Reg8 r, uint8_t count);
 
     void ret();
 
+    void rolCL(Reg8 dst);
     void rol(Reg8 r, uint8_t count);
 
+    void rorCL(Reg8 dst);
     void ror(Reg8 r, uint8_t count);
 
     void sarCL(Reg8 dst);
