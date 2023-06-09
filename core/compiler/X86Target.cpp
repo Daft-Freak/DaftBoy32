@@ -521,6 +521,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             err = true;
         };
 
+        auto unhandledFlags = [&err, &instr](uint16_t flags)
+        {
+            printf("unhandled flags %x in op %i\n", flags, int(instr.opcode));
+            err = true;
+        };
+
         auto translatePreserveMask = [this, &instr]()
         {
             uint8_t ret = 0;
@@ -776,7 +782,21 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 checkSingleSource();
                 assert(!(instr.flags & GenOp_PreserveFlags));
 
-                if(regSize == 8)
+                if(regSize == 16)
+                {
+                    // used for LDH
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src = checkReg16(instr.src[1]);
+                        auto dst = checkReg16(instr.dst[0]);
+
+                        if(src && dst)
+                            builder.or_(*dst, *src);
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkReg8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
@@ -789,13 +809,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero));
+                        setFlags({}, flags, flagWriteMask(SourceFlagType::Zero));
                     }
                 }
                 else
                     badRegSize(regSize);
                 break;
             }
+
             case GenOpcode::Xor:
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
