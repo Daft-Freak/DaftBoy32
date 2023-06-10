@@ -203,6 +203,7 @@ public:
 
     void setcc(Condition cc, Reg8 dst);
 
+    void shrCL(Reg32 dst);
     void shrCL(Reg8 dst);
     void shr(Reg32 r, uint8_t count);
     void shr(Reg8 r, uint8_t count);
