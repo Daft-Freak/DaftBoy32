@@ -1528,7 +1528,34 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 checkSingleSource();
                 assert(!(instr.flags & GenOp_PreserveFlags));
 
-                if(regSize == 8)
+                if(regSize == 16)
+                {
+                    // used for LD (nn), SP
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src = checkReg32(instr.src[1]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        assert(*src != *dst);
+                        assert(*dst != Reg32::ECX);
+
+                        if(src && dst)
+                        {
+                            bool swap = *src != Reg32::ECX;
+
+                            if(swap)
+                                builder.xchg(static_cast<Reg8>(*src), Reg8::CL);
+
+                            builder.shrCL(*dst);
+
+                            if(swap)
+                                builder.xchg(static_cast<Reg8>(*src), Reg8::CL);
+                        }
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkReg8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
