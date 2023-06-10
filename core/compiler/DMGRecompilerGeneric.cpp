@@ -125,7 +125,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
         H,
         L,
 
-        Temp2, // used by ret
+        Temp2, // used by ret, ld (nn) sp
         Temp2B, // byte alias (used by inc/dec (hl) and ext ops (HL))
         Temp3, // used by ret
     };
@@ -233,12 +233,12 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
         return ret;
     };
 
-    auto loadImm16 = [](uint8_t *imm, int cycles = 2)
+    auto loadImm16 = [](uint8_t *imm, int cycles = 2, int add = 0)
     {
         GenOpInfo ret{};
         ret.opcode = GenOpcode::LoadImm;
         ret.cycles = cycles;
-        ret.imm = imm[0] | imm[1] << 8;
+        ret.imm = (imm[0] | imm[1] << 8) + add;
 
         return ret;
     };
@@ -411,7 +411,21 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(alu(GenOpcode::RotateLeft, GenReg::Temp), instr.len, inFlags | GenOp_MagicAlt1);
                 break;
 
-            // ld (nn) sp
+            case 0x08: // LD (nn),SP
+            {
+                // low
+                addInstruction(loadImm16(instr.opcode + 1));
+                addInstruction(store(GenReg::Temp, GenReg::SP));
+
+                // high
+                addInstruction(move(GenReg::SP, GenReg::Temp2, 0));
+                addInstruction(loadImm(8, 0));
+                addInstruction(alu(GenOpcode::ShiftRightLogic, GenReg::Temp, GenReg::Temp2, 0)); // SP >> 8
+                addInstruction(loadImm16(instr.opcode + 1, 0, 1));
+                addInstruction(store(GenReg::Temp, GenReg::Temp2, 2), instr.len, inFlags);
+
+                break;
+            }
 
             case 0x09: // ADD HL,BC
             case 0x19: // ADD HL,DE
