@@ -535,7 +535,12 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(store(GenReg::HL, GenReg::Temp, 2), instr.len, inFlags);
                 break;
     
-            // SCF
+            case 0x37: // SCF
+                addInstruction(loadImm(DMGCPU::Flag_Z, 0));
+                addInstruction(alu(GenOpcode::And, GenReg::Temp, GenReg::F, 0)); // preserve Z
+                addInstruction(loadImm(DMGCPU::Flag_C, 0));
+                addInstruction(alu(GenOpcode::Or, GenReg::Temp, GenReg::F), instr.len, inFlags & ~Op_WriteFlags); // set C
+                break;
 
             case 0x3A: // LDD A,(HL)
                 addInstruction(load(GenReg::HL, GenReg::A));
@@ -543,7 +548,12 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::HL), instr.len, inFlags);
                 break;
 
-            // CCF
+            case 0x3F: // CCF
+                addInstruction(loadImm(DMGCPU::Flag_C | DMGCPU::Flag_Z, 0));
+                addInstruction(alu(GenOpcode::And, GenReg::Temp, GenReg::F, 0)); // preserve Z and C
+                addInstruction(loadImm(DMGCPU::Flag_C, 0));
+                addInstruction(alu(GenOpcode::Xor, GenReg::Temp, GenReg::F), instr.len, inFlags & ~Op_WriteFlags); // flip C
+                break;
 
             case 0x40: // LD B,B
             case 0x41: // LD B,C
