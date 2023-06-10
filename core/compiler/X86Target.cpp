@@ -763,8 +763,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         unswapReg(swapReg);
 
                         // flags
+                        bool setZ = !(instr.flags & GenOp_MagicAlt1); // LDHL SP/ADD SP use an 8-bit add to set flags, but set Z=0
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(origDst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
+                        setFlags(origDst, flags, (setZ ? flagWriteMask(SourceFlagType::Zero) : 0) | flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
 
                         if(flags & flagWriteMask(SourceFlagType::HalfCarry))
                             builder.or_(*f, Reg8::SIL);
