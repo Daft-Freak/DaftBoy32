@@ -744,6 +744,16 @@ void X86Builder::setcc(Condition cc, Reg8 dst)
     encodeModRM(dstReg);
 }
 
+// reg by CL
+void X86Builder::shrCL(Reg32 r)
+{
+    auto reg = static_cast<int>(r);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xD3); // opcode, w = 1
+    encodeModRM(reg, 5);
+}
+
 // reg by CL, 8bit
 void X86Builder::shrCL(Reg8 r)
 {
@@ -780,7 +790,7 @@ void X86Builder::shr(Reg8 r, uint8_t count)
     write(count);
 }
 
-// reg by CL, 8bit
+// reg by CL
 void X86Builder::shlCL(Reg32 r)
 {
     auto reg = static_cast<int>(r);
