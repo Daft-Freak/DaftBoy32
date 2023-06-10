@@ -1123,10 +1123,34 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 addInstruction(alu(GenOpcode::And, GenReg::Temp), instr.len, inFlags);
                 break;
 
-            /*
-            ADD SP,n
-            LDHL SP,n
-            */
+            case 0xE8: // ADD SP,n
+            {
+                // sets flags as if it's an 8-bit add... so do that first
+                auto imm = instr.opcode[1];
+                addInstruction(move(GenReg::SP, GenReg::Temp2B, 0));
+                addInstruction(loadImm(imm));
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2B), 0, (inFlags & Op_WriteFlags) | GenOp_MagicAlt1);
+
+                // do the real add
+                addInstruction(loadImm((imm & 0x80) ? (0xFF00 | imm) : imm)); // sign extend
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::SP), instr.len, inFlags & ~Op_WriteFlags);
+                break;
+            }
+
+            case 0xF8: // LDHL SP,n
+            {
+                // sets flags as if it's an 8-bit add... so do that first
+                auto imm = instr.opcode[1];
+                addInstruction(move(GenReg::SP, GenReg::Temp2B, 0));
+                addInstruction(loadImm(imm));
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2B), 0, (inFlags & Op_WriteFlags) | GenOp_MagicAlt1);
+
+                // do the real add
+                addInstruction(move(GenReg::SP, GenReg::HL, 0));
+                addInstruction(loadImm((imm & 0x80) ? (0xFF00 | imm) : imm, 0)); // sign extend
+                addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::HL), instr.len, inFlags & ~Op_WriteFlags);
+                break;
+            }
 
             case 0xE9: // JP (HL)
                 addInstruction(jump(GenCondition::Always, GenReg::HL, 1), instr.len, inFlags);
@@ -1201,15 +1225,12 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             default:
             {
                 printf("unhandled op %02X\n", instr.opcode[0]);
-                ret = false;
-                GenOpInfo op{};
-                op.opcode = GenOpcode::NOP; // nop with no cycles
-                addInstruction(op, instr.len, inFlags);
+                return false;
             }
         }
     }
 
-    return ret;
+    return true;
 }
 
 void DMGRecompilerGeneric::printBlock(uint16_t pc, GenBlockInfo &block)
