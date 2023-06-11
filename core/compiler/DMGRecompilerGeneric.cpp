@@ -6,11 +6,8 @@
 #include "DMGRecompilerGeneric.h"
 #include "DMGCPU.h"
 
-DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fallback(cpu)
+DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu)
 {
-    fallback.codeBuf = codeBuf;
-    fallback.curCodePtr = codeBuf;
-
     SourceInfo sourceInfo;
 
     auto cpuPtrInt = reinterpret_cast<uintptr_t>(&cpu);
@@ -83,29 +80,17 @@ bool DMGRecompilerGeneric::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bl
     printBlock(pc, genBlock);
     printf("\n\n");
 
-    auto oldCodePtr = codePtr;
     if(success && target.compile(codePtr, codeBuf + codeBufSize, pc, genBlock))
-    {
-        //fallback.curCodePtr = codePtr; //
-        //return true;
-    }
+        return true;
 
-    codePtr = oldCodePtr;
-    return fallback.compile(codePtr, pc, blockInfo);
+    return false;
 }
 
 void DMGRecompilerGeneric::compileEntry()
 {
-
     auto entryPtr = curCodePtr;
     target.compileEntry(curCodePtr, codeBufSize);
     entryFunc = reinterpret_cast<CompiledFunc>(entryPtr);
-
-    // hax
-    fallback.curCodePtr = curCodePtr;
-    fallback.exitPtr = target.exitPtr;
-    fallback.saveAndExitPtr = target.saveAndExitPtr;
-    fallback.exitForCallPtr = target.exitForCallPtr;
 }
 
 bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBlockInfo &genBlock)
