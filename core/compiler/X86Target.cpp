@@ -453,9 +453,49 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     bool lastWasEI = false;
     bool forceExitAfter = false;
 
-    for(auto &instr : blockInfo.instructions)
+    auto beginInstr = blockInfo.instructions.begin();
+    auto endInstr = blockInfo.instructions.end();
+
+    for(auto instIt = beginInstr; instIt != endInstr; ++instIt)
     {
-        // branch targets
+        auto &instr = *instIt;
+
+        // handle branch targets
+        if(instr.flags & GenOp_BranchTarget)
+        {
+            // store for backwards jumps
+            if(lastInstrCycleCheck)
+                branchTargets.emplace(pc, lastInstrCycleCheck); // after adjusting cycle count but before the jump
+            else
+            {
+                // this is the first instruction, so make a cycle check for the branch to go to
+                builder.jmp(13);
+                lastInstrCycleCheck = builder.getPtr();
+
+                // if <= 0 exit
+                builder.jcc(Condition::G, 11);
+                builder.mov(pcReg32, pc);
+                builder.call(saveAndExitPtr - builder.getPtr());
+
+                // TODO: this is the first instruction
+                branchTargets.emplace(pc, lastInstrCycleCheck);
+            }
+
+            // patch forwards jumps
+            // can't hit this for the first instruction, so the lastInstrCycleCheck will be valid
+            auto jumps = forwardBranchesToPatch.equal_range(pc);
+            for(auto it = jumps.first; it != jumps.second; ++it)
+            {
+                // overrite 4 byte disp
+                auto off = lastInstrCycleCheck - (it->second + 5);
+
+                it->second[1] = off;
+                it->second[2] = off >> 8;
+                it->second[3] = off >> 16;
+                it->second[4] = off >> 24;
+            }
+            forwardBranchesToPatch.erase(jumps.first, jumps.second);
+        }
 
         pc += instr.len;
 
@@ -1614,8 +1654,19 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             {
                 auto condition = static_cast<GenCondition>(instr.src[0]);
                 auto regSize = sourceInfo.registers[instr.src[1]].size;
-                if((instr.flags & GenOp_Exit))
-                    printf("unhandled branch\n");
+
+                bool isExit = instr.flags & GenOp_Exit;
+                bool constAddr = false;
+                uint16_t addr;
+
+                if(instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::LoadImm)
+                {
+                    constAddr = true;
+                    addr = (instIt - 1)->imm;
+                    // TODO: remove the mov for the imm (only enitted with one use)
+                }
+
+                assert(isExit || constAddr); // shouldn't be any non-exit jumps with unknown addr
 
                 if(regSize == 16)
                 {
@@ -1630,8 +1681,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             auto f = checkReg8(flagsReg);
 
                             syncCyclesExecuted();
-                            // TODO: only if unhandled
-                            builder.mov(pcReg32, pc);
+
+                            if(isExit)
+                                builder.mov(pcReg32, pc);
 
                             flagSet = condition == GenCondition::Equal || condition == GenCondition::CarrySet;
                             auto flag = (condition == GenCondition::Equal || condition == GenCondition::NotEqual) ? SourceFlagType::Zero : SourceFlagType::Carry;
@@ -1653,11 +1705,32 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         }
                         syncCyclesExecuted();
 
-                        // if branch sub cycles else
-                        builder.movzx(pcReg32, *src);
+                        // set pc if we're exiting
+                        if(isExit)
+                            builder.movzx(pcReg32, *src);
+                        else // or sub cycles early (we jump past the usual code that does this)
+                            builder.sub(Reg32::EDI, cyclesThisInstr);
 
-                        // TODO: handle branch
-                        builder.jmp(exitPtr - builder.getPtr()); // exit
+                        // don't update twice for unconditional branches
+                        if(condition == GenCondition::Always)
+                            cyclesThisInstr = 0;
+
+                        auto it = constAddr ? branchTargets.find(addr) : branchTargets.end();
+
+                        if(it != branchTargets.end())
+                        {
+                            // backwards branch
+                            builder.jmp(it->second - builder.getPtr());
+                        }
+                        else
+                        {
+                            if(!isExit)
+                                forwardBranchesToPatch.emplace(addr, builder.getPtr());
+
+                            // forwards branch or exit
+                            // patched later if not exit
+                            builder.jmp(exitPtr - builder.getPtr(), !isExit);
+                        }
 
                         // patch the condition jump
                         if(branchPtr && !builder.getError())
