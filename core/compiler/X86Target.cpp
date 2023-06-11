@@ -450,11 +450,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     int numInstructions = 0;
     uint8_t *opStartPtr = nullptr;
     bool newEmuOp = true;
+    bool lastWasEI = false;
+    bool forceExitAfter = false;
 
     for(auto &instr : blockInfo.instructions)
     {
-        bool forceExitAfter = false;
-
         // branch targets
 
         pc += instr.len;
@@ -471,7 +471,25 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             instrCycles--;
         }
 
-        // DMG EI check
+        // previous op was EI
+        if(lastWasEI)
+        {
+            // enable interrupts for EI
+
+            // if(enableInterruptsNextCycle)
+            // probably don't need this check... might get a false positive in some extreme case though
+            builder.cmp(0, cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/);
+            builder.jcc(Condition::E, 10);
+
+            // masterInterruptEnable = true
+            builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+
+            // enableInterruptsNextCycle = false
+            builder.mov(0, cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/);
+
+            forceExitAfter = true;
+            lastWasEI = false;
+        }
 
         bool err = false;
 
@@ -1756,8 +1774,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 builder.mov(0, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
                 break;
 
+            case GenOpcode::DMG_EI:
+                // enableInterruptsNextCycle = true
+                builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/);
+                lastWasEI = true;
+                break;
+
             default:
-                printf("unhandled gen op %i\n", instr.opcode);
+                printf("unhandled gen op %i\n", static_cast<int>(instr.opcode));
                 err = true;
         }
 
@@ -1805,6 +1829,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             builder.call(saveAndExitPtr - builder.getPtr());
 
             cyclesThisInstr = 0;
+            forceExitAfter = false;
         }
 
         if(newEmuOp)
