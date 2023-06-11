@@ -190,6 +190,10 @@ void DMGRecompiler::handleBranch()
 
         if(cpu.serviceableInterrupts)
             cpu.serviceInterrupts();
+
+        if(cpu.enableInterruptsNextCycle)
+            break; // might happen if we exited right after an EI, make it the interpreter's problem
+
     }
 }
 

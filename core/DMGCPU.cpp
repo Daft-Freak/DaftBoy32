@@ -458,7 +458,7 @@ void DMGCPU::run(int ms)
 
     cyclesToRun += cycles;
 
-    if(!halted)
+    if(!halted && !enableInterruptsNextCycle)
         enterCompiledCode();
 
     while(!stopped && cyclesToRun > 0)
@@ -508,7 +508,7 @@ void DMGCPU::run(int ms)
             {
                 serviceInterrupts();
 
-                if(!haltBug)
+                if(!haltBug && !enableInterruptsNextCycle)
                     enterCompiledCode(); // un-halted
             }
 
