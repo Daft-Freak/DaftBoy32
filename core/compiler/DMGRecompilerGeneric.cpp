@@ -13,7 +13,9 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
 
     SourceInfo sourceInfo;
 
-    uint16_t regsOffset = reinterpret_cast<uintptr_t>(&cpu.regs) - reinterpret_cast<uintptr_t>(&cpu);
+    auto cpuPtrInt = reinterpret_cast<uintptr_t>(&cpu);
+
+    uint16_t regsOffset = reinterpret_cast<uintptr_t>(&cpu.regs) - cpuPtrInt;
 
     sourceInfo.registers.emplace_back(SourceRegInfo{"tmp", 16, SourceRegType::Temp, 0, 0, 0xFFFF});
 
@@ -25,7 +27,7 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
     sourceInfo.registers.emplace_back(SourceRegInfo{"DE ", 16, SourceRegType::General, 0, 0, regsOffset});
     regsOffset += 2;
     sourceInfo.registers.emplace_back(SourceRegInfo{"HL ", 16, SourceRegType::General, 0, 0, regsOffset});
-    regsOffset = reinterpret_cast<uintptr_t>(&cpu.sp) - reinterpret_cast<uintptr_t>(&cpu);
+    regsOffset = reinterpret_cast<uintptr_t>(&cpu.sp) - cpuPtrInt;
     sourceInfo.registers.emplace_back(SourceRegInfo{"SP ", 16, SourceRegType::General, 0, 0, regsOffset});
 
     // 8 bit aliases
@@ -49,7 +51,7 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
     sourceInfo.flags.emplace_back(SourceFlagInfo{'Z', 7, SourceFlagType::Zero});
 
     sourceInfo.pcSize = 16;
-    sourceInfo.pcOffset = reinterpret_cast<uintptr_t>(&cpu.pc) - reinterpret_cast<uintptr_t>(&cpu);
+    sourceInfo.pcOffset = reinterpret_cast<uintptr_t>(&cpu.pc) - cpuPtrInt;
 
     sourceInfo.exitCallFlag = &exitCallFlag;
     sourceInfo.savedExitPtr = &tmpSavedPtr;
@@ -58,6 +60,12 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu), fa
     sourceInfo.cycleExecuted = reinterpret_cast<void (*)(void *)>(DMGRecompilerGeneric::cycleExecuted);
     sourceInfo.readMem = reinterpret_cast<uint8_t (*)(void *, uint16_t)>(DMGRecompilerGeneric::readMem);
     sourceInfo.writeMem = reinterpret_cast<int (*)(void *, uint16_t, uint8_t, int)>(DMGRecompilerGeneric::writeMem);
+
+    sourceInfo.extraCPUOffsets[0] = reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtrInt; // DI, RETI, HALT
+    sourceInfo.extraCPUOffsets[1] = reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtrInt; // EI
+    sourceInfo.extraCPUOffsets[2] = reinterpret_cast<uintptr_t>(&cpu.halted) - cpuPtrInt; // HALT
+    sourceInfo.extraCPUOffsets[3] = reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtrInt; // HALT
+    sourceInfo.extraCPUOffsets[4] = reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtrInt; // HALT
 
     target.init(sourceInfo, &cpu);
 }
@@ -312,8 +320,6 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
     auto preserveC = DMGCPU::Flag_C >> 4;
     auto preserveZ = DMGCPU::Flag_Z >> 4;
-
-    bool ret = true;
 
     bool branchTargetOnNext = false;
 

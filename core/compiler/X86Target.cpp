@@ -1657,6 +1657,105 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 break;
             }
 
+            // DMG specific
+            case GenOpcode::DMG_DAA:
+            {
+                auto f = *mapReg8(flagsReg);
+                auto a = *mapReg8(6); // magic!
+
+                assert(f == Reg8::AL && a == Reg8::AH);
+
+                auto cMask = 1 << getFlagInfo(SourceFlagType::Carry).bit;
+                auto hMask = 1 << getFlagInfo(SourceFlagType::HalfCarry).bit;
+                auto nMask = 1 << getFlagInfo(SourceFlagType::WasSub).bit;
+                auto zMask = 1 << getFlagInfo(SourceFlagType::Zero).bit;
+
+                // clear Z flag (will add back later)
+                builder.and_(f, zMask ^ 0xFF);
+
+                builder.test(f, nMask);
+                builder.jcc(Condition::E, 18); // N not set
+
+                // negative
+
+                // if (Flag_C) A -= 0x60
+                builder.test(f, cMask);
+                builder.jcc(Condition::E, 03); // C not set
+                builder.sub(a, 0x60);
+
+                // if (Flag_H) A -= 0x06
+                builder.test(f, hMask);
+                builder.jcc(Condition::E, 3); // C not set
+                builder.sub(a, 0x06);
+
+                builder.jmp(43); // skip
+
+                // positive
+
+                // if (Flag_C ...
+                builder.test(f, cMask);
+                builder.jcc(Condition::NE, 5); // C set
+                // ... || A > 0x99) ...
+                builder.cmp(a, 0x99);
+                builder.jcc(Condition::BE, 6);
+                // ... A += 0x60
+                builder.add(a, 0x60);
+                builder.or_(f, cMask); // set C flag
+
+                // if (Flag_H ...
+                builder.test(f, hMask);
+                builder.jcc(Condition::NE, 19); // H set
+                // ... || A & (0x0F) > 0x09) ...
+                builder.mov(Reg32::R10D, static_cast<Reg32>(f)); // move the whole thing as we can't easily mov just the high byte
+                builder.and_(Reg32::R10D, 0xF00);
+                builder.cmp(Reg32::R10D, 0x0900);
+                builder.jcc(Condition::BE, 3);
+                // .. A += 0x06
+                builder.add(a, 0x06);
+
+                // Z flag
+                builder.and_(a, a);
+                builder.jcc(Condition::NE, 3);
+                builder.or_(f, zMask);
+
+                // clear H flag
+                builder.and_(f, ~hMask);
+
+                break;
+            }
+
+            case GenOpcode::DMG_Halt:
+            {
+                // halted = true
+                builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[2]/*halted*/);
+
+                // if(!masterInterruptEnable && serviceableInterrupts)
+                builder.cmp(0, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+                builder.jcc(Condition::NE, 12);
+                builder.cmp(0, cpuPtrReg, sourceInfo.extraCPUOffsets[3]/*serviceableInterrupts*/);
+                builder.jcc(Condition::E, 5);
+                // haltBug = true
+                builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[4]/*haltBug*/);
+
+                // exit
+                syncCyclesExecuted();
+                builder.mov(pcReg32, pc); // exits need to set PC themselves
+                builder.call(saveAndExitPtr - builder.getPtr());
+
+                break;
+            }
+
+            case GenOpcode::DMG_EnableIntrForRet:
+                // masterInterruptEnable = true
+                builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+                break;
+
+            case GenOpcode::DMG_DI:
+                // masterInterruptEnable = false
+                // TODO: after next instruction (DMGCPU also has this TODO)
+                builder.mov(0, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+                break;
+
             default:
                 printf("unhandled gen op %i\n", instr.opcode);
                 err = true;
