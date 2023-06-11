@@ -136,4 +136,6 @@ struct SourceInfo
 
     uint8_t (*readMem)(void *cpu, uint16_t addr);
     int (*writeMem)(void *cpu, uint16_t addr, uint8_t data, int cyclesToRun);
+
+    int extraCPUOffsets[5]; // source specific ops
 };
