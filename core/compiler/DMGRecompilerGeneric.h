@@ -2,7 +2,6 @@
 
 #include "DMGRecompiler.h"
 
-#include "DMGRecompilerX86.h"
 #include "RecompilerGeneric.h"
 #include "X86Target.h"
 
@@ -20,7 +19,4 @@ private:
     void printBlock(uint16_t pc, GenBlockInfo &block);
 
     X86Target target;
-
-    // wastes memory, but this is a temp fallback
-    DMGRecompilerX86 fallback;
 };
