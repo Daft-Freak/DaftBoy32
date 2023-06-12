@@ -168,8 +168,11 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
         Reg32::EDX,
         Reg32::EBX,
         Reg32::R13D,
+
+        Reg32::R12D, // also used for pc out, so can only be used as a temp
+        Reg32::R11D, // used as temp in some ALUs
     };
-    // also free R11 R15
+    // also free R15
 
     // alloc registers
     unsigned int allocOff = 0;
@@ -182,9 +185,10 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
         if(it->type == SourceRegType::Flags)
             flagsReg = i;
 
-        if(it->alias || it->type != SourceRegType::General)
+        if(it->alias)
             continue;
 
+        // TODO: make sure we allocate all temps
         if(allocOff == std::size(regList))
             continue;
 
