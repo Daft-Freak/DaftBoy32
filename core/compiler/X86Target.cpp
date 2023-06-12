@@ -1913,10 +1913,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             numInstructions++;
     }
 
-    /*spWrite = false;
-    branchTargets.clear();
-    forwardBranchesToPatch.clear();*/
-
     if(builder.getError())
     {
         printf("recompile @%04X failed due to error (out of space?)\n", startPC);
