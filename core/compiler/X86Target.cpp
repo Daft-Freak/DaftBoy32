@@ -1885,10 +1885,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             assert(instrCycles == 1);
         }
 
-        // TODO: avoid syncing in the middle of an emulated op
-        syncCyclesExecuted();
-
+        // check if this is the end of the source instruction (pc incremented)
         newEmuOp = instr.len != 0;
+
+        if(newEmuOp)
+            syncCyclesExecuted();
 
         // check cycle count if this is the last part of en emulated op
         // ... but not on the last op, that should always exit anyway
