@@ -455,6 +455,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     // do instructions
     int numInstructions = 0;
     uint8_t *opStartPtr = nullptr;
+    uint8_t *lastImmLoadStart = nullptr, *lastImmLoadEnd = nullptr;
     bool newEmuOp = true;
     bool lastWasEI = false;
     bool forceExitAfter = false;
@@ -644,8 +645,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 break;
 
             case GenOpcode::LoadImm:
-                // TODO: optimise (merge into user, smaller load?)
+                lastImmLoadStart = builder.getPtr();
                 builder.mov(*mapReg32(0), instr.imm);
+                lastImmLoadEnd = builder.getPtr();
                 break;
 
             case GenOpcode::Move:
@@ -1665,11 +1667,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 bool constAddr = false;
                 uint16_t addr;
 
-                if(instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::LoadImm)
+                if(instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::LoadImm && instr.src[1] == 0)
                 {
                     constAddr = true;
                     addr = (instIt - 1)->imm;
-                    // TODO: remove the mov for the imm (only enitted with one use)
+
+                    // remove the load
+                    assert(lastImmLoadStart);
+                    builder.removeRange(lastImmLoadStart, lastImmLoadEnd);
+                    lastImmLoadStart = lastImmLoadEnd = nullptr;
                 }
 
                 assert(isExit || constAddr); // shouldn't be any non-exit jumps with unknown addr
@@ -1710,7 +1716,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                         // set pc if we're exiting
                         if(isExit)
-                            builder.movzx(pcReg32, *src);
+                        {
+                            if(constAddr)
+                                builder.mov(pcReg32, addr);
+                            else
+                                builder.movzx(pcReg32, *src);
+                        }
                         else // or sub cycles early (we jump past the usual code that does this)
                             builder.sub(Reg32::EDI, cyclesThisInstr);
 
