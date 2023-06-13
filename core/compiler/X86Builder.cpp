@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstring>
 
 #include "X86Builder.h"
 
@@ -970,6 +971,23 @@ void X86Builder::endPatch()
 {
     ptr = savedPtr;
     endPtr = savedEndPtr;
+}
+
+void X86Builder::removeRange(uint8_t *startPtr, uint8_t *endPtr)
+{
+    if(error)
+        return;
+
+    // making sure this doesn't break any jumps is the user's problem
+
+    assert(startPtr < ptr && endPtr <= ptr);
+    assert(endPtr > startPtr);
+
+    // move any code after the end of the removed range
+    if(endPtr != ptr)
+        memmove(startPtr, endPtr, ptr - endPtr);
+
+    this->ptr -= (endPtr - startPtr);
 }
 
 void X86Builder::write(uint8_t b)
