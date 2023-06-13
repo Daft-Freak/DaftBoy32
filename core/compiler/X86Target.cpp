@@ -1688,9 +1688,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                             syncCyclesExecuted();
 
-                            if(isExit)
-                                builder.mov(pcReg32, pc);
-
                             flagSet = condition == GenCondition::Equal || condition == GenCondition::CarrySet;
                             auto flag = (condition == GenCondition::Equal || condition == GenCondition::NotEqual) ? SourceFlagType::Zero : SourceFlagType::Carry;
 
