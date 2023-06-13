@@ -991,7 +991,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
                 }
                 else if(instr.opcode[1] < 0xC0) // RES
                 {
-                    addInstruction(loadImm(~(1 << bit), 0));
+                    uint8_t mask = ~(1 << bit);
+                    addInstruction(loadImm(mask, 0));
 
                     auto aluOp = alu(GenOpcode::And, GenReg::Temp, reg);
 
