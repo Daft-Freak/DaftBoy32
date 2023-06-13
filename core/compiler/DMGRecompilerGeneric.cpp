@@ -186,8 +186,8 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
     auto addInstruction = [&genBlock](GenOpInfo op, uint8_t len = 0, uint16_t flags = 0)
     {
-        if(flags & (Op_Branch | Op_Exit))
-            assert(op.opcode == GenOpcode::Jump || op.opcode == GenOpcode::NOP/*FIXME: unhandled op*/);
+        if(flags & Op_Exit)
+            assert(op.opcode == GenOpcode::Jump);
 
         // move branch target flag up to the start of the original instruction
         if((flags & Op_BranchTarget) && !genBlock.instructions.empty() && !genBlock.instructions.back().len)
@@ -315,7 +315,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
         auto inFlags = instr.flags;
 
         // remove unused flags
-        inFlags &= ~(Op_ReadFlags | Op_Load | Op_Store);
+        inFlags &= ~(Op_ReadFlags | Op_Branch | Op_Load | Op_Store | Op_Last);
 
         if(branchTargetOnNext)
         {
