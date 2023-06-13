@@ -580,6 +580,74 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             return reg;
         };
 
+        // immediate helpers
+        auto getLastImmLoad = [&builder, &instIt, &beginInstr, &lastImmLoadStart, &lastImmLoadEnd]() -> std::optional<uint32_t>
+        {
+            if(instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::LoadImm)
+            {
+                // remove the load
+                assert(lastImmLoadStart);
+                builder.removeRange(lastImmLoadStart, lastImmLoadEnd);
+                lastImmLoadStart = lastImmLoadEnd = nullptr;
+
+                return (instIt - 1)->imm;
+            }
+
+            return {};
+        };
+
+        auto checkRegOrImm32 = [&checkReg32, &getLastImmLoad](uint8_t index) -> std::variant<std::monostate, Reg32, uint32_t>
+        {
+            if(index == 0)
+            {
+                auto imm = getLastImmLoad();
+                if(imm)
+                    return *imm;
+            }
+
+            if(auto reg = checkReg32(index))
+                return *reg;
+
+            return {};
+        };
+
+        auto checkRegOrImm16 = [&checkReg16, &getLastImmLoad](uint8_t index) -> std::variant<std::monostate, Reg16, uint16_t>
+        {
+            if(index == 0)
+            {
+                auto imm = getLastImmLoad();
+                if(imm)
+                {
+                    assert(!(*imm & 0xFFFF0000));
+                    return static_cast<uint16_t>(*imm);
+                }
+            }
+
+            if(auto reg = checkReg16(index))
+                return *reg;
+
+            return {};
+        };
+
+        auto checkRegOrImm8 = [&checkReg8, &getLastImmLoad](uint8_t index) -> std::variant<std::monostate, Reg8, uint8_t>
+        {
+            if(index == 0)
+            {
+                auto imm = getLastImmLoad();
+                if(imm)
+                {
+                    assert(!(*imm & 0xFFFFFF00));
+                    return static_cast<uint8_t>(*imm);
+                }
+            }
+
+            if(auto reg = checkReg8(index))
+                return *reg;
+
+            return {};
+        };
+
+        // error handling
         auto badRegSize = [&err, &instr](int size)
         {
             printf("unhandled reg size %i in op %i\n", size, int(instr.opcode));
@@ -1664,26 +1732,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[1]].size;
 
                 bool isExit = instr.flags & GenOp_Exit;
-                bool constAddr = false;
-                uint16_t addr;
-
-                if(instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::LoadImm && instr.src[1] == 0)
-                {
-                    constAddr = true;
-                    addr = (instIt - 1)->imm;
-
-                    // remove the load
-                    assert(lastImmLoadStart);
-                    builder.removeRange(lastImmLoadStart, lastImmLoadEnd);
-                    lastImmLoadStart = lastImmLoadEnd = nullptr;
-                }
-
-                assert(isExit || constAddr); // shouldn't be any non-exit jumps with unknown addr
 
                 if(regSize == 16)
                 {
-                    if(auto src = checkReg16(instr.src[1]))
+                    auto src = checkRegOrImm16(instr.src[1]);
+                    if(src.index())
                     {
+                        assert(isExit || std::holds_alternative<uint16_t>(src)); // shouldn't be any non-exit jumps with unknown addr
+
                         uint8_t *branchPtr = nullptr;
                         bool flagSet = false;
 
@@ -1717,10 +1773,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         // set pc if we're exiting
                         if(isExit)
                         {
-                            if(constAddr)
-                                builder.mov(pcReg32, addr);
+                            if(std::holds_alternative<uint16_t>(src))
+                                builder.mov(pcReg32, std::get<uint16_t>(src));
                             else
-                                builder.movzx(pcReg32, *src);
+                                builder.movzx(pcReg32, std::get<Reg16>(src));
                         }
                         else // or sub cycles early (we jump past the usual code that does this)
                             builder.sub(Reg32::EDI, cyclesThisInstr);
@@ -1729,7 +1785,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         if(condition == GenCondition::Always)
                             cyclesThisInstr = 0;
 
-                        auto it = constAddr ? branchTargets.find(addr) : branchTargets.end();
+                        auto it = std::holds_alternative<uint16_t>(src) ? branchTargets.find(std::get<uint16_t>(src)) : branchTargets.end();
 
                         if(it != branchTargets.end())
                         {
@@ -1739,7 +1795,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         else
                         {
                             if(!isExit)
-                                forwardBranchesToPatch.emplace(addr, builder.getPtr());
+                                forwardBranchesToPatch.emplace(std::get<uint16_t>(src), builder.getPtr());
 
                             // forwards branch or exit
                             if(isExit && (instr.flags & GenOp_Call))
