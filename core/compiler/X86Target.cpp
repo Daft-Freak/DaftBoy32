@@ -217,6 +217,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
     // state
     uint8_t *lastInstrCycleCheck = nullptr;
+    std::map<uint16_t, uint8_t *> branchTargets;
+    std::multimap<uint16_t, uint8_t *> forwardBranchesToPatch;
 
     // FIXME: DMG specific
     bool inHRAM = pc >= 0xFF00;
