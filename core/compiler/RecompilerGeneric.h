@@ -56,6 +56,7 @@ enum GenOpFlags
 
     GenOp_WriteFlags = 0xF << 4,
 
+    GenOp_Call = 1 << 8, // branch is a call, code will return here later
     GenOp_BranchTarget = 1 << 9,
     GenOp_Exit = 1 << 10,
 

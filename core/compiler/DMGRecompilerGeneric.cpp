@@ -848,7 +848,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
                 // jump
                 addInstruction(loadImm16(instr.opcode + 1, 0));
-                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, inFlags);
+                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, inFlags | GenOp_Call);
                 break;
             }
 
@@ -1043,7 +1043,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
                 // jump
                 addInstruction(loadImm16(instr.opcode + 1, 0));
-                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, inFlags);
+                addInstruction(jump(GenCondition::Always, GenReg::Temp, 1), instr.len, inFlags | GenOp_Call);
                 break;
             }
 
