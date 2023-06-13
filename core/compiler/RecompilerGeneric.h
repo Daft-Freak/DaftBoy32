@@ -56,14 +56,11 @@ enum GenOpFlags
 
     GenOp_WriteFlags = 0xF << 4,
 
-    GenOp_Branch = 1 << 8,
     GenOp_BranchTarget = 1 << 9,
     GenOp_Exit = 1 << 10,
 
     GenOp_MagicAlt1 = 1 << 11, // for when an op sometimes has slightly different behaviour
     GenOp_MagicAlt2 = 1 << 12,
-
-    GenOp_Last = 1 << 13,
 };
 
 struct GenOpInfo
