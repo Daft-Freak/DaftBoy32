@@ -236,6 +236,8 @@ public:
     void patch(uint8_t *patchPtr, uint8_t *patchEndPtr);
     void endPatch();
 
+    void removeRange(uint8_t *startPtr, uint8_t *endPtr);
+
     bool getError() const {return error;}
 
 private:
