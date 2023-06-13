@@ -1557,51 +1557,70 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         unhandledFlags(instr.flags & GenOp_WriteFlags);
                     else
                     {
-                        auto src = checkReg32(instr.src[1]);
+                        auto src = checkRegOrImm32(instr.src[1]);
                         auto dst = checkReg32(instr.dst[0]);
 
-                        assert(*src != *dst);
-                        assert(*dst != Reg32::EBX);
-
-                        if(src && dst)
+                        if(src.index() && dst)
                         {
-                            bool swap = *src != Reg32::ECX;
+                            assert(*dst != Reg32::ECX);
 
-                            if(swap)
-                                builder.xchg(static_cast<Reg8>(*src), Reg8::CL);
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                assert(std::get<uint32_t>(src) < 32);
+                                builder.shl(*dst, std::get<uint32_t>(src));
+                            }
+                            else
+                            {
+                                auto srcReg = std::get<Reg32>(src);
+                                assert(srcReg != *dst);
 
-                            builder.shlCL(*dst);
+                                bool swap = srcReg != Reg32::ECX;
 
-                            if(swap)
-                                builder.xchg(static_cast<Reg8>(*src), Reg8::CL);
+                                if(swap)
+                                    builder.xchg(static_cast<Reg8>(srcReg), Reg8::CL);
+
+                                builder.shlCL(*dst);
+
+                                if(swap)
+                                    builder.xchg(static_cast<Reg8>(srcReg), Reg8::CL);
+                            }
                         }
                     }
                 }
                 else if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src && dst)
+                    if(src.index() && dst)
                     {
-                        assert(*src != *dst);
-
-                        // can only shift by CL
-                        bool swap = *src != Reg8::CL;
-
-                        // swap with whatever is currently in CL
-                        if(swap)
-                            builder.xchg(*src, Reg8::CL);
-
-                        // if it was the dst swap the args around
-                        if(dst == Reg8::CL)
-                            builder.shlCL(*src);
+                        if(std::holds_alternative<uint8_t>(src))
+                        {
+                            assert(std::get<uint8_t>(src) < 32);
+                            builder.shl(*dst, std::get<uint8_t>(src));
+                        }
                         else
-                            builder.shlCL(*dst);
+                        {
+                            auto srcReg = std::get<Reg8>(src);
+                            assert(srcReg != *dst);
 
-                        // restore
-                        if(swap)
-                            builder.xchg(*src, Reg8::CL);
+                            // can only shift by CL
+                            bool swap = srcReg != Reg8::CL;
+
+                            // swap with whatever is currently in CL
+                            if(swap)
+                                builder.xchg(srcReg, Reg8::CL);
+
+                            // if it was the dst swap the args around
+                            if(dst == Reg8::CL)
+                                builder.shlCL(srcReg);
+                            else
+                                builder.shlCL(*dst);
+
+                            // restore
+                            if(swap)
+                                builder.xchg(srcReg, Reg8::CL);
+                        }
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -1622,29 +1641,38 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src && dst)
+                    if(src.index() && dst)
                     {
-                        assert(*src != *dst);
-
-                        // can only shift by CL
-                        bool swap = *src != Reg8::CL;
-
-                        // swap with whatever is currently in CL
-                        if(swap)
-                            builder.xchg(*src, Reg8::CL);
-
-                        // if it was the dst swap the args around
-                        if(dst == Reg8::CL)
-                            builder.sarCL(*src);
+                        if(std::holds_alternative<uint8_t>(src))
+                        {
+                            assert(std::get<uint8_t>(src) < 32);
+                            builder.sar(*dst, std::get<uint8_t>(src));
+                        }
                         else
-                            builder.sarCL(*dst);
+                        {
+                            auto srcReg = std::get<Reg8>(src);
+                            assert(srcReg != *dst);
 
-                        // restore
-                        if(swap)
-                            builder.xchg(*src, Reg8::CL);
+                            // can only shift by CL
+                            bool swap = srcReg != Reg8::CL;
+
+                            // swap with whatever is currently in CL
+                            if(swap)
+                                builder.xchg(srcReg, Reg8::CL);
+
+                            // if it was the dst swap the args around
+                            if(dst == Reg8::CL)
+                                builder.sarCL(srcReg);
+                            else
+                                builder.sarCL(*dst);
+
+                            // restore
+                            if(swap)
+                                builder.xchg(srcReg, Reg8::CL);
+                        }
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -1670,51 +1698,70 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         unhandledFlags(instr.flags & GenOp_WriteFlags);
                     else
                     {
-                        auto src = checkReg32(instr.src[1]);
+                        auto src = checkRegOrImm32(instr.src[1]);
                         auto dst = checkReg32(instr.dst[0]);
 
-                        assert(*src != *dst);
-                        assert(*dst != Reg32::ECX);
-
-                        if(src && dst)
+                        if(src.index() && dst)
                         {
-                            bool swap = *src != Reg32::ECX;
+                            assert(*dst != Reg32::ECX);
 
-                            if(swap)
-                                builder.xchg(static_cast<Reg8>(*src), Reg8::CL);
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                assert(std::get<uint32_t>(src) < 32);
+                                builder.shr(*dst, std::get<uint32_t>(src));
+                            }
+                            else
+                            {
+                                auto srcReg = std::get<Reg32>(src);
+                                assert(srcReg != *dst);
 
-                            builder.shrCL(*dst);
+                                bool swap = srcReg != Reg32::ECX;
 
-                            if(swap)
-                                builder.xchg(static_cast<Reg8>(*src), Reg8::CL);
+                                if(swap)
+                                    builder.xchg(static_cast<Reg8>(srcReg), Reg8::CL);
+
+                                builder.shrCL(*dst);
+
+                                if(swap)
+                                    builder.xchg(static_cast<Reg8>(srcReg), Reg8::CL);
+                            }
                         }
                     }
                 }
                 else if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src && dst)
+                    if(src.index() && dst)
                     {
-                        assert(*src != *dst);
-
-                        // can only shift by CL
-                        bool swap = *src != Reg8::CL;
-
-                        // swap with whatever is currently in CL
-                        if(swap)
-                            builder.xchg(*src, Reg8::CL);
-
-                        // if it was the dst swap the args around
-                        if(dst == Reg8::CL)
-                            builder.shrCL(*src);
+                        if(std::holds_alternative<uint8_t>(src))
+                        {
+                            assert(std::get<uint8_t>(src) < 32);
+                            builder.shr(*dst, std::get<uint8_t>(src));
+                        }
                         else
-                            builder.shrCL(*dst);
+                        {
+                            auto srcReg = std::get<Reg8>(src);
+                            assert(srcReg != *dst);
 
-                        // restore
-                        if(swap)
-                            builder.xchg(*src, Reg8::CL);
+                            // can only shift by CL
+                            bool swap = srcReg != Reg8::CL;
+
+                            // swap with whatever is currently in CL
+                            if(swap)
+                                builder.xchg(srcReg, Reg8::CL);
+
+                            // if it was the dst swap the args around
+                            if(dst == Reg8::CL)
+                                builder.shrCL(srcReg);
+                            else
+                                builder.shrCL(*dst);
+
+                            // restore
+                            if(swap)
+                                builder.xchg(srcReg, Reg8::CL);
+                        }
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
