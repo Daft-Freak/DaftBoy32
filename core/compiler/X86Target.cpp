@@ -1734,8 +1734,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                                 forwardBranchesToPatch.emplace(addr, builder.getPtr());
 
                             // forwards branch or exit
-                            // patched later if not exit
-                            builder.jmp(exitPtr - builder.getPtr(), !isExit);
+                            if(isExit && (instr.flags & GenOp_Call))
+                                builder.call(exitForCallPtr - builder.getPtr()); // call, save when exiting
+                            else
+                                builder.jmp(exitPtr - builder.getPtr(), !isExit); // patched later if not exit
                         }
 
                         // patch the condition jump
