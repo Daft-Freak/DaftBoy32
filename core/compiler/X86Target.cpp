@@ -821,21 +821,28 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(regSize == 16)
                 {
-                    auto src = checkReg16(instr.src[1]);
+                    auto src = checkRegOrImm16(instr.src[1]);
                     auto dst = checkReg16(instr.dst[0]);
                     
-                    if(src && dst && f)
+                    if(src.index() && dst && f)
                     {
                         // calc half carry
                         if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
                         {
-                            // copy
-                            builder.mov(Reg32::R11D, static_cast<Reg32>(*src));
+                            // dst & 0xFFF
                             builder.mov(Reg32::ESI, static_cast<Reg32>(*dst));
-
-                            // mask and add
-                            builder.and_(Reg32::R11D, 0xFFF);
                             builder.and_(Reg32::ESI, 0xFFF);
+
+                            // src & 0xFFF
+                            if(std::holds_alternative<uint16_t>(src))
+                                builder.mov(Reg32::R11D, std::get<uint16_t>(src) & 0xFFF);
+                            else
+                            {
+                                builder.mov(Reg32::R11D, static_cast<Reg32>(std::get<Reg16>(src)));
+                                builder.and_(Reg32::R11D, 0xFFF);
+                            }
+
+                            // "half" add
                             builder.add(Reg32::ESI, Reg32::R11D);
 
                             // compare and set h bit
@@ -844,7 +851,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
                         }
 
-                        builder.add(*dst, *src);
+                        if(std::holds_alternative<uint16_t>(src))
+                        {
+                            // currently signed 8-bit only
+                            assert(std::get<uint16_t>(src) < 128 || std::get<uint16_t>(src) >= 0xFF80);
+                            builder.add(*dst, std::get<uint16_t>(src));
+                        }
+                        else
+                            builder.add(*dst, std::get<Reg16>(src));
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -856,10 +870,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 }
                 else if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src && dst && f)
+                    if(src.index() && dst && f)
                     {
                         auto origDst = *dst;
 
@@ -879,7 +893,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                                 else
                                     builder.mov(Reg8::AH, *dst);
                             }
-                            builder.mov(Reg8::AL, *src);
+
+                            if(std::holds_alternative<uint8_t>(src))
+                                builder.mov(Reg8::AL, std::get<uint8_t>(src));
+                            else
+                                builder.mov(Reg8::AL, std::get<Reg8>(src));
 
                             builder.and_(Reg32::EAX, 0x0F0F); // mask both
 
@@ -892,9 +910,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
                         }
 
-                        auto swapReg = maybeSwapHReg(src, dst);
-                        builder.add(*dst, *src);
-                        unswapReg(swapReg);
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.add(*dst, std::get<uint8_t>(src));
+                        else
+                        {
+                            std::optional<Reg8> regSrc = std::get<Reg8>(src);
+                            auto swapReg = maybeSwapHReg(regSrc, dst);
+                            builder.add(*dst, *regSrc);
+                            unswapReg(swapReg);
+                        }
 
                         // flags
                         bool setZ = !(instr.flags & GenOp_MagicAlt1); // LDHL SP/ADD SP use an 8-bit add to set flags, but set Z=0
@@ -919,11 +943,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
                     auto f = checkReg8(flagsReg);
 
-                    if(src && dst && f)
+                    if(src.index() && dst && f)
                     {
                         auto origDst = *dst;
 
@@ -949,7 +973,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                                 else
                                     builder.mov(Reg8::AH, *dst);
                             }
-                            builder.mov(Reg8::AL, *src);
+                            
+                            if(std::holds_alternative<uint8_t>(src))
+                                builder.mov(Reg8::AL, std::get<uint8_t>(src));
+                            else
+                                builder.mov(Reg8::AL, std::get<Reg8>(src));
 
                             builder.and_(Reg32::EAX, 0x0F0F); // mask both
 
@@ -968,9 +996,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         builder.jcc(Condition::E, 1); // not set
                         builder.stc(); // CF = 1
 
-                        auto swapReg = maybeSwapHReg(src, dst);
-                        builder.adc(*dst, *src);
-                        unswapReg(swapReg);
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.adc(*dst, std::get<uint8_t>(src));
+                        else
+                        {
+                            std::optional<Reg8> regSrc = std::get<Reg8>(src);
+                            auto swapReg = maybeSwapHReg(regSrc, dst);
+                            builder.adc(*dst, *regSrc);
+                            unswapReg(swapReg);
+                        }
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -993,14 +1027,13 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    // d = s0 & d -> d = d & s0
+                    int srcIndex = instr.src[1] == instr.dst[0] ? 0 : 1;
+
+                    auto src = checkRegOrImm8(instr.src[srcIndex]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    // d = s0 & d -> d = d & s0
-                    if(instr.src[1] == instr.dst[0])
-                        src = checkReg8(instr.src[0]);
-
-                    if(src && dst)
+                    if(src.index() && dst)
                     {
                         // preserve flags (BIT)
                         uint8_t preserveMask = 0;
@@ -1012,9 +1045,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                                 builder.and_(*f, preserveMask);
                         }
 
-                        auto swapReg = maybeSwapHReg(src, dst);
-                        builder.and_(*dst, *src);
-                        unswapReg(swapReg);
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.and_(*dst, std::get<uint8_t>(src));
+                        else
+                        {
+                            std::optional<Reg8> regSrc = std::get<Reg8>(src);
+                            auto swapReg = maybeSwapHReg(regSrc, dst);
+                            builder.and_(*dst, *regSrc);
+                            unswapReg(swapReg);
+                        }
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -1034,11 +1073,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.src[0]);
                     auto f = checkReg8(flagsReg);
 
-                    if(src && dst && f)
+                    if(src.index() && dst && f)
                     {
                         auto cMask = flagWriteMask(SourceFlagType::Carry);
                         auto zMask = flagWriteMask(SourceFlagType::Zero);
@@ -1048,13 +1087,20 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         {
                             // half cmp
                             // this makes a lot of assumptions, but is only used for DMG anyway
-                            if(isXHReg(*src))
-                            {
-                                builder.mov(*f, *src);
-                                builder.mov(Reg8::SIL, *f);
-                            }
+                            if(std::holds_alternative<uint8_t>(src))
+                                builder.mov(Reg8::SIL, std::get<uint8_t>(src) & 0xF);
                             else
-                                builder.mov(Reg8::SIL, *src);
+                            {
+                                auto regSrc = std::get<Reg8>(src);
+
+                                if(isXHReg(regSrc))
+                                {
+                                    builder.mov(*f, regSrc);
+                                    builder.mov(Reg8::SIL, *f);
+                                }
+                                else
+                                    builder.mov(Reg8::SIL, regSrc);
+                            }
 
                             builder.mov(*f, *dst);
 
@@ -1065,9 +1111,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             builder.setcc(Condition::B, Reg8::SIL);
                         }
 
-                        auto swapReg = maybeSwapHReg(src, dst);
-                        builder.cmp(*dst, *src);
-                        unswapReg(swapReg);
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.cmp(*dst, std::get<uint8_t>(src));
+                        else
+                        {
+                            std::optional<Reg8> regSrc = std::get<Reg8>(src);
+                            auto swapReg = maybeSwapHReg(regSrc, dst);
+                            builder.cmp(*dst, *regSrc);
+                            unswapReg(swapReg);
+                        }
 
                         if((instr.flags & (cMask | zMask)) == (cMask | zMask))
                             builder.setcc(Condition::E, Reg8::R10B); // save zero if carry also set, should be safe to use tmp here
@@ -1109,23 +1161,34 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         unhandledFlags(instr.flags & GenOp_WriteFlags);
                     else
                     {
-                        auto src = checkReg16(instr.src[1]);
+                        auto src = checkRegOrImm16(instr.src[1]);
                         auto dst = checkReg16(instr.dst[0]);
 
-                        if(src && dst)
-                            builder.or_(*dst, *src);
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint16_t>(src))
+                                builder.or_(static_cast<Reg32>(*dst), std::get<uint16_t>(src));
+                            else
+                                builder.or_(*dst, std::get<Reg16>(src));
+                        }
                     }
                 }
                 else if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src && dst)
+                    if(src.index() && dst)
                     {
-                        auto swapReg = maybeSwapHReg(src, dst);
-                        builder.or_(*dst, *src);
-                        unswapReg(swapReg);
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.or_(*dst, std::get<uint8_t>(src));
+                        else
+                        {
+                            std::optional<Reg8> regSrc = std::get<Reg8>(src);
+                            auto swapReg = maybeSwapHReg(regSrc, dst);
+                            builder.or_(*dst, *regSrc);
+                            unswapReg(swapReg);
+                        }
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -1157,7 +1220,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
                     else
                     {
-                        auto src = checkReg16(instr.src[1]);
+                        auto src = checkReg16(instr.src[1]); // TODO: imm
                         auto dst = checkReg16(instr.dst[0]);
 
                         if(src && dst)
@@ -1166,10 +1229,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 }
                 else if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src && dst && f)
+                    if(src.index() && dst && f)
                     {
                         auto origDst = *dst;
 
@@ -1189,7 +1252,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                                 else
                                     builder.mov(Reg8::AH, *dst);
                             }
-                            builder.mov(Reg8::AL, *src);
+
+                            if(std::holds_alternative<uint8_t>(src))
+                                builder.mov(Reg8::AL, std::get<uint8_t>(src));
+                            else
+                                builder.mov(Reg8::AL, std::get<Reg8>(src));
 
                             builder.and_(Reg32::EAX, 0x0F0F); // mask both
 
@@ -1202,9 +1269,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
                         }
 
-                        auto swapReg = maybeSwapHReg(src, dst);
-                        builder.sub(*dst, *src);
-                        unswapReg(swapReg);
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.sub(*dst, std::get<uint8_t>(src));
+                        else
+                        {
+                            std::optional<Reg8> regSrc = std::get<Reg8>(src);
+                            auto swapReg = maybeSwapHReg(regSrc, dst);
+                            builder.sub(*dst, *regSrc);
+                            unswapReg(swapReg);
+                        }
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -1229,11 +1302,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
                     auto f = checkReg8(flagsReg);
 
-                    if(src && dst && f)
+                    if(src.index() && dst && f)
                     {
                         auto origDst = *dst;
 
@@ -1259,7 +1332,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                                 else
                                     builder.mov(Reg8::AH, *dst);
                             }
-                            builder.mov(Reg8::AL, *src);
+
+                            if(std::holds_alternative<uint8_t>(src))
+                                builder.mov(Reg8::AL, std::get<uint8_t>(src));
+                            else
+                                builder.mov(Reg8::AL, std::get<Reg8>(src));
 
                             builder.and_(Reg32::EAX, 0x0F0F); // mask both
 
@@ -1278,9 +1355,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         builder.jcc(Condition::E, 1); // not set
                         builder.stc(); // CF = 1
 
-                        auto swapReg = maybeSwapHReg(src, dst);
-                        builder.sbb(*dst, *src);
-                        unswapReg(swapReg);
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.sbb(*dst, std::get<uint8_t>(src));
+                        else
+                        {
+                            std::optional<Reg8> regSrc = std::get<Reg8>(src);
+                            auto swapReg = maybeSwapHReg(regSrc, dst);
+                            builder.sbb(*dst, *regSrc);
+                            unswapReg(swapReg);
+                        }
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -1304,14 +1387,20 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[1]);
+                    auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src && dst)
+                    if(src.index() && dst)
                     {
-                        auto swapReg = maybeSwapHReg(src, dst);
-                        builder.xor_(*dst, *src);
-                        unswapReg(swapReg);
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.xor_(*dst, std::get<uint8_t>(src));
+                        else
+                        {
+                            std::optional<Reg8> regSrc = std::get<Reg8>(src);
+                            auto swapReg = maybeSwapHReg(regSrc, dst);
+                            builder.xor_(*dst, *regSrc);
+                            unswapReg(swapReg);
+                        }
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
