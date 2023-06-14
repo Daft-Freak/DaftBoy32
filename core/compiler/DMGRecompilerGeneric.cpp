@@ -231,7 +231,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
         GenOpInfo ret{};
         ret.opcode = GenOpcode::LoadImm;
         ret.cycles = cycles;
-        ret.imm = (imm[0] | imm[1] << 8) + add;
+        ret.imm = ((imm[0] | imm[1] << 8) + add) & 0xFFFF;
 
         return ret;
     };
