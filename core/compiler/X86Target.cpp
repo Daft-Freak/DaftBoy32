@@ -388,6 +388,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         if(!flagsReg)
             return;
 
+        if(!neededFlags)
+            return; // nothing to set
+
         // FIXME: assuming 8bit flags reg
         auto f = *mapReg8(flagsReg);
 
