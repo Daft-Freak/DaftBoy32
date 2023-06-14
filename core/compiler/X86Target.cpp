@@ -115,15 +115,22 @@ static void callRestore(X86Builder &builder, Reg32 dstReg)
     builder.pop(Reg64::RAX);
 }
 
-static void callRestore(X86Builder &builder, Reg8 dstReg)
+static void callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend = false)
 {
     assert(dstReg != Reg8::DIL); // no
 
     // move before popping if possible
     bool isPoppedReg = dstReg == Reg8::AL || dstReg == Reg8::CL || dstReg == Reg8::DL || dstReg == Reg8::AH || dstReg == Reg8::CH || dstReg == Reg8::DH;
 
+    assert(!isPoppedReg || !zeroExtend);
+
     if(!isPoppedReg)
-        builder.mov(dstReg, Reg8::AL);
+    {
+        if(zeroExtend)
+            builder.movzx(static_cast<Reg32>(dstReg), Reg8::AL);
+        else
+            builder.mov(dstReg, Reg8::AL);
+    }
 
 #ifdef _WIN32
     builder.add(Reg64::RSP, 32); // shadow space
@@ -293,7 +300,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         }
     };
 
-    auto readMem = [this, &builder, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, Reg8 dstReg)
+    auto readMem = [this, &builder, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, Reg8 dstReg, bool zeroExtend)
     {
         // can skip push/pop if we don't need AX/CX/DX
         if(!std::holds_alternative<Reg16>(addr) || !isCallSaved(std::get<Reg16>(addr)))
@@ -308,7 +315,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
         builder.call(Reg64::RAX); // do call
 
-        callRestore(builder, dstReg);
+        callRestore(builder, dstReg, zeroExtend);
     };
 
     auto writeMem = [this, &builder, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, std::variant<std::monostate, Reg8, uint8_t> data)
@@ -789,12 +796,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     auto dst = checkReg8(instr.dst[0]);
                     if(addr.index() && dst)
                     {
-                        readMem(addr, *dst);
-
                         // zero-extend if not 8 bit dest (a temp)
-                        // TODO: merge with the mov in callRestore
-                        if(sourceInfo.registers[instr.dst[0]].size != 8)
-                            builder.movzx(static_cast<Reg32>(*dst), *dst);
+                        bool zeroExtend = sourceInfo.registers[instr.dst[0]].size != 8;
+                        readMem(addr, *dst, zeroExtend);
                     }
                 }
                 else
