@@ -868,9 +868,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                         if(std::holds_alternative<uint16_t>(src))
                         {
-                            // currently signed 8-bit only
-                            assert(std::get<uint16_t>(src) < 128 || std::get<uint16_t>(src) >= 0xFF80);
-                            builder.add(*dst, std::get<uint16_t>(src));
+                            auto srcImm = std::get<uint16_t>(src);
+                            if(srcImm == 1 && !(instr.flags & flagWriteMask(SourceFlagType::Carry)))
+                                builder.inc(*dst);
+                            else
+                            {
+                                // currently signed 8-bit only
+                                assert(srcImm < 128 || srcImm >= 0xFF80);
+                                builder.add(*dst, srcImm);
+                            }
                         }
                         else
                             builder.add(*dst, std::get<Reg16>(src));
@@ -926,7 +932,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         }
 
                         if(std::holds_alternative<uint8_t>(src))
-                            builder.add(*dst, std::get<uint8_t>(src));
+                        {
+                            if(std::get<uint8_t>(src) == 1 && !(instr.flags & flagWriteMask(SourceFlagType::Carry)))
+                                builder.inc(*dst);
+                            else
+                                builder.add(*dst, std::get<uint8_t>(src));
+                        }
                         else
                         {
                             std::optional<Reg8> regSrc = std::get<Reg8>(src);
@@ -1235,11 +1246,19 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
                     else
                     {
-                        auto src = checkReg16(instr.src[1]); // TODO: imm
+                        auto src = checkRegOrImm16(instr.src[1]);
                         auto dst = checkReg16(instr.dst[0]);
 
-                        if(src && dst)
-                            builder.sub(*dst, *src);
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint16_t>(src))
+                            {
+                                assert(std::get<uint16_t>(src) == 1); // should be DEC
+                                builder.dec(*dst);
+                            }
+                            else
+                                builder.sub(*dst, std::get<Reg16>(src));
+                        }
                     }
                 }
                 else if(regSize == 8)
@@ -1285,7 +1304,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         }
 
                         if(std::holds_alternative<uint8_t>(src))
-                            builder.sub(*dst, std::get<uint8_t>(src));
+                        {
+                            if(std::get<uint8_t>(src) == 1 && !(instr.flags & flagWriteMask(SourceFlagType::Carry)))
+                                builder.dec(*dst);
+                            else
+                                builder.sub(*dst, std::get<uint8_t>(src));
+                        }
                         else
                         {
                             std::optional<Reg8> regSrc = std::get<Reg8>(src);
