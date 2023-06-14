@@ -269,8 +269,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     };
 
     // load/store helpers
-    auto setupMemAddr = [this, &builder, &syncCyclesExecuted](std::variant<Reg16, uint16_t> addr)
+    auto setupMemAddr = [this, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg16, uint16_t> addr)
     {
+        assert(addr.index()); // caller should have checked checkRegOrImm result
+
         //FIXME: DMG specific "should sync" logic
         if(std::holds_alternative<Reg16>(addr))
         {
@@ -291,7 +293,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         }
     };
 
-    auto readMem = [this, &builder, &setupMemAddr](std::variant<Reg16, uint16_t> addr, Reg8 dstReg)
+    auto readMem = [this, &builder, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, Reg8 dstReg)
     {
         // can skip push/pop if we don't need AX/CX/DX
         if(!std::holds_alternative<Reg16>(addr) || !isCallSaved(std::get<Reg16>(addr)))
@@ -309,8 +311,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         callRestore(builder, dstReg);
     };
 
-    auto writeMem = [this, &builder, &setupMemAddr](std::variant<Reg16, uint16_t> addr, std::variant<Reg8, uint8_t> data)
+    auto writeMem = [this, &builder, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, std::variant<std::monostate, Reg8, uint8_t> data)
     {
+        assert(data.index());
+
         // can skip push/pop if we don't need AX/CX/DX
         bool noPopAddr = !std::holds_alternative<Reg16>(addr) || !isCallSaved(std::get<Reg16>(addr));
         bool noPopData = !std::holds_alternative<Reg8>(data) || std::get<Reg8>(data) == Reg8::BL || std::get<Reg8>(data) == Reg8::BH;
@@ -739,22 +743,33 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     }
                     else
                     {
-                        auto src = checkReg32(instr.src[0]);
+                        auto src = checkRegOrImm32(instr.src[0]);
 
-                        if(src && dst)
-                            builder.mov(*dst, *src);
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                                builder.mov(*dst, std::get<uint32_t>(src));
+                            else
+                                builder.mov(*dst, std::get<Reg32>(src));
+                        }
                     }
                 }
                 else if(regSize == 8)
                 {
-                    auto src = checkReg8(instr.src[0]);
+                    auto src = checkRegOrImm8(instr.src[0]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src && dst)
+                    if(src.index() && dst)
                     {
-                        auto swapReg = maybeSwapHReg(src, dst);
-                        builder.mov(*dst, *src);
-                        unswapReg(swapReg);
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.mov(*dst, std::get<uint8_t>(src));
+                        else
+                        {
+                            std::optional<Reg8> regSrc = std::get<Reg8>(src);
+                            auto swapReg = maybeSwapHReg(regSrc, dst);
+                            builder.mov(*dst, *regSrc);
+                            unswapReg(swapReg);
+                        }
                     }
                 }
                 else
@@ -770,11 +785,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(addrSize == 16)
                 {
-                    auto addr = checkReg16(instr.src[0]);
+                    auto addr = checkRegOrImm16(instr.src[0]);
                     auto dst = checkReg8(instr.dst[0]);
-                    if(addr && dst)
+                    if(addr.index() && dst)
                     {
-                        readMem(*addr, *dst);
+                        readMem(addr, *dst);
 
                         // zero-extend if not 8 bit dest (a temp)
                         // TODO: merge with the mov in callRestore
@@ -795,10 +810,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 if(addrSize == 16)
                 {
-                    auto addr = checkReg16(instr.src[0]);
-                    auto data = checkReg8(instr.src[1]);
-                    if(addr && data)
-                        writeMem(*addr, *data);
+                    auto addr = checkRegOrImm16(instr.src[0]);
+                    auto data = checkRegOrImm8(instr.src[1]);
+                    if(addr.index() && data.index())
+                        writeMem(addr, data);
                 }
                 else
                     badRegSize(addrSize);
