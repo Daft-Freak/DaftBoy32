@@ -45,6 +45,11 @@ static bool isCallSaved(Reg16 reg)
     return reg == Reg16::AX || reg == Reg16::CX || reg == Reg16::DX || reg == Reg16::DI;
 }
 
+static bool isCallSaved(Reg8 reg)
+{
+    return reg == Reg8::AL || reg == Reg8::CL || reg == Reg8::DL || reg == Reg8::AH || reg == Reg8::CH || reg == Reg8::DH || reg == Reg8::DIL;
+}
+
 static void callSave(X86Builder &builder)
 {
     builder.push(Reg64::RAX);
@@ -52,32 +57,6 @@ static void callSave(X86Builder &builder)
     builder.push(Reg64::RDX);
     builder.push(Reg64::RDI);
     // builder.sub(Reg64::RSP, 8); // align stack
-
-#ifdef _WIN32
-    builder.sub(Reg64::RSP, 32); // shadow space
-#endif
-}
-
-static void callSaveOrSkip(X86Builder &builder)
-{
-    auto tmpPtr = builder.getPtr() - 4;
-
-    // skip pop/push if we just popped
-    // only safe if values from RAX, RCX, RDX, RDI are not moved to args
-    if(tmpPtr[0] == 0x5F/*pop rdi*/ && tmpPtr[1] == 0x5A/*pop rdx*/ && tmpPtr[2] == 0x59/*pop rcx*/ && tmpPtr[3] == 0x58/*pop rax*/)
-        builder.resetPtr(tmpPtr);
-    else if(tmpPtr[1] == 0x5A/*pop rdx*/ && tmpPtr[2] == 0x59/*pop rcx*/ && tmpPtr[3] == 0x58/*pop rax*/)
-    {
-        // skip 3/4 of the pops
-        // (should be after a writeMem)
-        builder.resetPtr(tmpPtr + 1);
-        builder.push(Reg64::RDI);
-    }
-    else
-    {
-        callSave(builder);
-        return;
-    }
 
 #ifdef _WIN32
     builder.sub(Reg64::RSP, 32); // shadow space
@@ -115,22 +94,13 @@ static void callRestore(X86Builder &builder, Reg32 dstReg)
     builder.pop(Reg64::RAX);
 }
 
-static void callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend = false)
+static void callRestore(X86Builder &builder, Reg8 dstReg)
 {
     assert(dstReg != Reg8::DIL); // no
 
-    // move before popping if possible
-    bool isPoppedReg = dstReg == Reg8::AL || dstReg == Reg8::CL || dstReg == Reg8::DL || dstReg == Reg8::AH || dstReg == Reg8::CH || dstReg == Reg8::DH;
+    bool isPoppedReg = isCallSaved(dstReg);
 
-    assert(!isPoppedReg || !zeroExtend);
-
-    if(!isPoppedReg)
-    {
-        if(zeroExtend)
-            builder.movzx(static_cast<Reg32>(dstReg), Reg8::AL);
-        else
-            builder.mov(dstReg, Reg8::AL);
-    }
+    assert(isPoppedReg);
 
 #ifdef _WIN32
     builder.add(Reg64::RSP, 32); // shadow space
@@ -142,7 +112,7 @@ static void callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend = fals
     builder.pop(Reg64::RCX);
 
     // mov ret val (if not going to RAX)
-    if(isPoppedReg && dstReg != Reg8::AL && dstReg != Reg8::AH)
+    if(dstReg != Reg8::AL && dstReg != Reg8::AH)
     {
         builder.mov(dstReg, Reg8::AL);
         builder.pop(Reg64::RAX);
@@ -161,8 +131,53 @@ static void callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend = fals
         builder.movzx(Reg32::EAX, Reg8::AL);
         builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
     }
-    else // we already did it
-        builder.pop(Reg64::RAX);
+}
+
+static void callSaveIfNeeded(X86Builder &builder, bool &saveFlag)
+{
+    if(saveFlag)
+        return;
+
+    callSave(builder);
+
+    saveFlag = true;
+}
+
+static void callRestoreIfNeeded(X86Builder &builder, bool &saveFlag)
+{
+    if(!saveFlag)
+        return;
+
+    callRestore(builder);
+    saveFlag = false;
+}
+
+// restore if it would affect this register
+// takes a variant so it can be passed the result of checkRegOrImm
+static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, bool &saveFlag)
+{
+    if(!saveFlag)
+        return;
+
+    if(!std::holds_alternative<Reg8>(val) || !isCallSaved(std::get<Reg8>(val)))
+        return;
+
+    callRestore(builder);
+
+    saveFlag = false;
+}
+
+static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, bool &saveFlag)
+{
+    if(!saveFlag)
+        return;
+
+    if(!std::holds_alternative<Reg16>(val) || !isCallSaved(std::get<Reg16>(val)))
+        return;
+
+    callRestore(builder);
+
+    saveFlag = false;
 }
 
 void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
@@ -226,6 +241,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     uint8_t *lastInstrCycleCheck = nullptr;
     std::map<uint16_t, uint8_t *> branchTargets;
     std::multimap<uint16_t, uint8_t *> forwardBranchesToPatch;
+    bool needCallRestore = false;
 
     // FIXME: DMG specific
     bool inHRAM = pc >= 0xFF00;
@@ -234,7 +250,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     int cyclesThisInstr = 0;
     int delayedCyclesExecuted = 0;
 
-    auto cycleExecuted = [this, &builder, inHRAM, &cyclesThisInstr, &delayedCyclesExecuted]()
+    auto cycleExecuted = [this, &builder, &needCallRestore, inHRAM, &cyclesThisInstr, &delayedCyclesExecuted]()
     {
         cyclesThisInstr += 4;
 
@@ -249,14 +265,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
         // FIXME: handle not having a cycleExecuted (AGBRecompiler)
 
-        // safe to skip here as we take no args
-        callSaveOrSkip(builder);
+        callSaveIfNeeded(builder, needCallRestore);
 
         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.cycleExecuted)); // function ptr
         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
-
-        callRestore(builder);
     };
 
     auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted]()
@@ -300,13 +313,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         }
     };
 
-    auto readMem = [this, &builder, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, Reg8 dstReg, bool zeroExtend)
+    auto readMem = [this, &builder, &needCallRestore, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, Reg8 dstReg, bool zeroExtend)
     {
-        // can skip push/pop if we don't need AX/CX/DX
-        if(!std::holds_alternative<Reg16>(addr) || !isCallSaved(std::get<Reg16>(addr)))
-            callSaveOrSkip(builder);
-        else
-            callSave(builder);
+        // maybe push
+        callSaveIfNeeded(builder, needCallRestore);
 
         setupMemAddr(addr);
 
@@ -315,21 +325,23 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
         builder.call(Reg64::RAX); // do call
 
-        callRestore(builder, dstReg, zeroExtend);
+        if(isCallSaved(dstReg))
+        {
+            callRestore(builder, dstReg);
+            needCallRestore = false;
+        }
+        else if(zeroExtend)
+            builder.movzx(static_cast<Reg32>(dstReg), Reg8::AL);
+        else
+            builder.mov(dstReg, Reg8::AL);
     };
 
-    auto writeMem = [this, &builder, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, std::variant<std::monostate, Reg8, uint8_t> data)
+    auto writeMem = [this, &builder, &needCallRestore, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, std::variant<std::monostate, Reg8, uint8_t> data)
     {
         assert(data.index());
 
-        // can skip push/pop if we don't need AX/CX/DX
-        bool noPopAddr = !std::holds_alternative<Reg16>(addr) || !isCallSaved(std::get<Reg16>(addr));
-        bool noPopData = !std::holds_alternative<Reg8>(data) || std::get<Reg8>(data) == Reg8::BL || std::get<Reg8>(data) == Reg8::BH;
-
-        if(noPopAddr && noPopData)
-            callSaveOrSkip(builder);
-        else
-            callSave(builder);
+        callRestoreIfNeeded(builder, needCallRestore); // TODO: cycle count in EDI
+        callSaveIfNeeded(builder, needCallRestore);
 
 #ifndef _WIN32
         // setup addr first (data writes DX)
@@ -363,20 +375,23 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
 
-        callRestore(builder, Reg32::EDI);
+        callRestore(builder, Reg32::EDI); // hmm
+        needCallRestore = false;
     };
 
     // neededFlags is what we need to output
     // updateFlags is what we can output from the result
     // oneFlags is is what is alwyas set to 1
     // hasPreservedFlags is set if some flags were preserved (we can't write flags directly here)
-    const auto setFlags = [this, &builder](std::optional<Reg8> result, uint8_t &neededFlags, uint8_t updateFlags, uint8_t oneFlags = 0, bool hasPreservedFlags = false, bool isRotate = false)
+    const auto setFlags = [this, &builder, &needCallRestore](std::optional<Reg8> result, uint8_t &neededFlags, uint8_t updateFlags, uint8_t oneFlags = 0, bool hasPreservedFlags = false, bool isRotate = false)
     {
         if(!flagsReg)
             return;
 
         // FIXME: assuming 8bit flags reg
         auto f = *mapReg8(flagsReg);
+
+        callRestoreIfNeeded(builder, f, needCallRestore);
 
         updateFlags &= neededFlags;  // mask out unneeded
 
@@ -552,7 +567,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         bool err = false;
 
         // validating wrappers
-        auto checkReg32 = [this, &err, &instr](uint8_t index)
+        auto checkReg32 = [this, &builder, &needCallRestore, &err, &instr](uint8_t index)
         {
             auto reg = mapReg32(index);
             if(!reg)
@@ -561,11 +576,13 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 printf("unhandled reg %s in op %i\n", sourceInfo.registers[index].label, int(instr.opcode));
                 err = true;
             }
+            else
+                callRestoreIfNeeded(builder, static_cast<Reg16>(*reg), needCallRestore);
 
             return reg;
         };
 
-        auto checkReg16 = [this, &err, &instr](uint8_t index)
+        auto checkReg16 = [this, &builder, &needCallRestore, &err, &instr](uint8_t index)
         {
             auto reg = mapReg16(index);
             if(!reg)
@@ -574,11 +591,13 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 printf("unhandled reg %s in op %i\n", sourceInfo.registers[index].label, int(instr.opcode));
                 err = true;
             }
+            else
+                callRestoreIfNeeded(builder, *reg, needCallRestore);
 
             return reg;
         };
 
-        auto checkReg8 = [this, &err, &instr](uint8_t index)
+        auto checkReg8 = [this, &builder, &needCallRestore, &err, &instr](uint8_t index)
         {
             auto reg = mapReg8(index);
             if(!reg)
@@ -587,6 +606,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 printf("unhandled reg %s in op %i\n", sourceInfo.registers[index].label, int(instr.opcode));
                 err = true;
             }
+            else
+                callRestoreIfNeeded(builder, *reg, needCallRestore);
 
             return reg;
         };
@@ -1953,6 +1974,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     auto src = checkRegOrImm16(instr.src[1]);
                     if(src.index())
                     {
+                        callRestoreIfNeeded(builder, needCallRestore);
+
                         assert(isExit || std::holds_alternative<uint16_t>(src)); // shouldn't be any non-exit jumps with unknown addr
 
                         uint8_t *branchPtr = nullptr;
@@ -1984,6 +2007,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             assert(instrCycles == 0);
                         }
                         syncCyclesExecuted();
+
+                        callRestoreIfNeeded(builder, needCallRestore); // we might have just done another cycleExecuted call
 
                         // set pc if we're exiting
                         if(isExit)
@@ -2168,7 +2193,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         newEmuOp = instr.len != 0;
 
         if(newEmuOp)
+        {
+            callRestoreIfNeeded(builder, needCallRestore);
             syncCyclesExecuted();
+        }
 
         // check cycle count if this is the last part of en emulated op
         // ... but not on the last op, that should always exit anyway
