@@ -855,19 +855,25 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 checkSingleSource();
 
-                uint8_t preserveMask = translatePreserveMask();
-                auto f = checkReg8(flagsReg);
+                uint8_t preserveMask = 0;
+                std::optional<Reg8> f;
 
-                // preserve flags
-                if(preserveMask && (instr.flags & GenOp_WriteFlags) && f)
-                    builder.and_(*f, preserveMask);
+                if(instr.flags & GenOp_WriteFlags)
+                {
+                    preserveMask = translatePreserveMask();
+                    f = checkReg8(flagsReg);
+
+                    // preserve flags
+                    if(preserveMask && f)
+                        builder.and_(*f, preserveMask);
+                }
 
                 if(regSize == 16)
                 {
                     auto src = checkRegOrImm16(instr.src[1]);
                     auto dst = checkReg16(instr.dst[0]);
                     
-                    if(src.index() && dst && f)
+                    if(src.index() && dst)
                     {
                         // calc half carry
                         if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
@@ -922,7 +928,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src.index() && dst && f)
+                    if(src.index() && dst)
                     {
                         auto origDst = *dst;
 
@@ -1260,12 +1266,18 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 checkSingleSource();
 
-                uint8_t preserveMask = translatePreserveMask();
-                auto f = checkReg8(flagsReg);
+                uint8_t preserveMask = 0;
+                std::optional<Reg8> f;
 
-                // preserve flags
-                if(preserveMask && (instr.flags & GenOp_WriteFlags) && f)
-                    builder.and_(*f, preserveMask);
+                if(instr.flags & GenOp_WriteFlags)
+                {
+                    preserveMask = translatePreserveMask();
+                    f = checkReg8(flagsReg);
+
+                    // preserve flags
+                    if(preserveMask && f)
+                        builder.and_(*f, preserveMask);
+                }
 
                 if(regSize == 16)
                 {
@@ -1294,7 +1306,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(src.index() && dst && f)
+                    if(src.index() && dst)
                     {
                         auto origDst = *dst;
 
