@@ -1990,7 +1990,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         {
                             if(std::holds_alternative<uint16_t>(src))
                                 builder.mov(pcReg32, std::get<uint16_t>(src));
-                            else
+                            else if(std::get<Reg16>(src) != pcReg16)
                                 builder.movzx(pcReg32, std::get<Reg16>(src));
                         }
                         else // or sub cycles early (we jump past the usual code that does this)
