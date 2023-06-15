@@ -131,6 +131,10 @@ struct SourceInfo
     uint8_t pcSize;
     uint16_t pcOffset;
 
+    int extraCPUOffsets[5]; // source specific ops
+
+    bool (*shouldSyncForAddress)(uint16_t addr); // return true to sync cycle count before accessing this address
+
     // emulator interface
     bool *exitCallFlag;
     uint8_t **savedExitPtr;
@@ -140,6 +144,4 @@ struct SourceInfo
 
     uint8_t (*readMem)(void *cpu, uint16_t addr);
     int (*writeMem)(void *cpu, uint16_t addr, uint8_t data, int cyclesToRun);
-
-    int extraCPUOffsets[5]; // source specific ops
 };
