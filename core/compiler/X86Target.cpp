@@ -244,22 +244,18 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     std::multimap<uint16_t, uint8_t *> forwardBranchesToPatch;
     int needCallRestore = 0;
 
-    // FIXME: DMG specific
-    bool inHRAM = pc >= 0xFF00;
 
     // cycle executed sync
     int cyclesThisInstr = 0;
     int delayedCyclesExecuted = 0;
 
-    auto cycleExecuted = [this, &builder, &needCallRestore, inHRAM, &cyclesThisInstr, &delayedCyclesExecuted]()
+    auto cycleExecuted = [this, &builder, &needCallRestore, &blockInfo, &cyclesThisInstr, &delayedCyclesExecuted]()
     {
         cyclesThisInstr += 4;
 
-        // FIXME: DMG specific
-        if(!inHRAM)
+        if(!(blockInfo.flags & GenBlock_StrictSync))
         {
-            // since we refuse to compile when OAM DMA is active we can just inline cycleExecuted (-updateOAMDMA) when not running from HRAM
-            // ...and we can also do it slightly later
+            // delay/inline cycle updates if possible
             delayedCyclesExecuted += 4;
             return;
         }
