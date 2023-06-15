@@ -94,9 +94,11 @@ bool DMGRecompilerGeneric::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bl
 
     bool success = convertToGeneric(pc, blockInfo, genBlock);
 
+#ifdef RECOMPILER_DEBUG
     printf("gen block (%s):\n", success ? "success" : "failed");
     printBlock(pc, genBlock);
     printf("\n\n");
+#endif
 
     if(success && target.compile(codePtr, codeBuf + codeBufSize, pc, genBlock))
         return true;
