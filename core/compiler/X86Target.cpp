@@ -730,18 +730,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
             err = true;
         };
 
-        auto translatePreserveMask = [this, &instr]()
-        {
-            uint8_t ret = 0;
-            for(int i = 0; i < 4; i++)
-            {
-                if(instr.flags & (1 << i))
-                    ret |= 1 << sourceInfo.flags[i].bit;
-            }
-
-            return ret;
-        };
-
         // helpers to deal with restrictions
         auto maybeSwapHReg = [&builder](std::optional<Reg8> &src, std::optional<Reg8> &dst)
         {
@@ -776,6 +764,26 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 err = true;
             }
         };
+
+        // preserve flags
+        // needs to be after the reg helpers
+        uint8_t preserveMask = 0;
+
+        if((instr.flags & GenOp_WriteFlags) && (instr.flags & GenOp_PreserveFlags))
+        {
+            preserveMask = 0;
+            for(int i = 0; i < 4; i++)
+            {
+                if(instr.flags & (1 << i))
+                    preserveMask |= 1 << sourceInfo.flags[i].bit;
+            }
+
+            auto f = checkReg8(flagsReg); // TODO: assumes 8-bit flags
+
+            // preserve flags
+            if(f)
+                builder.and_(*f, preserveMask);
+        }
 
         switch(instr.opcode)
         {
@@ -890,19 +898,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 checkSingleSource();
 
-                uint8_t preserveMask = 0;
-                std::optional<Reg8> f;
-
-                if(instr.flags & GenOp_WriteFlags)
-                {
-                    preserveMask = translatePreserveMask();
-                    f = checkReg8(flagsReg);
-
-                    // preserve flags
-                    if(preserveMask && f)
-                        builder.and_(*f, preserveMask);
-                }
-
                 if(regSize == 16)
                 {
                     auto src = checkRegOrImm16(instr.src[1]);
@@ -955,7 +950,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         setFlags({}, flags, flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
 
                         if(flags & flagWriteMask(SourceFlagType::HalfCarry))
-                            builder.or_(*f, Reg8::SIL);
+                            builder.or_(*mapReg8(flagsReg), Reg8::SIL);
                     }
                 }
                 else if(regSize == 8)
@@ -1028,7 +1023,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         setFlags(origDst, flags, (setZ ? flagWriteMask(SourceFlagType::Zero) : 0) | flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
 
                         if(flags & flagWriteMask(SourceFlagType::HalfCarry))
-                            builder.or_(*f, Reg8::SIL);
+                            builder.or_(*mapReg8(flagsReg), Reg8::SIL);
                     }
                 }
                 else
@@ -1137,16 +1132,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                     if(src.index() && dst)
                     {
-                        // preserve flags (BIT)
-                        uint8_t preserveMask = 0;
-                        if((instr.flags & GenOp_PreserveFlags) && (instr.flags & GenOp_WriteFlags))
-                        {
-                            preserveMask = translatePreserveMask();
-                            auto f = checkReg8(flagsReg);
-                            if(f)
-                                builder.and_(*f, preserveMask);
-                        }
-
                         if(std::holds_alternative<uint8_t>(src))
                             builder.and_(*dst, std::get<uint8_t>(src));
                         else
@@ -1309,19 +1294,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                 checkSingleSource();
 
-                uint8_t preserveMask = 0;
-                std::optional<Reg8> f;
-
-                if(instr.flags & GenOp_WriteFlags)
-                {
-                    preserveMask = translatePreserveMask();
-                    f = checkReg8(flagsReg);
-
-                    // preserve flags
-                    if(preserveMask && f)
-                        builder.and_(*f, preserveMask);
-                }
-
                 if(regSize == 16)
                 {
                     // should be DEC, which sets no flags
@@ -1414,7 +1386,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         setFlags(origDst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub), preserveMask);
 
                         if(flags & flagWriteMask(SourceFlagType::HalfCarry))
-                            builder.or_(*f, Reg8::SIL);
+                            builder.or_(*mapReg8(flagsReg), Reg8::SIL);
                     }
                 }
                 else
@@ -1555,16 +1527,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 {
                     if(auto dst = checkReg8(instr.dst[0]))
                     {
-                        // preserve flags
-                        auto f = checkReg8(flagsReg);
-                        if((instr.flags & GenOp_PreserveFlags) && (instr.flags & GenOp_WriteFlags) && f)
-                            builder.and_(*f, translatePreserveMask());
-
                         builder.not_(*dst);
 
                         // flags (sets H and N to 1)
-                        if((instr.flags & GenOp_WriteFlags) && f)
-                            builder.or_(*f, (1 << getFlagInfo(SourceFlagType::HalfCarry).bit) | (1 << getFlagInfo(SourceFlagType::WasSub).bit));
+                        if((instr.flags & GenOp_WriteFlags))
+                            builder.or_(*mapReg8(flagsReg), (1 << getFlagInfo(SourceFlagType::HalfCarry).bit) | (1 << getFlagInfo(SourceFlagType::WasSub).bit));
                     }
                 }
                 else
