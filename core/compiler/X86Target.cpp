@@ -20,6 +20,8 @@ static const Reg64 argumentRegs64[]{Reg64::RDI, Reg64::RSI, Reg64::RDX, Reg64::R
 static const Reg32 argumentRegs32[]{Reg32::EDI, Reg32::ESI, Reg32::EDX, Reg32::ECX};
 #endif
 
+static const Reg64 callSavedRegs[]{Reg64::RAX, Reg64::RCX, Reg64::RDX, Reg64::RDI};
+
 static bool isXHReg(Reg8 reg)
 {
     return static_cast<int>(reg) >= 4 && static_cast<int>(reg) < 8;
@@ -42,7 +44,13 @@ static Reg8 swapRegHalf(Reg8 reg)
 // FIXME: DMG specific bits
 static bool isCallSaved(Reg16 reg)
 {
-    return reg == Reg16::AX || reg == Reg16::CX || reg == Reg16::DX || reg == Reg16::DI;
+    for(auto r : callSavedRegs)
+    {
+        if(reg == static_cast<Reg16>(r))
+            return true;
+    }
+
+    return false;
 }
 
 static bool isCallSaved(Reg8 reg)
@@ -50,48 +58,30 @@ static bool isCallSaved(Reg8 reg)
     return reg == Reg8::AL || reg == Reg8::CL || reg == Reg8::DL || reg == Reg8::AH || reg == Reg8::CH || reg == Reg8::DH || reg == Reg8::DIL;
 }
 
-static void callSave(X86Builder &builder)
+static int callSaveIndex(Reg16 reg)
 {
-    builder.push(Reg64::RAX);
-    builder.push(Reg64::RCX);
-    builder.push(Reg64::RDX);
-    builder.push(Reg64::RDI);
-    // builder.sub(Reg64::RSP, 8); // align stack
-
-#ifdef _WIN32
-    builder.sub(Reg64::RSP, 32); // shadow space
-#endif
+    for(size_t i = 0; i < std::size(callSavedRegs); i++)
+    {
+        if(reg == static_cast<Reg16>(callSavedRegs[i]))
+            return static_cast<int>(i);
+    }
+    
+    return -1;
 }
 
-static void callRestore(X86Builder &builder)
+static void callRestore(X86Builder &builder, int saveState, int toIndex)
 {
-#ifdef _WIN32
-    builder.add(Reg64::RSP, 32); // shadow space
-#endif
+    int numRegs = static_cast<int>(std::size(callSavedRegs));
 
-    // builder.add(Reg64::RSP, 8); // alignment
-    builder.pop(Reg64::RDI);
-    builder.pop(Reg64::RDX);
-    builder.pop(Reg64::RCX);
-    builder.pop(Reg64::RAX);
-}
-
-static void callRestore(X86Builder &builder, Reg32 dstReg)
-{
-    // mov ret val (this is never used for the emulated regs)
-    assert(dstReg != Reg32::EAX && dstReg != Reg32::EDX && dstReg != Reg32::ECX);
-
-    builder.mov(dstReg, Reg32::EAX);
+    assert(toIndex < numRegs);
 
 #ifdef _WIN32
-    builder.add(Reg64::RSP, 32); // shadow space
+    if(saveState == numRegs)
+        builder.add(Reg64::RSP, 32); // shadow space
 #endif
 
-    // builder.add(Reg64::RSP, 8); // alignment
-    builder.pop(dstReg == Reg32::EDI ? Reg64::RSI : Reg64::RDI); // use RSI to pop the unneeded value
-    builder.pop(Reg64::RDX);
-    builder.pop(Reg64::RCX);
-    builder.pop(Reg64::RAX);
+    for(int i = saveState - 1; i >= toIndex; i--)
+        builder.pop(callSavedRegs[i]);
 }
 
 static void callRestore(X86Builder &builder, Reg8 dstReg)
@@ -133,51 +123,62 @@ static void callRestore(X86Builder &builder, Reg8 dstReg)
     }
 }
 
-static void callSaveIfNeeded(X86Builder &builder, bool &saveFlag)
+static void callSaveIfNeeded(X86Builder &builder, int &saveState)
 {
-    if(saveFlag)
+    int numRegs = static_cast<int>(std::size(callSavedRegs));
+
+    if(saveState == numRegs)
         return;
 
-    callSave(builder);
+    for(int i = saveState; i < numRegs; i++)
+        builder.push(callSavedRegs[i]);
 
-    saveFlag = true;
+    // builder.sub(Reg64::RSP, 8); // align stack
+
+#ifdef _WIN32
+    builder.sub(Reg64::RSP, 32); // shadow space
+#endif
+
+    saveState = numRegs;
 }
 
-static void callRestoreIfNeeded(X86Builder &builder, bool &saveFlag)
+static void callRestoreIfNeeded(X86Builder &builder, int &saveState)
 {
-    if(!saveFlag)
+    if(!saveState)
         return;
 
-    callRestore(builder);
-    saveFlag = false;
+    callRestore(builder, saveState, 0);
+    saveState = 0;
 }
 
 // restore if it would affect this register
 // takes a variant so it can be passed the result of checkRegOrImm
-static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, bool &saveFlag)
+static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, int &saveState)
 {
-    if(!saveFlag)
+    if(!saveState)
         return;
 
     if(!std::holds_alternative<Reg8>(val) || !isCallSaved(std::get<Reg8>(val)))
         return;
 
-    callRestore(builder);
+    callRestore(builder, saveState, 0);
 
-    saveFlag = false;
+    saveState = 0;
 }
 
-static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, bool &saveFlag)
+static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, int &saveState)
 {
-    if(!saveFlag)
+    if(!saveState)
         return;
 
     if(!std::holds_alternative<Reg16>(val) || !isCallSaved(std::get<Reg16>(val)))
         return;
 
-    callRestore(builder);
+    auto index = callSaveIndex(std::get<Reg16>(val));
 
-    saveFlag = false;
+    callRestore(builder, saveState, index);
+
+    saveState = index;
 }
 
 void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
@@ -241,7 +242,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     uint8_t *lastInstrCycleCheck = nullptr;
     std::map<uint16_t, uint8_t *> branchTargets;
     std::multimap<uint16_t, uint8_t *> forwardBranchesToPatch;
-    bool needCallRestore = false;
+    int needCallRestore = 0;
 
     // FIXME: DMG specific
     bool inHRAM = pc >= 0xFF00;
@@ -328,7 +329,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         if(isCallSaved(dstReg))
         {
             callRestore(builder, dstReg);
-            needCallRestore = false;
+            needCallRestore = 0;
         }
         else if(zeroExtend)
             builder.movzx(static_cast<Reg32>(dstReg), Reg8::AL);
@@ -340,7 +341,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     {
         assert(data.index());
 
-        callRestoreIfNeeded(builder, needCallRestore); // TODO: cycle count in EDI
+        callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
         callSaveIfNeeded(builder, needCallRestore);
 
 #ifndef _WIN32
@@ -375,8 +376,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
         builder.call(Reg64::RAX); // do call
 
-        callRestore(builder, Reg32::EDI); // hmm
-        needCallRestore = false;
+        // just pop EDI... then overrwrite it
+        callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
+        builder.mov(Reg32::EDI, Reg32::EAX);
     };
 
     // neededFlags is what we need to output
