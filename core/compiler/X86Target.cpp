@@ -69,6 +69,25 @@ static int callSaveIndex(Reg16 reg)
     return -1;
 }
 
+static int callSaveIndex(Reg8 reg)
+{
+    Reg16 mappedReg = static_cast<Reg16>(reg);
+    auto iReg = static_cast<int>(reg);
+
+    if(iReg >= 16) // SPL/BPL/SIL/DIL
+        mappedReg = static_cast<Reg16>(iReg - 16);
+    else if(isXHReg(reg))
+        mappedReg = static_cast<Reg16>(iReg - 4);
+
+    for(size_t i = 0; i < std::size(callSavedRegs); i++)
+    {
+        if(mappedReg == static_cast<Reg16>(callSavedRegs[i]))
+            return static_cast<int>(i);
+    }
+    
+    return -1;
+}
+
 static void callRestore(X86Builder &builder, int saveState, int toIndex)
 {
     int numRegs = static_cast<int>(std::size(callSavedRegs));
@@ -156,14 +175,19 @@ static void callRestoreIfNeeded(X86Builder &builder, int &saveState)
 static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, int &saveState)
 {
     if(!saveState)
-        return;
+        return; // nothing saved
 
     if(!std::holds_alternative<Reg8>(val) || !isCallSaved(std::get<Reg8>(val)))
-        return;
+        return; // not a register
 
-    callRestore(builder, saveState, 0);
+    auto index = callSaveIndex(std::get<Reg8>(val));
 
-    saveState = 0;
+    if(saveState < index)
+        return; // already restored
+
+    callRestore(builder, saveState, index);
+
+    saveState = index;
 }
 
 static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, int &saveState)
@@ -175,6 +199,9 @@ static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate
         return;
 
     auto index = callSaveIndex(std::get<Reg16>(val));
+
+    if(saveState < index)
+        return;
 
     callRestore(builder, saveState, index);
 
