@@ -946,26 +946,33 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             assert(*dst != Reg8::AL);
                             builder.push(Reg64::RAX);
 
-                            if(*dst != Reg8::AH)
+                            auto halfDst = Reg8::AH;
+
+                            if(*dst != halfDst)
                             {
                                 if(requiresREX(*dst)) // INC (HL)
                                 {
-                                    builder.mov(Reg8::AL, *dst);
-                                    builder.mov(Reg8::AH, Reg8::AL);
+                                    assert(std::holds_alternative<uint8_t>(src));
+                                    // use the other half, we don't need it
+                                    halfDst = Reg8::AL;
                                 }
-                                else
-                                    builder.mov(Reg8::AH, *dst);
+
+                                builder.mov(halfDst, *dst);
                             }
 
                             if(std::holds_alternative<uint8_t>(src))
-                                builder.mov(Reg8::AL, std::get<uint8_t>(src));
+                            {
+                                builder.and_(halfDst, 0xF); // mask
+                                builder.cmp(halfDst, 0xF - (std::get<uint8_t>(src) & 0xF));
+                            }
                             else
+                            {
                                 builder.mov(Reg8::AL, std::get<Reg8>(src));
+                                builder.and_(Reg32::EAX, 0x0F0F); // mask both
 
-                            builder.and_(Reg32::EAX, 0x0F0F); // mask both
-
-                            builder.add(Reg8::AH, Reg8::AL);
-                            builder.cmp(Reg8::AH, 0xF);
+                                builder.add(halfDst, Reg8::AL);
+                                builder.cmp(halfDst, 0xF);
+                            }
 
                             builder.pop(Reg64::RAX);
 
@@ -1154,29 +1161,33 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         if(instr.flags & hMask)
                         {
                             // half cmp
-                            // this makes a lot of assumptions, but is only used for DMG anyway
+                            assert(*dst != Reg8::AL);
+                            builder.push(Reg64::RAX);
+
+                            auto halfDst = Reg8::AH;
+
+                            if(*dst != halfDst)
+                                builder.mov(halfDst, *dst);
+
                             if(std::holds_alternative<uint8_t>(src))
-                                builder.mov(Reg8::SIL, std::get<uint8_t>(src) & 0xF);
+                            {
+                                builder.and_(halfDst, 0xF); // mask
+
+                                builder.cmp(halfDst, std::get<uint8_t>(src) & 0xF);
+                            }
                             else
                             {
-                                auto regSrc = std::get<Reg8>(src);
+                                builder.mov(Reg8::AL, std::get<Reg8>(src));
 
-                                if(isXHReg(regSrc))
-                                {
-                                    builder.mov(*f, regSrc);
-                                    builder.mov(Reg8::SIL, *f);
-                                }
-                                else
-                                    builder.mov(Reg8::SIL, regSrc);
+                                builder.and_(Reg32::EAX, 0x0F0F); // mask both
+
+                                builder.cmp(halfDst, Reg8::AL);
                             }
 
-                            builder.mov(*f, *dst);
+                            builder.pop(Reg64::RAX);
 
-                            builder.and_(*f, 0xF);
-                            builder.and_(Reg8::SIL, 0xF);
-
-                            builder.cmp(*f, Reg8::SIL);
-                            builder.setcc(Condition::B, Reg8::SIL);
+                            builder.setcc(Condition::L, Reg8::SIL);
+                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
                         }
 
                         if(std::holds_alternative<uint8_t>(src))
@@ -1198,10 +1209,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                         // half carry
                         if(flags & flagWriteMask(SourceFlagType::HalfCarry))
-                        {
-                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
                             builder.or_(*f, Reg8::SIL);
-                        }
 
                         if(flags & zMask)
                         {
@@ -1324,26 +1332,34 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             assert(*dst != Reg8::AL);
                             builder.push(Reg64::RAX);
 
-                            if(*dst != Reg8::AH)
+                            auto halfDst = Reg8::AH;
+
+                            if(*dst != halfDst)
                             {
                                 if(requiresREX(*dst)) // DEC (HL)
                                 {
-                                    builder.mov(Reg8::AL, *dst);
-                                    builder.mov(Reg8::AH, Reg8::AL);
+                                    assert(std::holds_alternative<uint8_t>(src));
+                                    // use the other half, we don't need it
+                                    halfDst = Reg8::AL;
                                 }
-                                else
-                                    builder.mov(Reg8::AH, *dst);
+
+                                builder.mov(halfDst, *dst);
                             }
 
                             if(std::holds_alternative<uint8_t>(src))
-                                builder.mov(Reg8::AL, std::get<uint8_t>(src));
+                            {
+                                builder.and_(halfDst, 0xF); // mask
+
+                                builder.cmp(halfDst, std::get<uint8_t>(src) & 0xF);
+                            }
                             else
+                            {
                                 builder.mov(Reg8::AL, std::get<Reg8>(src));
 
-                            builder.and_(Reg32::EAX, 0x0F0F); // mask both
+                                builder.and_(Reg32::EAX, 0x0F0F); // mask both
 
-                            builder.sub(Reg8::AH, Reg8::AL);
-                            builder.cmp(Reg8::AH, 0);
+                                builder.cmp(halfDst, Reg8::AL);
+                            }
 
                             builder.pop(Reg64::RAX);
 
