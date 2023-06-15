@@ -2217,7 +2217,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
         // check cycle count if this is the last part of en emulated op
         // ... but not on the last op, that should always exit anyway
-        if(instIt != endInstr - 1 && newEmuOp) // TODO: also safe to omit if there's an unconditional exit
+        // ... or exits unless followed by a branch target
+        auto nextInstr = instIt + 1;
+        bool shouldSkip = nextInstr == endInstr || ((instr.flags & GenOp_Exit) && !(nextInstr->flags & GenOp_BranchTarget));
+        if(newEmuOp && !shouldSkip)
         {
             // exit may be forced after interrupts are enabled
             if(forceExitAfter)
