@@ -840,6 +840,7 @@ void DMGRecompiler::analyse(uint16_t &pc, BlockInfo &blockInfo)
 
                 // collect read flags
                 read |= next->flags & Op_ReadFlags;
+                read &= (instr.flags & Op_WriteFlags) >> 4; // can't have a read for a flag we're not setting
 
                 if(next->flags & Op_Exit)
                     break; // give up
