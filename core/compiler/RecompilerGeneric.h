@@ -83,6 +83,8 @@ struct GenOpInfo
 enum GenBlockFlags
 {
     GenBlock_StrictSync = 1 << 0, // call cycleExecuted for each cycle
+
+    GenBlock_DMGSPWrite = 1 << 16, // SP is set to point at regs or unknown addr in this block
 };
 
 struct GenBlockInfo
@@ -134,6 +136,7 @@ struct SourceInfo
     int extraCPUOffsets[5]; // source specific ops
 
     bool (*shouldSyncForAddress)(uint16_t addr); // return true to sync cycle count before accessing this address
+    bool (*shouldSyncForRegIndex)(uint8_t reg, const GenBlockInfo &block);
 
     // emulator interface
     bool *exitCallFlag;
