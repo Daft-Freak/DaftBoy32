@@ -286,15 +286,26 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     };
 
     // load/store helpers
-    auto setupMemAddr = [this, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg16, uint16_t> addr)
+    auto setupMemAddr = [this, &blockInfo, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg16, uint16_t> addr)
     {
         assert(addr.index()); // caller should have checked checkRegOrImm result
 
-        //FIXME: DMG specific "should sync" logic
         if(std::holds_alternative<Reg16>(addr))
         {
-            // skip sync for stack read/write
-            //if(!isStack || spWrite) // TODO?
+            // figure out original reg index
+            // TODO: avoid this
+            uint8_t addrIndex = ~0;
+            for(auto &r : regAlloc)
+            {
+                if(static_cast<Reg16>(r.second) == std::get<Reg16>(addr))
+                {
+                    addrIndex = r.first;
+                    break;
+                }
+            }
+            assert(addrIndex != 0xFF);
+
+            if(!sourceInfo.shouldSyncForRegIndex || sourceInfo.shouldSyncForRegIndex(addrIndex, blockInfo))
                 syncCyclesExecuted();
 
             builder.movzx(argumentRegs32[1], std::get<Reg16>(addr));

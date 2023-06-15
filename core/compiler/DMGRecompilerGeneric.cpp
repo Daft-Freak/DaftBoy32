@@ -12,6 +12,13 @@ static bool shouldSyncForAddress(uint16_t addr)
     return addr >= 0xFF00 && addr < 0xFF80/*HRAM start*/ && addr != 0xFFFF/*IE*/;
 }
 
+static bool shouldSyncForRegIndex(uint8_t reg, const GenBlockInfo &block)
+{
+    // skip sync for stack read/write
+    // unless stack could be pointing somewhere silly
+    return reg != 5/*SP*/ || (block.flags & GenBlock_DMGSPWrite);
+}
+
 DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu)
 {
     SourceInfo sourceInfo;
@@ -63,7 +70,7 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu)
     sourceInfo.extraCPUOffsets[4] = reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtrInt; // HALT
 
     sourceInfo.shouldSyncForAddress = shouldSyncForAddress;
-
+    sourceInfo.shouldSyncForRegIndex = shouldSyncForRegIndex;
 
     sourceInfo.exitCallFlag = &exitCallFlag;
     sourceInfo.savedExitPtr = &tmpSavedPtr;
@@ -352,6 +359,10 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
             case 0x31: // LD SP,nn
                 addInstruction(loadImm16(instr.opcode + 1));
                 addInstruction(move(GenReg::Temp, regMap16[instr.opcode[0] >> 4]), instr.len, inFlags);
+
+                // pointing SP at regs is very evil
+                if(instr.opcode[0] == 0x31 && instr.opcode[1] < 0x80 && instr.opcode[2] == 0xFF)
+                    genBlock.flags |= GenBlock_DMGSPWrite;
                 break;
 
             case 0x02: // LD (BC),A
@@ -1204,6 +1215,7 @@ bool DMGRecompilerGeneric::convertToGeneric(uint16_t pc, BlockInfo &block, GenBl
 
             case 0xF9: // LD SP,HL
                 addInstruction(move(GenReg::HL, GenReg::SP, 2), instr.len, inFlags);
+                genBlock.flags |= GenBlock_DMGSPWrite;
                 break;
 
             case 0xFA: // LD A,(nn)
