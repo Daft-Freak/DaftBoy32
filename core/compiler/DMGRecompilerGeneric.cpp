@@ -6,6 +6,12 @@
 #include "DMGRecompilerGeneric.h"
 #include "DMGCPU.h"
 
+static bool shouldSyncForAddress(uint16_t addr)
+{
+    // accessing most ram shouldn't cause anything to be updated, so we don't need an accurate cycle count
+    return addr >= 0xFF00 && addr < 0xFF80/*HRAM start*/ && addr != 0xFFFF/*IE*/;
+}
+
 DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu)
 {
     SourceInfo sourceInfo;
@@ -50,6 +56,15 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu)
     sourceInfo.pcSize = 16;
     sourceInfo.pcOffset = reinterpret_cast<uintptr_t>(&cpu.pc) - cpuPtrInt;
 
+    sourceInfo.extraCPUOffsets[0] = reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtrInt; // DI, RETI, HALT
+    sourceInfo.extraCPUOffsets[1] = reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtrInt; // EI
+    sourceInfo.extraCPUOffsets[2] = reinterpret_cast<uintptr_t>(&cpu.halted) - cpuPtrInt; // HALT
+    sourceInfo.extraCPUOffsets[3] = reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtrInt; // HALT
+    sourceInfo.extraCPUOffsets[4] = reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtrInt; // HALT
+
+    sourceInfo.shouldSyncForAddress = shouldSyncForAddress;
+
+
     sourceInfo.exitCallFlag = &exitCallFlag;
     sourceInfo.savedExitPtr = &tmpSavedPtr;
 
@@ -57,12 +72,6 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu)
     sourceInfo.cycleExecuted = reinterpret_cast<void (*)(void *)>(DMGRecompilerGeneric::cycleExecuted);
     sourceInfo.readMem = reinterpret_cast<uint8_t (*)(void *, uint16_t)>(DMGRecompilerGeneric::readMem);
     sourceInfo.writeMem = reinterpret_cast<int (*)(void *, uint16_t, uint8_t, int)>(DMGRecompilerGeneric::writeMem);
-
-    sourceInfo.extraCPUOffsets[0] = reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtrInt; // DI, RETI, HALT
-    sourceInfo.extraCPUOffsets[1] = reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtrInt; // EI
-    sourceInfo.extraCPUOffsets[2] = reinterpret_cast<uintptr_t>(&cpu.halted) - cpuPtrInt; // HALT
-    sourceInfo.extraCPUOffsets[3] = reinterpret_cast<uintptr_t>(&cpu.serviceableInterrupts) - cpuPtrInt; // HALT
-    sourceInfo.extraCPUOffsets[4] = reinterpret_cast<uintptr_t>(&cpu.haltBug) - cpuPtrInt; // HALT
 
     target.init(sourceInfo, &cpu);
 }

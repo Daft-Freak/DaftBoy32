@@ -301,9 +301,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         }
         else
         {
-            // accessing most ram shouldn't cause anything to be updated, so we don't need an accurate cycle count
             auto immAddr = std::get<uint16_t>(addr);
-            if(immAddr >= 0xFF00 && immAddr < 0xFF80/*HRAM start*/ && immAddr != 0xFFFF/*IE*/)
+            if(!sourceInfo.shouldSyncForAddress || sourceInfo.shouldSyncForAddress(immAddr))
                 syncCyclesExecuted();
 
             builder.mov(argumentRegs32[1], immAddr);
