@@ -1507,7 +1507,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags({}, flags, flagWriteMask(SourceFlagType::Zero));
+                        bool alwaysZero = instr.src[1] == instr.dst[0]; // x ^ x is always 0
+                        auto zMask = flagWriteMask(SourceFlagType::Zero);
+
+                        setFlags({}, flags, alwaysZero ? 0 : zMask, alwaysZero ? zMask : 0);
                     }
                 }
                 else
