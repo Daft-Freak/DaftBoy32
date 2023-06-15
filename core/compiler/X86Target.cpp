@@ -2209,12 +2209,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         // check if this is the end of the source instruction (pc incremented)
         newEmuOp = instr.len != 0;
 
-        if(newEmuOp)
-        {
-            callRestoreIfNeeded(builder, needCallRestore);
-            syncCyclesExecuted();
-        }
-
         // check cycle count if this is the last part of en emulated op
         // ... but not on the last op, that should always exit anyway
         // ... or exits unless followed by a branch target
@@ -2222,6 +2216,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         bool shouldSkip = nextInstr == endInstr || ((instr.flags & GenOp_Exit) && !(nextInstr->flags & GenOp_BranchTarget));
         if(newEmuOp && !shouldSkip)
         {
+            // might exit, sync
+            callRestoreIfNeeded(builder, needCallRestore);
+            syncCyclesExecuted();
+
             // exit may be forced after interrupts are enabled
             if(forceExitAfter)
                 builder.jmp(cyclesThisInstr ? 5 : 2);
