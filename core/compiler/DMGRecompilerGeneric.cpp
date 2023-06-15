@@ -69,11 +69,13 @@ DMGRecompilerGeneric::DMGRecompilerGeneric(DMGCPU &cpu) : DMGRecompiler(cpu)
 
 bool DMGRecompilerGeneric::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo) 
 {
-    printf("in block %04X:\n", pc);
-    printInfo(blockInfo);
-    printf("\n");
-
     GenBlockInfo genBlock;
+    genBlock.flags = 0;
+
+    // since we refuse to compile when OAM DMA is active we can skip most of cycleExecuted when not running from HRAM
+    if(pc >= 0xFF00) // in HRAM
+        genBlock.flags |= GenBlock_StrictSync;
+
     bool success = convertToGeneric(pc, blockInfo, genBlock);
 
     printf("gen block (%s):\n", success ? "success" : "failed");

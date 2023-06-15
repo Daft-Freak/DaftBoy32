@@ -80,9 +80,15 @@ struct GenOpInfo
     uint16_t flags;
 };
 
+enum GenBlockFlags
+{
+    GenBlock_StrictSync = 1 << 0, // call cycleExecuted for each cycle
+};
+
 struct GenBlockInfo
 {
     std::vector<GenOpInfo> instructions;
+    uint32_t flags;
 };
 
 enum class SourceRegType : uint8_t
