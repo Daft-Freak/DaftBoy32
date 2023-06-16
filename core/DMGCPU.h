@@ -8,9 +8,9 @@
 
 #ifdef RECOMPILER_X86
 #define RECOMPILER
-#include "compiler/DMGRecompilerX86.h"
+#include "compiler/DMGRecompilerGeneric.h"
 
-using Recompiler = DMGRecompilerX86;
+using Recompiler = DMGRecompilerGeneric;
 #elif defined(RECOMPILER_THUMB)
 #define RECOMPILER
 #include "compiler/DMGRecompilerThumb.h"
