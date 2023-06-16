@@ -486,6 +486,13 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         builder.mov(Reg32::EDI, Reg32::EAX);
     };
 
+    auto carryIn = [this, &builder](Reg8 f)
+    {
+        builder.test(f, 1 << getFlagInfo(SourceFlagType::Carry).bit); // sets CF to 0
+        builder.jcc(Condition::E, 1); // not set
+        builder.stc(); // CF = 1
+    };
+
     // neededFlags is what we need to output
     // updateFlags is what we can output from the result
     // oneFlags is is what is alwyas set to 1
@@ -1121,11 +1128,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
                         }
 
-                        // carry in
-                        builder.test(*f, 1 << carryBit); // sets CF to 0
-                        builder.jcc(Condition::E, 1); // not set
-                        builder.stc(); // CF = 1
-
+                        carryIn(*f);
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::adc), std::mem_fn<ImmOp8>(&X86Builder::adc));
 
                         // flags
@@ -1442,11 +1445,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                             builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
                         }
 
-                        // carry in
-                        builder.test(*f, 1 << carryBit); // sets CF to 0
-                        builder.jcc(Condition::E, 1); // not set
-                        builder.stc(); // CF = 1
-
+                        carryIn(*f);
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::sbb), std::mem_fn<ImmOp8>(&X86Builder::sbb));
 
                         // flags
@@ -1555,11 +1554,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                     if(src.index() && dst && f)
                     {
-                        // carry in
-                        builder.test(*f, 1 << getFlagInfo(SourceFlagType::Carry).bit); // sets CF to 0
-                        builder.jcc(Condition::E, 1); // not set
-                        builder.stc(); // CF = 1
-
+                        carryIn(*f);
                         doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::rclCL), std::mem_fn<ImmOp8>(&X86Builder::rcl));
 
                         // flags
@@ -1615,11 +1610,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                     if(src.index() && dst && f)
                     {
-                        // carry in
-                        builder.test(*f, 1 << getFlagInfo(SourceFlagType::Carry).bit); // sets CF to 0
-                        builder.jcc(Condition::E, 1); // not set
-                        builder.stc(); // CF = 1
-
+                        carryIn(*f);
                         doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::rcrCL), std::mem_fn<ImmOp8>(&X86Builder::rcr));
 
                         // flags
