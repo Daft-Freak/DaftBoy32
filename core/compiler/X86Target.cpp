@@ -1043,7 +1043,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     if(src.index() && dst)
                     {
                         // calc half carry
-                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
                         {
                             // dst & 0xFFF
                             builder.mov(Reg32::ESI, static_cast<Reg32>(*dst));
@@ -1070,7 +1070,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         if(std::holds_alternative<uint16_t>(src))
                         {
                             auto srcImm = std::get<uint16_t>(src);
-                            if(srcImm == 1 && !(instr.flags & flagWriteMask(SourceFlagType::Carry)))
+                            if(srcImm == 1 && !(writesFlag(instr.flags, SourceFlagType::Carry)))
                                 builder.inc(*dst);
                             else
                             {
@@ -1086,7 +1086,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
                         setFlags({}, flags, flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
 
-                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(flags, SourceFlagType::HalfCarry))
                             builder.or_(*mapReg8(flagsReg), Reg8::SIL);
                     }
                 }
@@ -1098,12 +1098,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     if(src.index() && dst)
                     {
                         // calc half carry
-                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
                             calcHalfCarry8(instr.opcode, *dst, src, {});
 
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::add), [this, &instr](X86Builder &builder, Reg8 dst, uint8_t src)
                         {
-                            if(src == 1 && !(instr.flags & flagWriteMask(SourceFlagType::Carry)))
+                            if(src == 1 && !(writesFlag(instr.flags, SourceFlagType::Carry)))
                                 builder.inc(dst);
                             else
                                 builder.add(dst, src);
@@ -1114,7 +1114,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
                         setFlags(*dst, flags, (setZ ? flagWriteMask(SourceFlagType::Zero) : 0) | flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
 
-                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(flags, SourceFlagType::HalfCarry))
                             builder.or_(*mapReg8(flagsReg), Reg8::SIL);
                     }
                 }
@@ -1139,7 +1139,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     if(src.index() && dst && f)
                     {
                         // calc half carry
-                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
                             calcHalfCarry8(instr.opcode, *dst, src, f);
 
                         carryIn(*f);
@@ -1149,7 +1149,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
                         setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry));
 
-                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(flags, SourceFlagType::HalfCarry))
                             builder.or_(*f, Reg8::SIL);
                     }
                 }
@@ -1200,9 +1200,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     {
                         auto cMask = flagWriteMask(SourceFlagType::Carry);
                         auto zMask = flagWriteMask(SourceFlagType::Zero);
-                        auto hMask = flagWriteMask(SourceFlagType::HalfCarry);
 
-                        if(instr.flags & hMask)
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
                             calcHalfCarry8(instr.opcode, *dst, src, {});
 
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::cmp), std::mem_fn<ImmOp8>(&X86Builder::cmp));
@@ -1215,7 +1214,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         setFlags({}, flags, cMask | zMask, flagWriteMask(SourceFlagType::WasSub));
 
                         // half carry
-                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(flags, SourceFlagType::HalfCarry))
                             builder.or_(*f, Reg8::SIL);
 
                         if(flags & zMask)
@@ -1309,12 +1308,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     if(src.index() && dst)
                     {
                         // calc half carry
-                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
                             calcHalfCarry8(instr.opcode, *dst, src, {});
 
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::sub), [this, &instr](X86Builder &builder, Reg8 dst, uint8_t src)
                         {
-                            if(src == 1 && !(instr.flags & flagWriteMask(SourceFlagType::Carry)))
+                            if(src == 1 && !(writesFlag(instr.flags, SourceFlagType::Carry)))
                                 builder.dec(dst);
                             else
                                 builder.sub(dst, src);
@@ -1324,7 +1323,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
                         setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub), preserveMask);
 
-                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(flags, SourceFlagType::HalfCarry))
                             builder.or_(*mapReg8(flagsReg), Reg8::SIL);
                     }
                 }
@@ -1350,7 +1349,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                     if(src.index() && dst && f)
                     {
                         // calc half carry
-                        if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
                             calcHalfCarry8(instr.opcode, *dst, src, f);
 
                         carryIn(*f);
@@ -1360,7 +1359,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
                         setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub));
 
-                        if(flags & flagWriteMask(SourceFlagType::HalfCarry))
+                        if(writesFlag(flags, SourceFlagType::HalfCarry))
                             builder.or_(*f, Reg8::SIL);
                     }
                 }
