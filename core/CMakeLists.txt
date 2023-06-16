@@ -11,7 +11,7 @@ if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" OR ${CMAKE_SYSTEM_PROCESSOR} STRE
     target_sources(DaftBoyCore INTERFACE
         compiler/DMGRecompiler.cpp
         compiler/X86Builder.cpp
-        compiler/DMGRecompilerX86.cpp
+        compiler/X86Target.cpp
         compiler/DMGRecompilerGeneric.cpp
     )
     target_compile_definitions(DaftBoyCore INTERFACE RECOMPILER_X86)
