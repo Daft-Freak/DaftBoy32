@@ -419,73 +419,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         }
     };
 
-    auto readMem = [this, &builder, &needCallRestore, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, Reg8 dstReg, bool zeroExtend)
-    {
-        // maybe push
-        callSaveIfNeeded(builder, needCallRestore);
-
-        setupMemAddr(addr);
-
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.readMem)); // function ptr
-        builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
-
-        builder.call(Reg64::RAX); // do call
-
-        if(isCallSaved(dstReg))
-        {
-            callRestore(builder, dstReg);
-            needCallRestore = 0;
-        }
-        else if(zeroExtend)
-            builder.movzx(static_cast<Reg32>(dstReg), Reg8::AL);
-        else
-            builder.mov(dstReg, Reg8::AL);
-    };
-
-    auto writeMem = [this, &builder, &needCallRestore, &setupMemAddr](std::variant<std::monostate, Reg16, uint16_t> addr, std::variant<std::monostate, Reg8, uint8_t> data)
-    {
-        assert(data.index());
-
-        callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
-        callSaveIfNeeded(builder, needCallRestore);
-
-#ifndef _WIN32
-        // setup addr first (data writes DX)
-        setupMemAddr(addr);
-#endif
-
-        if(std::holds_alternative<Reg8>(data))
-        {
-#ifdef _WIN32
-            // argumentRegs[2] is R8, can't mov from xH to there
-            auto reg8 = std::get<Reg8>(data);
-            if(isXHReg(reg8))
-            {
-                builder.mov(Reg8::AL, reg8);
-                data = Reg8::AL;
-            }
-#endif
-            builder.movzx(argumentRegs32[2], std::get<Reg8>(data));
-        }
-        else
-            builder.mov(argumentRegs32[2], std::get<uint8_t>(data));
-
-#ifdef _WIN32
-        // setup addr after data (addr writes DX)
-        setupMemAddr(addr);
-#endif
-
-        builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
-
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.writeMem)); // function ptr
-        builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
-        builder.call(Reg64::RAX); // do call
-
-        // just pop EDI... then overrwrite it
-        callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
-        builder.mov(Reg32::EDI, Reg32::EAX);
-    };
-
     auto carryIn = [this, &builder](Reg8 f)
     {
         builder.test(f, 1 << getFlagInfo(SourceFlagType::Carry).bit); // sets CF to 0
@@ -908,11 +841,31 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 {
                     auto addr = checkRegOrImm16(instr.src[0]);
                     auto dst = checkReg8(instr.dst[0]);
+
                     if(addr.index() && dst)
                     {
                         // zero-extend if not 8 bit dest (a temp)
                         bool zeroExtend = sourceInfo.registers[instr.dst[0]].size != 8;
-                        readMem(addr, *dst, zeroExtend);
+                        
+                        // maybe push
+                        callSaveIfNeeded(builder, needCallRestore);
+
+                        setupMemAddr(addr);
+
+                        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.readMem)); // function ptr
+                        builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
+
+                        builder.call(Reg64::RAX); // do call
+
+                        if(isCallSaved(*dst))
+                        {
+                            callRestore(builder, *dst);
+                            needCallRestore = 0;
+                        }
+                        else if(zeroExtend)
+                            builder.movzx(static_cast<Reg32>(*dst), Reg8::AL);
+                        else
+                            builder.mov(*dst, Reg8::AL);
                     }
                 }
                 else
@@ -930,8 +883,48 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                 {
                     auto addr = checkRegOrImm16(instr.src[0]);
                     auto data = checkRegOrImm8(instr.src[1]);
+
                     if(addr.index() && data.index())
-                        writeMem(addr, data);
+                    {
+                        callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
+                        callSaveIfNeeded(builder, needCallRestore);
+
+#ifndef _WIN32
+                        // setup addr first (data writes DX)
+                        setupMemAddr(addr);
+#endif
+
+                        if(std::holds_alternative<Reg8>(data))
+                        {
+#ifdef _WIN32
+                            // argumentRegs[2] is R8, can't mov from xH to there
+                            auto reg8 = std::get<Reg8>(data);
+                            if(isXHReg(reg8))
+                            {
+                                builder.mov(Reg8::AL, reg8);
+                                data = Reg8::AL;
+                            }
+#endif
+                            builder.movzx(argumentRegs32[2], std::get<Reg8>(data));
+                        }
+                        else
+                            builder.mov(argumentRegs32[2], std::get<uint8_t>(data));
+
+#ifdef _WIN32
+                        // setup addr after data (addr writes DX)
+                        setupMemAddr(addr);
+#endif
+
+                        builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
+
+                        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.writeMem)); // function ptr
+                        builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
+                        builder.call(Reg64::RAX); // do call
+
+                        // just pop EDI... then overrwrite it
+                        callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
+                        builder.mov(Reg32::EDI, Reg32::EAX);
+                    }
                 }
                 else
                     badRegSize(addrSize);
