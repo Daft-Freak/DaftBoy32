@@ -209,7 +209,7 @@ static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate
     saveState = index;
 }
 
-// 8-bit op helper
+// 8-bit op helpers
 using ImmOp8 = void(Reg8, uint8_t);
 using RegOp8 = void(Reg8, Reg8);
 using RegUnOp8 = void(Reg8);
@@ -242,7 +242,7 @@ static bool doRegImmOp8(X86Builder &builder, std::optional<Reg8> dst, std::varia
     }
 
     return true;
-};
+}
 
 static bool doRegImmShift8(X86Builder &builder, std::optional<Reg8> dst, std::variant<std::monostate, Reg8, uint8_t> src, std::function<void(X86Builder &, Reg8)> regOp, std::function<void(X86Builder &, Reg8, uint8_t)> immOp)
 {
@@ -278,7 +278,39 @@ static bool doRegImmShift8(X86Builder &builder, std::optional<Reg8> dst, std::va
     }
 
     return true;
-};
+}
+
+// more shift helpers
+static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::variant<std::monostate, Reg8, uint8_t> src, std::function<void(X86Builder &, Reg32)> regOp, std::function<void(X86Builder &, Reg32, uint8_t)> immOp)
+{
+    if(!src.index() || !dst)
+        return false;
+
+    assert(*dst != Reg32::ECX);
+
+    if(std::holds_alternative<uint8_t>(src))
+    {
+        assert(std::get<uint8_t>(src) < 32);
+        immOp(builder, *dst, std::get<uint8_t>(src));
+    }
+    else
+    {
+        auto srcReg = std::get<Reg8>(src);
+        assert(srcReg != static_cast<Reg8>(*dst));
+
+        bool swap = srcReg != Reg8::CL;
+
+        if(swap)
+            builder.xchg(srcReg, Reg8::CL);
+
+        regOp(builder, *dst);
+
+        if(swap)
+            builder.xchg(srcReg, Reg8::CL);
+    }
+
+    return true;
+}
 
 void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
 {
@@ -1617,34 +1649,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         unhandledFlags(instr.flags & GenOp_WriteFlags);
                     else
                     {
-                        auto src = checkRegOrImm32(instr.src[1]);
+                        auto src = checkRegOrImm8(instr.src[1]);
                         auto dst = checkReg32(instr.dst[0]);
 
-                        if(src.index() && dst)
-                        {
-                            assert(*dst != Reg32::ECX);
-
-                            if(std::holds_alternative<uint32_t>(src))
-                            {
-                                assert(std::get<uint32_t>(src) < 32);
-                                builder.shl(*dst, std::get<uint32_t>(src));
-                            }
-                            else
-                            {
-                                auto srcReg = std::get<Reg32>(src);
-                                assert(srcReg != *dst);
-
-                                bool swap = srcReg != Reg32::ECX;
-
-                                if(swap)
-                                    builder.xchg(static_cast<Reg8>(srcReg), Reg8::CL);
-
-                                builder.shlCL(*dst);
-
-                                if(swap)
-                                    builder.xchg(static_cast<Reg8>(srcReg), Reg8::CL);
-                            }
-                        }
+                        doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shlCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shl));
                     }
                 }
                 else if(regSize == 8)
@@ -1702,34 +1710,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         unhandledFlags(instr.flags & GenOp_WriteFlags);
                     else
                     {
-                        auto src = checkRegOrImm32(instr.src[1]);
+                        auto src = checkRegOrImm8(instr.src[1]);
                         auto dst = checkReg32(instr.dst[0]);
 
-                        if(src.index() && dst)
-                        {
-                            assert(*dst != Reg32::ECX);
-
-                            if(std::holds_alternative<uint32_t>(src))
-                            {
-                                assert(std::get<uint32_t>(src) < 32);
-                                builder.shr(*dst, std::get<uint32_t>(src));
-                            }
-                            else
-                            {
-                                auto srcReg = std::get<Reg32>(src);
-                                assert(srcReg != *dst);
-
-                                bool swap = srcReg != Reg32::ECX;
-
-                                if(swap)
-                                    builder.xchg(static_cast<Reg8>(srcReg), Reg8::CL);
-
-                                builder.shrCL(*dst);
-
-                                if(swap)
-                                    builder.xchg(static_cast<Reg8>(srcReg), Reg8::CL);
-                            }
-                        }
+                        doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shrCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shr));
                     }
                 }
                 else if(regSize == 8)
