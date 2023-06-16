@@ -547,6 +547,84 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
         }
     };
 
+    const auto calcHalfCarry8 = [this, &builder](GenOpcode op, Reg8 dst, std::variant<std::monostate, Reg8, uint8_t> src, std::optional<Reg8> f)
+    {
+        bool withCarry = op == GenOpcode::AddWithCarry || op == GenOpcode::SubtractWithCarry;
+        bool isAdd = op == GenOpcode::Add || op == GenOpcode::AddWithCarry;
+
+        assert(dst != Reg8::AL);
+        builder.push(Reg64::RAX);
+
+        auto halfDst = Reg8::AH;
+
+        if(withCarry)
+        {
+            // check carry
+            auto carryBit = getFlagInfo(SourceFlagType::Carry).bit;
+            builder.test(*f, 1 << carryBit); // sets CF to 0
+            builder.setcc(Condition::NE, Reg8::SIL);
+
+            if(std::holds_alternative<uint8_t>(src))
+                halfDst = Reg8::AL; // avoid conflict
+        }
+        
+        if(dst != halfDst)
+        {
+            if(requiresREX(dst)) // INC (HL)
+            {
+                assert(std::holds_alternative<uint8_t>(src));
+                // use the other half, we don't need it
+                halfDst = Reg8::AL;
+            }
+
+            builder.mov(halfDst, dst);
+        }
+
+        if(std::holds_alternative<uint8_t>(src))
+        {
+            // imm (simplify a bit)
+            builder.and_(halfDst, 0xF); // mask
+
+            if(isAdd)
+            {
+                if(withCarry)
+                    builder.add(halfDst, Reg8::SIL); // add carry
+
+                builder.cmp(halfDst, 0xF - (std::get<uint8_t>(src) & 0xF));
+            }
+            else
+            {
+                if(withCarry)
+                    builder.sub(halfDst, Reg8::SIL); // add carry
+
+                builder.cmp(halfDst, std::get<uint8_t>(src) & 0xF);
+            }
+        }
+        else
+        {
+            // reg
+            builder.mov(Reg8::AL, std::get<Reg8>(src));
+
+            builder.and_(Reg32::EAX, 0x0F0F); // mask both
+
+            if(withCarry)
+                builder.add(Reg8::AL, Reg8::SIL); // add carry
+
+            if(isAdd)
+            {
+                builder.add(halfDst, Reg8::AL);
+                builder.cmp(halfDst, 0xF);
+            }
+            else
+                builder.cmp(halfDst, Reg8::AL);
+        }
+
+        builder.pop(Reg64::RAX);
+
+        builder.setcc(isAdd ? Condition::A : Condition::L, Reg8::SIL);
+        builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
+    };
+
     // do instructions
     int numInstructions = 0;
     uint8_t *opStartPtr = nullptr;
@@ -1019,47 +1097,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                     if(src.index() && dst)
                     {
-                        auto origDst = *dst;
-
                         // calc half carry
                         if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
-                        {
-                            assert(*dst != Reg8::AL);
-                            builder.push(Reg64::RAX);
-
-                            auto halfDst = Reg8::AH;
-
-                            if(*dst != halfDst)
-                            {
-                                if(requiresREX(*dst)) // INC (HL)
-                                {
-                                    assert(std::holds_alternative<uint8_t>(src));
-                                    // use the other half, we don't need it
-                                    halfDst = Reg8::AL;
-                                }
-
-                                builder.mov(halfDst, *dst);
-                            }
-
-                            if(std::holds_alternative<uint8_t>(src))
-                            {
-                                builder.and_(halfDst, 0xF); // mask
-                                builder.cmp(halfDst, 0xF - (std::get<uint8_t>(src) & 0xF));
-                            }
-                            else
-                            {
-                                builder.mov(Reg8::AL, std::get<Reg8>(src));
-                                builder.and_(Reg32::EAX, 0x0F0F); // mask both
-
-                                builder.add(halfDst, Reg8::AL);
-                                builder.cmp(halfDst, 0xF);
-                            }
-
-                            builder.pop(Reg64::RAX);
-
-                            builder.setcc(Condition::A, Reg8::SIL);
-                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
-                        }
+                            calcHalfCarry8(instr.opcode, *dst, src, {});
 
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::add), [this, &instr](X86Builder &builder, Reg8 dst, uint8_t src)
                         {
@@ -1072,7 +1112,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         // flags
                         bool setZ = !(instr.flags & GenOp_MagicAlt1); // LDHL SP/ADD SP use an 8-bit add to set flags, but set Z=0
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(origDst, flags, (setZ ? flagWriteMask(SourceFlagType::Zero) : 0) | flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
+                        setFlags(*dst, flags, (setZ ? flagWriteMask(SourceFlagType::Zero) : 0) | flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
 
                         if(flags & flagWriteMask(SourceFlagType::HalfCarry))
                             builder.or_(*mapReg8(flagsReg), Reg8::SIL);
@@ -1098,54 +1138,16 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                     if(src.index() && dst && f)
                     {
-                        auto origDst = *dst;
-
-                        auto carryBit = getFlagInfo(SourceFlagType::Carry).bit;
-
                         // calc half carry
                         if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
-                        {
-                            assert(*dst != Reg8::AL);
-                            builder.push(Reg64::RAX);
-
-                            // check carry
-                            builder.test(*f, 1 << carryBit); // sets CF to 0
-                            builder.setcc(Condition::NE, Reg8::SIL);
-
-                            if(*dst != Reg8::AH)
-                            {
-                                if(requiresREX(*dst)) // INC (HL)
-                                {
-                                    builder.mov(Reg8::AL, *dst);
-                                    builder.mov(Reg8::AH, Reg8::AL);
-                                }
-                                else
-                                    builder.mov(Reg8::AH, *dst);
-                            }
-                            
-                            if(std::holds_alternative<uint8_t>(src))
-                                builder.mov(Reg8::AL, std::get<uint8_t>(src));
-                            else
-                                builder.mov(Reg8::AL, std::get<Reg8>(src));
-
-                            builder.and_(Reg32::EAX, 0x0F0F); // mask both
-
-                            builder.add(Reg8::AL, Reg8::SIL); // add carry
-                            builder.add(Reg8::AH, Reg8::AL);
-                            builder.cmp(Reg8::AH, 0xF);
-
-                            builder.pop(Reg64::RAX);
-
-                            builder.setcc(Condition::A, Reg8::SIL);
-                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
-                        }
+                            calcHalfCarry8(instr.opcode, *dst, src, f);
 
                         carryIn(*f);
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::adc), std::mem_fn<ImmOp8>(&X86Builder::adc));
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(origDst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry));
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry));
 
                         if(flags & flagWriteMask(SourceFlagType::HalfCarry))
                             builder.or_(*f, Reg8::SIL);
@@ -1201,36 +1203,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         auto hMask = flagWriteMask(SourceFlagType::HalfCarry);
 
                         if(instr.flags & hMask)
-                        {
-                            // half cmp
-                            assert(*dst != Reg8::AL);
-                            builder.push(Reg64::RAX);
-
-                            auto halfDst = Reg8::AH;
-
-                            if(*dst != halfDst)
-                                builder.mov(halfDst, *dst);
-
-                            if(std::holds_alternative<uint8_t>(src))
-                            {
-                                builder.and_(halfDst, 0xF); // mask
-
-                                builder.cmp(halfDst, std::get<uint8_t>(src) & 0xF);
-                            }
-                            else
-                            {
-                                builder.mov(Reg8::AL, std::get<Reg8>(src));
-
-                                builder.and_(Reg32::EAX, 0x0F0F); // mask both
-
-                                builder.cmp(halfDst, Reg8::AL);
-                            }
-
-                            builder.pop(Reg64::RAX);
-
-                            builder.setcc(Condition::L, Reg8::SIL);
-                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
-                        }
+                            calcHalfCarry8(instr.opcode, *dst, src, {});
 
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::cmp), std::mem_fn<ImmOp8>(&X86Builder::cmp));
 
@@ -1335,48 +1308,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                     if(src.index() && dst)
                     {
-                        auto origDst = *dst;
-
                         // calc half carry
                         if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
-                        {
-                            assert(*dst != Reg8::AL);
-                            builder.push(Reg64::RAX);
-
-                            auto halfDst = Reg8::AH;
-
-                            if(*dst != halfDst)
-                            {
-                                if(requiresREX(*dst)) // DEC (HL)
-                                {
-                                    assert(std::holds_alternative<uint8_t>(src));
-                                    // use the other half, we don't need it
-                                    halfDst = Reg8::AL;
-                                }
-
-                                builder.mov(halfDst, *dst);
-                            }
-
-                            if(std::holds_alternative<uint8_t>(src))
-                            {
-                                builder.and_(halfDst, 0xF); // mask
-
-                                builder.cmp(halfDst, std::get<uint8_t>(src) & 0xF);
-                            }
-                            else
-                            {
-                                builder.mov(Reg8::AL, std::get<Reg8>(src));
-
-                                builder.and_(Reg32::EAX, 0x0F0F); // mask both
-
-                                builder.cmp(halfDst, Reg8::AL);
-                            }
-
-                            builder.pop(Reg64::RAX);
-
-                            builder.setcc(Condition::L, Reg8::SIL);
-                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
-                        }
+                            calcHalfCarry8(instr.opcode, *dst, src, {});
 
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::sub), [this, &instr](X86Builder &builder, Reg8 dst, uint8_t src)
                         {
@@ -1388,7 +1322,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(origDst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub), preserveMask);
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub), preserveMask);
 
                         if(flags & flagWriteMask(SourceFlagType::HalfCarry))
                             builder.or_(*mapReg8(flagsReg), Reg8::SIL);
@@ -1415,54 +1349,16 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
                     if(src.index() && dst && f)
                     {
-                        auto origDst = *dst;
-
-                        auto carryBit = getFlagInfo(SourceFlagType::Carry).bit;
-
                         // calc half carry
                         if(instr.flags & flagWriteMask(SourceFlagType::HalfCarry))
-                        {
-                            assert(*dst != Reg8::AL);
-                            builder.push(Reg64::RAX);
-
-                            // check carry
-                            builder.test(*f, 1 << carryBit); // sets CF to 0
-                            builder.setcc(Condition::NE, Reg8::SIL);
-
-                            if(*dst != Reg8::AH)
-                            {
-                                if(requiresREX(*dst)) // DEC (HL)
-                                {
-                                    builder.mov(Reg8::AL, *dst);
-                                    builder.mov(Reg8::AH, Reg8::AL);
-                                }
-                                else
-                                    builder.mov(Reg8::AH, *dst);
-                            }
-
-                            if(std::holds_alternative<uint8_t>(src))
-                                builder.mov(Reg8::AL, std::get<uint8_t>(src));
-                            else
-                                builder.mov(Reg8::AL, std::get<Reg8>(src));
-
-                            builder.and_(Reg32::EAX, 0x0F0F); // mask both
-
-                            builder.add(Reg8::AL, Reg8::SIL); // add carry
-                            builder.sub(Reg8::AH, Reg8::AL);
-                            builder.cmp(Reg8::AH, 0);
-
-                            builder.pop(Reg64::RAX);
-
-                            builder.setcc(Condition::L, Reg8::SIL);
-                            builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
-                        }
+                            calcHalfCarry8(instr.opcode, *dst, src, f);
 
                         carryIn(*f);
                         doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::sbb), std::mem_fn<ImmOp8>(&X86Builder::sbb));
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(origDst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub));
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub));
 
                         if(flags & flagWriteMask(SourceFlagType::HalfCarry))
                             builder.or_(*f, Reg8::SIL);
