@@ -41,6 +41,5 @@ private:
     uint8_t flagsReg = 0;
     uint8_t flagMap[4]; // map from SourceFlagType to flags bit
 
-public: // FIXME
     uint8_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;
 };
