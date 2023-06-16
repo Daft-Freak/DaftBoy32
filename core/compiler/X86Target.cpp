@@ -385,25 +385,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     };
 
     // load/store helpers
-    auto setupMemAddr = [this, &blockInfo, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg16, uint16_t> addr)
+    auto setupMemAddr = [this, &blockInfo, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg16, uint16_t> addr, uint8_t addrIndex)
     {
         assert(addr.index()); // caller should have checked checkRegOrImm result
 
         if(std::holds_alternative<Reg16>(addr))
         {
-            // figure out original reg index
-            // TODO: avoid this
-            uint8_t addrIndex = ~0;
-            for(auto &r : regAlloc)
-            {
-                if(static_cast<Reg16>(r.second) == std::get<Reg16>(addr))
-                {
-                    addrIndex = r.first;
-                    break;
-                }
-            }
-            assert(addrIndex != 0xFF);
-
             if(!sourceInfo.shouldSyncForRegIndex || sourceInfo.shouldSyncForRegIndex(addrIndex, blockInfo))
                 syncCyclesExecuted();
 
@@ -850,7 +837,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
                         // maybe push
                         callSaveIfNeeded(builder, needCallRestore);
 
-                        setupMemAddr(addr);
+                        setupMemAddr(addr, instr.src[0]);
 
                         builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.readMem)); // function ptr
                         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
@@ -891,7 +878,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
 #ifndef _WIN32
                         // setup addr first (data writes DX)
-                        setupMemAddr(addr);
+                        setupMemAddr(addr, instr.src[0]);
 #endif
 
                         if(std::holds_alternative<Reg8>(data))
@@ -912,7 +899,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
 
 #ifdef _WIN32
                         // setup addr after data (addr writes DX)
-                        setupMemAddr(addr);
+                        setupMemAddr(addr, instr.src[0]);
 #endif
 
                         builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
