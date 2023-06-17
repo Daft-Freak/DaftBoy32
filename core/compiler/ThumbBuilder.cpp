@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstring>
 
 #include "ThumbBuilder.h"
 
@@ -365,6 +366,23 @@ void ThumbBuilder::endPatch()
 {
     ptr = savedPtr;
     endPtr = savedEndPtr;
+}
+
+void ThumbBuilder::removeRange(uint16_t *startPtr, uint16_t *endPtr)
+{
+    if(error)
+        return;
+
+    // making sure this doesn't break any jumps is the user's problem
+
+    assert(startPtr < ptr && endPtr <= ptr);
+    assert(endPtr > startPtr);
+
+    // move any code after the end of the removed range
+    if(endPtr != ptr)
+        memmove(startPtr, endPtr, ptr - endPtr);
+
+    this->ptr -= (endPtr - startPtr);
 }
 
 void ThumbBuilder::write(uint16_t hw)

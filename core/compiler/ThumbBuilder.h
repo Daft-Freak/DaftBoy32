@@ -141,6 +141,8 @@ public:
     void patch(uint16_t *patchPtr, uint16_t *patchEndPtr);
     void endPatch();
 
+    void removeRange(uint16_t *startPtr, uint16_t *endPtr);
+
     bool getError() const {return error;}
 
 private:
