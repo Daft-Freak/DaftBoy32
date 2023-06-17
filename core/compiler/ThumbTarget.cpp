@@ -325,7 +325,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                     {
                         // 8 -> 16 bit
                         auto src = checkRegOrImm8(instr.src[0]);
-                        get8BitValue(builder, *dst, src);
+                        if(src.index() && dst)
+                            get8BitValue(builder, *dst, src);
                     }
                     else
                     {
