@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <variant>
 
 #include "ThumbTarget.h"
 #include "ThumbBuilder.h"
@@ -10,6 +11,57 @@ const Reg cpuPtrReg = Reg::R8;
 static bool isLowReg(Reg r)
 {
     return static_cast<int>(r) < 8;
+}
+
+// helpers for accessing 8/16-bit regs/values
+
+// copies 8 bit value from upper/lower reg or imm to reg
+static void get8BitValue(ThumbBuilder &builder, Reg dst, std::variant<std::monostate, ThumbTarget::RegInfo, uint8_t> b)
+{
+    assert(b.index());
+
+    if(std::holds_alternative<uint8_t>(b))
+        builder.mov(dst, std::get<uint8_t>(b));
+    else
+    {
+        auto reg = std::get<ThumbTarget::RegInfo>(b);
+
+        if(reg.mask == 0xFF00)
+            builder.lsr(dst, reg.reg, 8); // shift it down
+        else if(reg.mask == 0xFF && dst != reg.reg) // assume it's already masked if it's already there
+            builder.uxtb(dst, reg.reg); // clear the high half
+    }
+}
+
+// store to 8-bit reg, modifies src
+static void write8BitReg(ThumbBuilder &builder, ThumbTarget::RegInfo dst, Reg src)
+{
+    // do nothing if already in the right place
+    if(dst.reg == src)
+    {
+        assert(!dst.mask || dst.mask == 0xFF);
+        return;
+    }
+
+    if(!dst.mask)
+    {
+        builder.mov(dst.reg, src);
+        return;
+    }
+
+    if(dst.mask == 0xFF)
+    {
+        // shift out low byte
+        builder.lsr(dst.reg, dst.reg, 8);
+        builder.lsl(dst.reg, dst.reg, 8);
+    }
+    else if(dst.mask == 0xFF00)
+    {
+        builder.uxtb(dst.reg, dst.reg);
+        builder.lsl(src, src, 8);
+    }
+
+    builder.orr(dst.reg, src);
 }
 
 // TODO: improve branch handling
@@ -327,7 +379,7 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
                 }
 
                 assert(reg.cpuOffset - firstRegOff <= 62);
-                printf("%i %i %i\n", i, firstRegOff, reg.cpuOffset);
+
                 fflush(stdout);
                 if(isLowReg(*mappedReg))
                     builder.ldrh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
@@ -449,6 +501,19 @@ std::optional<Reg> ThumbTarget::mapReg(uint8_t index)
     auto alloc = regAlloc.find(index);
     if(alloc != regAlloc.end())
         return alloc->second;
+
+    return {};
+}
+
+std::optional<ThumbTarget::RegInfo> ThumbTarget::mapReg8(uint8_t index)
+{
+    // remap aliases
+    auto &reg = sourceInfo.registers[index];
+    if(reg.alias)
+        index = reg.alias;
+
+    if(auto mapped = mapReg(index))
+        return RegInfo{*mapped, reg.aliasMask};
 
     return {};
 }
