@@ -6,6 +6,7 @@
 #include "RecompilerGeneric.h"
 
 enum class Reg;
+class ThumbBuilder;
 
 class ThumbTarget final
 {
@@ -27,6 +28,9 @@ public:
     uint8_t *compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize);
 
 private:
+    void loadLiteral(ThumbBuilder &builder, Reg reg, uint32_t val);
+    void outputLiterals(ThumbBuilder &builder);
+
     std::optional<Reg> mapReg(uint8_t index);
     std::optional<RegInfo> mapReg8(uint8_t index);
 
@@ -43,4 +47,11 @@ private:
     uint8_t flagMap[4]; // map from SourceFlagType to flags bit
 
     uint16_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;
+
+    // literals
+    // (we only need two so far)
+    uint32_t literals[2]{};
+
+    unsigned int curLiteral = 0;
+    std::vector<uint16_t *> ldrLiteralInstrs;
 };

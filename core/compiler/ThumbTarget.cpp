@@ -364,8 +364,19 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
         if(err)
         {
             builder.resetPtr(opStartPtr);
+
+            // remove any literal loads we just un-wrote
+            for(auto it = ldrLiteralInstrs.begin(); it != ldrLiteralInstrs.end();)
+            {
+                if(*it >= builder.getPtr())
+                    it = ldrLiteralInstrs.erase(it);
+                else
+                    ++it;
+            }
+
             load16BitValue(builder, pcReg, pc - instr.len);
             builder.bl((exitPtr - builder.getPtr()) * 2);
+            outputLiterals(builder);
             break;
         }
 
@@ -414,11 +425,16 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
         if(newEmuOp)
             numInstructions++;
+
+        // output literals if ~close to the limit or this is the last instruction
+        // this was definitely NOT set by decreasing until it didn't abort...
+        if(nextInstr == endInstr || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460))
+            outputLiterals(builder);
     }
 
     if(builder.getError())
     {
-        //ldrLiteralInstrs.clear();
+        ldrLiteralInstrs.clear();
         printf("recompile @%04X failed due to error (out of space?)\n", startPC);
         return false;
     }
@@ -607,6 +623,76 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     codeBuf = reinterpret_cast<uint8_t *>(ptr);
 
     return ret;
+}
+
+void ThumbTarget::loadLiteral(ThumbBuilder &builder, Reg reg, uint32_t val)
+{
+    // TODO: AGBRecompiler may have improved literal code...
+    unsigned int index;
+    for(index = 0; index < curLiteral; index++)
+    {
+        if(literals[index] == val)
+            break;
+    }
+
+    if(index == curLiteral)
+    {
+        assert(curLiteral < std::size(literals));
+        literals[curLiteral++] = val;
+    }
+
+    ldrLiteralInstrs.push_back(builder.getPtr());
+    builder.ldr(reg, index << 2); //write literal index, patched later
+}
+
+void ThumbTarget::outputLiterals(ThumbBuilder &builder)
+{
+    if(!ldrLiteralInstrs.empty())
+    {
+        auto dataPtr = builder.getPtr() + 1/*B*/;
+        if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
+        {
+            // not aligned
+            builder.b(curLiteral * 4 + 2);
+            builder.data(0);
+            dataPtr++;
+        }
+        else // aligned
+            builder.b(curLiteral * 4);
+
+        for(unsigned int i = 0; i < curLiteral; i++)
+        {
+            builder.data(literals[i]);
+            builder.data(literals[i] >> 16);
+        }
+
+        // ran out of space
+        if(builder.getError())
+            return;
+
+        // patch
+        for(auto &ptr : ldrLiteralInstrs)
+        {
+            auto start = ptr + 1;
+            if(reinterpret_cast<uintptr_t>(start) & 2)
+                start++;
+
+            // update LDR imm
+            auto index = *ptr & 0xFF;
+            auto off = ((dataPtr + index * 2) - start) >> 1;
+
+            assert(index < 2);
+            assert(off <= 0xFF);
+            *ptr = (*ptr & 0xFF00) | off;
+        }
+    }
+
+    // reset
+    ldrLiteralInstrs.clear();
+    curLiteral = 0;
+
+    for(auto &literal : literals)
+        literal = 0;
 }
 
 std::optional<Reg> ThumbTarget::mapReg(uint8_t index)
