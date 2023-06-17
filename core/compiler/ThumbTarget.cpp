@@ -12,6 +12,18 @@ static bool isLowReg(Reg r)
     return static_cast<int>(r) < 8;
 }
 
+// TODO: improve branch handling
+static int load16BitValueSize(uint16_t value)
+{
+    if(value <= 0xFF)
+        return 2; // mov
+    
+    if(value >> __builtin_ctz(value) <= 0xFF)
+        return 4; // mov + lsl
+
+    return 8; // mov + mov + lsl + orr
+}
+
 static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value, Reg tmp = Reg::R2)
 {
     if(value <= 0xFF || value >> __builtin_ctz(value) <= 0xFF)
@@ -84,15 +96,59 @@ void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
 
 bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, GenBlockInfo &blockInfo)
 {
+    // don't handle HRAM for now
+    if(pc >= 0xFF00)
+        return false;
+
     auto codePtr16 = reinterpret_cast<uint16_t *>(codePtr);
     ThumbBuilder builder(codePtr16, reinterpret_cast<uint16_t *>(codeBufEnd));
 
     auto startPC = pc;
 
+    // state
+    uint16_t *lastInstrCycleCheck = nullptr;
+
+    // cycle executed sync
+    int cyclesThisInstr = 0;
+    int delayedCyclesExecuted = 0;
+
+    auto cycleExecuted = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted]()
+    {
+        cyclesThisInstr += 4;
+
+        // only the optimised not-HRAM path
+        delayedCyclesExecuted += 4;
+    };
+
+    auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted]()
+    {
+        if(!delayedCyclesExecuted)
+            return;
+
+        assert(delayedCyclesExecuted < 0xFF);
+        auto cpuPtrInt = reinterpret_cast<uintptr_t>(cpuPtr);
+
+        uint8_t u8Cycles = delayedCyclesExecuted;
+
+        // we don't update cyclesToRun here, do it after returning instead
+        auto cycleCountOff = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - cpuPtrInt;
+        assert(cycleCountOff <= 124);
+
+        // load to r3, add and store back
+        builder.mov(Reg::R1, cpuPtrReg); // cpu ptr
+
+        builder.ldr(Reg::R3, Reg::R1, cycleCountOff);
+        builder.add(Reg::R3, u8Cycles);
+        builder.str(Reg::R3, Reg::R1, cycleCountOff);
+
+        delayedCyclesExecuted = 0;
+    };
+
     // do instructions
     int numInstructions = 0;
     uint16_t *opStartPtr = nullptr;
     bool newEmuOp = true;
+    bool forceExitAfter = false;
 
     auto beginInstr = blockInfo.instructions.begin();
     auto endInstr = blockInfo.instructions.end();
@@ -113,7 +169,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
         int instrCycles = instr.cycles;
         if(instrCycles)
         {
-            //cycleExecuted();
+            cycleExecuted();
             instrCycles--;
         }
 
@@ -125,6 +181,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
         switch(instr.opcode)
         {
+            case GenOpcode::NOP:
+                break;
+
             default:
                 printf("unhandled gen op %i\n", static_cast<int>(instr.opcode));
                 err = true;
@@ -145,14 +204,45 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
         // additional cycle
         if(instrCycles)
         {
-            //cycleExecuted();
+            cycleExecuted();
             assert(instrCycles == 1);
         }
 
         // check if this is the end of the source instruction (pc incremented)
         newEmuOp = instr.len != 0;
 
-        // exit check
+        // check cycle count if this is the last part of en emulated op
+        // ... but not on the last op, that should always exit anyway
+        // ... or exits unless followed by a branch target
+        auto nextInstr = instIt + 1;
+        bool shouldSkip = nextInstr == endInstr || ((instr.flags & GenOp_Exit) && !(nextInstr->flags & GenOp_BranchTarget));
+        if(newEmuOp && !shouldSkip)
+        {
+            // might exit, sync
+            syncCyclesExecuted();
+
+            // exit may be forced after interrupts are enabled
+            if(forceExitAfter)
+               builder.b(cyclesThisInstr ? 4 : 2); // jump over the condition
+
+            // cycles -= executed
+            if(cyclesThisInstr) // 0 means we already did the sub
+                builder.sub(Reg::R0, cyclesThisInstr);
+
+            lastInstrCycleCheck = builder.getPtr(); // save in case the next instr is a branch target
+
+            // if <= 0 exit
+            auto loadSize = load16BitValueSize(pc);
+
+            // if <= 0 exit
+            builder.b(Condition::GT, loadSize + 4);
+
+            load16BitValue(builder, pcReg, pc);
+            builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
+
+            cyclesThisInstr = 0;
+            forceExitAfter = false;
+        }
 
         if(newEmuOp)
             numInstructions++;
