@@ -196,6 +196,29 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
         delayedCyclesExecuted = 0;
     };
 
+    auto setupMemAddr = [this, &blockInfo, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg, uint32_t> addr, uint8_t addrIndex)
+    {
+        assert(addr.index()); // caller should have checked checkRegOrImm result
+
+        if(std::holds_alternative<Reg>(addr))
+        {
+            auto reg = std::get<Reg>(addr);
+
+            if(!sourceInfo.shouldSyncForRegIndex || sourceInfo.shouldSyncForRegIndex(addrIndex, blockInfo))
+                syncCyclesExecuted(); // uses R1/3
+
+            builder.mov(Reg::R1, reg);
+        }
+        else
+        {
+            auto immAddr = std::get<uint32_t>(addr);
+            if(!sourceInfo.shouldSyncForAddress || sourceInfo.shouldSyncForAddress(immAddr))
+                syncCyclesExecuted();
+
+            load16BitValue(builder, Reg::R1, immAddr);
+        }
+    };
+
     // do instructions
     int numInstructions = 0;
     uint16_t *opStartPtr = nullptr;
@@ -269,6 +292,21 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
                 return (instIt - 1)->imm;
             }
+
+            return {};
+        };
+
+        auto checkRegOrImm = [&checkReg, &getLastImmLoad](uint8_t index) -> std::variant<std::monostate, Reg, uint32_t>
+        {
+            if(index == 0)
+            {
+                auto imm = getLastImmLoad();
+                if(imm)
+                    return *imm;
+            }
+
+            if(auto reg = checkReg(index))
+                return *reg;
 
             return {};
         };
@@ -349,6 +387,79 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 }
                 else
                     badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::Load:
+            {
+                auto addrSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(addrSize == 16)
+                {
+                    auto addr = checkRegOrImm(instr.src[0]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(addr.index() && dst)
+                    {
+                        int pushMask = 1 << 0; // R0
+
+                        builder.push(pushMask, false);
+
+                        setupMemAddr(addr, instr.src[0]);
+
+                        builder.mov(Reg::R0, Reg::R8); // cpu pointer
+
+                        // get func ptr
+                        loadLiteral(builder, Reg::R2, reinterpret_cast<uintptr_t>(sourceInfo.readMem));
+
+                        builder.blx(Reg::R2); // do call
+
+                        // move to dest
+                        write8BitReg(builder, *dst, Reg::R0);
+
+                        builder.pop(pushMask, false);
+                    }
+                }
+                else
+                    badRegSize(addrSize);
+
+                break;
+            }
+
+            case GenOpcode::Store:
+            {
+                auto addrSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(addrSize == 16)
+                {
+                    auto addr = checkRegOrImm(instr.src[0]);
+                    auto data = checkRegOrImm8(instr.src[1]);
+
+                    if(addr.index() && data.index())
+                    {
+                        int pushMask = 1 << 4; // R4
+
+                        builder.push(pushMask, false);
+
+                        setupMemAddr(addr, instr.src[0]);
+                        get8BitValue(builder, Reg::R2, data);
+                        builder.mov(Reg::R3, Reg::R0); // cycle count
+
+                        builder.mov(Reg::R0, Reg::R8); // cpu pointer
+
+                        // get func ptr
+                        loadLiteral(builder, Reg::R4, reinterpret_cast<uintptr_t>(sourceInfo.writeMem));
+
+                        builder.blx(Reg::R4); // do call
+
+                        // new cycle count is already in R0
+
+                        builder.pop(pushMask, false);
+                    }
+                }
+                else
+                    badRegSize(addrSize);
+
                 break;
             }
 
