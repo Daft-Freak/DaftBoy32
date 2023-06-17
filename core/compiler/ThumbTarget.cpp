@@ -4,15 +4,77 @@
 #include "ThumbTarget.h"
 #include "ThumbBuilder.h"
 
+const Reg pcReg = Reg::R1;
+const Reg cpuPtrReg = Reg::R8;
+
+static bool isLowReg(Reg r)
+{
+    return static_cast<int>(r) < 8;
+}
+
+static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value, Reg tmp = Reg::R2)
+{
+    if(value <= 0xFF || value >> __builtin_ctz(value) <= 0xFF)
+    {
+        int shift = 0;
+        if(value > 0xFF)
+            shift = __builtin_ctz(value);
+
+        builder.mov(dst, value >> shift);
+        if(shift)
+            builder.lsl(dst, dst, shift);
+    }
+    else
+    {
+        builder.mov(dst, value & 0xFF);
+        builder.mov(tmp, value >> 8);
+        builder.lsl(tmp, tmp, 8);
+        builder.orr(dst, tmp);
+    }
+}
+
 void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
 {
-    // reg alloc
+    static const Reg regList[]
+    {
+        // from DMGRecompilerThumb
+        Reg::R4,
+        Reg::R5,
+        Reg::R6,
+        Reg::R7,
+        Reg::R9,
+
+        // temps
+    };
+
+    // alloc registers
+    unsigned int allocOff = 0;
+
+    regAlloc.emplace(0, Reg::R1); // temp
+
+    int i = 1;
+    for(auto it = sourceInfo.registers.begin() + 1; it != sourceInfo.registers.end(); ++it, i++)
+    {
+        if(it->type == SourceRegType::Flags)
+            flagsReg = i;
+
+        if(it->alias)
+            continue;
+
+        // TODO: make sure we allocate all temps
+        if(allocOff == std::size(regList))
+            continue;
+
+        regAlloc.emplace(i, regList[allocOff]);
+
+        allocOff++;
+    }
 
     // map flags
     for(auto & f : flagMap)
         f = 0xFF;
 
-    int i = 0;
+    i = 0;
     for(auto it = sourceInfo.flags.begin(); it != sourceInfo.flags.end(); ++it, i++)
         flagMap[static_cast<int>(it->type)] = i;
 
@@ -75,8 +137,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
         if(err)
         {
             builder.resetPtr(opStartPtr);
-            //load16BitValue(builder, Reg::R1, pc - instr.len);
-            builder.bl(exitPtr - builder.getPtr());
+            load16BitValue(builder, pcReg, pc - instr.len);
+            builder.bl((exitPtr - builder.getPtr()) * 2);
             break;
         }
 
@@ -126,18 +188,175 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
     printf("(addr %p->%p)\n", codePtr, endPtr);
 #endif
 
-    codePtr = reinterpret_cast<uint8_t *>(endPtr);
-
     // need to clear the cache
-    // TODO: don't do the entire range
-    //__builtin___clear_cache(codeBuf, codeBuf + codeBufSize);
+    __builtin___clear_cache(codePtr, endPtr);
+
+    codePtr = reinterpret_cast<uint8_t *>(endPtr);
 
     return true;
 }
 
 void ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 {
+    auto codePtr16 = reinterpret_cast<uint16_t *>(codeBuf);
+    ThumbBuilder builder(codePtr16, reinterpret_cast<uint16_t *>(codeBuf + codeBufSize));
 
+    auto cpuPtrInt = reinterpret_cast<uintptr_t>(cpuPtr);
+
+    builder.mov(Reg::R2, Reg::R8);
+    builder.mov(Reg::R3, Reg::R9);
+    builder.push(0b11111100, true); // R2-7, LR
+    
+    // set the low bit so we stay in thumb mode
+    builder.mov(Reg::R2, 1);
+    builder.orr(Reg::R1, Reg::R2);
+
+    // load cpu pointer
+    builder.ldr(Reg::R2, 60); // FIXME: hardcoded offset
+    builder.mov(cpuPtrReg, Reg::R2);
+
+    // load emu regs
+    uint16_t firstRegOff = 0xFFFF;
+
+    uint8_t i = 0;
+    for(auto &reg : sourceInfo.registers)
+    {
+        if(reg.cpuOffset != 0xFFFF)
+        {
+            assert(reg.size == 16);
+
+             if(auto mappedReg = mapReg(i))
+             {
+                // make offsets smaller
+                // assumes first reg is at lowest addr
+                if(reg.cpuOffset < firstRegOff)
+                {
+                    firstRegOff = reg.cpuOffset;
+                    if(firstRegOff)
+                        builder.add(Reg::R2, firstRegOff); // add to cpu ptr
+                }
+
+                assert(reg.cpuOffset - firstRegOff <= 62);
+                printf("%i %i %i\n", i, firstRegOff, reg.cpuOffset);
+                fflush(stdout);
+                if(isLowReg(*mappedReg))
+                    builder.ldrh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
+                else
+                {
+                    builder.ldrh(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
+                    builder.mov(*mappedReg, Reg::R3);
+                }
+             }
+        }
+
+        i++;
+    }
+
+    builder.bx(Reg::R1);
+
+    // exit setting the call flag ... and saving LR
+    exitForCallPtr = builder.getPtr();
+    builder.mov(Reg::R0, 1);
+    builder.ldr(Reg::R2, 44); // FIXME: hardcoded offset
+    builder.strb(Reg::R0, Reg::R2, 0);
+
+    // exit saving LR
+    saveAndExitPtr = builder.getPtr();
+
+    builder.mov(Reg::R0, Reg::LR);
+    builder.ldr(Reg::R2, 40); // FIXME: hardcoded offset
+    builder.str(Reg::R0, Reg::R2, 0);
+
+    // exit
+    exitPtr = builder.getPtr();
+
+    // store PC
+    int pcOff = sourceInfo.pcOffset;
+    assert(pcOff <= 0xFF);
+    builder.mov(Reg::R2, Reg::R8); // cpu ptr
+    builder.mov(Reg::R0, pcOff);
+    builder.strh(Reg::R1, Reg::R2, Reg::R0);
+
+    // save emu regs
+    if(firstRegOff)
+        builder.add(Reg::R2, firstRegOff); // add to cpu ptr
+
+    i = 0;
+    for(auto &reg : sourceInfo.registers)
+    {
+        if(reg.cpuOffset != 0xFFFF)
+        {
+            assert(reg.size == 16);
+
+             if(auto mappedReg = mapReg(i))
+             {
+                assert(reg.cpuOffset - firstRegOff <= 62);
+                if(isLowReg(*mappedReg))
+                    builder.strh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
+                else
+                {
+                    builder.mov(Reg::R3, *mappedReg);
+                    builder.strh(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
+                }
+             }
+        }
+
+        i++;
+    }
+
+
+    // restore regs and return
+    builder.pop(0b11111100, false); // R2-7
+    builder.mov(Reg::R8, Reg::R2);
+    builder.mov(Reg::R9, Reg::R3);
+
+    builder.pop(0, true); // PC
+
+    // write cpu addr
+    auto ptr = builder.getPtr();
+
+    if((ptr - codePtr16) & 1)
+        *ptr++ = 0; // align
+
+    *ptr++ = cpuPtrInt;
+    *ptr++ = cpuPtrInt >> 16;
+
+    // write addr of exitCallFlag
+    auto addr = reinterpret_cast<uintptr_t>(&sourceInfo.exitCallFlag);
+    *ptr++ = addr;
+    *ptr++ = addr >> 16;
+
+    // write addr of tmpSavedPtr
+    addr = reinterpret_cast<uintptr_t>(&sourceInfo.savedExitPtr);
+    *ptr++ = addr;
+    *ptr++ = addr >> 16;
+
+
+#ifdef RECOMPILER_DEBUG
+    int len = ptr - codePtr16;
+
+    //debug
+    printf("generated %i halfwords for entry/exit\ncode:", len);
+
+    for(auto p = codeBuf; p != codeBuf + len * 2; p++)
+        printf(" %02X", *p);
+
+    printf("\n");
+#endif
+
+    codeBuf = reinterpret_cast<uint8_t *>(ptr);
+}
+
+std::optional<Reg> ThumbTarget::mapReg(uint8_t index)
+{
+    if(sourceInfo.registers[index].alias)
+        return {};
+
+    auto alloc = regAlloc.find(index);
+    if(alloc != regAlloc.end())
+        return alloc->second;
+
+    return {};
 }
 
 SourceFlagInfo &ThumbTarget::getFlagInfo(SourceFlagType flag)
