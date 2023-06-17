@@ -10,6 +10,12 @@ enum class Reg;
 class ThumbTarget final
 {
 public:
+    struct RegInfo
+    {
+        Reg reg;
+        uint32_t mask;
+    };
+
     ThumbTarget(){}
 
     void init(SourceInfo sourceInfo, void *cpuPtr);
@@ -22,6 +28,7 @@ public:
 
 private:
     std::optional<Reg> mapReg(uint8_t index);
+    std::optional<RegInfo> mapReg8(uint8_t index);
 
     SourceFlagInfo &getFlagInfo(SourceFlagType flag);
     uint8_t flagWriteMask(SourceFlagType flag);
