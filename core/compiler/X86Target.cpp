@@ -1926,7 +1926,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, Gen
     return true;
 }
 
-void X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
+uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 {
     X86Builder builder(codeBuf, codeBuf + codeBufSize);
 
@@ -2031,7 +2031,11 @@ void X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     printf("\n");
 #endif
 
+    auto ret = codeBuf;
+
     codeBuf = builder.getPtr();
+
+    return ret;
 }
 
 std::optional<Reg8> X86Target::mapReg8(uint8_t index)
