@@ -336,6 +336,12 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             err = true;
         };
 
+        auto unhandledFlags = [&err, &instr](uint16_t flags)
+        {
+            printf("unhandled flags %x in op %i\n", flags, int(instr.opcode));
+            err = true;
+        };
+
         // preserve flags
 
         switch(instr.opcode)
@@ -459,6 +465,50 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 }
                 else
                     badRegSize(addrSize);
+
+                break;
+            }
+
+            case GenOpcode::Subtract:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+            
+                if(regSize == 16)
+                {
+                    // should be DEC, which sets no flags
+                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
+                    else
+                    {
+                        auto src0 = checkReg(instr.src[0]);
+                        auto src1 = checkRegOrImm(instr.src[1]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src0 && src1.index() && dst)
+                        {
+                            assert(std::holds_alternative<uint32_t>(src1) && *src0 == *dst);
+
+                            auto imm = std::get<uint32_t>(src1);
+                            assert(imm <= 0xFF);
+
+                            if(isLowReg(*dst))
+                            {
+                                builder.sub(*dst, imm);
+                                builder.uxth(*dst, *dst);
+                            }
+                            else
+                            {
+                                auto r = Reg::R1;
+                                builder.mov(r, *dst);
+                                builder.sub(r, 1);
+                                builder.uxth(r, r);
+                                builder.mov(*dst, r);
+                            }
+                        }
+                    }
+                }
+                else
+                    badRegSize(regSize);
 
                 break;
             }
