@@ -21,10 +21,10 @@ static int load16BitValueSize(uint16_t value)
     if(value >> __builtin_ctz(value) <= 0xFF)
         return 4; // mov + lsl
 
-    return 8; // mov + mov + lsl + orr
+    return 6; // mov + lsl + add
 }
 
-static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value, Reg tmp = Reg::R2)
+static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value)
 {
     if(value <= 0xFF || value >> __builtin_ctz(value) <= 0xFF)
     {
@@ -38,10 +38,10 @@ static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value, Reg t
     }
     else
     {
-        builder.mov(dst, value & 0xFF);
-        builder.mov(tmp, value >> 8);
-        builder.lsl(tmp, tmp, 8);
-        builder.orr(dst, tmp);
+        // high << 8 + low
+        builder.mov(dst, value >> 8);
+        builder.lsl(dst, dst, 8);
+        builder.add(dst, value & 0xFF);
     }
 }
 
