@@ -469,6 +469,58 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 break;
             }
 
+            case GenOpcode::Add:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+            
+                if(regSize == 16)
+                {
+                    // FIXME: handle flags
+                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
+                    else
+                    {
+                        auto src0 = checkReg(instr.src[0]);
+                        auto src1 = checkRegOrImm(instr.src[1]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src0 && src1.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src1))
+                            {
+                                assert(*src0 == *dst);
+
+                                auto imm = std::get<uint32_t>(src1);
+                                assert(imm <= 0xFF);
+
+                                if(isLowReg(*dst))
+                                {
+                                    builder.add(*dst, imm);
+                                    builder.uxth(*dst, *dst);
+                                }
+                                else
+                                {
+                                    auto r = Reg::R1;
+                                    builder.mov(r, *dst);
+                                    builder.add(r, 1);
+                                    builder.uxth(r, r);
+                                    builder.mov(*dst, r);
+                                }
+                            }
+                            else
+                            {
+                                builder.add(*dst, *src0, std::get<Reg>(src1));
+                                builder.uxth(*dst, *dst);
+                            }
+                        }
+                    }
+                }
+                else
+                    badRegSize(regSize);
+
+                break;
+            }
+
             case GenOpcode::Subtract:
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
