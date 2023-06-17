@@ -108,8 +108,7 @@ bool DMGRecompilerGeneric::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &bl
 
 void DMGRecompilerGeneric::compileEntry()
 {
-    auto entryPtr = curCodePtr;
-    target.compileEntry(curCodePtr, codeBufSize);
+    auto entryPtr = target.compileEntry(curCodePtr, codeBufSize);
     entryFunc = reinterpret_cast<CompiledFunc>(entryPtr);
 }
 

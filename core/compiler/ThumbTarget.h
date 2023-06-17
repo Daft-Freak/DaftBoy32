@@ -18,7 +18,7 @@ public:
 
     bool compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, GenBlockInfo &blockInfo);
 
-    void compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize);
+    uint8_t *compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize);
 
 private:
     std::optional<Reg> mapReg(uint8_t index);

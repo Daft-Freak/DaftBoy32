@@ -196,7 +196,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
     return true;
 }
 
-void ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
+uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 {
     auto codePtr16 = reinterpret_cast<uint16_t *>(codeBuf);
     ThumbBuilder builder(codePtr16, reinterpret_cast<uint16_t *>(codeBuf + codeBufSize));
@@ -344,7 +344,11 @@ void ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     printf("\n");
 #endif
 
+    auto ret = codeBuf + 1; // thumb bit
+
     codeBuf = reinterpret_cast<uint8_t *>(ptr);
+
+    return ret;
 }
 
 std::optional<Reg> ThumbTarget::mapReg(uint8_t index)
