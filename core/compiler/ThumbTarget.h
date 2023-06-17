@@ -21,6 +21,8 @@ public:
     void compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize);
 
 private:
+    std::optional<Reg> mapReg(uint8_t index);
+
     SourceFlagInfo &getFlagInfo(SourceFlagType flag);
     uint8_t flagWriteMask(SourceFlagType flag);
     bool writesFlag(uint16_t opFlags, SourceFlagType flag);
