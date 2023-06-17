@@ -114,7 +114,7 @@ void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
     // alloc registers
     unsigned int allocOff = 0;
 
-    regAlloc.emplace(0, Reg::R1); // temp
+    regAlloc.emplace(0, Reg::R2); // temp
 
     int i = 1;
     for(auto it = sourceInfo.registers.begin() + 1; it != sourceInfo.registers.end(); ++it, i++)
@@ -199,6 +199,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
     // do instructions
     int numInstructions = 0;
     uint16_t *opStartPtr = nullptr;
+    uint16_t *lastImmLoadStart = nullptr, *lastImmLoadEnd = nullptr;
     bool newEmuOp = true;
     bool forceExitAfter = false;
 
@@ -211,7 +212,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
         // branch targets
 
-            pc += instr.len;
+        pc += instr.len;
 
         // update start pointer if the last op was the end of an emulated op
         if(newEmuOp)
@@ -229,12 +230,126 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
         bool err = false;
 
+        // validating wrappers
+        auto checkReg = [this, &builder, &err, &instr](uint8_t index)
+        {
+            auto reg = mapReg(index);
+            if(!reg)
+            {
+                // TODO: opcode labels
+                printf("unhandled reg %s in op %i\n", sourceInfo.registers[index].label, int(instr.opcode));
+                err = true;
+            }
+
+            return reg;
+        };
+
+        auto checkReg8 = [this, &builder, &err, &instr](uint8_t index)
+        {
+            auto reg = mapReg8(index);
+            if(!reg)
+            {
+                // TODO: opcode labels
+                printf("unhandled reg %s in op %i\n", sourceInfo.registers[index].label, int(instr.opcode));
+                err = true;
+            }
+
+            return reg;
+        };
+
+        // immediate helpers
+        auto getLastImmLoad = [&builder, &instIt, &beginInstr, &lastImmLoadStart, &lastImmLoadEnd]() -> std::optional<uint32_t>
+        {
+            if(instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::LoadImm)
+            {
+                // remove the load
+                assert(lastImmLoadStart);
+                builder.removeRange(lastImmLoadStart, lastImmLoadEnd);
+                lastImmLoadStart = lastImmLoadEnd = nullptr;
+
+                return (instIt - 1)->imm;
+            }
+
+            return {};
+        };
+
+        auto checkRegOrImm8 = [&checkReg8, &getLastImmLoad](uint8_t index) -> std::variant<std::monostate, RegInfo, uint8_t>
+        {
+            if(index == 0)
+            {
+                auto imm = getLastImmLoad();
+                if(imm)
+                {
+                    assert(!(*imm & 0xFFFFFF00));
+                    return static_cast<uint8_t>(*imm);
+                }
+            }
+
+            if(auto reg = checkReg8(index))
+                return *reg;
+
+            return {};
+        };
+
+        // error handling
+        auto badRegSize = [&err, &instr](int size)
+        {
+            printf("unhandled reg size %i in op %i\n", size, int(instr.opcode));
+            err = true;
+        };
+
         // preserve flags
 
         switch(instr.opcode)
         {
             case GenOpcode::NOP:
                 break;
+
+            case GenOpcode::LoadImm:
+                lastImmLoadStart = builder.getPtr();
+                assert(instr.imm <= 0xFFFF);
+                load16BitValue(builder, *mapReg(0), instr.imm);
+                lastImmLoadEnd = builder.getPtr();
+                break;
+
+            case GenOpcode::Move:
+            {
+                assert(!(instr.flags & GenOp_WriteFlags));
+
+                auto regSize = sourceInfo.registers[instr.dst[0]].size;
+                if(regSize == 16)
+                {
+                    auto dst = checkReg(instr.dst[0]);
+
+                    if(sourceInfo.registers[instr.src[0]].size == 8)
+                    {
+                        // 8 -> 16 bit
+                        auto src = checkRegOrImm8(instr.src[0]);
+                        get8BitValue(builder, *dst, src);
+                    }
+                    else
+                    {
+                        // TODO: can do _slightly_ better for immediates (avoid the mov)
+                        auto src = checkReg(instr.src[0]);
+                        if(src && dst)
+                            builder.mov(*dst, *src);
+                    }
+                }
+                else if(regSize == 8)
+                {
+                    auto src = checkRegOrImm8(instr.src[0]);
+                    auto dst = checkReg8(instr.dst[0]);
+                    if(src.index() && dst)
+                    {
+                        auto tmp = mapReg(0);
+                        get8BitValue(builder, *tmp, src);
+                        write8BitReg(builder, *dst, *tmp);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
 
             default:
                 printf("unhandled gen op %i\n", static_cast<int>(instr.opcode));
