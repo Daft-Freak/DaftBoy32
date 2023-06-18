@@ -602,7 +602,41 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(regSize == 8)
+                if(regSize == 16)
+                {
+                    // used for LDH, RET
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src0 = checkReg(instr.src[0]);
+                        auto src1 = checkReg(instr.src[1]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src0 && src1 && dst)
+                        {
+                            auto origDest = *dst;
+
+                            // the high temp ends up getting used as src and dst...
+                            if(!isLowReg(*src1))
+                            {
+                                builder.mov(Reg::R1, *src1);
+                                src1 = Reg::R1;
+                            }
+                            else if(!isLowReg(*dst))
+                                *dst = Reg::R1;
+
+                            if(*dst != *src0)
+                                builder.mov(*dst, *src0);
+
+                            builder.orr(*dst, *src1);
+
+                            if(*dst != origDest) // we moved it
+                                builder.mov(origDest, *dst);
+                        }
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src0 = checkReg8(instr.src[0]);
                     auto src1 = checkReg8(instr.src[1]);
