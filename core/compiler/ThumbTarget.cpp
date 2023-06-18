@@ -641,7 +641,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
         // output literals if ~close to the limit or this is the last instruction
         // this was definitely NOT set by decreasing until it didn't abort...
-        if(nextInstr == endInstr || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460))
+        if(newEmuOp && (nextInstr == endInstr || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460)))
             outputLiterals(builder);
     }
 
