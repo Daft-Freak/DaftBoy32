@@ -565,6 +565,109 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 break;
             }
 
+            case GenOpcode::Jump:
+            {
+                auto condition = static_cast<GenCondition>(instr.src[0]);
+                auto regSize = sourceInfo.registers[instr.src[1]].size;
+
+                bool isExit = instr.flags & GenOp_Exit;
+
+                if(regSize == 16)
+                {
+                    auto src = checkRegOrImm(instr.src[1]);
+                    if(src.index())
+                    {
+                        assert(isExit || std::holds_alternative<uint32_t>(src)); // shouldn't be any non-exit jumps with unknown addr
+
+                        uint16_t *branchPtr = nullptr;
+                        bool flagSet = false;
+
+                        // condition
+                        if(condition != GenCondition::Always)
+                        {
+                            auto f = checkReg8(flagsReg);
+
+                            syncCyclesExecuted();
+
+                            flagSet = condition == GenCondition::Equal || condition == GenCondition::CarrySet;
+                            auto flag = (condition == GenCondition::Equal || condition == GenCondition::NotEqual) ? SourceFlagType::Zero : SourceFlagType::Carry;
+
+                            if(f)
+                            {
+                                builder.mov(Reg::R1, 1 << getFlagInfo(flag).bit);
+                                builder.and_(Reg::R1, f->reg);
+                                branchPtr = builder.getPtr();
+                                builder.b(Condition::EQ, 0); // patch later
+                            }
+                        }
+
+                        // need to sync cycles *before* the jump out
+                        if(instrCycles)
+                        {
+                            cycleExecuted();
+                            instrCycles--;
+                            assert(instrCycles == 0);
+                        }
+                        syncCyclesExecuted();
+
+
+                        // set pc if we're exiting
+                        // ... or always as we might not be able to patch the branch
+                        if(std::holds_alternative<uint32_t>(src))
+                            load16BitValue(builder, pcReg, std::get<uint32_t>(src));
+                        else if(std::get<Reg>(src) != pcReg)
+                            builder.mov(pcReg, std::get<Reg>(src));
+                    
+                        //if(instr.flags & Op_Branch)
+                        //    builder.sub(Reg::R0, cyclesThisInstr);
+
+
+                        // don't update twice for unconditional branches
+                        //if(condition == GenCondition::Always)
+                        //    cyclesThisInstr = 0;
+
+                        /*auto it = std::holds_alternative<uint32_t>(src) ? branchTargets.find(std::get<uint32_t>(src)) : branchTargets.end();
+
+                        if(it != branchTargets.end())
+                        {
+                            // backwards branch
+                            int off = (it->second - builder.getPtr()) * 2;
+                            if(off >= -2044)
+                            {
+                                builder.b(off);
+                                builder.nop(); // B is shorter than BL
+                            }
+                            else
+                                builder.bl((exitPtr - builder.getPtr()) * 2); // too far, give up
+                        }
+                        else*/
+                        {
+                            //if(!isExit)
+                            //    forwardBranchesToPatch.emplace(std::get<uint32_t>(src), builder.getPtr());
+
+                            // forwards branch or exit
+                            if(isExit && (instr.flags & GenOp_Call))
+                                builder.bl((exitForCallPtr - builder.getPtr()) * 2); // call, save when exiting
+                            else
+                                builder.bl((exitPtr - builder.getPtr()) * 2); // patched later if not exit
+                        }
+
+                        // patch the condition jump
+                        if(branchPtr && !builder.getError())
+                        {
+                            int off = (builder.getPtr() - (branchPtr + 1)) * 2;
+                            builder.patch(branchPtr, branchPtr + 2);
+                            builder.b(flagSet ? Condition::EQ : Condition::NE, off);
+                            builder.endPatch();
+                        }
+                    }
+                }
+                else
+                    badRegSize(regSize);
+
+                break;
+            }
+
             default:
                 printf("unhandled gen op %i\n", static_cast<int>(instr.opcode));
                 err = true;
