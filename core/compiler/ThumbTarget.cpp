@@ -29,7 +29,12 @@ static void get8BitValue(ThumbBuilder &builder, Reg dst, std::variant<std::monos
         if(reg.mask == 0xFF00)
             builder.lsr(dst, reg.reg, 8); // shift it down
         else if(reg.mask == 0xFF && dst != reg.reg) // assume it's already masked if it's already there
-            builder.uxtb(dst, reg.reg); // clear the high half
+        {
+            if(isLowReg(reg.reg))
+                builder.uxtb(dst, reg.reg); // clear the high half
+            else
+                builder.mov(dst, reg.reg); // assume this isn't an emulated reg and doesn't need masked
+        }
     }
 }
 
@@ -43,7 +48,9 @@ static void write8BitReg(ThumbBuilder &builder, ThumbTarget::RegInfo dst, Reg sr
         return;
     }
 
-    if(!dst.mask)
+    // just copy if not masked
+    // or >= R8, mostly because the code below would fail
+    if(!dst.mask || !isLowReg(dst.reg))
     {
         builder.mov(dst.reg, src);
         return;
@@ -109,6 +116,8 @@ void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
         Reg::R9,
 
         // temps
+        Reg::R10, // not very optimal
+        Reg::R2, // the same as temp/0, should only get used where temp is removed
     };
 
     // alloc registers
@@ -417,7 +426,15 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         // 8 -> 16 bit
                         auto src = checkRegOrImm8(instr.src[0]);
                         if(src.index() && dst)
-                            get8BitValue(builder, *dst, src);
+                        {
+                            if(isLowReg(*dst))
+                                get8BitValue(builder, *dst, src);
+                            else // LDH (C)
+                            {
+                                get8BitValue(builder, Reg::R1, src);
+                                builder.mov(*dst, Reg::R1);
+                            }
+                        }
                     }
                     else
                     {
@@ -993,13 +1010,16 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     builder.mov(Reg::R2, Reg::R8);
     builder.mov(Reg::R3, Reg::R9);
     builder.push(0b11111100, true); // R2-7, LR
+
+    builder.mov(Reg::R2, Reg::R10);
+    builder.push(0b100, false); // R2
     
     // set the low bit so we stay in thumb mode
     builder.mov(Reg::R2, 1);
     builder.orr(Reg::R1, Reg::R2);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 60); // FIXME: hardcoded offset
+    builder.ldr(Reg::R2, 64); // FIXME: hardcoded offset
     builder.mov(cpuPtrReg, Reg::R2);
 
     // load emu regs
@@ -1044,14 +1064,14 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     // exit setting the call flag ... and saving LR
     exitForCallPtr = builder.getPtr();
     builder.mov(Reg::R0, 1);
-    builder.ldr(Reg::R2, 44); // FIXME: hardcoded offset
+    builder.ldr(Reg::R2, 48); // FIXME: hardcoded offset
     builder.strb(Reg::R0, Reg::R2, 0);
 
     // exit saving LR
     saveAndExitPtr = builder.getPtr();
 
     builder.mov(Reg::R0, Reg::LR);
-    builder.ldr(Reg::R2, 40); // FIXME: hardcoded offset
+    builder.ldr(Reg::R2, 44); // FIXME: hardcoded offset
     builder.str(Reg::R0, Reg::R2, 0);
 
     // exit
@@ -1093,6 +1113,9 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
 
     // restore regs and return
+    builder.pop(0b100, false); // R2
+    builder.mov(Reg::R10, Reg::R2);
+
     builder.pop(0b11111100, false); // R2-7
     builder.mov(Reg::R8, Reg::R2);
     builder.mov(Reg::R9, Reg::R3);
