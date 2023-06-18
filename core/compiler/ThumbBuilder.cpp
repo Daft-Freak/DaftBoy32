@@ -380,7 +380,7 @@ void ThumbBuilder::removeRange(uint16_t *startPtr, uint16_t *endPtr)
 
     // move any code after the end of the removed range
     if(endPtr != ptr)
-        memmove(startPtr, endPtr, ptr - endPtr);
+        memmove(startPtr, endPtr, (ptr - endPtr) * 2);
 
     this->ptr -= (endPtr - startPtr);
 }
