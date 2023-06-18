@@ -233,6 +233,29 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
     {
         auto &instr = *instIt;
 
+        // flag helpers
+        // assumes value in R1 if needCompare is true
+        const auto updateZ = [this, &instr, &builder](bool needCompare)
+        {
+            if(writesFlag(instr.flags, SourceFlagType::Zero))
+            {
+                auto f = *mapReg8(flagsReg);
+
+                if(needCompare)
+                    builder.cmp(Reg::R1, 0);
+
+                builder.b(Condition::NE, 2);
+                // assuming we started with 0 and never set the same flag twice, we can use add instead of orr
+                builder.add(f.reg, 1 << getFlagInfo(SourceFlagType::Zero).bit);
+            }
+        };
+
+        const auto setFlag = [this, &instr, &builder](SourceFlagType flag)
+        {
+            if(writesFlag(instr.flags, flag))
+                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(flag).bit);
+        };
+
         // branch targets
 
         pc += instr.len;
@@ -342,7 +365,31 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             err = true;
         };
 
-        // preserve flags
+        // clear/preserve flags
+        // needs to be after the reg helpers
+        uint8_t preserveMask = 0;
+
+        if((instr.flags & GenOp_WriteFlags))
+        {
+            preserveMask = 0;
+
+            if((instr.flags & GenOp_PreserveFlags))
+            {
+                for(int i = 0; i < 4; i++)
+                {
+                    if(instr.flags & (1 << i))
+                        preserveMask |= 1 << sourceInfo.flags[i].bit;
+                }
+            }
+
+            auto f = checkReg8(flagsReg); // TODO: assumes 8-bit flags
+
+            if(f)
+            {
+                builder.mov(Reg::R1, ~preserveMask);
+                builder.bic(f->reg, Reg::R1); // clear flags
+            }
+        }
 
         switch(instr.opcode)
         {
@@ -521,6 +568,64 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 break;
             }
 
+            case GenOpcode::And:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src0 && src1 && dst)
+                    {
+                        // TODO: can optimise a bit for A reg
+                        assert(src0->reg != Reg::R2);
+                        get8BitValue(builder, Reg::R1, *src0);
+                        get8BitValue(builder, Reg::R2, *src1);
+
+                        builder.and_(Reg::R1, Reg::R2);
+
+                        write8BitReg(builder, *dst, Reg::R1);
+
+                        updateZ(false);
+                        setFlag(SourceFlagType::HalfCarry);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::Or:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src0 && src1 && dst)
+                    {
+                        assert(src0->reg != Reg::R2);
+                        get8BitValue(builder, Reg::R1, *src0);
+                        get8BitValue(builder, Reg::R2, *src1);
+
+                        builder.orr(Reg::R1, Reg::R2);
+
+                        write8BitReg(builder, *dst, Reg::R1);
+
+                        updateZ(false);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
             case GenOpcode::Subtract:
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
@@ -562,6 +667,35 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 else
                     badRegSize(regSize);
 
+                break;
+            }
+
+            case GenOpcode::Xor:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src0 && src1 && dst)
+                    {
+                        // TODO: optimise XOR A
+                        assert(src0->reg != Reg::R2);
+                        get8BitValue(builder, Reg::R1, *src0);
+                        get8BitValue(builder, Reg::R2, *src1);
+
+                        builder.eor(Reg::R1, Reg::R2);
+
+                        write8BitReg(builder, *dst, Reg::R1);
+
+                        updateZ(false);
+                    }
+                }
+                else
+                    badRegSize(regSize);
                 break;
             }
 
