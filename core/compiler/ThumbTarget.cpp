@@ -733,6 +733,35 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 break;
             }
 
+            case GenOpcode::ShiftLeft:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 16)
+                {
+                    // used for RET
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src0 = checkReg(instr.src[0]);
+                        auto src1 = checkRegOrImm8(instr.src[1]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src0 && src0 && src1.index())
+                        {
+                            if(std::holds_alternative<uint8_t>(src1))
+                                builder.lsl(*dst, *src0, std::get<uint8_t>(src1)); // should uxth, but the only users of this don't need it
+                            else
+                                assert(!"16-bit shift by reg");
+                        }
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
             case GenOpcode::Jump:
             {
                 auto condition = static_cast<GenCondition>(instr.src[0]);
