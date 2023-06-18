@@ -831,6 +831,8 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     printf("\n");
 #endif
 
+    __builtin___clear_cache(codeBuf, ptr);
+
     auto ret = codeBuf + 1; // thumb bit
 
     codeBuf = reinterpret_cast<uint8_t *>(ptr);
