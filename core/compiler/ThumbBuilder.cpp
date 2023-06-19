@@ -18,6 +18,15 @@ void ThumbBuilder::add(LowReg dn, uint8_t imm)
 }
 
 // reg
+void ThumbBuilder::add(Reg dn, Reg m)
+{
+    int mReg = static_cast<int>(m);
+    int dnReg = static_cast<int>(dn);
+
+    write(0x4400 | (dnReg & 8) << 4 | mReg << 3 | (dnReg & 7));
+}
+
+// reg
 void ThumbBuilder::add(LowReg d, LowReg n, LowReg m)
 {
     int dReg = static_cast<int>(d.val);
