@@ -545,51 +545,81 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             
                 if(regSize == 16)
                 {
-                    // FIXME: handle flags
-                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
-                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
-                    else
+                    auto src0 = checkReg(instr.src[0]);
+                    auto src1 = checkRegOrImm(instr.src[1]);
+                    auto dst = checkReg(instr.dst[0]);
+                    auto f = checkReg8(flagsReg);
+
+                    if(src0 && src1.index() && dst && f)
                     {
-                        auto src0 = checkReg(instr.src[0]);
-                        auto src1 = checkRegOrImm(instr.src[1]);
-                        auto dst = checkReg(instr.dst[0]);
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
+                            builder.mov(Reg::R3, *dst); // save dst in
 
-                        if(src0 && src1.index() && dst)
+                        auto resultReg = *dst;
+
+                        if(std::holds_alternative<uint32_t>(src1))
                         {
-                            if(std::holds_alternative<uint32_t>(src1))
+                            assert(*src0 == *dst);
+
+                            auto imm = std::get<uint32_t>(src1);
+                            assert(imm <= 0xFF || imm >= 0xFF80);
+
+                            if(isLowReg(*dst))
                             {
-                                assert(*src0 == *dst);
-
-                                auto imm = std::get<uint32_t>(src1);
-                                assert(imm <= 0xFF || imm >= 0xFF80);
-
-                                if(isLowReg(*dst))
-                                {
-                                    if(imm >= 0xFF80) // LDHL SP (signed 8 bit)
-                                        builder.sub(*dst, 0x10000 - imm);
-                                    else
-                                        builder.add(*dst, imm);
-                                    builder.uxth(*dst, *dst);
-                                }
+                                if(imm >= 0xFF80) // LDHL SP (signed 8 bit)
+                                    builder.sub(*dst, 0x10000 - imm);
                                 else
-                                {
-                                    auto r = Reg::R1;
-                                    builder.mov(r, *dst);
-
-                                    if(imm >= 0xFF80) // ADD SP (signed 8 bit)
-                                        builder.sub(r, 0x10000 - imm);
-                                    else
-                                        builder.add(r, imm);
-                                    builder.uxth(r, r);
-                                    builder.mov(*dst, r);
-                                }
+                                    builder.add(*dst, imm);
                             }
                             else
                             {
-                                builder.add(*dst, *src0, std::get<Reg>(src1));
-                                builder.uxth(*dst, *dst);
+                                resultReg = Reg::R1;
+                                builder.mov(resultReg, *dst);
+
+                                if(imm >= 0xFF80) // ADD SP (signed 8 bit)
+                                    builder.sub(resultReg, 0x10000 - imm);
+                                else
+                                    builder.add(resultReg, imm);
                             }
                         }
+                        else if(*dst == *src0)
+                            builder.add(*dst, std::get<Reg>(src1)); // can handle high regs
+                        else
+                            builder.add(*dst, *src0, std::get<Reg>(src1));
+
+                        // flags
+                        // can't use carry from op here
+                        if(writesFlag(instr.flags, SourceFlagType::Carry))
+                        {
+                            // res > 0xFFFF == res >> 16 != 0
+                            builder.lsr(Reg::R1, resultReg, 16);
+
+                            builder.b(Condition::EQ, 2);
+                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                        }
+
+                        // mask and move
+                        builder.uxth(resultReg, resultReg);
+                        if(resultReg != *dst)
+                            builder.mov(*dst, resultReg);
+
+                        // H = (res & 0xFFF) < (dst & 0xFFFF)
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
+                        {
+                            // & 0xFFF == & ~0xF000
+                            load16BitValue(builder, Reg::R2, 0xF000);
+
+                            if(resultReg != Reg::R1)
+                                builder.mov(Reg::R1, resultReg);
+
+                            builder.bic(Reg::R1, Reg::R2);
+                            builder.bic(Reg::R3, Reg::R2);
+
+                            builder.cmp(Reg::R1, Reg::R3);
+
+                            builder.b(Condition::GE, 2);
+                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::HalfCarry).bit);
+                        } 
                     }
                 }
                 else if(regSize == 8)
