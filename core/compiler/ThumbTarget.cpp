@@ -1180,7 +1180,7 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     // exit setting the call flag ... and saving LR
     exitForCallPtr = builder.getPtr();
     builder.mov(Reg::R0, 1);
-    builder.ldr(Reg::R2, 48); // FIXME: hardcoded offset
+    builder.ldr(Reg::R2, 44); // FIXME: hardcoded offset
     builder.strb(Reg::R0, Reg::R2, 0);
 
     // exit saving LR
@@ -1248,12 +1248,12 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     *ptr++ = cpuPtrInt >> 16;
 
     // write addr of exitCallFlag
-    auto addr = reinterpret_cast<uintptr_t>(&sourceInfo.exitCallFlag);
+    auto addr = reinterpret_cast<uintptr_t>(sourceInfo.exitCallFlag);
     *ptr++ = addr;
     *ptr++ = addr >> 16;
 
     // write addr of tmpSavedPtr
-    addr = reinterpret_cast<uintptr_t>(&sourceInfo.savedExitPtr);
+    addr = reinterpret_cast<uintptr_t>(sourceInfo.savedExitPtr);
     *ptr++ = addr;
     *ptr++ = addr >> 16;
 
