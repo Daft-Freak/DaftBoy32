@@ -1025,6 +1025,82 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 break;
             }
 
+            case GenOpcode::SubtractWithCarry:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+            
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[1]);
+                    auto dst = checkReg8(instr.src[0]);
+                    auto f = checkReg8(flagsReg);
+
+                    if(src && dst && f)
+                    {
+                        get8BitValue(builder, Reg::R1, *dst);
+
+                        assert(dst->reg != Reg::R2);
+                        get8BitValue(builder, Reg::R2, *src);
+
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
+                            builder.push(0b1010, false); // save dst in and carry
+
+                        // need to invert C
+                        builder.mvn(Reg::R3, Reg::R3);
+                        // but now all the other bits are set, so use a shift
+                        builder.lsr(Reg::R3, Reg::R3, getFlagInfo(SourceFlagType::Carry).bit + 1);
+
+                        builder.sbc(Reg::R1, Reg::R2);
+                        builder.uxtb(Reg::R1, Reg::R1);
+
+                        // flags
+                        if(writesFlag(instr.flags, SourceFlagType::Carry))
+                        {
+                            // carry is reversed for sub 
+                            builder.b(Condition::CS, 2);
+                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                        }
+
+                        write8BitReg(builder, *dst, Reg::R1); // may modify R1
+
+                        updateZ(true);
+
+                        // H = (res & 0xF) > ((dst & 0xF) - C)
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
+                        {
+                            builder.mov(Reg::R2, 0xF);
+
+                            if(dst->mask == 0xFF00) // undo shift from write
+                                builder.lsr(Reg::R1, Reg::R1, 8);
+
+                            builder.and_(Reg::R1, Reg::R2);
+
+                            // restore dst -> R3
+                            builder.pop(1 << 3, false);
+                            builder.and_(Reg::R3, Reg::R2);
+
+                            // restore C -> R2
+                            builder.pop(1 << 2, false);
+
+                            // sub C
+                            builder.lsr(Reg::R2, Reg::R2, getFlagInfo(SourceFlagType::Carry).bit);
+                            builder.sub(Reg::R3, Reg::R3, Reg::R2);
+                            
+                            builder.cmp(Reg::R1, Reg::R3);
+
+                            builder.b(Condition::LE, 2);
+                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::HalfCarry).bit);
+                        }
+
+                        setFlag(SourceFlagType::WasSub);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+
+                break;
+            }
+
             case GenOpcode::Xor:
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
