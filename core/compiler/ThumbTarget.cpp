@@ -775,6 +775,62 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         }
                     }
                 }
+                else if(regSize == 8)
+                {
+                    auto src = checkRegOrImm8(instr.src[1]);
+                    auto dst = checkReg8(instr.src[0]);
+                    auto f = checkReg8(flagsReg);
+
+                    if(src.index() && dst && f)
+                    {
+                        get8BitValue(builder, Reg::R1, *dst);
+
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
+                            builder.mov(Reg::R3, Reg::R1); // save dst in
+
+                        if(std::holds_alternative<uint8_t>(src))
+                            builder.sub(Reg::R1, std::get<uint8_t>(src));
+                        else
+                        {
+                            assert(dst->reg != Reg::R2);
+                            get8BitValue(builder, Reg::R2, src);
+                            builder.sub(Reg::R1, Reg::R1, Reg::R2);
+                        }
+
+                        builder.uxtb(Reg::R1, Reg::R1);
+
+                        // flags
+                        if(writesFlag(instr.flags, SourceFlagType::Carry))
+                        {
+                            // carry is reversed for sub 
+                            builder.b(Condition::CS, 2);
+                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                        }
+
+                        write8BitReg(builder, *dst, Reg::R1); // may modify R1
+
+                        updateZ(true);
+
+                        // H = (res & 0xF) > (dst & 0xF)
+                        if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
+                        {
+                            builder.mov(Reg::R2, 0xF);
+
+                            if(dst->mask == 0xFF00) // undo shift from write
+                                builder.lsr(Reg::R1, Reg::R1, 8);
+
+                            builder.and_(Reg::R1, Reg::R2);
+
+                            builder.and_(Reg::R3, Reg::R2);
+                            builder.cmp(Reg::R1, Reg::R3);
+
+                            builder.b(Condition::LE, 2);
+                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::HalfCarry).bit);
+                        } 
+
+                        setFlag(SourceFlagType::WasSub);
+                    }
+                }
                 else
                     badRegSize(regSize);
 
