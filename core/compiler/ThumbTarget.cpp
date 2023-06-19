@@ -384,14 +384,14 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
         // needs to be after the reg helpers
         uint8_t preserveMask = 0;
 
-        if((instr.flags & GenOp_WriteFlags))
+        bool needCarry = instr.opcode == GenOpcode::AddWithCarry
+                      || instr.opcode == GenOpcode::SubtractWithCarry
+                      || instr.opcode == GenOpcode::RotateLeftCarry
+                      || instr.opcode == GenOpcode::RotateRightCarry;
+
+        if((instr.flags & GenOp_WriteFlags) || needCarry)
         {
             preserveMask = 0;
-
-            bool needCarry = instr.opcode == GenOpcode::AddWithCarry
-                          || instr.opcode == GenOpcode::SubtractWithCarry
-                          || instr.opcode == GenOpcode::RotateLeftCarry
-                          || instr.opcode == GenOpcode::RotateRightCarry;
 
             if((instr.flags & GenOp_PreserveFlags))
             {
@@ -414,8 +414,11 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                     builder.and_(Reg::R3, Reg::R1);
                 }
 
-                builder.mov(Reg::R1, ~preserveMask);
-                builder.bic(f->reg, Reg::R1); // clear flags
+                if(instr.flags & GenOp_WriteFlags)
+                {
+                    builder.mov(Reg::R1, ~preserveMask);
+                    builder.bic(f->reg, Reg::R1); // clear flags
+                }
             }
         }
 
