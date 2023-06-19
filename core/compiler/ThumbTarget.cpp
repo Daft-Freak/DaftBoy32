@@ -28,12 +28,18 @@ static void get8BitValue(ThumbBuilder &builder, Reg dst, std::variant<std::monos
 
         if(reg.mask == 0xFF00)
             builder.lsr(dst, reg.reg, 8); // shift it down
-        else if(reg.mask == 0xFF && dst != reg.reg) // assume it's already masked if it's already there
+        else if(dst != reg.reg) // assume it's already masked if it's already there
         {
             if(isLowReg(reg.reg))
                 builder.uxtb(dst, reg.reg); // clear the high half
             else
-                builder.mov(dst, reg.reg); // assume this isn't an emulated reg and doesn't need masked
+            {
+                builder.mov(dst, reg.reg);
+                // definitely need to mask if src wasn't 8-bit
+                // otherwise assume this isn't an emulated reg and doesn't need masked
+                if(reg.mask == 0)
+                    builder.uxtb(dst, dst);
+            }
         }
     }
 }
@@ -555,18 +561,25 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                                 assert(*src0 == *dst);
 
                                 auto imm = std::get<uint32_t>(src1);
-                                assert(imm <= 0xFF);
+                                assert(imm <= 0xFF || imm >= 0xFF80);
 
                                 if(isLowReg(*dst))
                                 {
-                                    builder.add(*dst, imm);
+                                    if(imm >= 0xFF80) // LDHL SP (signed 8 bit)
+                                        builder.sub(*dst, 0x10000 - imm);
+                                    else
+                                        builder.add(*dst, imm);
                                     builder.uxth(*dst, *dst);
                                 }
                                 else
                                 {
                                     auto r = Reg::R1;
                                     builder.mov(r, *dst);
-                                    builder.add(r, 1);
+
+                                    if(imm >= 0xFF80) // ADD SP (signed 8 bit)
+                                        builder.sub(r, 0x10000 - imm);
+                                    else
+                                        builder.add(r, imm);
                                     builder.uxth(r, r);
                                     builder.mov(*dst, r);
                                 }
