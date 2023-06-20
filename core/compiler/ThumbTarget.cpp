@@ -1669,10 +1669,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             // backwards branch
                             int off = (it->second - builder.getPtr()) * 2;
                             if(off >= -2044)
-                            {
                                 builder.b(off);
-                                builder.nop(); // B is shorter than BL
-                            }
                             else
                                 builder.bl((exitPtr - builder.getPtr()) * 2); // too far, give up
                         }
