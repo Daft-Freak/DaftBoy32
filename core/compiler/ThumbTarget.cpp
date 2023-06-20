@@ -1157,6 +1157,205 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 break;
             }
 
+            case GenOpcode::RotateLeft:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkRegOrImm8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    bool setZ = !(instr.flags & GenOp_MagicAlt1); // RLCA sets Z to 0, RLC A sets Z based on the result
+                    bool setC = !(instr.flags & GenOp_MagicAlt2); // SWAP sets C to 0 (translated to rot by 4)
+
+                    if(src0 && src0 && src1.index())
+                    {
+                        if(std::holds_alternative<uint8_t>(src1))
+                        {
+                            get8BitValue(builder, Reg::R1, *src0);
+
+                            // v << n | v >> (8 - n)
+                            builder.lsr(Reg::R2, Reg::R1, 8 - std::get<uint8_t>(src1));
+                            builder.lsl(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
+                            builder.orr(Reg::R1, Reg::R2);
+
+                            // carry
+                            if(setC && writesFlag(instr.flags, SourceFlagType::Carry))
+                            {
+                                builder.cmp(Reg::R1, 0xFF);
+                                builder.b(Condition::LE, 2);
+                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                            }
+
+                            builder.uxtb(Reg::R1, Reg::R1);
+
+                            // zero
+                            if(setZ)
+                                updateZ(true);
+
+                            // write back
+                            write8BitReg(builder, *dst, Reg::R1);
+                        }
+                        else
+                            assert(!"8-bit rotate by reg");
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::RotateLeftCarry:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkRegOrImm8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    bool setZ = !(instr.flags & GenOp_MagicAlt1);
+
+                    if(src0 && src0 && src1.index())
+                    {
+                        if(std::holds_alternative<uint8_t>(src1))
+                        {
+                            get8BitValue(builder, Reg::R1, *src0);
+
+                            assert(std::get<uint8_t>(src1) == 1);
+
+                            builder.lsl(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
+
+                            // carry in
+                            builder.lsr(Reg::R3, Reg::R3, getFlagInfo(SourceFlagType::Carry).bit);
+                            builder.orr(Reg::R1, Reg::R3);
+
+                            // carry
+                            if(writesFlag(instr.flags, SourceFlagType::Carry))
+                            {
+                                builder.cmp(Reg::R1, 0xFF);
+                                builder.b(Condition::LE, 2);
+                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                            }
+
+                            builder.uxtb(Reg::R1, Reg::R1);
+
+                            // zero
+                            if(setZ)
+                                updateZ(true);
+
+                            // write back
+                            write8BitReg(builder, *dst, Reg::R1);
+                        }
+                        else
+                            assert(!"8-bit rotate by reg");
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::RotateRight:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkRegOrImm8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    bool setZ = !(instr.flags & GenOp_MagicAlt1);
+
+                    if(src0 && src0 && src1.index())
+                    {
+                        if(std::holds_alternative<uint8_t>(src1))
+                        {
+                            get8BitValue(builder, Reg::R1, *src0);
+
+                            // v << (8 - n) | v >> n
+                            builder.lsl(Reg::R2, Reg::R1, 8 - std::get<uint8_t>(src1));
+                            builder.lsr(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
+
+                            // carry (set before or)
+                            if(writesFlag(instr.flags, SourceFlagType::Carry))
+                            {
+                                builder.b(Condition::CC, 2);
+                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                            }
+
+                            builder.orr(Reg::R1, Reg::R2);
+                            builder.uxtb(Reg::R1, Reg::R1);
+
+                            // zero
+                            if(setZ)
+                                updateZ(true);
+
+                            // write back
+                            write8BitReg(builder, *dst, Reg::R1);
+                        }
+                        else
+                            assert(!"8-bit rotate by reg");
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::RotateRightCarry:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkRegOrImm8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    bool setZ = !(instr.flags & GenOp_MagicAlt1);
+
+                    if(src0 && src0 && src1.index())
+                    {
+                        if(std::holds_alternative<uint8_t>(src1))
+                        {
+                            get8BitValue(builder, Reg::R1, *src0);
+
+                            assert(std::get<uint8_t>(src1) == 1);
+
+                            builder.lsr(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
+
+                            // carry out
+                            if(writesFlag(instr.flags, SourceFlagType::Carry))
+                            {
+                                builder.b(Condition::CC, 2);
+                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                            }
+
+                            // carry in
+                            builder.lsl(Reg::R3, Reg::R3, 7 - getFlagInfo(SourceFlagType::Carry).bit);
+                            builder.orr(Reg::R1, Reg::R3);
+
+                            // zero
+                            if(setZ)
+                                updateZ(true);
+
+                            // write back
+                            write8BitReg(builder, *dst, Reg::R1);
+                        }
+                        else
+                            assert(!"8-bit rotate by reg");
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
             case GenOpcode::ShiftLeft:
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
