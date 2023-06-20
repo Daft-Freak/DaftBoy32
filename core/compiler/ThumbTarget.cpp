@@ -389,7 +389,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                       || instr.opcode == GenOpcode::RotateLeftCarry
                       || instr.opcode == GenOpcode::RotateRightCarry;
 
-        if((instr.flags & GenOp_WriteFlags) || needCarry)
+        if(((instr.flags & GenOp_WriteFlags) || needCarry) && instr.opcode != GenOpcode::DMG_DAA /* needs most flags */)
         {
             preserveMask = 0;
 
@@ -1632,6 +1632,89 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 }
                 else
                     badRegSize(regSize);
+
+                break;
+            }
+
+            // DMG specific
+            case GenOpcode::DMG_DAA:
+            {
+                auto f = *mapReg8(flagsReg);
+                auto a = Reg::R2;
+
+                assert(f.reg == Reg::R4 && f.mask == 0xFF);
+
+                auto cMask = 1 << getFlagInfo(SourceFlagType::Carry).bit;
+                auto hMask = 1 << getFlagInfo(SourceFlagType::HalfCarry).bit;
+                auto nMask = 1 << getFlagInfo(SourceFlagType::WasSub).bit;
+                auto zMask = 1 << getFlagInfo(SourceFlagType::Zero).bit;
+
+                builder.lsr(a, f.reg, 8); // get A
+
+                // clear Z flag (will add back later)
+                builder.mov(Reg::R1, zMask);
+                builder.bic(f.reg, Reg::R1);
+
+                builder.mov(Reg::R1, nMask);
+                builder.and_(Reg::R1, f.reg); // tst?
+                builder.b(Condition::EQ, 18); // N not set
+
+                // negative
+
+                // if (Flag_C) A -= 0x60
+                builder.mov(Reg::R1, cMask);
+                builder.and_(Reg::R1, f.reg); // tst?
+                builder.b(Condition::EQ, 2); // C not set
+                builder.sub(a, 0x60);
+
+                // if (Flag_H) A -= 0x06
+                builder.mov(Reg::R1, hMask);
+                builder.and_(Reg::R1, f.reg); // tst?
+                builder.b(Condition::EQ, 2); // C not set
+                builder.sub(a, 0x06);
+
+                builder.b(32); // skip
+
+                // positive
+
+                // if (Flag_C ...
+                builder.mov(Reg::R1, cMask);
+                builder.and_(Reg::R1, f.reg); // tst?
+                builder.b(Condition::NE, 4); // C set
+                // ... || A > 0x99) ...
+                builder.cmp(a, 0x99);
+                builder.b(Condition::LE, 6);
+                // ... A += 0x60
+                builder.add(a, 0x60);
+                builder.mov(Reg::R1, cMask);
+                builder.orr(f.reg, Reg::R1); // set C flag
+
+                // if (Flag_H ...
+                builder.mov(Reg::R1, hMask);
+                builder.and_(Reg::R1, f.reg); // tst?
+                builder.b(Condition::NE, 8); // H set
+                // ... || A & (0x0F) > 0x09) ...
+                builder.mov(Reg::R1, 0xF);
+                builder.and_(Reg::R1, a);
+                builder.cmp(Reg::R1, 0x09);
+                builder.b(Condition::LE, 2);
+                // .. A += 0x06
+                builder.add(a, 0x06);
+
+                builder.uxtb(a, a);
+
+                // Z flag
+                builder.cmp(a, 0);
+                builder.b(Condition::NE, 4);
+                builder.mov(Reg::R1, zMask);
+                builder.orr(f.reg, Reg::R1);
+
+                // clear H flag
+                builder.mov(Reg::R1, hMask);
+                builder.bic(f.reg, Reg::R1);
+
+                // write A back
+                write8BitReg(builder, *mapReg8(6/*A*/), a);
 
                 break;
             }
