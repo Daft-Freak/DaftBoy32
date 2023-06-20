@@ -1181,6 +1181,154 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         }
                     }
                 }
+                else if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkRegOrImm8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src0 && src0 && src1.index())
+                    {
+                        if(std::holds_alternative<uint8_t>(src1))
+                        {
+                            get8BitValue(builder, Reg::R1, *src0);
+                            builder.lsl(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
+
+                            // carry
+                            if(writesFlag(instr.flags, SourceFlagType::Carry))
+                            {
+                                builder.cmp(Reg::R1, 0xFF);
+                                builder.b(Condition::LE, 2);
+                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                            }
+
+                            builder.uxtb(Reg::R1, Reg::R1);
+
+                            // zero
+                            updateZ(true);
+
+                            // write back
+                            write8BitReg(builder, *dst, Reg::R1);
+                        }
+                        else
+                            assert(!"8-bit shift by reg");
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::ShiftRightArith:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkRegOrImm8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src0 && src0 && src1.index())
+                    {
+                        if(std::holds_alternative<uint8_t>(src1))
+                        {
+                            get8BitValue(builder, Reg::R1, *src0);
+
+                            builder.sxtb(Reg::R1, Reg::R1); // TODO: can avoid this in some cases be replacing the uxtb in get8BitValue
+                            builder.asr(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
+
+                            // carry
+                            if(writesFlag(instr.flags, SourceFlagType::Carry))
+                            {
+                                builder.b(Condition::CC, 2);
+                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                            }
+
+                            builder.uxtb(Reg::R1, Reg::R1);
+
+                            // zero
+                            updateZ(true);
+
+                            // write back
+                            write8BitReg(builder, *dst, Reg::R1);
+                        }
+                        else
+                            assert(!"8-bit shift by reg");
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
+            case GenOpcode::ShiftRightLogic:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 16)
+                {
+                    // used for LD (nn), SP
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src0 = checkReg(instr.src[0]);
+                        auto src1 = checkRegOrImm8(instr.src[1]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src0 && src0 && src1.index())
+                        {
+                            auto resReg = *dst;
+                            if(!isLowReg(*src0))
+                            {
+                                builder.mov(Reg::R1, *src0);
+                                src0 = Reg::R1;
+                            }
+
+                            if(!isLowReg(*dst))
+                                resReg = Reg::R1;
+
+                            if(std::holds_alternative<uint8_t>(src1))
+                                builder.lsr(resReg, *src0, std::get<uint8_t>(src1)); // should uxth, but the only users of this don't need it
+                            else
+                                assert(!"16-bit shift by reg");
+
+                            if(resReg != *dst)
+                                builder.mov(*dst, resReg);
+                        }
+                    }
+                }
+                else if(regSize == 8)
+                {
+                    auto src0 = checkReg8(instr.src[0]);
+                    auto src1 = checkRegOrImm8(instr.src[1]);
+                    auto dst = checkReg8(instr.dst[0]);
+
+                    if(src0 && src0 && src1.index())
+                    {
+                        if(std::holds_alternative<uint8_t>(src1))
+                        {
+                            get8BitValue(builder, Reg::R1, *src0);
+                            builder.lsr(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
+
+                            // carry
+                            if(writesFlag(instr.flags, SourceFlagType::Carry))
+                            {
+                                builder.b(Condition::CC, 2);
+                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                            }
+
+                            // zero
+                            updateZ(true);
+
+                            // write back
+                            write8BitReg(builder, *dst, Reg::R1);
+                        }
+                        else
+                            assert(!"8-bit shift by reg");
+                    }
+                }
                 else
                     badRegSize(regSize);
                 break;
