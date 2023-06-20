@@ -1130,6 +1130,33 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 break;
             }
 
+            case GenOpcode::Not:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 8)
+                {
+                    auto src = checkReg8(instr.src[0]);
+                    auto dst = checkReg8(instr.dst[0]);
+                    if(src && dst)
+                    {
+                        assert(src->reg == dst->reg && src->mask == dst->mask);
+                        assert(dst->mask);
+
+                        // xor by reg mask
+                        load16BitValue(builder, Reg::R1, dst->mask);
+                        builder.eor(dst->reg, Reg::R1);
+
+                        // flags (sets H and N to 1)
+                        if((instr.flags & GenOp_WriteFlags))
+                            builder.add(mapReg8(flagsReg)->reg, (1 << getFlagInfo(SourceFlagType::HalfCarry).bit) | (1 << getFlagInfo(SourceFlagType::WasSub).bit));
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
             case GenOpcode::ShiftLeft:
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
