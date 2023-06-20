@@ -1870,7 +1870,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
             load16BitValue(builder, pcReg, pc - instr.len);
             builder.bl((exitPtr - builder.getPtr()) * 2);
-            outputLiterals(builder);
+            outputLiterals(builder, false);
             break;
         }
 
@@ -1924,7 +1924,11 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
         // this was definitely NOT set by decreasing until it didn't abort...
         // don't output after a LoadImm as it might get removed by the next op
         if(instr.opcode != GenOpcode::LoadImm && !ldrLiteralInstrs.empty() && (nextInstr == endInstr || builder.getPtr() - ldrLiteralInstrs[0] >= 460))
-            outputLiterals(builder);
+        {
+            // calls might return here
+            bool exited = shouldSkip && !(instr.flags & GenOp_Call);
+            outputLiterals(builder, !exited);
+        }
     }
 
     if(builder.getError())
@@ -2148,20 +2152,31 @@ void ThumbTarget::loadLiteral(ThumbBuilder &builder, Reg reg, uint32_t val)
     builder.ldr(reg, index << 2); //write literal index, patched later
 }
 
-void ThumbTarget::outputLiterals(ThumbBuilder &builder)
+void ThumbTarget::outputLiterals(ThumbBuilder &builder, bool reachable)
 {
     if(!ldrLiteralInstrs.empty())
     {
-        auto dataPtr = builder.getPtr() + 1/*B*/;
-        if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
+        auto dataPtr = builder.getPtr();
+
+        if(reachable)
         {
-            // not aligned
-            builder.b(curLiteral * 4 + 2);
-            builder.data(0);
+            // jump over the literals
+            dataPtr++;
+            if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
+            {
+                // not aligned
+                builder.b(curLiteral * 4 + 2);
+                builder.data(0);
+                dataPtr++;
+            }
+            else // aligned
+                builder.b(curLiteral * 4);
+        }
+        else if(reinterpret_cast<uintptr_t>(dataPtr) & 2)
+        {
+            builder.nop(); // align
             dataPtr++;
         }
-        else // aligned
-            builder.b(curLiteral * 4);
 
         for(unsigned int i = 0; i < curLiteral; i++)
         {
