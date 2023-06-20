@@ -174,6 +174,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
     // state
     uint16_t *lastInstrCycleCheck = nullptr;
+    std::map<uint16_t, uint16_t *> branchTargets;
+    std::multimap<uint16_t, uint16_t *> forwardBranchesToPatch;
 
     // cycle executed sync
     int cyclesThisInstr = 0;
@@ -248,6 +250,46 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
     for(auto instIt = beginInstr; instIt != endInstr; ++instIt)
     {
         auto &instr = *instIt;
+
+        // handle branch targets
+        if(instr.flags & GenOp_BranchTarget)
+        {
+            // store for backwards jumps
+            if(lastInstrCycleCheck)
+                branchTargets.emplace(pc, lastInstrCycleCheck); // after adjusting cycle count but before the jump
+            else
+            {
+                // this is the first instruction, so make a cycle check for the branch to go to
+                auto loadSize = load16BitValueSize(pc);
+                builder.b(loadSize + 6);
+                lastInstrCycleCheck = builder.getPtr();
+
+                // if <= 0 exit
+                builder.b(Condition::GT, loadSize + 4);
+                load16BitValue(builder, Reg::R1, pc);
+                builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
+
+                branchTargets.emplace(pc, lastInstrCycleCheck);
+            }
+
+            // patch forwards jumps
+            // can't hit this for the first instruction, so the lastInstrCycleCheck will be valid
+            auto jumps = forwardBranchesToPatch.equal_range(pc);
+            for(auto it = jumps.first; it != jumps.second; ++it)
+            {
+                auto off = (lastInstrCycleCheck - (it->second + 1)) * 2;
+
+                if(off > 2048)
+                    continue; // it's too far away
+
+                // replace BL with B+NOP
+                builder.patch(it->second, it->second + 2);
+                builder.b(off);
+                builder.nop();
+                builder.endPatch();
+            }
+            forwardBranchesToPatch.erase(jumps.first, jumps.second);
+        }
 
         // flag helpers
         // assumes value in R1 if needCompare is true
@@ -1613,15 +1655,14 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         else if(std::get<Reg>(src) != pcReg)
                             builder.mov(pcReg, std::get<Reg>(src));
                     
-                        //if(instr.flags & Op_Branch)
-                        //    builder.sub(Reg::R0, cyclesThisInstr);
-
+                        if(!isExit)
+                            builder.sub(Reg::R0, cyclesThisInstr);
 
                         // don't update twice for unconditional branches
-                        //if(condition == GenCondition::Always)
-                        //    cyclesThisInstr = 0;
+                        if(condition == GenCondition::Always)
+                            cyclesThisInstr = 0;
 
-                        /*auto it = std::holds_alternative<uint32_t>(src) ? branchTargets.find(std::get<uint32_t>(src)) : branchTargets.end();
+                        auto it = std::holds_alternative<uint32_t>(src) ? branchTargets.find(std::get<uint32_t>(src)) : branchTargets.end();
 
                         if(it != branchTargets.end())
                         {
@@ -1635,10 +1676,10 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             else
                                 builder.bl((exitPtr - builder.getPtr()) * 2); // too far, give up
                         }
-                        else*/
+                        else
                         {
-                            //if(!isExit)
-                            //    forwardBranchesToPatch.emplace(std::get<uint32_t>(src), builder.getPtr());
+                            if(!isExit)
+                                forwardBranchesToPatch.emplace(std::get<uint32_t>(src), builder.getPtr());
 
                             // forwards branch or exit
                             if(isExit && (instr.flags & GenOp_Call))
