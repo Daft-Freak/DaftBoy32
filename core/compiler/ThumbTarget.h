@@ -13,6 +13,11 @@ class ThumbTarget final
 public:
     struct RegInfo
     {
+        bool operator==(RegInfo &r)
+        {
+            return reg == r.reg && mask == r.mask;
+        }
+
         Reg reg;
         uint32_t mask;
     };
