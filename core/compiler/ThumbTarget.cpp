@@ -1182,16 +1182,25 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
                     if(src0 && src1 && dst)
                     {
-                        // TODO: optimise XOR A
-                        assert(src0->reg != Reg::R2);
-                        get8BitValue(builder, Reg::R1, *src0);
-                        get8BitValue(builder, Reg::R2, *src1);
+                        if(*src0 == *src1 && dst->reg == mapReg8(flagsReg)->reg)
+                        {
+                            // DMG XOR A special case, A = A ^ A with flags in the same 16-bit reg
+                            // we don't need the flag clear code either, that's a little harder to avoid
+                            // A = 0, F = Z
+                            builder.mov(dst->reg, 1 << getFlagInfo(SourceFlagType::Zero).bit);
+                        }
+                        else
+                        {
+                            assert(src0->reg != Reg::R2);
+                            get8BitValue(builder, Reg::R1, *src0);
+                            get8BitValue(builder, Reg::R2, *src1);
 
-                        builder.eor(Reg::R1, Reg::R2);
+                            builder.eor(Reg::R1, Reg::R2);
 
-                        write8BitReg(builder, *dst, Reg::R1);
+                            write8BitReg(builder, *dst, Reg::R1);
 
-                        updateZ(false);
+                            updateZ(false);
+                        }
                     }
                 }
                 else
