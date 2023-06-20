@@ -239,6 +239,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
     uint16_t *opStartPtr = nullptr;
     uint16_t *lastImmLoadStart = nullptr, *lastImmLoadEnd = nullptr;
     bool newEmuOp = true;
+    bool lastWasEI = false;
     bool forceExitAfter = false;
 
     auto beginInstr = blockInfo.instructions.begin();
@@ -287,7 +288,33 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             instrCycles--;
         }
 
-        // ei check
+        // previous op was EI
+        if(lastWasEI)
+        {
+            // enable interrupts for EI
+            auto enableInterruptsNextCycleOff = sourceInfo.extraCPUOffsets[1];
+            auto masterInterruptEnableOff = sourceInfo.extraCPUOffsets[0];
+            assert(enableInterruptsNextCycleOff < 32);
+            assert(masterInterruptEnableOff < 32);        
+
+            // if(enableInterruptsNextCycle)
+            // probably don't need this check... might get a false positive in some extreme case though
+            builder.mov(Reg::R3, Reg::R8); // cpu ptr
+            builder.ldrb(Reg::R1, Reg::R3, enableInterruptsNextCycleOff);
+
+            builder.cmp(Reg::R1, 0);
+            builder.b(Condition::EQ, 6);
+
+            // masterInterruptEnable = true
+            builder.strb(Reg::R1, Reg::R3, masterInterruptEnableOff); // R1 == 1 here
+
+            // enableInterruptsNextCycle = false
+            builder.mov(Reg::R1, 0);
+            builder.strb(Reg::R1, Reg::R3, enableInterruptsNextCycleOff);
+
+            forceExitAfter = true;
+            lastWasEI = false;
+        }
 
         bool err = false;
 
@@ -1719,6 +1746,68 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 break;
             }
 
+            case GenOpcode::DMG_Halt:
+            {
+                auto haltedOff = sourceInfo.extraCPUOffsets[2];
+                auto masterInterruptEnableOff = sourceInfo.extraCPUOffsets[0];
+                auto serviceableInterruptsOff = sourceInfo.extraCPUOffsets[3];
+                auto haltBugOff = sourceInfo.extraCPUOffsets[4];
+                assert(haltedOff < 32);
+                assert(masterInterruptEnableOff < 32);
+                assert(serviceableInterruptsOff < 32);
+                assert(haltBugOff < 32);
+
+                builder.mov(Reg::R2, Reg::R8); // cpu ptr
+
+                // halted = true
+                builder.mov(Reg::R1, 1);
+                builder.strb(Reg::R1, Reg::R2, haltedOff);
+
+                // if(!masterInterruptEnable && serviceableInterrupts)
+                builder.ldrb(Reg::R1, Reg::R2, masterInterruptEnableOff);
+                builder.cmp(Reg::R1, 0);
+                builder.b(Condition::NE, 10);
+                builder.ldrb(Reg::R1, Reg::R2, serviceableInterruptsOff);
+                builder.cmp(Reg::R1, 0);
+                builder.b(Condition::EQ, 4);
+                // haltBug = true
+                builder.mov(Reg::R1, 1);
+                builder.strb(Reg::R1, Reg::R2, haltBugOff);
+
+                // exit
+                syncCyclesExecuted();
+                load16BitValue(builder, Reg::R1, pc); // exits need to set PC themselves
+                builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
+
+                break;
+            }
+        
+            case GenOpcode::DMG_EnableIntrForRet:
+                assert(sourceInfo.extraCPUOffsets[0] < 32);
+                // masterInterruptEnable = true
+                builder.mov(Reg::R2, cpuPtrReg);
+                builder.mov(Reg::R1, 1);
+                builder.strb(Reg::R1, Reg::R2, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+                break;
+
+            case GenOpcode::DMG_DI:
+                assert(sourceInfo.extraCPUOffsets[0] < 32);
+                // masterInterruptEnable = false
+                // TODO: after next instruction (DMGCPU also has this TODO)
+                builder.mov(Reg::R2, cpuPtrReg);
+                builder.mov(Reg::R1, 0);
+                builder.strb(Reg::R1, Reg::R2, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+                break;
+
+            case GenOpcode::DMG_EI:
+                assert(sourceInfo.extraCPUOffsets[1] < 32);
+                // enableInterruptsNextCycle = true
+                builder.mov(Reg::R2, cpuPtrReg);
+                builder.mov(Reg::R1, 1);
+                builder.strb(Reg::R1, Reg::R2, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/);
+                lastWasEI = true;
+                break;
+
             default:
                 printf("unhandled gen op %i\n", static_cast<int>(instr.opcode));
                 err = true;
@@ -1795,7 +1884,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
         // output literals if ~close to the limit or this is the last instruction
         // this was definitely NOT set by decreasing until it didn't abort...
-        if(newEmuOp && (nextInstr == endInstr || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 460)))
+        if(newEmuOp && (nextInstr == endInstr || (!ldrLiteralInstrs.empty() && builder.getPtr() - ldrLiteralInstrs[0] > 450)))
             outputLiterals(builder);
     }
 
