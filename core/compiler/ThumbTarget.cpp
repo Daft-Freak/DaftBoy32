@@ -213,7 +213,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
         delayedCyclesExecuted = 0;
     };
 
-    auto setupMemAddr = [this, &blockInfo, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg, uint32_t> addr, uint8_t addrIndex)
+    auto setupMemAddr = [this, &blockInfo, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg, uint32_t> addr, uint8_t addrIndex, bool skipMov = false)
     {
         assert(addr.index()); // caller should have checked checkRegOrImm result
 
@@ -222,9 +222,13 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             auto reg = std::get<Reg>(addr);
 
             if(!sourceInfo.shouldSyncForRegIndex || sourceInfo.shouldSyncForRegIndex(addrIndex, blockInfo))
+            {
                 syncCyclesExecuted(); // uses R1/3
+                skipMov = false; // if it was in R1 it isn't now
+            }
 
-            builder.mov(Reg::R1, reg);
+            if(!skipMov)
+                builder.mov(Reg::R1, reg);
         }
         else
         {
@@ -582,7 +586,14 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
                         builder.push(pushMask, false);
 
-                        setupMemAddr(addr, instr.src[0]);
+                        // if the address is in a high reg and the last op was an add to it, the value should still be in R1
+                        // this allows us to skip the mov (for stack pops)
+                        bool skipMov = false;
+                        bool addrIsHighReg = std::holds_alternative<Reg>(addr) && !isLowReg(std::get<Reg>(addr));
+                        if(!newEmuOp && addrIsHighReg && instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::Add && (instIt - 1)->dst[0] == instr.src[0] && !((instIt - 1)->flags & GenOp_WriteFlags))                        
+                            skipMov = true;
+
+                        setupMemAddr(addr, instr.src[0], skipMov);
 
                         builder.mov(Reg::R0, Reg::R8); // cpu pointer
 
@@ -618,7 +629,14 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
                         builder.push(pushMask, false);
 
-                        setupMemAddr(addr, instr.src[0]);
+                        // if the address is in a high reg and the last op was an sub to it, the value should still be in R1
+                        // this allows us to skip the mov (for stack pushes)
+                        bool skipMov = false;
+                        bool addrIsHighReg = std::holds_alternative<Reg>(addr) && !isLowReg(std::get<Reg>(addr));
+                        if(!newEmuOp && addrIsHighReg && instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::Subtract && (instIt - 1)->dst[0] == instr.src[0])
+                            skipMov = true;
+
+                        setupMemAddr(addr, instr.src[0], skipMov);
                         get8BitValue(builder, Reg::R2, data);
                         builder.mov(Reg::R3, Reg::R0); // cycle count
 
