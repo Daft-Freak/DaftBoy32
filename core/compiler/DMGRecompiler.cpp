@@ -193,9 +193,24 @@ void DMGRecompiler::handleBranch()
                 printf("analysed %04X-%04X (%zi instructions)\n", cpu.pc, pc, blockInfo.instructions.size());
 #endif
 
+                GenBlockInfo genBlock;
+                genBlock.flags = 0;
+
+                // since we refuse to compile when OAM DMA is active we can skip most of cycleExecuted when not running from HRAM
+                if(cpu.pc >= 0xFF00) // in HRAM
+                    genBlock.flags |= GenBlock_StrictSync;
+
+                bool success = convertToGeneric(cpu.pc, blockInfo, genBlock);
+
+#ifdef RECOMPILER_DEBUG
+                printf("gen block (%s):\n", success ? "success" : "failed");
+                printGenBlock(pc, genBlock, target.getSourceInfo());
+                printf("\n\n");
+#endif
+
                 FuncInfo info{};
 
-                if(compile(ptr, cpu.pc, blockInfo))
+                if(success && target.compile(ptr, codeBuf + codeBufSize, cpu.pc, genBlock))
                 {
                     info.startPtr = startPtr;
                     info.endPtr = curCodePtr = ptr;
@@ -2222,29 +2237,6 @@ void DMGRecompiler::printInfo(BlockInfo &blockInfo)
 
         printf("\n");
     }
-}
-
-bool DMGRecompiler::compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo) 
-{
-    GenBlockInfo genBlock;
-    genBlock.flags = 0;
-
-    // since we refuse to compile when OAM DMA is active we can skip most of cycleExecuted when not running from HRAM
-    if(pc >= 0xFF00) // in HRAM
-        genBlock.flags |= GenBlock_StrictSync;
-
-    bool success = convertToGeneric(pc, blockInfo, genBlock);
-
-#ifdef RECOMPILER_DEBUG
-    printf("gen block (%s):\n", success ? "success" : "failed");
-    printGenBlock(pc, genBlock, target.getSourceInfo());
-    printf("\n\n");
-#endif
-
-    if(success && target.compile(codePtr, codeBuf + codeBufSize, pc, genBlock))
-        return true;
-
-    return false;
 }
 
 void DMGRecompiler::compileEntry()
