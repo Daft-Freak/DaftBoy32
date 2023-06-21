@@ -105,11 +105,4 @@ protected:
     static const int savedExitsSize = 16;
     int curSavedExit = 0;
     std::tuple<uint8_t *, uint32_t> savedExits[savedExitsSize];
-
-    // compile state
-    // TODO: make these temps
-    uint8_t *lastInstrCycleCheck = nullptr;
-    std::map<uint16_t, uint8_t *> branchTargets;
-    std::multimap<uint16_t, uint8_t *> forwardBranchesToPatch;
-    bool spWrite = false;
 };
