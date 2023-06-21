@@ -187,7 +187,6 @@ void DMGRecompiler::handleBranch()
 
                 BlockInfo blockInfo;
                 gatherBlock(pc, blockInfo);
-                analyse(cpu.pc, pc, blockInfo);
 
 #ifdef RECOMPILER_DEBUG
                 printf("analysed %04X-%04X (%zi instructions)\n", cpu.pc, pc, blockInfo.instructions.size());
@@ -201,6 +200,8 @@ void DMGRecompiler::handleBranch()
                     genBlock.flags |= GenBlock_StrictSync;
 
                 bool success = convertToGeneric(cpu.pc, blockInfo, genBlock);
+
+                analyse(cpu.pc, pc, genBlock);
 
 #ifdef RECOMPILER_DEBUG
                 printf("gen block (%s):\n", success ? "success" : "failed");
@@ -873,12 +874,35 @@ void DMGRecompiler::gatherBlock(uint16_t &pc, BlockInfo &blockInfo)
     }
 }
 
-void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
+void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, GenBlockInfo &blockInfo)
 {
     auto startPC = pc;
 
+    auto &sourceInfo = target.getSourceInfo();
+
+    // find flag masks/reg
+    int carryMask = 0, zeroMask = 0;
+    uint8_t flagsReg = 0xFF;
+
+    int i = 0;
+    for(auto &flag : sourceInfo.flags)
+    {
+        if(flag.type == SourceFlagType::Carry)
+            carryMask = 1 << i;
+        else if(flag.type == SourceFlagType::Zero)
+            zeroMask = 1 << i;
+
+        i++;
+    }
+
+    for(auto it = sourceInfo.registers.begin() + 1; it != sourceInfo.registers.end(); ++it)
+    {
+        if(it->type == SourceRegType::Flags)
+            flagsReg = it - sourceInfo.registers.begin();
+    }
+
     // TODO: we end up scanning for branch targets a lot
-    auto findBranchTarget = [&blockInfo](uint16_t pc, uint16_t target, std::vector<OpInfo>::iterator it)
+    auto findBranchTarget = [&blockInfo](uint16_t pc, uint16_t target, std::vector<GenOpInfo>::iterator it)
     {
         auto searchPC = pc;
         if(target < pc)
@@ -889,7 +913,15 @@ void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
             {
                 searchPC -= prevIt->len;
                 if(searchPC == target)
-                    return prevIt.base() - 1;
+                {
+                    auto ret = prevIt.base() - 1;
+                    // need to go to the start of the instruction
+                    // (the op after the last one to increment PC)
+                    while(ret != blockInfo.instructions.begin() && !(ret - 1)->len)
+                        --ret;
+
+                    return ret;
+                }
             }
         }
         else
@@ -904,6 +936,40 @@ void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
         return blockInfo.instructions.end();
     };
 
+    auto getReadFlags = [zeroMask, carryMask, flagsReg](GenOpInfo &instr)
+    {
+        if(instr.opcode == GenOpcode::AddWithCarry || instr.opcode == GenOpcode::SubtractWithCarry || instr.opcode == GenOpcode::RotateLeftCarry || instr.opcode == GenOpcode::RotateRightCarry)
+            return carryMask;
+
+        // flags from condition
+        if(instr.opcode == GenOpcode::Jump)
+        {
+            auto cond = static_cast<GenCondition>(instr.src[0]);
+            if(cond == GenCondition::CarryClear || cond == GenCondition::CarrySet)
+                return carryMask;
+            else if(cond != GenCondition::Always)
+                return zeroMask;
+        }
+
+        if(instr.opcode == GenOpcode::DMG_DAA)
+            return 0x7; // CHN
+
+        // reads flags register directly
+        if(instr.opcode != GenOpcode::LoadImm && (instr.src[0] == flagsReg || instr.src[1] == flagsReg))
+            return 0xF; // all
+
+        return 0;
+    };
+
+    auto getWrittenFlags = [flagsReg](GenOpInfo &instr) -> int
+    {
+        // special case for loading flags, writes all of them
+        if(instr.opcode == GenOpcode::Load && instr.dst[0] == flagsReg)
+            return GenOp_WriteFlags;
+
+        return instr.flags & GenOp_WriteFlags;
+    };
+
     std::vector<uint8_t> origFlags; // there aren't enough bits in ->flags...
     origFlags.resize(blockInfo.instructions.size());
 
@@ -912,7 +978,7 @@ void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
         auto &instr = *it;
         pc += instr.len;
 
-        if(instr.flags & Op_WriteFlags)
+        if(instr.flags & GenOp_WriteFlags)
         {
             // find actually used flags
             int read = 0;
@@ -921,22 +987,19 @@ void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
             bool inBranch = false;
 
             // save flags
-            origFlags[it - blockInfo.instructions.begin()] = instr.flags & Op_WriteFlags;
+            origFlags[it - blockInfo.instructions.begin()] = instr.flags & GenOp_WriteFlags;
 
             // look ahead until we have no flags wrtiten that are not read
             auto nextPC = pc;
-            for(auto next = it + 1; next != blockInfo.instructions.end() && (instr.flags & Op_WriteFlags) != read << 4;)
+            for(auto next = it + 1; next != blockInfo.instructions.end() && (instr.flags & GenOp_WriteFlags) != read << 4;)
             {
                 nextPC += next->len;
 
                 // collect read flags
-                read |= next->flags & Op_ReadFlags;
-                read &= (instr.flags & Op_WriteFlags) >> 4; // can't have a read for a flag we're not setting
+                read |= getReadFlags(*next);
+                read &= (instr.flags & GenOp_WriteFlags) >> 4; // can't have a read for a flag we're not setting
 
-                if(next->flags & Op_Exit)
-                    break; // give up
-
-                if(next->flags & Op_Branch)
+                if(next->opcode == GenOpcode::Jump)
                 {
                     // don't go too deep
                     if(inBranch)
@@ -944,13 +1007,13 @@ void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
 
                     inBranch = true;
 
-                    bool isConditional = next->flags & Op_ReadFlags;
+                    bool isConditional = static_cast<GenCondition>(next->src[0]) != GenCondition::Always;
 
-                    uint16_t target;
-                    if(next->opcode[0] >= 0xC2) // JP
-                        target = next->opcode[1] | next->opcode[2] << 8;
-                    else // JR
-                        target = nextPC + static_cast<int8_t>(next->opcode[1]);
+                    // make sure we know the target addr
+                    if(next->src[1] != 0 || (next - 1)->opcode != GenOpcode::LoadImm)
+                        break;
+
+                    auto target = (next - 1)->imm;
 
                     auto targetInstr = findBranchTarget(nextPC, target, next);
 
@@ -968,14 +1031,14 @@ void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
                     else
                     {
                         // follow false branch until we hit another branch
-                        falseBranchFlags = instr.flags & Op_WriteFlags;
+                        falseBranchFlags = instr.flags & GenOp_WriteFlags;
                         for(auto falseInstr = next + 1; falseInstr != blockInfo.instructions.end() && falseBranchFlags != read << 4; ++falseInstr)
                         {
-                            if(falseInstr->flags & (Op_Branch | Op_Exit))
+                            if(falseInstr->opcode == GenOpcode::Jump)
                                 break;
 
-                            read |= falseInstr->flags & Op_ReadFlags;
-                            falseBranchFlags = (falseBranchFlags & ~falseInstr->flags) | read << 4;
+                            read |= getReadFlags(*falseInstr);
+                            falseBranchFlags = (falseBranchFlags & ~getWrittenFlags(*falseInstr)) | read << 4;
                         }
 
                         // follow the true branch
@@ -985,7 +1048,7 @@ void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
                     }
                 }
 
-                auto written = next->flags & Op_WriteFlags;
+                auto written = getWrittenFlags(*next);
                 if(next < it) // backwards jump, restore old flags
                     written = origFlags[next - blockInfo.instructions.begin()];
 
@@ -996,40 +1059,31 @@ void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
             }
         }
 
-        if(instr.flags & Op_Branch)
+        // jumps with immediate addr may be branches
+        if(instr.opcode == GenOpcode::Jump && instr.src[1] == 0 && (it - 1)->opcode == GenOpcode::LoadImm)
         {
-            // get target (should be JR or JP)
-            uint16_t target;
-            if(instr.opcode[0] >= 0xC2) // JP
-                target = instr.opcode[1] | instr.opcode[2] << 8;
-            else
-                target = pc + static_cast<int8_t>(instr.opcode[1]);
+            // get target from LoadImm
+            auto target = (it - 1)->imm;
 
-            // not reachable, convert to exit
+            // not reachable, mark as exit
             if(target < startPC || target >= endPC)
-            {
-                instr.flags &= ~Op_Branch;
-                instr.flags |= Op_Exit;
-            }
+                instr.flags |= GenOp_Exit;
             else
             {
                 // find and mark target
                 auto targetInstr = findBranchTarget(pc, target, it);
 
                 if(targetInstr != blockInfo.instructions.end())
-                    targetInstr->flags |= Op_BranchTarget;
+                    targetInstr->flags |= GenOp_BranchTarget;
                 else
                 {
                     // failed to find target
                     // may happen if there's a jump over some data
-                    instr.flags &= ~Op_Branch;
-                    instr.flags |= Op_Exit;
+                    instr.flags |= GenOp_Exit;
                 }
             }
         }
     }
-
-    blockInfo.instructions.back().flags |= Op_Last;
 }
 
 bool DMGRecompiler::convertToGeneric(uint16_t pc, BlockInfo &block, GenBlockInfo &genBlock)
