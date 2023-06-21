@@ -529,10 +529,26 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                     }
                     else
                     {
-                        // TODO: can do _slightly_ better for immediates (avoid the mov)
-                        auto src = checkReg(instr.src[0]);
-                        if(src && dst)
-                            builder.mov(*dst, *src);
+                        auto src = checkRegOrImm(instr.src[0]);
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                auto value = std::get<uint32_t>(src);
+                                assert(!(value & 0xFFFF0000));
+                                // avoid a mov if possible
+                                if(isLowReg(*dst))
+                                    load16BitValue(builder, *dst, value);
+                                else
+                                {
+                                    // effectively re-emit the LoadImm we just removed, at least we tried....
+                                    load16BitValue(builder, Reg::R2, value);
+                                    builder.mov(*dst, Reg::R2);
+                                }
+                            }
+                            else
+                                builder.mov(*dst, std::get<Reg>(src));
+                        }
                     }
                 }
                 else if(regSize == 8)
