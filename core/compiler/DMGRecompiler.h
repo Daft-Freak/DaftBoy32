@@ -83,8 +83,6 @@ protected:
 
     void printInfo(BlockInfo &blockInfo);
 
-    bool compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo);
-
     void compileEntry();
 
     static void cycleExecuted(DMGCPU *cpu);
