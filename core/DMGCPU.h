@@ -6,12 +6,7 @@
 #include "DMGDisplay.h"
 #include "DMGMemory.h"
 
-#ifdef RECOMPILER_X86
-#define RECOMPILER
-#include "compiler/DMGRecompilerGeneric.h"
-
-using Recompiler = DMGRecompilerGeneric;
-#elif defined(RECOMPILER_THUMB)
+#if defined(RECOMPILER_X86) || defined(RECOMPILER_THUMB)
 #define RECOMPILER
 #include "compiler/DMGRecompilerGeneric.h"
 
@@ -170,8 +165,8 @@ private:
     uint8_t inputs = 0;
 
 #ifdef RECOMPILER
-    Recompiler compiler;
+    DMGRecompilerGeneric compiler;
     friend class DMGRecompiler; // needs access to internals
-    friend Recompiler;
+    friend class DMGRecompilerGeneric;
 #endif
 };
