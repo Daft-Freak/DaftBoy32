@@ -91,7 +91,7 @@ static int callSaveIndex(Reg8 reg)
 
 static void callRestore(X86Builder &builder, int saveState, int toIndex)
 {
-    int numRegs = static_cast<int>(std::size(callSavedRegs));
+    [[maybe_unused]] int numRegs = static_cast<int>(std::size(callSavedRegs));
 
     assert(toIndex < numRegs);
 
@@ -108,9 +108,7 @@ static void callRestore(X86Builder &builder, Reg8 dstReg)
 {
     assert(dstReg != Reg8::DIL); // no
 
-    bool isPoppedReg = isCallSaved(dstReg);
-
-    assert(isPoppedReg);
+    assert(isCallSaved(dstReg));
 
 #ifdef _WIN32
     builder.add(Reg64::RSP, 32); // shadow space
