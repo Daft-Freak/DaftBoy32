@@ -8,9 +8,7 @@
 
 #if defined(RECOMPILER_X86) || defined(RECOMPILER_THUMB)
 #define RECOMPILER
-#include "compiler/DMGRecompilerGeneric.h"
-
-using Recompiler = DMGRecompilerGeneric;
+#include "compiler/DMGRecompiler.h"
 #endif
 
 enum Interrupts
@@ -165,8 +163,7 @@ private:
     uint8_t inputs = 0;
 
 #ifdef RECOMPILER
-    DMGRecompilerGeneric compiler;
+    DMGRecompiler compiler;
     friend class DMGRecompiler; // needs access to internals
-    friend class DMGRecompilerGeneric;
 #endif
 };

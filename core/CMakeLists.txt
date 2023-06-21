@@ -12,7 +12,6 @@ if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" OR ${CMAKE_SYSTEM_PROCESSOR} STRE
         compiler/DMGRecompiler.cpp
         compiler/X86Builder.cpp
         compiler/X86Target.cpp
-        compiler/DMGRecompilerGeneric.cpp
         compiler/RecompilerGeneric.cpp
     )
     target_compile_definitions(DaftBoyCore INTERFACE RECOMPILER_X86)
@@ -21,7 +20,6 @@ elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
         compiler/DMGRecompiler.cpp
         compiler/ThumbBuilder.cpp
         compiler/ThumbTarget.cpp
-        compiler/DMGRecompilerGeneric.cpp
         compiler/RecompilerGeneric.cpp
     )
     target_compile_definitions(DaftBoyCore INTERFACE RECOMPILER_THUMB)

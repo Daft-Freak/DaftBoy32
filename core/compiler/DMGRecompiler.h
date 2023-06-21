@@ -3,6 +3,16 @@
 #include <map>
 #include <vector>
 
+#include "RecompilerGeneric.h"
+
+#if defined(RECOMPILER_X86)
+#include "X86Target.h"
+#elif defined(RECOMPILER_THUMB)
+#include "ThumbTarget.h"
+#else
+#error No recompiler target!
+#endif
+
 class DMGCPU;
 
 class DMGRecompiler
@@ -68,11 +78,13 @@ protected:
 
     void analyse(uint16_t &pc, BlockInfo &blockInfo);
 
+    bool convertToGeneric(uint16_t pc, BlockInfo &block, GenBlockInfo &genBlock);
+
     void printInfo(BlockInfo &blockInfo);
 
-    virtual bool compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo) = 0;
+    bool compile(uint8_t *&codePtr, uint16_t pc, BlockInfo &blockInfo);
 
-    virtual void compileEntry() = 0;
+    void compileEntry();
 
     static void cycleExecuted(DMGCPU *cpu);
     static uint8_t readMem(DMGCPU *cpu, uint16_t addr);
@@ -105,4 +117,10 @@ protected:
     static const int savedExitsSize = 16;
     int curSavedExit = 0;
     std::tuple<uint8_t *, uint32_t> savedExits[savedExitsSize];
+
+#if defined(RECOMPILER_X86)
+    X86Target target;
+#elif defined(RECOMPILER_THUMB)
+    ThumbTarget target;
+#endif
 };
