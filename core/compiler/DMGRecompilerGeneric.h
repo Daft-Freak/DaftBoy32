@@ -24,7 +24,6 @@ private:
     void compileEntry() override;
 
     bool convertToGeneric(uint16_t pc, BlockInfo &block, GenBlockInfo &genBlock);
-    void printBlock(uint16_t pc, GenBlockInfo &block);
 
 #if defined(RECOMPILER_X86)
     X86Target target;
