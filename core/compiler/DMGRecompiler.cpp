@@ -204,7 +204,7 @@ void DMGRecompiler::handleBranch()
 
 #ifdef RECOMPILER_DEBUG
                 printf("gen block (%s):\n", success ? "success" : "failed");
-                printGenBlock(pc, genBlock, target.getSourceInfo());
+                printGenBlock(cpu.pc, genBlock, target.getSourceInfo());
                 printf("\n\n");
 #endif
 
