@@ -1083,6 +1083,8 @@ void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, GenBlockInfo &blockInfo
                 }
             }
         }
+        else if(instr.opcode == GenOpcode::Jump)
+            instr.flags |= GenOp_Exit; // we don't know where it goes
     }
 }
 
