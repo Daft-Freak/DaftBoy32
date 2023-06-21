@@ -312,6 +312,24 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             }
         };
 
+        const auto updateC = [this, &instr, &builder](bool needCompare, bool inverted = false)
+        {
+            if(writesFlag(instr.flags, SourceFlagType::Carry))
+            {
+                auto f = *mapReg8(flagsReg);
+
+                if(needCompare)
+                {
+                    builder.cmp(Reg::R1, 0xFF);
+                    builder.b(Condition::LE, 2);
+                }
+                else
+                    builder.b(inverted ? Condition::CS : Condition::CC, 2);
+
+                builder.add(f.reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+            }
+        };
+
         const auto setFlag = [this, &instr, &builder](SourceFlagType flag)
         {
             if(writesFlag(instr.flags, flag))
@@ -765,12 +783,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
                         // flags
                         // can't use carry from op here
-                        if(writesFlag(instr.flags, SourceFlagType::Carry))
-                        {
-                            builder.cmp(Reg::R1, 0xFF);
-                            builder.b(Condition::LE, 2);
-                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                        }
+                        updateC(true);
 
                         builder.uxtb(Reg::R1, Reg::R1); // mask
 
@@ -829,12 +842,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
                         // flags
                         // can't use carry from op here
-                        if(writesFlag(instr.flags, SourceFlagType::Carry))
-                        {
-                            builder.cmp(Reg::R1, 0xFF);
-                            builder.b(Condition::LE, 2);
-                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                        }
+                        updateC(true);
 
                         builder.uxtb(Reg::R1, Reg::R1); // mask
 
@@ -935,13 +943,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         builder.uxtb(Reg::R1, Reg::R1);
 
                         // flags
-                        if(writesFlag(instr.flags, SourceFlagType::Carry))
-                        {
-                            // carry is reversed for sub 
-                            builder.b(Condition::CS, 2);
-                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                        }
-
+                        updateC(false, true);
                         updateZ(true);
 
                         // H = (res & 0xF) > (dst & 0xF)
@@ -1091,12 +1093,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         builder.uxtb(Reg::R1, Reg::R1);
 
                         // flags
-                        if(writesFlag(instr.flags, SourceFlagType::Carry))
-                        {
-                            // carry is reversed for sub 
-                            builder.b(Condition::CS, 2);
-                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                        }
+                        updateC(false, true);
 
                         write8BitReg(builder, *dst, Reg::R1); // may modify R1
 
@@ -1157,12 +1154,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         builder.uxtb(Reg::R1, Reg::R1);
 
                         // flags
-                        if(writesFlag(instr.flags, SourceFlagType::Carry))
-                        {
-                            // carry is reversed for sub 
-                            builder.b(Condition::CS, 2);
-                            builder.add(f->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                        }
+                        updateC(false, true);
 
                         write8BitReg(builder, *dst, Reg::R1); // may modify R1
 
@@ -1294,12 +1286,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             builder.orr(Reg::R1, Reg::R2);
 
                             // carry
-                            if(setC && writesFlag(instr.flags, SourceFlagType::Carry))
-                            {
-                                builder.cmp(Reg::R1, 0xFF);
-                                builder.b(Condition::LE, 2);
-                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                            }
+                            if(setC)
+                                updateC(true);
 
                             builder.uxtb(Reg::R1, Reg::R1);
 
@@ -1346,12 +1334,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             builder.orr(Reg::R1, Reg::R3);
 
                             // carry
-                            if(writesFlag(instr.flags, SourceFlagType::Carry))
-                            {
-                                builder.cmp(Reg::R1, 0xFF);
-                                builder.b(Condition::LE, 2);
-                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                            }
+                            updateC(true);
 
                             builder.uxtb(Reg::R1, Reg::R1);
 
@@ -1394,11 +1377,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             builder.lsr(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
 
                             // carry (set before or)
-                            if(writesFlag(instr.flags, SourceFlagType::Carry))
-                            {
-                                builder.b(Condition::CC, 2);
-                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                            }
+                            updateC(false);
 
                             builder.orr(Reg::R1, Reg::R2);
                             builder.uxtb(Reg::R1, Reg::R1);
@@ -1442,11 +1421,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             builder.lsr(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
 
                             // carry out
-                            if(writesFlag(instr.flags, SourceFlagType::Carry))
-                            {
-                                builder.b(Condition::CC, 2);
-                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                            }
+                            updateC(false);
 
                             // carry in
                             builder.lsl(Reg::R3, Reg::R3, 7 - getFlagInfo(SourceFlagType::Carry).bit);
@@ -1506,12 +1481,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             builder.lsl(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
 
                             // carry
-                            if(writesFlag(instr.flags, SourceFlagType::Carry))
-                            {
-                                builder.cmp(Reg::R1, 0xFF);
-                                builder.b(Condition::LE, 2);
-                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                            }
+                            updateC(true);
 
                             builder.uxtb(Reg::R1, Reg::R1);
 
@@ -1550,11 +1520,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             builder.asr(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
 
                             // carry
-                            if(writesFlag(instr.flags, SourceFlagType::Carry))
-                            {
-                                builder.b(Condition::CC, 2);
-                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                            }
+                            updateC(false);
 
                             builder.uxtb(Reg::R1, Reg::R1);
 
@@ -1624,11 +1590,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             builder.lsr(Reg::R1, Reg::R1, std::get<uint8_t>(src1));
 
                             // carry
-                            if(writesFlag(instr.flags, SourceFlagType::Carry))
-                            {
-                                builder.b(Condition::CC, 2);
-                                builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(SourceFlagType::Carry).bit);
-                            }
+                            updateC(false);
 
                             // zero
                             updateZ(true);
