@@ -186,7 +186,8 @@ void DMGRecompiler::handleBranch()
                 auto pc = cpu.pc;
 
                 BlockInfo blockInfo;
-                analyse(pc, blockInfo);
+                gatherBlock(pc, blockInfo);
+                analyse(cpu.pc, pc, blockInfo);
 
 #ifdef RECOMPILER_DEBUG
                 printf("analysed %04X-%04X (%zi instructions)\n", cpu.pc, pc, blockInfo.instructions.size());
@@ -272,7 +273,7 @@ void DMGRecompiler::handleBranch()
     }
 }
 
-void DMGRecompiler::analyse(uint16_t &pc, BlockInfo &blockInfo)
+void DMGRecompiler::gatherBlock(uint16_t &pc, BlockInfo &blockInfo)
 {
     bool done = false;
 
@@ -855,11 +856,11 @@ void DMGRecompiler::analyse(uint16_t &pc, BlockInfo &blockInfo)
         if(info.len)
             blockInfo.instructions.push_back(info);
     }
+}
 
-    auto endPC = pc;
-
-    // cleanup
-    pc = startPC;
+void DMGRecompiler::analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo)
+{
+    auto startPC = pc;
 
     // TODO: we end up scanning for branch targets a lot
     auto findBranchTarget = [&blockInfo](uint16_t pc, uint16_t target, std::vector<OpInfo>::iterator it)

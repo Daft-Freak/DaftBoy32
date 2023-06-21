@@ -76,7 +76,8 @@ protected:
 
     DMGCPU &cpu;
 
-    void analyse(uint16_t &pc, BlockInfo &blockInfo);
+    void gatherBlock(uint16_t &pc, BlockInfo &blockInfo);
+    void analyse(uint16_t pc, uint16_t endPC, BlockInfo &blockInfo);
 
     bool convertToGeneric(uint16_t pc, BlockInfo &block, GenBlockInfo &genBlock);
 
