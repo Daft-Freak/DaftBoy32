@@ -19,7 +19,8 @@ elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
     target_sources(DaftBoyCore INTERFACE
         compiler/DMGRecompiler.cpp
         compiler/ThumbBuilder.cpp
-        compiler/DMGRecompilerThumb.cpp
+        compiler/ThumbTarget.cpp
+        compiler/DMGRecompilerGeneric.cpp
     )
     target_compile_definitions(DaftBoyCore INTERFACE RECOMPILER_THUMB)
 endif()

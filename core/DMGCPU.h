@@ -13,9 +13,9 @@
 using Recompiler = DMGRecompilerGeneric;
 #elif defined(RECOMPILER_THUMB)
 #define RECOMPILER
-#include "compiler/DMGRecompilerThumb.h"
+#include "compiler/DMGRecompilerGeneric.h"
 
-using Recompiler = DMGRecompilerThumb;
+using Recompiler = DMGRecompilerGeneric;
 #endif
 
 enum Interrupts
