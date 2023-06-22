@@ -66,9 +66,10 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
     sourceInfo.flags.emplace_back(SourceFlagInfo{'N', 31, SourceFlagType::Negative});
 
     sourceInfo.pcSize = 32;
+    sourceInfo.pcPrefetch = 2;
     sourceInfo.pcOffset = reinterpret_cast<uintptr_t>(&cpu.regs[15]) - cpuPtrInt;
 
-    sourceInfo.pcPrefetch = 2;
+    sourceInfo.cycleMul = 1;
 
     sourceInfo.exitCallFlag = &exitCallFlag;
     sourceInfo.savedExitPtr = &tmpSavedPtr;

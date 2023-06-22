@@ -136,6 +136,8 @@ struct SourceInfo
     uint8_t pcPrefetch; // offset to add on exit for prefetch
     uint16_t pcOffset;
 
+    uint8_t cycleMul; // cycles to add for each cycle in an op
+
     int extraCPUOffsets[5]; // source specific ops
 
     bool (*shouldSyncForAddress)(uint16_t addr); // return true to sync cycle count before accessing this address

@@ -383,12 +383,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
     auto cycleExecuted = [this, &builder, &needCallRestore, &blockInfo, &cyclesThisInstr, &delayedCyclesExecuted]()
     {
-        cyclesThisInstr += 4;
+        cyclesThisInstr += sourceInfo.cycleMul;
 
         if(!(blockInfo.flags & GenBlock_StrictSync))
         {
             // delay/inline cycle updates if possible
-            delayedCyclesExecuted += 4;
+            delayedCyclesExecuted += sourceInfo.cycleMul;
             return;
         }
 
