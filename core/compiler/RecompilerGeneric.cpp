@@ -292,10 +292,10 @@ void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sou
         if(lastPC != pc)
         {
             lastPC = pc;
-            printf("%04X: ", pc);
+            printf("%08X: ", pc);
         }
         else
-            printf("    : ");
+            printf("        : ");
 
         auto intOp = static_cast<int>(instr.opcode);
 
