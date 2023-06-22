@@ -1050,7 +1050,32 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 16)
+                if(regSize == 32)
+                {
+                    // TODO
+                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
+                    else
+                    {
+                        auto src = checkRegOrImm32(instr.src[1]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                auto imm = std::get<uint32_t>(src);
+                                if(imm < 0x80)
+                                    builder.add(*dst, static_cast<int8_t>(imm));
+                                else
+                                    builder.add(*dst, imm);
+                            }
+                            else
+                                builder.add(*dst, std::get<Reg32>(src));
+                        }
+                    }
+                }
+                else if(regSize == 16)
                 {
                     auto src = checkRegOrImm16(instr.src[1]);
                     auto dst = checkReg16(instr.dst[0]);
@@ -1289,7 +1314,32 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 16)
+                if(regSize == 32)
+                {
+                    // TODO
+                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
+                    else
+                    {
+                        auto src = checkRegOrImm32(instr.src[1]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                auto imm = std::get<uint32_t>(src);
+                                if(imm < 0x80)
+                                    builder.sub(*dst, static_cast<int8_t>(imm));
+                                else
+                                    builder.sub(*dst, imm);
+                            }
+                            else
+                                builder.sub(*dst, std::get<Reg32>(src));
+                        }
+                    }
+                }
+                else if(regSize == 16)
                 {
                     // should be DEC, which sets no flags
                     if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
