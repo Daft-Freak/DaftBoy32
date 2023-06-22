@@ -200,7 +200,6 @@ void DMGRecompiler::handleBranch()
                 printf("analysed %04X-%04X (%zi instructions)\n", cpu.pc, pc, genBlock.instructions.size());
                 printGenBlock(cpu.pc, genBlock, target.getSourceInfo());
                 printf("\n\n");
-                fflush(stdout);//
 #endif
 
                 FuncInfo info{};
