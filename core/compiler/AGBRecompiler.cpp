@@ -320,6 +320,13 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         CPSR,
     };
 
+    auto lowReg = [](int reg)
+    {
+        assert(reg < 8);
+
+        return static_cast<GenReg>(reg + 1);
+    };
+
     /*static const GenCondition condMap[]
     {
         GenCondition::NotEqual,
@@ -417,6 +424,29 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return ret;
     };
 
+    auto alu = [](GenOpcode op, GenReg src0, GenReg src1, GenReg dst, int cycles = 1)
+    {
+        GenOpInfo ret{};
+        ret.opcode = op;
+        ret.cycles = cycles;
+        ret.src[0] = static_cast<uint8_t>(src0);
+        ret.src[1] = static_cast<uint8_t>(src1);
+        ret.dst[0] = static_cast<uint8_t>(dst);
+
+        return ret;
+    };
+
+    auto compare = [](GenReg src0, GenReg src1, int cycles = 1)
+    {
+        GenOpInfo ret{};
+        ret.opcode = GenOpcode::Compare;
+        ret.cycles = cycles;
+        ret.src[0] = static_cast<uint8_t>(src0);
+        ret.src[1] = static_cast<uint8_t>(src1);
+
+        return ret;
+    };
+
     auto jump = [](GenCondition cond = GenCondition::Always, GenReg src = GenReg::Temp, int cycles = 2)
     {
         GenOpInfo ret{};
@@ -428,16 +458,18 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return ret;
     };
 
-    /*const int preserveC = AGBCPU::Flag_C >> 4;
-    const int preserveZ = AGBCPU::Flag_Z >> 4;
+    const int preserveV = AGBCPU::Flag_V >> 28;
+    const int preserveC = AGBCPU::Flag_C >> 28;
 
-    const int writeC = AGBCPU::Flag_C;
-    const int writeH = AGBCPU::Flag_H;
-    const int writeN = AGBCPU::Flag_N;
-    const int writeZ = AGBCPU::Flag_Z;*/
-
+    const int writeV = AGBCPU::Flag_V >> 24;
+    const int writeC = AGBCPU::Flag_C >> 24;
+    const int writeZ = AGBCPU::Flag_Z >> 24;
+    const int writeN = uint32_t(AGBCPU::Flag_N) >> 24;
 
     auto pcPtr = reinterpret_cast<const uint16_t *>(std::as_const(mem).mapAddress(pc));
+
+    // we don't handle prefetch here, hmm
+    auto pcSCycles = cpu.pcSCycles, pcNCycles = cpu.pcNCycles;
 
     while(!done)
     {
@@ -449,16 +481,80 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
             case 0x0: // format 1, move shifted
             case 0x1: // formats 1-2
             {
-                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
-                done = true;
+                auto instOp = (opcode >> 11) & 0x3;
+                auto srcReg = lowReg((opcode >> 3) & 7);
+                auto dstReg = lowReg(opcode & 7);
+
+                if(instOp == 3) // format 2, add/sub
+                {
+                    bool isImm = opcode & (1 << 10);
+                    bool isSub = opcode & (1 << 9);
+
+                    auto src1Reg = GenReg::Temp;
+
+                    if(isImm)
+                        addInstruction(loadImm((opcode >> 6) & 7, 0));
+                    else
+                        src1Reg = lowReg((opcode >> 6) & 7);
+
+                    if(isSub)
+                        addInstruction(alu(GenOpcode::Subtract, srcReg, src1Reg, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                    else
+                        addInstruction(alu(GenOpcode::Subtract, srcReg, src1Reg, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                }
+                else // format 1, move shifted register
+                {
+                    auto offset = (opcode >> 6) & 0x1F;
+
+                    switch(instOp)
+                    {
+                        case 0: // LSL
+                        {
+                            int cFlag = offset == 0 ? preserveC : writeC; // C preserved if shift by 0
+                            addInstruction(loadImm(offset, 0));
+                            addInstruction(alu(GenOpcode::ShiftLeft, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | cFlag | writeZ | writeN);
+                            break;
+                        }
+
+                        case 1: // LSR
+                            addInstruction(loadImm(offset, 0));
+                            addInstruction(alu(GenOpcode::ShiftRightLogic, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
+                            break;
+
+                        case 2: // ASR
+                            addInstruction(loadImm(offset, 0));
+                            addInstruction(alu(GenOpcode::ShiftRightArith, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
+                            break;
+                    }
+                }
+                
                 break;
             }
 
             case 0x2: // format 3, mov/cmp immediate
             case 0x3: // format 3, add/sub immediate
             {
-                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
-                done = true;
+                auto instOp = (opcode >> 11) & 0x3;
+                auto dstReg = lowReg((opcode >> 8) & 7);
+
+                addInstruction(loadImm(opcode & 0xFF, 0));
+
+                switch(instOp)
+                {
+                    case 0: // MOV
+                        addInstruction(move(GenReg::Temp, dstReg, pcSCycles), 2, preserveV | preserveC | writeZ | writeN);
+                        break;
+                    case 1: // CMP
+                        addInstruction(compare(dstReg, GenReg::Temp, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                        break;
+                    case 2: // ADD
+                        addInstruction(alu(GenOpcode::Add, dstReg, GenReg::Temp, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                        break;
+                    case 3: // SUB
+                        addInstruction(alu(GenOpcode::Subtract, dstReg, GenReg::Temp, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                        break;
+                }
+
                 break;
             }
 
@@ -476,8 +572,75 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 }
                 else // format 4, alu
                 {
-                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xFC00);
-                    done = true;
+                    auto instOp = (opcode >> 6) & 0xF;
+                    auto srcReg = lowReg((opcode >> 3) & 7);
+                    auto dstReg = lowReg(opcode & 7);
+
+                    switch(instOp)
+                    {
+                        case 0x0: // AND
+                            addInstruction(alu(GenOpcode::And, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeZ | writeN);
+                            break;
+                        case 0x1: // EOR
+                            addInstruction(alu(GenOpcode::Xor, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeZ | writeN);
+                            break;
+                        //case 0x2: // LSL
+                        //case 0x3: // LSR
+                        //case 0x4: // ASR
+                            // preserves C if src == 0
+                        case 0x5: // ADC
+                            addInstruction(alu(GenOpcode::AddWithCarry, dstReg, srcReg, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                            break;
+                        case 0x6: // SBC
+                            addInstruction(alu(GenOpcode::SubtractWithCarry, dstReg, srcReg, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                            break;
+                        //case 0x7: // ROR
+                            // preserves C if src == 0
+                        case 0x8: // TST
+                            addInstruction(alu(GenOpcode::And, dstReg, srcReg, GenReg::Temp, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                            break;
+                        case 0x9: // NEG
+                            addInstruction(loadImm(0, 0));
+                            addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, srcReg, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                            break;
+                        case 0xA: // CMP
+                            addInstruction(compare(dstReg, srcReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                            break;
+                        case 0xB: // CMN
+                            addInstruction(alu(GenOpcode::Add, dstReg, srcReg, GenReg::Temp, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                            break;
+                        case 0xC: // ORR
+                            addInstruction(alu(GenOpcode::Or, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeZ | writeN);
+                            break;
+                        //case 0xD:
+                            // variable cycles
+                        case 0xE: // BIC
+                        {
+                            GenOpInfo notOp{};
+                            notOp.opcode = GenOpcode::Not;
+                            notOp.src[0] = static_cast<uint8_t>(srcReg);
+                            notOp.dst[0] = static_cast<uint8_t>(GenReg::Temp);
+                            addInstruction(notOp);
+
+                            addInstruction(alu(GenOpcode::And, dstReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | preserveC | writeZ | writeN);
+                            break;
+                        }
+                        case 0xF: // MVN
+                        {
+                            GenOpInfo notOp{};
+                            notOp.opcode = GenOpcode::Not;
+                            notOp.cycles = pcSCycles;
+                            notOp.src[0] = static_cast<uint8_t>(srcReg);
+                            notOp.dst[0] = static_cast<uint8_t>(GenReg::Temp);
+                            addInstruction(notOp, 2, preserveV | preserveC | writeZ | writeN);
+                            break;
+                        }
+
+                        default:
+                            printf("unhandled alu op in convertToGeneric %x\n", instOp);
+                            done = true;
+                    }
+                    
                 }
                 break;
             }
