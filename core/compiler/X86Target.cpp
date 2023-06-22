@@ -1849,11 +1849,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             break;
         }
 
-        // additional cycle
+        // additional cycles
         if(instrCycles)
         {
-            cycleExecuted();
-            assert(instrCycles == 1);
+            assert(instrCycles == 1 || !(blockInfo.flags & GenBlock_StrictSync));
+            while(instrCycles--)
+                cycleExecuted();
         }
 
         // check if this is the end of the source instruction (pc incremented)
