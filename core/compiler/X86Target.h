@@ -19,7 +19,7 @@ public:
 
     const SourceInfo &getSourceInfo() {return sourceInfo;}
 
-    bool compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, GenBlockInfo &blockInfo);
+    bool compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, GenBlockInfo &blockInfo);
 
     uint8_t *compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize);
 
