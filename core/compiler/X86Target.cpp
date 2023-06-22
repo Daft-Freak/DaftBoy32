@@ -1420,7 +1420,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -1434,7 +1433,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, (setC ? flagWriteMask(SourceFlagType::Carry) : 0) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, false, true);
+                        setFlags(*dst, flags, (setC ? flagWriteMask(SourceFlagType::Carry) : 0) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, preserveMask, true);
                     }
                 }
                 else
@@ -1447,7 +1446,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -1464,7 +1462,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, false, true);
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, preserveMask, true);
                     }
                 }
                 else
@@ -1477,7 +1475,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -1490,7 +1487,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, false, true);
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, preserveMask, true);
                     }
                 }
                 else
@@ -1503,7 +1500,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -1520,7 +1516,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, false, true);
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | (setZ ? flagWriteMask(SourceFlagType::Zero) : 0), 0, preserveMask, true);
                     }
                 }
                 else
@@ -1533,7 +1529,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 16)
                 {
@@ -1557,7 +1552,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | flagWriteMask(SourceFlagType::Zero));
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | flagWriteMask(SourceFlagType::Zero), 0, preserveMask);
                     }
                 }
                 else
@@ -1570,7 +1565,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -1581,7 +1575,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | flagWriteMask(SourceFlagType::Zero));
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | flagWriteMask(SourceFlagType::Zero), 0, preserveMask);
                     }
                 }
                 else
@@ -1594,7 +1588,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 16)
                 {
@@ -1618,7 +1611,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | flagWriteMask(SourceFlagType::Zero));
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Carry) | flagWriteMask(SourceFlagType::Zero), 0, preserveMask);
                     }
                 }
                 else
