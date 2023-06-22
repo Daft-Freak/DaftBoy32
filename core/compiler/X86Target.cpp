@@ -841,14 +841,26 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         };
 
         // helpers to deal with restrictions
-        auto checkSingleSource = [&err, &instr](bool canSwapSrcs = false)
+        auto checkSingleSource = [this, &builder, &err, &instr, &checkReg32](bool canSwapSrcs = false)
         {
             if(instr.src[0] != instr.dst[0])
             {
                 if(instr.src[1] == instr.dst[0] && canSwapSrcs)
                     return;
 
-                // this just needs an extra mov to fix, but nothing generates these yet
+                if(!sourceInfo.registers[instr.dst[0]].aliasMask && !sourceInfo.registers[instr.src[0]].aliasMask)
+                {
+                    // move src0 to dst
+                    auto dst = checkReg32(instr.dst[0]);
+                    auto src = checkReg32(instr.src[0]);
+
+                    if(src && dst)
+                    {
+                        builder.mov(*dst, *src);
+                        return;
+                    }
+                }
+
                 printf("unhandled src[0] != dst in op %i\n", int(instr.opcode));
                 err = true;
             }
