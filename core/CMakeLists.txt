@@ -7,24 +7,6 @@ target_sources(DaftBoyCore INTERFACE
     DMGMemory.cpp
 )
 
-if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
-    target_sources(DaftBoyCore INTERFACE
-        compiler/DMGRecompiler.cpp
-        compiler/X86Builder.cpp
-        compiler/X86Target.cpp
-        compiler/RecompilerGeneric.cpp
-    )
-    target_compile_definitions(DaftBoyCore INTERFACE RECOMPILER_X86)
-elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
-    target_sources(DaftBoyCore INTERFACE
-        compiler/DMGRecompiler.cpp
-        compiler/ThumbBuilder.cpp
-        compiler/ThumbTarget.cpp
-        compiler/RecompilerGeneric.cpp
-    )
-    target_compile_definitions(DaftBoyCore INTERFACE RECOMPILER_THUMB)
-endif()
-
 target_include_directories(DaftBoyCore INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 
 # DBA
@@ -38,3 +20,31 @@ target_sources(DaftBoyAdvanceCore INTERFACE
 )
 
 target_include_directories(DaftBoyAdvanceCore INTERFACE ${CMAKE_CURRENT_LIST_DIR})
+
+# recompiler
+add_library(DaftBoyRecompiler INTERFACE)
+
+# common sources
+target_sources(DaftBoyRecompiler INTERFACE
+    compiler/RecompilerGeneric.cpp
+    # builders might be here if they didn't define enums with the same name
+)
+
+# detect target arch
+if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
+    target_sources(DaftBoyRecompiler INTERFACE compiler/X86Builder.cpp compiler/X86Target.cpp)
+    target_compile_definitions(DaftBoyRecompiler INTERFACE RECOMPILER_X86)
+    set(HAVE_RECOMPILER TRUE)
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
+    target_sources(DaftBoyRecompiler INTERFACE compiler/ThumbBuilder.cpp compiler/ThumbTarget.cpp)
+    target_compile_definitions(DaftBoyRecompiler INTERFACE RECOMPILER_THUMB)
+    set(HAVE_RECOMPILER TRUE)
+endif()
+
+if(HAVE_RECOMPILER)
+    # enable DMG recompiler
+    target_sources(DaftBoyCore INTERFACE
+        compiler/DMGRecompiler.cpp
+    )
+    target_link_libraries(DaftBoyCore INTERFACE DaftBoyRecompiler)
+endif()
