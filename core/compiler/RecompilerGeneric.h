@@ -133,9 +133,8 @@ struct SourceInfo
     std::vector<SourceFlagInfo> flags;
 
     uint8_t pcSize;
-    uint16_t pcOffset;
-
     uint8_t pcPrefetch; // offset to add on exit for prefetch
+    uint16_t pcOffset;
 
     int extraCPUOffsets[5]; // source specific ops
 
