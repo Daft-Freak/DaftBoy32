@@ -2000,7 +2000,10 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     }
 
     // save emu pc
-    builder.mov(pcReg16, cpuPtrReg, true, sourceInfo.pcOffset);
+    if(sourceInfo.pcSize == 16)
+        builder.mov(pcReg16, cpuPtrReg, true, sourceInfo.pcOffset);
+    else if(sourceInfo.pcSize == 32)
+        builder.mov(pcReg32, cpuPtrReg, true, sourceInfo.pcOffset);
 
     // restore
 
