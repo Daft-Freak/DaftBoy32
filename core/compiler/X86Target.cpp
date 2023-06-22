@@ -1957,10 +1957,15 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     {
         if(reg.cpuOffset != 0xFFFF)
         {
-            assert(reg.size == 16);
+            assert(reg.size == 16 || reg.size == 32);
 
              if(auto reg32 = mapReg32(i))
-                builder.movzxW(*reg32, cpuPtrReg, reg.cpuOffset); // FIXME: assumes 16 bit regs
+             {
+                if(reg.size == 16)
+                    builder.movzxW(*reg32, cpuPtrReg, reg.cpuOffset);
+                else if(reg.size == 32)
+                    builder.mov(*reg32, cpuPtrReg, false, reg.cpuOffset);
+             }
         }
 
         i++;
@@ -1989,10 +1994,18 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     {
         if(reg.cpuOffset != 0xFFFF)
         {
-            assert(reg.size == 16);
+            assert(reg.size == 16 || reg.size == 32);
 
-            if(auto reg16 = mapReg16(i))
-                builder.mov(*reg16, cpuPtrReg, true, reg.cpuOffset); // FIXME: assumes 16 bit regs
+            if(reg.size == 16)
+            {
+                if(auto reg16 = mapReg16(i))
+                    builder.mov(*reg16, cpuPtrReg, true, reg.cpuOffset);
+            }
+            else if(reg.size == 32)
+            {
+                if(auto reg32 = mapReg32(i))
+                    builder.mov(*reg32, cpuPtrReg, true, reg.cpuOffset);
+            }
         }
 
         i++;
