@@ -72,6 +72,8 @@ DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
     sourceInfo.pcSize = 16;
     sourceInfo.pcOffset = reinterpret_cast<uintptr_t>(&cpu.pc) - cpuPtrInt;
 
+    sourceInfo.cycleMul = 4;
+
     sourceInfo.extraCPUOffsets[0] = reinterpret_cast<uintptr_t>(&cpu.masterInterruptEnable) - cpuPtrInt; // DI, RETI, HALT
     sourceInfo.extraCPUOffsets[1] = reinterpret_cast<uintptr_t>(&cpu.enableInterruptsNextCycle) - cpuPtrInt; // EI
     sourceInfo.extraCPUOffsets[2] = reinterpret_cast<uintptr_t>(&cpu.halted) - cpuPtrInt; // HALT
