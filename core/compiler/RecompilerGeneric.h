@@ -149,4 +149,6 @@ struct SourceInfo
     int (*writeMem)(void *cpu, uint16_t addr, uint8_t data, int cyclesToRun);
 };
 
+void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const SourceInfo &sourceInfo);
+
 void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sourceInfo);

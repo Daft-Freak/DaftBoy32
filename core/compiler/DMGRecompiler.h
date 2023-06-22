@@ -26,8 +26,6 @@ public:
 protected:
     DMGCPU &cpu;
 
-    void analyse(uint16_t pc, uint16_t endPC, GenBlockInfo &blockInfo);
-
     void convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock);
 
     void compileEntry();

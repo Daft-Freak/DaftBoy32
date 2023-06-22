@@ -2,6 +2,219 @@
 
 #include "RecompilerGeneric.h"
 
+
+void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const SourceInfo &sourceInfo)
+{
+    auto startPC = pc;
+
+    // find flag masks/reg
+    int carryMask = 0, zeroMask = 0;
+    uint8_t flagsReg = 0xFF;
+
+    int i = 0;
+    for(auto &flag : sourceInfo.flags)
+    {
+        if(flag.type == SourceFlagType::Carry)
+            carryMask = 1 << i;
+        else if(flag.type == SourceFlagType::Zero)
+            zeroMask = 1 << i;
+
+        i++;
+    }
+
+    for(auto it = sourceInfo.registers.begin() + 1; it != sourceInfo.registers.end(); ++it)
+    {
+        if(it->type == SourceRegType::Flags)
+            flagsReg = it - sourceInfo.registers.begin();
+    }
+
+    // TODO: we end up scanning for branch targets a lot
+    auto findBranchTarget = [&blockInfo](uint32_t pc, uint32_t target, std::vector<GenOpInfo>::iterator it)
+    {
+        auto searchPC = pc;
+        if(target < pc)
+        {
+            auto prevIt = std::make_reverse_iterator(it + 1);
+    
+            for(; prevIt != blockInfo.instructions.rend() && searchPC >= target; ++prevIt)
+            {
+                searchPC -= prevIt->len;
+                if(searchPC == target)
+                {
+                    auto ret = prevIt.base() - 1;
+                    // need to go to the start of the instruction
+                    // (the op after the last one to increment PC)
+                    while(ret != blockInfo.instructions.begin() && !(ret - 1)->len)
+                        --ret;
+
+                    return ret;
+                }
+            }
+        }
+        else
+        {
+            for(auto nextIt = it + 1; nextIt != blockInfo.instructions.end() && searchPC <= target; searchPC += nextIt->len, ++nextIt)
+            {
+                if(searchPC == target)
+                    return nextIt;
+            }
+        }
+
+        return blockInfo.instructions.end();
+    };
+
+    auto getReadFlags = [zeroMask, carryMask, flagsReg](GenOpInfo &instr)
+    {
+        if(instr.opcode == GenOpcode::AddWithCarry || instr.opcode == GenOpcode::SubtractWithCarry || instr.opcode == GenOpcode::RotateLeftCarry || instr.opcode == GenOpcode::RotateRightCarry)
+            return carryMask;
+
+        // flags from condition
+        if(instr.opcode == GenOpcode::Jump)
+        {
+            auto cond = static_cast<GenCondition>(instr.src[0]);
+            if(cond == GenCondition::CarryClear || cond == GenCondition::CarrySet)
+                return carryMask;
+            else if(cond != GenCondition::Always)
+                return zeroMask;
+        }
+
+        if(instr.opcode == GenOpcode::DMG_DAA)
+            return 0x7; // CHN
+
+        // reads flags register directly
+        if(instr.opcode != GenOpcode::LoadImm && (instr.src[0] == flagsReg || instr.src[1] == flagsReg))
+            return 0xF; // all
+
+        return 0;
+    };
+
+    auto getWrittenFlags = [flagsReg](GenOpInfo &instr) -> int
+    {
+        // special case for loading flags, writes all of them
+        if(instr.opcode == GenOpcode::Load && instr.dst[0] == flagsReg)
+            return GenOp_WriteFlags;
+
+        return instr.flags & GenOp_WriteFlags;
+    };
+
+    std::vector<uint8_t> origFlags; // there aren't enough bits in ->flags...
+    origFlags.resize(blockInfo.instructions.size());
+
+    for(auto it = blockInfo.instructions.begin(); it != blockInfo.instructions.end(); ++it)
+    {
+        auto &instr = *it;
+        pc += instr.len;
+
+        if(instr.flags & GenOp_WriteFlags)
+        {
+            // find actually used flags
+            int read = 0;
+
+            int falseBranchFlags = 0; // flags used by the "other" branch
+            bool inBranch = false;
+
+            // save flags
+            origFlags[it - blockInfo.instructions.begin()] = instr.flags & GenOp_WriteFlags;
+
+            // look ahead until we have no flags wrtiten that are not read
+            auto nextPC = pc;
+            for(auto next = it + 1; next != blockInfo.instructions.end() && (instr.flags & GenOp_WriteFlags) != read << 4;)
+            {
+                nextPC += next->len;
+
+                // collect read flags
+                read |= getReadFlags(*next);
+                read &= (instr.flags & GenOp_WriteFlags) >> 4; // can't have a read for a flag we're not setting
+
+                if(next->opcode == GenOpcode::Jump)
+                {
+                    // don't go too deep
+                    if(inBranch)
+                        break;
+
+                    inBranch = true;
+
+                    bool isConditional = static_cast<GenCondition>(next->src[0]) != GenCondition::Always;
+
+                    // make sure we know the target addr
+                    if(next->src[1] != 0 || (next - 1)->opcode != GenOpcode::LoadImm)
+                        break;
+
+                    auto target = (next - 1)->imm;
+
+                    auto targetInstr = findBranchTarget(nextPC, target, next);
+
+                    // bad branch, give up
+                    if(targetInstr == blockInfo.instructions.end())
+                        break;
+
+                    if(!isConditional)
+                    {
+                        // follow it
+                        next = targetInstr;
+                        nextPC = target;
+                        continue;
+                    }
+                    else
+                    {
+                        // follow false branch until we hit another branch
+                        falseBranchFlags = instr.flags & GenOp_WriteFlags;
+                        for(auto falseInstr = next + 1; falseInstr != blockInfo.instructions.end() && falseBranchFlags != read << 4; ++falseInstr)
+                        {
+                            if(falseInstr->opcode == GenOpcode::Jump)
+                                break;
+
+                            read |= getReadFlags(*falseInstr);
+                            falseBranchFlags = (falseBranchFlags & ~getWrittenFlags(*falseInstr)) | read << 4;
+                        }
+
+                        // follow the true branch
+                        next = targetInstr;
+                        nextPC = target;
+                        continue;
+                    }
+                }
+
+                auto written = getWrittenFlags(*next);
+                if(next < it) // backwards jump, restore old flags
+                    written = origFlags[next - blockInfo.instructions.begin()];
+
+                // clear overriden flags (keep any that are used)
+                instr.flags = (instr.flags & ~(written)) | read << 4 | falseBranchFlags;
+
+                ++next;
+            }
+        }
+
+        // jumps with immediate addr may be branches
+        if(instr.opcode == GenOpcode::Jump && instr.src[1] == 0 && (it - 1)->opcode == GenOpcode::LoadImm)
+        {
+            // get target from LoadImm
+            auto target = (it - 1)->imm;
+
+            // not reachable, mark as exit
+            if(target < startPC || target >= endPC)
+                instr.flags |= GenOp_Exit;
+            else
+            {
+                // find and mark target
+                auto targetInstr = findBranchTarget(pc, target, it);
+
+                if(targetInstr != blockInfo.instructions.end())
+                    targetInstr->flags |= GenOp_BranchTarget;
+                else
+                {
+                    // failed to find target
+                    // may happen if there's a jump over some data
+                    instr.flags |= GenOp_Exit;
+                }
+            }
+        }
+        else if(instr.opcode == GenOpcode::Jump)
+            instr.flags |= GenOp_Exit; // we don't know where it goes
+    }
+}
+
 void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sourceInfo)
 {
     struct OpMeta
