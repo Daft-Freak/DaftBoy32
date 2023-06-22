@@ -1128,7 +1128,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -1147,7 +1146,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry));
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), 0, preserveMask);
 
                         if(writesFlag(flags, SourceFlagType::HalfCarry))
                             builder.or_(*f, Reg8::SIL);
@@ -1188,8 +1187,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                assert(!(instr.flags & GenOp_PreserveFlags));
-
                 if(regSize == 8)
                 {
                     auto src = checkRegOrImm8(instr.src[1]);
@@ -1211,7 +1208,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags({}, flags, cMask | zMask, flagWriteMask(SourceFlagType::WasSub));
+                        setFlags({}, flags, cMask | zMask, flagWriteMask(SourceFlagType::WasSub), preserveMask);
 
                         // half carry
                         if(writesFlag(flags, SourceFlagType::HalfCarry))
@@ -1234,7 +1231,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 16)
                 {
@@ -1264,7 +1260,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags({}, flags, flagWriteMask(SourceFlagType::Zero));
+                        setFlags({}, flags, flagWriteMask(SourceFlagType::Zero), 0, preserveMask);
                     }
                 }
                 else
@@ -1338,8 +1334,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                assert(!(instr.flags & GenOp_PreserveFlags));
-
                 if(regSize == 8)
                 {
                     auto src = checkRegOrImm8(instr.src[1]);
@@ -1357,7 +1351,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
-                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub));
+                        setFlags(*dst, flags, flagWriteMask(SourceFlagType::Zero) | flagWriteMask(SourceFlagType::Carry), flagWriteMask(SourceFlagType::WasSub), preserveMask);
 
                         if(writesFlag(flags, SourceFlagType::HalfCarry))
                             builder.or_(*f, Reg8::SIL);
@@ -1373,7 +1367,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
                 checkSingleSource();
-                assert(!(instr.flags & GenOp_PreserveFlags));
 
                 if(regSize == 8)
                 {
@@ -1387,7 +1380,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         bool alwaysZero = instr.src[1] == instr.dst[0]; // x ^ x is always 0
                         auto zMask = flagWriteMask(SourceFlagType::Zero);
 
-                        setFlags({}, flags, alwaysZero ? 0 : zMask, alwaysZero ? zMask : 0);
+                        setFlags({}, flags, alwaysZero ? 0 : zMask, alwaysZero ? zMask : 0, preserveMask);
                     }
                 }
                 else
