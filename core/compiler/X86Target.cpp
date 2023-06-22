@@ -655,7 +655,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 // if <= 0 exit
                 builder.jcc(Condition::G, 10);
-                builder.mov(pcReg32, pc);
+                builder.mov(pcReg32, pc + sourceInfo.pcPrefetch);
                 builder.call(saveAndExitPtr - builder.getPtr());
 
                 // TODO: this is the first instruction
@@ -1832,7 +1832,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         if(err)
         {
             builder.resetPtr(opStartPtr);
-            builder.mov(pcReg32, pc - instr.len);
+            builder.mov(pcReg32, pc - instr.len + sourceInfo.pcPrefetch);
             builder.jmp(exitPtr - builder.getPtr());
             break;
         }
@@ -1870,7 +1870,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
             // if <= 0 exit
             builder.jcc(Condition::G, 10);
-            builder.mov(pcReg32, pc);
+            builder.mov(pcReg32, pc + sourceInfo.pcPrefetch);
             builder.call(saveAndExitPtr - builder.getPtr());
 
             cyclesThisInstr = 0;

@@ -30,7 +30,7 @@ static bool shouldSyncForRegIndex(uint8_t reg, const GenBlockInfo &block)
 
 DMGRecompiler::DMGRecompiler(DMGCPU &cpu) : cpu(cpu)
 {
-    SourceInfo sourceInfo;
+    SourceInfo sourceInfo{};
 
     auto cpuPtrInt = reinterpret_cast<uintptr_t>(&cpu);
 
