@@ -54,7 +54,6 @@ protected:
 
     // common code
     CompiledFunc entryFunc = nullptr;
-    uint8_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;
 
     // saved pointer on exit
     uint8_t *tmpSavedPtr = nullptr;
