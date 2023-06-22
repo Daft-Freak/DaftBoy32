@@ -322,7 +322,7 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
         Reg32::R13D,
 
         Reg32::R12D,
-        Reg32::R11D, // used as temp in some ALUs
+        Reg32::R11D, // used as temp in some ALUs and by exit code
     };
     // also free R15
 
@@ -342,6 +342,9 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
 
         // TODO: make sure we allocate all temps
         if(allocOff == std::size(regList))
+            continue;
+
+        if(regList[allocOff] == Reg32::R11D && it->type != SourceRegType::Temp)
             continue;
 
         regAlloc.emplace(i, regList[allocOff]);
