@@ -446,6 +446,93 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
         switch(opcode >> 12)
         {
+            case 0x0: // format 1, move shifted
+            case 0x1: // formats 1-2
+            {
+                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
+                done = true;
+                break;
+            }
+
+            case 0x2: // format 3, mov/cmp immediate
+            case 0x3: // format 3, add/sub immediate
+            {
+                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
+                done = true;
+                break;
+            }
+
+            case 0x4: // formats 4-6
+            {
+                if(opcode & (1 << 11)) // format 6, PC-relative load
+                {
+                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
+                    done = true;
+                }
+                else if(opcode & (1 << 10)) // format 5, Hi reg/branch exchange
+                {
+                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xFC00);
+                    done = true;
+                }
+                else // format 4, alu
+                {
+                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xFC00);
+                    done = true;
+                }
+                break;
+            }
+
+            case 0x5: // formats 7-8
+            {
+                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xFE00);
+                done = true;
+                break;
+            }
+
+            case 0x6: // format 9, load/store with imm offset (words)
+            case 0x7: // ... (bytes)
+            case 0x8: // format 10, load/store halfword
+            case 0x9: // format 11, SP-relative load/store
+            case 0xA: // format 12, load address
+            {
+                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
+                done = true;
+                break;
+            }
+
+            case 0xB: // formats 13-14
+            {
+                if(opcode & (1 << 10)) // format 14, push/pop
+                {
+                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xFC00);
+                    done = true;
+                }
+                else // format 13, add offset to SP
+                {
+                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
+                    done = true;
+                }
+                break;
+            }
+
+
+            case 0xC: // format 15, multiple load/store
+            {
+                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
+                done = true;
+
+                break;
+            }
+
+            case 0xD: // formats 16-17, conditional branch + SWI
+            case 0xE: // format 18, unconditional branch
+            case 0xF: // format 19, long branch with link
+            {
+                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF000);
+                done = true;
+
+                break;
+            }
 
             default:
             {
