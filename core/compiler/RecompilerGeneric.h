@@ -115,7 +115,9 @@ enum class SourceFlagType : uint8_t
     Carry = 0,
     HalfCarry,
     WasSub, // the Z80 N flag
-    Zero
+    Zero,
+    Negative,
+    Overflow
 };
 
 struct SourceFlagInfo
