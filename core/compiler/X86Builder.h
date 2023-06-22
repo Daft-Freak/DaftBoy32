@@ -120,8 +120,10 @@ public:
     void add(Reg32 dst, Reg32 src);
     void add(Reg16 dst, Reg16 src);
     void add(Reg8 dst, Reg8 src);
+    void add(Reg32 dst, uint32_t imm);
     void add(Reg8 dst, uint8_t imm);
     void add(Reg64 dst, int8_t imm);
+    void add(Reg32 dst, int8_t imm);
     void add(Reg16 dst, int8_t imm);
     void addD(int8_t imm, Reg64 base, int disp = 0);
     void addW(int8_t imm, Reg64 base, int disp = 0);
@@ -218,6 +220,7 @@ public:
     void sub(Reg32 dst, Reg32 src);
     void sub(Reg16 dst, Reg16 src);
     void sub(Reg8 dst, Reg8 src);
+    void sub(Reg32 dst, uint32_t imm);
     void sub(Reg8 dst, uint8_t imm);
     void sub(Reg64 dst, int8_t imm);
     void sub(Reg32 dst, int8_t imm);

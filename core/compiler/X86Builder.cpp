@@ -40,6 +40,22 @@ void X86Builder::add(Reg8 dst, Reg8 src)
     encodeModRMReg8(dstReg, srcReg);
 }
 
+// imm -> reg, 32 bit
+void X86Builder::add(Reg32 dst, uint32_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x81); // opcode, w = 1, s = 0
+    encodeModRM(dstReg);
+
+    // immediate
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
+}
+
 // imm -> reg, 8 bit
 void X86Builder::add(Reg8 dst, uint8_t imm)
 {
@@ -63,16 +79,24 @@ void X86Builder::add(Reg64 dst, int8_t imm)
 }
 
 // imm -> reg, 8 bit sign extended
+void X86Builder::add(Reg32 dst, int8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x83); // opcode, w = 1, s = 1
+    encodeModRM(dstReg);
+    write(imm);
+}
+
+// imm -> reg, 8 bit sign extended
 void X86Builder::add(Reg16 dst, int8_t imm)
 {
     auto dstReg = static_cast<int>(dst);
 
     write(0x66); // 16 bit override
 
-    encodeREX(false, 0, 0, dstReg);
-    write(0x83); // opcode, w = 1, s = 1
-    encodeModRM(dstReg);
-    write(imm);
+    add(static_cast<Reg32>(dst), imm);
 }
 
 // imm -> mem, 32 bit mem, 8 bit sign extended
@@ -869,6 +893,22 @@ void X86Builder::sub(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x28); // opcode
     encodeModRMReg8(dstReg, srcReg);
+}
+
+// imm -> reg, 32 bit
+void X86Builder::sub(Reg32 dst, uint32_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x81); // opcode, w = 1, s = 0
+    encodeModRM(dstReg, 5);
+
+    // immediate
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
 }
 
 // imm -> reg, 8 bit
