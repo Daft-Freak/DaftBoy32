@@ -1686,7 +1686,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 builder.movzx(pcReg32, std::get<Reg16>(src));
                         }
                         else // or sub cycles early (we jump past the usual code that does this)
-                            builder.sub(Reg32::EDI, cyclesThisInstr);
+                            builder.sub(Reg32::EDI, static_cast<int8_t>(cyclesThisInstr));
 
                         // don't update twice for unconditional branches
                         if(condition == GenCondition::Always)
@@ -1876,7 +1876,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
             // cycles -= executed
             if(cyclesThisInstr) // 0 means we already did the sub
-                builder.sub(Reg32::EDI, cyclesThisInstr);
+                builder.sub(Reg32::EDI, static_cast<int8_t>(cyclesThisInstr));
 
             lastInstrCycleCheck = builder.getPtr(); // save in case the next instr is a branch target
 
