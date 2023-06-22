@@ -284,8 +284,6 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
     if(!src.index() || !dst)
         return false;
 
-    assert(*dst != Reg32::ECX);
-
     if(std::holds_alternative<uint8_t>(src))
     {
         assert(std::get<uint8_t>(src) < 32);
@@ -293,6 +291,8 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
     }
     else
     {
+        assert(*dst != Reg32::ECX);
+
         auto srcReg = std::get<Reg8>(src);
         assert(srcReg != static_cast<Reg8>(*dst));
 
