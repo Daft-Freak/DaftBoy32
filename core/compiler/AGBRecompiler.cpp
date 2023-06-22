@@ -68,6 +68,8 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
     sourceInfo.pcSize = 32;
     sourceInfo.pcOffset = reinterpret_cast<uintptr_t>(&cpu.regs[15]) - cpuPtrInt;
 
+    sourceInfo.pcPrefetch = 2;
+
     sourceInfo.exitCallFlag = &exitCallFlag;
     sourceInfo.savedExitPtr = &tmpSavedPtr;
     sourceInfo.cycleCount = &cpu.cycleCount;
