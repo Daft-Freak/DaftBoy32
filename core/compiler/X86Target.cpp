@@ -884,12 +884,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
             case GenOpcode::Move:
             {
-                assert(!(instr.flags & GenOp_WriteFlags));
-
                 auto regSize = sourceInfo.registers[instr.dst[0]].size;
 
                 if(regSize == 16)
                 {
+                    assert(!(instr.flags & GenOp_WriteFlags));
+
                     // use 32-bit mov to save some bytes
                     auto dst = checkReg32(instr.dst[0]);
 
@@ -916,6 +916,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 }
                 else if(regSize == 8)
                 {
+                    assert(!(instr.flags & GenOp_WriteFlags));
+
                     auto src = checkRegOrImm8(instr.src[0]);
                     auto dst = checkReg8(instr.dst[0]);
 
