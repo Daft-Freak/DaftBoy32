@@ -602,13 +602,13 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
 
     auto addInstruction = [&genBlock](GenOpInfo op, uint8_t len = 0, uint16_t flags = 0)
     {
-        if(flags & Op_Exit)
+        if(flags & GenOp_Exit)
             assert(op.opcode == GenOpcode::Jump);
 
         // move branch target flag up to the start of the original instruction
-        if((flags & Op_BranchTarget) && !genBlock.instructions.empty() && !genBlock.instructions.back().len)
+        if((flags & GenOp_BranchTarget) && !genBlock.instructions.empty() && !genBlock.instructions.back().len)
         {
-            flags &= ~Op_BranchTarget;
+            flags &= ~GenOp_BranchTarget;
             auto rit = genBlock.instructions.rbegin();
             for(;rit != genBlock.instructions.rend(); ++rit)
             {
@@ -623,7 +623,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
             if(rit == genBlock.instructions.rend())
                 rit--;
 
-            rit->flags |= Op_BranchTarget;
+            rit->flags |= GenOp_BranchTarget;
         }
 
         op.len = len;
