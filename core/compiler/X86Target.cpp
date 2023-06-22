@@ -9,9 +9,9 @@
 // reg helpers
 static const Reg64 cpuPtrReg = Reg64::R14;
 
-// only an output at the end, could be anything
-static const Reg32 pcReg32 = Reg32::R12D;
-static const Reg16 pcReg16 = Reg16::R12W;
+// only an output at the end, use the same reg used for the cycle count
+static const Reg32 pcReg32 = Reg32::EDI;
+static const Reg16 pcReg16 = Reg16::DI;
 
 #ifdef _WIN32
 static const Reg64 argumentRegs64[]{Reg64::RCX, Reg64::RDX, Reg64::R8, Reg64::R9};
@@ -321,7 +321,7 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
         Reg32::EBX,
         Reg32::R13D,
 
-        Reg32::R12D, // also used for pc out, so can only be used as a temp
+        Reg32::R12D,
         Reg32::R11D, // used as temp in some ALUs
     };
     // also free R15
@@ -647,11 +647,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             else
             {
                 // this is the first instruction, so make a cycle check for the branch to go to
-                builder.jmp(13);
+                builder.jmp(12);
                 lastInstrCycleCheck = builder.getPtr();
 
                 // if <= 0 exit
-                builder.jcc(Condition::G, 11);
+                builder.jcc(Condition::G, 10);
                 builder.mov(pcReg32, pc);
                 builder.call(saveAndExitPtr - builder.getPtr());
 
@@ -1866,7 +1866,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             lastInstrCycleCheck = builder.getPtr(); // save in case the next instr is a branch target
 
             // if <= 0 exit
-            builder.jcc(Condition::G, 11);
+            builder.jcc(Condition::G, 10);
             builder.mov(pcReg32, pc);
             builder.call(saveAndExitPtr - builder.getPtr());
 
