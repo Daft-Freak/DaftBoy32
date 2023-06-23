@@ -1241,7 +1241,30 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource(true);
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    // TODO
+                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
+                    else
+                    {
+                        auto src = checkRegOrImm32(instr.src[1]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                auto imm = std::get<uint32_t>(src);
+                                // use sign extended if imm < 0x80? 
+                                builder.and_(*dst, imm);
+                            }
+                            else
+                                builder.and_(*dst, std::get<Reg32>(src));
+                        }
+                    }
+                }
+                else if(regSize == 8)
                 {
                     // d = s0 & d -> d = d & s0
                     int srcIndex = instr.src[1] == instr.dst[0] ? 0 : 1;
@@ -1310,7 +1333,30 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 16)
+                if(regSize == 32)
+                {
+                    // TODO
+                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
+                    else
+                    {
+                        auto src = checkRegOrImm32(instr.src[1]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                auto imm = std::get<uint32_t>(src);
+                                // use sign extended if imm < 0x80? 
+                                builder.or_(*dst, imm);
+                            }
+                            else
+                                builder.or_(*dst, std::get<Reg32>(src));
+                        }
+                    }
+                }
+                else if(regSize == 16)
                 {
                     // used for LDH
                     if(instr.flags & GenOp_WriteFlags)
@@ -1471,7 +1517,30 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    // TODO
+                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
+                    else
+                    {
+                        auto src = checkRegOrImm32(instr.src[1]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                auto imm = std::get<uint32_t>(src);
+                                // use sign extended if imm < 0x80? 
+                                builder.xor_(*dst, imm);
+                            }
+                            else
+                                builder.xor_(*dst, std::get<Reg32>(src));
+                        }
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
@@ -1497,7 +1566,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags));
+                    else if(auto dst = checkReg32(instr.dst[0]))
+                        builder.not_(*dst);
+                }
+                else if(regSize == 8)
                 {
                     if(auto dst = checkReg8(instr.dst[0]))
                     {
