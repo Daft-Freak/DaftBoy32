@@ -565,8 +565,15 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
             {
                 if(opcode & (1 << 11)) // format 6, PC-relative load
                 {
-                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
-                    done = true;
+                    // this is almost certainly going to cause more timing problems
+                    auto dstReg = lowReg((opcode >> 8) & 7);
+                    uint8_t word = opcode & 0xFF;
+                    auto addr = ((pc + 2) & ~2) + (word << 2);
+
+                    int cycles = pcSCycles + 1;
+
+                    addInstruction(loadImm(mem.read<uint32_t>(addr, cycles, false), 0));
+                    addInstruction(move(GenReg::Temp, dstReg, cycles), 2);
                 }
                 else if(opcode & (1 << 10)) // format 5, Hi reg/branch exchange
                 {
