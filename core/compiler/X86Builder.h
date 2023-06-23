@@ -197,7 +197,9 @@ public:
     void rorCL(Reg8 dst);
     void ror(Reg8 r, uint8_t count);
 
+    void sarCL(Reg32 dst);
     void sarCL(Reg8 dst);
+    void sar(Reg32 r, uint8_t count);
     void sar(Reg8 r, uint8_t count);
 
     void sbb(Reg8 dst, Reg8 src);
