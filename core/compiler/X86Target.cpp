@@ -2063,6 +2063,16 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         // check if this is the end of the source instruction (pc incremented)
         newEmuOp = instr.len != 0;
 
+        if(instIt + 1 == endInstr && instr.opcode != GenOpcode::Jump)
+        {
+            // ending on a non-jump probably means this was an incomplete block
+            // add an exit
+            callRestoreIfNeeded(builder, needCallRestore);
+            syncCyclesExecuted();
+            builder.mov(pcReg32, pc + sourceInfo.pcPrefetch);
+            builder.jmp(exitPtr - builder.getPtr());
+        }
+
         // check cycle count if this is the last part of en emulated op
         // ... but not on the last op, that should always exit anyway
         // ... or exits unless followed by a branch target
