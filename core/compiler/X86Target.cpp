@@ -314,14 +314,14 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
 {
     static const Reg32 regList[]
     {
-        // from DMGRecompilerX86
         Reg32::EAX,
         Reg32::ECX,
         Reg32::EDX,
         Reg32::EBX,
-        Reg32::R13D,
-
+        Reg32::EBP,
         Reg32::R12D,
+        Reg32::R13D,
+        
         Reg32::R11D, // used as temp in some ALUs and by exit code
     };
     // also free R15
@@ -2061,7 +2061,6 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
     // prologue
     builder.push(Reg64::RBP);
-    builder.mov(Reg64::RBP, Reg64::RSP);
 
     // save
     builder.push(Reg64::R12);
