@@ -868,7 +868,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             // save dest in temp and use as second source
                             builder.mov(*tmp, *dst);
                             instr.src[1] = 0;
-                            dst = *tmp;
                         }
                     }
 
