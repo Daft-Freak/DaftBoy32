@@ -850,8 +850,29 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(!sourceInfo.registers[instr.dst[0]].aliasMask && !sourceInfo.registers[instr.src[0]].aliasMask)
                 {
-                    // move src0 to dst
                     auto dst = checkReg32(instr.dst[0]);
+                    if(dst && instr.src[1] == instr.dst[0] && instr.opcode != GenOpcode::Not)
+                    {
+                        // dest is the second source, save it and replace the source
+                        assert(instr.dst[0]); // it's already a temp
+
+                        auto tmp = mapReg32(0);
+
+                        if(instr.src[0] == 0)
+                        {
+                            printf("unhandled src[0] != dst in op %i\n", int(instr.opcode));
+                            err = true;
+                        }
+                        else
+                        {
+                            // save dest in temp and use as second source
+                            builder.mov(*tmp, *dst);
+                            instr.src[1] = 0;
+                            dst = *tmp;
+                        }
+                    }
+
+                    // move src0 to dst
                     auto src = checkReg32(instr.src[0]);
 
                     if(src && dst)
