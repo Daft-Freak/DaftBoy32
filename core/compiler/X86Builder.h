@@ -131,6 +131,7 @@ public:
     void adc(Reg8 dst, Reg8 src);
     void adc(Reg8 dst, uint8_t imm);
 
+    void and_(Reg32 dst, Reg32 src);
     void and_(Reg16 dst, Reg16 src);
     void and_(Reg8 dst, Reg8 src);
     void and_(Reg32 dst, uint32_t imm);
@@ -172,8 +173,10 @@ public:
     void movzx(Reg32 dst, Reg8 src);
     void movzxW(Reg32 r, Reg64 base, int disp = 0);
 
+    void not_(Reg32 r);
     void not_(Reg8 r);
 
+    void or_(Reg32 dst, Reg32 src);
     void or_(Reg16 dst, Reg16 src);
     void or_(Reg8 dst, Reg8 src);
     void or_(Reg32 dst, uint32_t imm);
@@ -231,7 +234,9 @@ public:
 
     void xchg(Reg8 dst, Reg8 src);
 
+    void xor_(Reg32 dst, Reg32 src);
     void xor_(Reg8 dst, Reg8 src);
+    void xor_(Reg32 dst, uint32_t imm);
     void xor_(Reg8 dst, uint8_t imm);
 
     uint8_t *getPtr() const {return ptr;}
