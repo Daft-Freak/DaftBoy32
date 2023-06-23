@@ -92,10 +92,7 @@ void X86Builder::add(Reg32 dst, int8_t imm)
 // imm -> reg, 8 bit sign extended
 void X86Builder::add(Reg16 dst, int8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
     write(0x66); // 16 bit override
-
     add(static_cast<Reg32>(dst), imm);
 }
 
