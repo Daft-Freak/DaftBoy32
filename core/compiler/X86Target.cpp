@@ -921,7 +921,25 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             {
                 auto regSize = sourceInfo.registers[instr.dst[0]].size;
 
-                if(regSize == 16)
+                if(regSize == 32)
+                {
+                    if((instr.flags & GenOp_WriteFlags))
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src = checkRegOrImm32(instr.src[0]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                                builder.mov(*dst, std::get<uint32_t>(src));
+                            else
+                                builder.mov(*dst, std::get<Reg32>(src));
+                        }
+                    }
+                }
+                else if(regSize == 16)
                 {
                     assert(!(instr.flags & GenOp_WriteFlags));
 
@@ -1610,7 +1628,20 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 16)
+                if(regSize == 32)
+                {
+                    // TODO
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src = checkRegOrImm8(instr.src[1]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shlCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shl));
+                    }
+                }
+                else if(regSize == 16)
                 {
                     // used for RET
                     if(instr.flags & GenOp_WriteFlags)
@@ -1646,7 +1677,20 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    // TODO
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src = checkRegOrImm8(instr.src[1]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::sarCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::sar));
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
@@ -1669,7 +1713,20 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 16)
+                if(regSize == 32)
+                {
+                    // TODO
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src = checkRegOrImm8(instr.src[1]);
+                        auto dst = checkReg32(instr.dst[0]);
+
+                        doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shrCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shr));
+                    }
+                }
+                else if(regSize == 16)
                 {
                     // used for LD (nn), SP
                     if(instr.flags & GenOp_WriteFlags)
