@@ -520,12 +520,12 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         }
 
                         case 1: // LSR
-                            addInstruction(loadImm(offset, 0));
+                            addInstruction(loadImm(offset ? offset : 32, 0));
                             addInstruction(alu(GenOpcode::ShiftRightLogic, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
                             break;
 
                         case 2: // ASR
-                            addInstruction(loadImm(offset, 0));
+                            addInstruction(loadImm(offset ? offset : 32, 0));
                             addInstruction(alu(GenOpcode::ShiftRightArith, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
                             break;
                     }
