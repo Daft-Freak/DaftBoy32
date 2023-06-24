@@ -2183,18 +2183,12 @@ bool X86Target::writesFlag(uint16_t opFlags, SourceFlagType flag)
 
 bool X86Target::isCallSaved(Reg16 reg) const
 {
-    for(auto r : callSavedRegs)
-    {
-        if(reg == static_cast<Reg16>(r))
-            return true;
-    }
-
-    return false;
+    return callSaveIndex(reg) != -1;
 }
 
 bool X86Target::isCallSaved(Reg8 reg) const
 {
-    return reg == Reg8::AL || reg == Reg8::CL || reg == Reg8::DL || reg == Reg8::AH || reg == Reg8::CH || reg == Reg8::DH || reg == Reg8::DIL;
+    return callSaveIndex(reg) != -1;
 }
 
 int X86Target::callSaveIndex(Reg16 reg) const
@@ -2218,13 +2212,7 @@ int X86Target::callSaveIndex(Reg8 reg) const
     else if(isXHReg(reg))
         mappedReg = static_cast<Reg16>(iReg - 4);
 
-    for(size_t i = 0; i < std::size(callSavedRegs); i++)
-    {
-        if(mappedReg == static_cast<Reg16>(callSavedRegs[i]))
-            return static_cast<int>(i);
-    }
-    
-    return -1;
+    return callSaveIndex(mappedReg);
 }
 
 void X86Target::callSaveIfNeeded(X86Builder &builder, int &saveState) const
@@ -2247,8 +2235,11 @@ void X86Target::callSaveIfNeeded(X86Builder &builder, int &saveState) const
     saveState = numRegs;
 }
 
-void X86Target::callRestore(X86Builder &builder, int saveState, int toIndex) const
+void X86Target::callRestore(X86Builder &builder, int &saveState, int toIndex) const
 {
+    if(saveState <= toIndex)
+        return;
+
     int numRegs = static_cast<int>(std::size(callSavedRegs));
 
     assert(toIndex < numRegs);
@@ -2263,6 +2254,8 @@ void X86Target::callRestore(X86Builder &builder, int saveState, int toIndex) con
 
     for(int i = saveState - 1; i >= toIndex; i--)
         builder.pop(callSavedRegs[i]);
+
+    saveState = toIndex;
 }
 
 void X86Target::callRestore(X86Builder &builder, Reg8 dstReg) const
@@ -2310,47 +2303,29 @@ void X86Target::callRestore(X86Builder &builder, Reg8 dstReg) const
 
 void X86Target::callRestoreIfNeeded(X86Builder &builder, int &saveState) const
 {
-    if(!saveState)
-        return;
-
     callRestore(builder, saveState, 0);
-    saveState = 0;
 }
 
 // restore if it would affect this register
 // takes a variant so it can be passed the result of checkRegOrImm
 void X86Target::callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, int &saveState) const
 {
-    if(!saveState)
-        return; // nothing saved
-
-    if(!std::holds_alternative<Reg8>(val) || !isCallSaved(std::get<Reg8>(val)))
+    if(!std::holds_alternative<Reg8>(val))
         return; // not a register
 
     auto index = callSaveIndex(std::get<Reg8>(val));
 
-    if(saveState < index)
-        return; // already restored
-
-    callRestore(builder, saveState, index);
-
-    saveState = index;
+    if(index != -1)
+        callRestore(builder, saveState, index);
 }
 
 void X86Target::callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, int &saveState) const
 {
-    if(!saveState)
-        return;
-
-    if(!std::holds_alternative<Reg16>(val) || !isCallSaved(std::get<Reg16>(val)))
+    if(!std::holds_alternative<Reg16>(val))
         return;
 
     auto index = callSaveIndex(std::get<Reg16>(val));
 
-    if(saveState < index)
-        return;
-
-    callRestore(builder, saveState, index);
-
-    saveState = index;
+    if(index != -1)
+        callRestore(builder, saveState, index);
 }
