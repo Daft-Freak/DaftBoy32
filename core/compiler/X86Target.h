@@ -59,4 +59,6 @@ private:
     uint8_t flagMap[4]; // map from SourceFlagType to flags bit
 
     uint8_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;
+
+    uint8_t numSavedRegs;
 };

@@ -160,6 +160,8 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
     };
     // also free R15
 
+    numSavedRegs = 4; // TODO: can skip RDI/RSI on windows
+
     // alloc registers
     unsigned int allocOff = 0;
 
@@ -2193,7 +2195,7 @@ bool X86Target::isCallSaved(Reg8 reg) const
 
 int X86Target::callSaveIndex(Reg16 reg) const
 {
-    for(size_t i = 0; i < std::size(callSavedRegs); i++)
+    for(size_t i = 0; i < numSavedRegs; i++)
     {
         if(reg == static_cast<Reg16>(callSavedRegs[i]))
             return static_cast<int>(i);
@@ -2217,7 +2219,7 @@ int X86Target::callSaveIndex(Reg8 reg) const
 
 void X86Target::callSaveIfNeeded(X86Builder &builder, int &saveState) const
 {
-    int numRegs = static_cast<int>(std::size(callSavedRegs));
+    int numRegs = static_cast<int>(numSavedRegs);
 
     if(saveState == numRegs)
         return;
@@ -2240,7 +2242,7 @@ void X86Target::callRestore(X86Builder &builder, int &saveState, int toIndex) co
     if(saveState <= toIndex)
         return;
 
-    int numRegs = static_cast<int>(std::size(callSavedRegs));
+    int numRegs = static_cast<int>(numSavedRegs);
 
     assert(toIndex < numRegs);
 
@@ -2260,8 +2262,6 @@ void X86Target::callRestore(X86Builder &builder, int &saveState, int toIndex) co
 
 void X86Target::callRestore(X86Builder &builder, Reg8 dstReg) const
 {
-    int numRegs = static_cast<int>(std::size(callSavedRegs));
-
     assert(dstReg != Reg8::DIL); // no
 
     assert(isCallSaved(dstReg));
@@ -2270,11 +2270,11 @@ void X86Target::callRestore(X86Builder &builder, Reg8 dstReg) const
     builder.add(Reg64::RSP, 32); // shadow space
 #endif
 
-    if(numRegs % 2)
+    if(numSavedRegs % 2)
         builder.add(Reg64::RSP, 8); // alignment
 
     // pop everything except RAX
-    for(int i = numRegs - 1; i > 0; i--)
+    for(unsigned i = numSavedRegs - 1; i > 0; i--)
         builder.pop(callSavedRegs[i]);
 
     assert(callSavedRegs[0] == Reg64::RAX);
