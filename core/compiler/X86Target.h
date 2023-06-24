@@ -2,6 +2,7 @@
 
 #include <map>
 #include <optional>
+#include <variant>
 
 #include "RecompilerGeneric.h"
 
@@ -9,6 +10,8 @@ enum class Reg8;
 enum class Reg16;
 enum class Reg32;
 enum class Reg64;
+
+class X86Builder;
 
 class X86Target final
 {
@@ -32,6 +35,20 @@ private:
     SourceFlagInfo &getFlagInfo(SourceFlagType flag);
     uint8_t flagWriteMask(SourceFlagType flag);
     bool writesFlag(uint16_t opFlags, SourceFlagType flag);
+
+    bool isCallSaved(Reg16 reg) const;
+    bool isCallSaved(Reg8 reg) const;
+
+    int callSaveIndex(Reg16 reg) const;
+    int callSaveIndex(Reg8 reg) const;
+
+    void callSaveIfNeeded(X86Builder &builder, int &saveState) const;
+
+    void callRestore(X86Builder &builder, int saveState, int toIndex) const;
+    void callRestore(X86Builder &builder, Reg8 dstReg) const;
+    void callRestoreIfNeeded(X86Builder &builder, int &saveState) const;
+    void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, int &saveState) const;
+    void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, int &saveState) const;
 
     SourceInfo sourceInfo;
     void *cpuPtr;
