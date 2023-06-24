@@ -698,7 +698,24 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
             }
 
             case 0xD: // formats 16-17, conditional branch + SWI
+            {
+                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF000);
+                done = true;
+
+                break;
+            }
+
             case 0xE: // format 18, unconditional branch
+            {
+                uint32_t offset = static_cast<int16_t>(opcode << 5) >> 4; // sign extend and * 2
+                addInstruction(loadImm(pc + 2 + offset, 0));
+                addInstruction(jump(GenCondition::Always, GenReg::Temp, pcSCycles * 2 + pcNCycles), 2);
+
+                if(pc > maxBranch)
+                    done = true;
+                break;
+            }
+
             case 0xF: // format 19, long branch with link
             {
                 printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF000);
