@@ -21,7 +21,7 @@ static const Reg64 argumentRegs64[]{Reg64::RDI, Reg64::RSI, Reg64::RDX, Reg64::R
 static const Reg32 argumentRegs32[]{Reg32::EDI, Reg32::ESI, Reg32::EDX, Reg32::ECX};
 #endif
 
-static const Reg64 callSavedRegs[]{Reg64::RAX, Reg64::RCX, Reg64::RDX, Reg64::RDI};
+static const Reg64 callSavedRegs[]{Reg64::RAX, Reg64::RCX, Reg64::RDX, Reg64::RDI, Reg64::RSI};
 
 static bool isXHReg(Reg8 reg)
 {
@@ -201,6 +201,16 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
     i = 0;
     for(auto it = sourceInfo.flags.begin(); it != sourceInfo.flags.end(); ++it, i++)
         flagMap[static_cast<int>(it->type)] = i;
+
+    // allocate the flags register if it isn't an alias
+    if(!sourceInfo.registers[flagsReg].alias && !regAlloc.count(flagsReg))
+    {
+        // assume this isn't something that has a half carry flag so ESI is free
+        assert(!flagWriteMask(SourceFlagType::HalfCarry));
+
+        regAlloc.emplace(flagsReg, Reg32::ESI);
+        numSavedRegs++; // need to save it
+    }
 
     this->sourceInfo = std::move(sourceInfo);
     this->cpuPtr = cpuPtr;
@@ -2004,8 +2014,9 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     builder.push(Reg64::RDI);
 
     builder.mov(Reg64::RDI, argumentRegs64[0]); // move cycle count
-    builder.mov(Reg64::RSI, argumentRegs64[1]); // code ptr
 #endif
+
+    builder.mov(Reg64::R10, argumentRegs64[1]); // code ptr
 
     // store pointer to CPU
     auto cpuPtrInt = reinterpret_cast<uintptr_t>(cpuPtr);
@@ -2033,7 +2044,7 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     }
 
     // jump to code
-    builder.jmp(Reg64::RSI);
+    builder.jmp(Reg64::R10);
 
     // exit setting the call flag ... and saving ip
     exitForCallPtr = builder.getPtr();
