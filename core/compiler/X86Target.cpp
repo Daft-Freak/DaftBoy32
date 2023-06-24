@@ -1822,14 +1822,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 bool isExit = instr.flags & GenOp_Exit;
 
-                if(regSize == 16)
+                if(regSize == 16 || regSize == 32)
                 {
-                    auto src = checkRegOrImm16(instr.src[1]);
+                    auto src = checkRegOrImm32(instr.src[1]);
                     if(src.index())
                     {
                         callRestoreIfNeeded(builder, needCallRestore);
 
-                        assert(isExit || std::holds_alternative<uint16_t>(src)); // shouldn't be any non-exit jumps with unknown addr
+                        assert(isExit || std::holds_alternative<uint32_t>(src)); // shouldn't be any non-exit jumps with unknown addr
 
                         uint8_t *branchPtr = nullptr;
                         bool flagSet = false;
@@ -1855,9 +1855,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         // need to sync cycles *before* the jump out
                         if(instrCycles)
                         {
-                            cycleExecuted();
-                            instrCycles--;
-                            assert(instrCycles == 0);
+                            assert(instrCycles == 1 || !(blockInfo.flags & GenBlock_StrictSync));
+                            while(instrCycles--)
+                                cycleExecuted();
                         }
                         syncCyclesExecuted();
 
@@ -1866,10 +1866,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         // set pc if we're exiting
                         if(isExit)
                         {
-                            if(std::holds_alternative<uint16_t>(src))
-                                builder.mov(pcReg32, std::get<uint16_t>(src));
-                            else if(std::get<Reg16>(src) != pcReg16)
-                                builder.movzx(pcReg32, std::get<Reg16>(src));
+                            if(std::holds_alternative<uint32_t>(src))
+                                builder.mov(pcReg32, std::get<uint32_t>(src) + sourceInfo.pcPrefetch);
+                            else if(std::get<Reg32>(src) != pcReg32)
+                            {
+                                if(regSize == 16)
+                                    builder.movzx(pcReg32, static_cast<Reg16>(std::get<Reg32>(src)));
+                                else
+                                    builder.mov(pcReg32, std::get<Reg32>(src));
+                            }
                         }
                         else // or sub cycles early (we jump past the usual code that does this)
                             builder.sub(Reg32::EDI, static_cast<int8_t>(cyclesThisInstr));
@@ -1878,7 +1883,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         if(condition == GenCondition::Always)
                             cyclesThisInstr = 0;
 
-                        auto it = std::holds_alternative<uint16_t>(src) ? branchTargets.find(std::get<uint16_t>(src)) : branchTargets.end();
+                        auto it = std::holds_alternative<uint32_t>(src) ? branchTargets.find(std::get<uint32_t>(src)) : branchTargets.end();
 
                         if(it != branchTargets.end())
                         {
@@ -1888,7 +1893,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         else
                         {
                             if(!isExit)
-                                forwardBranchesToPatch.emplace(std::get<uint16_t>(src), builder.getPtr());
+                                forwardBranchesToPatch.emplace(std::get<uint32_t>(src), builder.getPtr());
 
                             // forwards branch or exit
                             if(isExit && (instr.flags & GenOp_Call))
@@ -2036,7 +2041,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         }
 
         // additional cycles
-        if(instrCycles)
+        if(instrCycles > 0)
         {
             assert(instrCycles == 1 || !(blockInfo.flags & GenBlock_StrictSync));
             while(instrCycles--)
