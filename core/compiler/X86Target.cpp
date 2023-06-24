@@ -155,12 +155,21 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
         Reg32::EBP,
         Reg32::R12D,
         Reg32::R13D,
-        
-        Reg32::R11D, // used as temp in some ALUs and by exit code
+        Reg32::R15D
     };
-    // also free R15
 
     numSavedRegs = 4; // TODO: can skip RDI/RSI on windows
+
+    // count regs
+    int numRegs = 0;
+    for(auto &reg : sourceInfo.registers)
+    {
+        if(!reg.alias)
+            numRegs++;
+    }
+
+    // enable using R15 if needed
+    saveR15 = numRegs > 8;
 
     // alloc registers
     unsigned int allocOff = 0;
@@ -178,9 +187,6 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
 
         // TODO: make sure we allocate all temps
         if(allocOff == std::size(regList))
-            continue;
-
-        if(regList[allocOff] == Reg32::R11D && it->type != SourceRegType::Temp)
             continue;
 
         regAlloc.emplace(i, regList[allocOff]);
@@ -1988,6 +1994,9 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     builder.push(Reg64::R12);
     builder.push(Reg64::R13);
     builder.push(Reg64::R14);
+    if(saveR15)
+        builder.push(Reg64::R15);
+
     builder.push(Reg64::RBX);
 
 #ifdef _WIN32
@@ -2077,6 +2086,9 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 #endif
 
     builder.pop(Reg64::RBX);
+
+    if(saveR15)
+        builder.pop(Reg64::R15);
     builder.pop(Reg64::R14);
     builder.pop(Reg64::R13);
     builder.pop(Reg64::R12);
@@ -2183,6 +2195,14 @@ bool X86Target::writesFlag(uint16_t opFlags, SourceFlagType flag)
     return opFlags & flagWriteMask(flag);
 }
 
+
+bool X86Target::needStackAlign() const
+{
+    // if R15 is saved the stack is misaligned before saving anything
+    // otherwise if we're saving an odd number of registiers it's misaligned
+    return !!(numSavedRegs % 2) != saveR15;
+}
+
 bool X86Target::isCallSaved(Reg16 reg) const
 {
     return callSaveIndex(reg) != -1;
@@ -2227,7 +2247,7 @@ void X86Target::callSaveIfNeeded(X86Builder &builder, int &saveState) const
     for(int i = saveState; i < numRegs; i++)
         builder.push(callSavedRegs[i]);
 
-    if(numRegs % 2)
+    if(needStackAlign())
         builder.sub(Reg64::RSP, 8); // align stack
 
 #ifdef _WIN32
@@ -2251,7 +2271,7 @@ void X86Target::callRestore(X86Builder &builder, int &saveState, int toIndex) co
         builder.add(Reg64::RSP, 32); // shadow space
 #endif
 
-    if(saveState == numRegs && (numRegs % 2))
+    if(saveState == numRegs && needStackAlign())
         builder.add(Reg64::RSP, 8); // alignment
 
     for(int i = saveState - 1; i >= toIndex; i--)
@@ -2270,7 +2290,7 @@ void X86Target::callRestore(X86Builder &builder, Reg8 dstReg) const
     builder.add(Reg64::RSP, 32); // shadow space
 #endif
 
-    if(numSavedRegs % 2)
+    if(needStackAlign())
         builder.add(Reg64::RSP, 8); // alignment
 
     // pop everything except RAX
