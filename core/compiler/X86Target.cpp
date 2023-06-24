@@ -91,7 +91,7 @@ static int callSaveIndex(Reg8 reg)
 
 static void callRestore(X86Builder &builder, int saveState, int toIndex)
 {
-    [[maybe_unused]] int numRegs = static_cast<int>(std::size(callSavedRegs));
+    int numRegs = static_cast<int>(std::size(callSavedRegs));
 
     assert(toIndex < numRegs);
 
@@ -100,12 +100,17 @@ static void callRestore(X86Builder &builder, int saveState, int toIndex)
         builder.add(Reg64::RSP, 32); // shadow space
 #endif
 
+    if(saveState == numRegs && (numRegs % 2))
+        builder.add(Reg64::RSP, 8); // alignment
+
     for(int i = saveState - 1; i >= toIndex; i--)
         builder.pop(callSavedRegs[i]);
 }
 
 static void callRestore(X86Builder &builder, Reg8 dstReg)
 {
+    int numRegs = static_cast<int>(std::size(callSavedRegs));
+
     assert(dstReg != Reg8::DIL); // no
 
     assert(isCallSaved(dstReg));
@@ -114,10 +119,14 @@ static void callRestore(X86Builder &builder, Reg8 dstReg)
     builder.add(Reg64::RSP, 32); // shadow space
 #endif
 
-    // builder.add(Reg64::RSP, 8); // alignment
-    builder.pop(Reg64::RDI);
-    builder.pop(Reg64::RDX);
-    builder.pop(Reg64::RCX);
+    if(numRegs % 2)
+        builder.add(Reg64::RSP, 8); // alignment
+
+    // pop everything except RAX
+    for(int i = numRegs - 1; i > 0; i--)
+        builder.pop(callSavedRegs[i]);
+
+    assert(callSavedRegs[0] == Reg64::RAX);
 
     // mov ret val (if not going to RAX)
     if(dstReg != Reg8::AL && dstReg != Reg8::AH)
@@ -151,7 +160,8 @@ static void callSaveIfNeeded(X86Builder &builder, int &saveState)
     for(int i = saveState; i < numRegs; i++)
         builder.push(callSavedRegs[i]);
 
-    // builder.sub(Reg64::RSP, 8); // align stack
+    if(numRegs % 2)
+        builder.sub(Reg64::RSP, 8); // align stack
 
 #ifdef _WIN32
     builder.sub(Reg64::RSP, 32); // shadow space
