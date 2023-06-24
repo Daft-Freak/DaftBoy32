@@ -234,6 +234,7 @@ public:
 
     void test(Reg8 dst, uint8_t imm);
 
+    void xchg(Reg32 dst, Reg32 src);
     void xchg(Reg8 dst, Reg8 src);
 
     void xor_(Reg32 dst, Reg32 src);

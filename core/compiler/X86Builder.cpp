@@ -1017,6 +1017,18 @@ void X86Builder::test(Reg8 r, uint8_t imm)
     write(imm); // imm
 }
 
+
+// reg -> reg
+void X86Builder::xchg(Reg32 dst, Reg32 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x87); // opcode, w = 1
+    encodeModRM(dstReg, srcReg);
+}
+
 // reg -> reg, 8bit
 void X86Builder::xchg(Reg8 dst, Reg8 src)
 {
