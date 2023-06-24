@@ -605,7 +605,7 @@ void X86Builder::or_(Reg32 dst, uint32_t imm)
 
     encodeREX(false, 0, 0, dstReg);
     write(0x81); // opcode, s = 0, w = 1
-    encodeModRMReg8(dstReg, 1);
+    encodeModRM(dstReg, 1);
 
     // immediate
     write(imm);
@@ -1014,7 +1014,7 @@ void X86Builder::xor_(Reg32 dst, Reg32 src)
 
     encodeREX(false, srcReg, 0, dstReg);
     write(0x31); // opcode, w = 1
-    encodeModRMReg8(dstReg, srcReg);
+    encodeModRM(dstReg, srcReg);
 }
 
 // reg -> reg, 8 bit
