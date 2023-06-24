@@ -641,7 +641,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             notOp.opcode = GenOpcode::Not;
                             notOp.cycles = pcSCycles;
                             notOp.src[0] = static_cast<uint8_t>(srcReg);
-                            notOp.dst[0] = static_cast<uint8_t>(GenReg::Temp);
+                            notOp.dst[0] = static_cast<uint8_t>(dstReg);
                             addInstruction(notOp, 2, preserveV | preserveC | writeZ | writeN);
                             break;
                         }
