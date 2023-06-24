@@ -607,7 +607,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         //case 0x7: // ROR
                             // preserves C if src == 0
                         case 0x8: // TST
-                            addInstruction(alu(GenOpcode::And, dstReg, srcReg, GenReg::Temp, pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                            addInstruction(alu(GenOpcode::And, dstReg, srcReg, GenReg::Temp, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
                             break;
                         case 0x9: // NEG
                             addInstruction(loadImm(0, 0));
