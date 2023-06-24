@@ -180,7 +180,10 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
     for(auto it = sourceInfo.registers.begin() + 1; it != sourceInfo.registers.end(); ++it, i++)
     {
         if(it->type == SourceRegType::Flags)
+        {
             flagsReg = i;
+            flagsSize = it->size;
+        }
 
         if(it->alias)
             continue;
@@ -200,7 +203,10 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
 
     i = 0;
     for(auto it = sourceInfo.flags.begin(); it != sourceInfo.flags.end(); ++it, i++)
+    {
         flagMap[static_cast<int>(it->type)] = i;
+        flagsMask |= 1 << it->bit;
+    }
 
     // allocate the flags register if it isn't an alias
     if(!sourceInfo.registers[flagsReg].alias && !regAlloc.count(flagsReg))
@@ -740,9 +746,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
         // preserve flags
         // needs to be after the reg helpers
-        uint8_t preserveMask = 0;
+        uint32_t preserveMask = 0;
 
-        if((instr.flags & GenOp_WriteFlags) && (instr.flags & GenOp_PreserveFlags))
+        if((instr.flags & GenOp_WriteFlags))
         {
             preserveMask = 0;
             for(int i = 0; i < 4; i++)
@@ -751,11 +757,19 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     preserveMask |= 1 << sourceInfo.flags[i].bit;
             }
 
-            auto f = checkReg8(flagsReg); // TODO: assumes 8-bit flags
-
-            // preserve flags
-            if(f)
-                builder.and_(*f, preserveMask);
+            // preserve/clear flags
+            if(flagsSize == 8 && preserveMask)
+            {
+                // 8-bit flags code assumes there is nothing else in the reg and writes the whole reg if there are no preserved flags
+                if(auto f = checkReg8(flagsReg))
+                    builder.and_(*f, preserveMask);
+            }
+            else if(flagsSize == 32)
+            {
+                // also preserve non-flags bits
+                if(auto f = checkReg32(flagsReg))
+                    builder.and_(*f, preserveMask | (~flagsMask));
+            }
         }
 
         switch(instr.opcode)
