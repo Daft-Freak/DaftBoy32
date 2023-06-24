@@ -1230,7 +1230,32 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    auto src = checkRegOrImm32(instr.src[1]);
+                    auto dst = checkReg32(instr.src[0]);
+                    if(src.index() && dst)
+                    {
+                        // move the dest and do a sub to make flags handling easier
+                        // could simplify if only one flag is used?
+                        builder.mov(Reg32::R11D, *dst);
+                    
+                        if(std::holds_alternative<uint32_t>(src))
+                        {
+                            auto imm = std::get<uint32_t>(src);
+                            if(imm < 0x80)
+                                builder.sub(Reg32::R11D, static_cast<int8_t>(imm));
+                            else
+                                builder.sub(Reg32::R11D, imm);
+                        }
+                        else
+                            builder.sub(Reg32::R11D, std::get<Reg32>(src));
+
+                        // flags
+                        setFlags32(Reg32::R11D, *dst, instr.flags, true, true); // assuming arm inverted carry flag
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.src[0]);
