@@ -217,6 +217,17 @@ void X86Builder::call(Reg64 r)
     encodeModRM(reg, 2);
 }
 
+// reg -> reg
+void X86Builder::cmp(Reg32 dst, Reg32 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x39); // opcode, w = 1
+    encodeModRM(dstReg, srcReg);
+}
+
 // reg -> reg, 8 bit
 void X86Builder::cmp(Reg8 dst, Reg8 src)
 {
@@ -250,6 +261,17 @@ void X86Builder::cmp(Reg8 dst, uint8_t imm)
 
     encodeREX(false, 0, 0, dstReg);
     write(0x80); // opcode, w = 0, s = 0
+    encodeModRM(dstReg, 7);
+    write(imm);
+}
+
+// imm -> reg, 8 bit sign extended
+void X86Builder::cmp(Reg32 dst, int8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dstReg, 7);
     write(imm);
 }
