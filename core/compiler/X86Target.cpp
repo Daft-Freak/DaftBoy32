@@ -41,182 +41,6 @@ static Reg8 swapRegHalf(Reg8 reg)
     return static_cast<Reg8>(iReg ^ 4);
 }
 
-// call helpers
-// FIXME: DMG specific bits
-static bool isCallSaved(Reg16 reg)
-{
-    for(auto r : callSavedRegs)
-    {
-        if(reg == static_cast<Reg16>(r))
-            return true;
-    }
-
-    return false;
-}
-
-static bool isCallSaved(Reg8 reg)
-{
-    return reg == Reg8::AL || reg == Reg8::CL || reg == Reg8::DL || reg == Reg8::AH || reg == Reg8::CH || reg == Reg8::DH || reg == Reg8::DIL;
-}
-
-static int callSaveIndex(Reg16 reg)
-{
-    for(size_t i = 0; i < std::size(callSavedRegs); i++)
-    {
-        if(reg == static_cast<Reg16>(callSavedRegs[i]))
-            return static_cast<int>(i);
-    }
-    
-    return -1;
-}
-
-static int callSaveIndex(Reg8 reg)
-{
-    Reg16 mappedReg = static_cast<Reg16>(reg);
-    auto iReg = static_cast<int>(reg);
-
-    if(iReg >= 16) // SPL/BPL/SIL/DIL
-        mappedReg = static_cast<Reg16>(iReg - 16);
-    else if(isXHReg(reg))
-        mappedReg = static_cast<Reg16>(iReg - 4);
-
-    for(size_t i = 0; i < std::size(callSavedRegs); i++)
-    {
-        if(mappedReg == static_cast<Reg16>(callSavedRegs[i]))
-            return static_cast<int>(i);
-    }
-    
-    return -1;
-}
-
-static void callRestore(X86Builder &builder, int saveState, int toIndex)
-{
-    int numRegs = static_cast<int>(std::size(callSavedRegs));
-
-    assert(toIndex < numRegs);
-
-#ifdef _WIN32
-    if(saveState == numRegs)
-        builder.add(Reg64::RSP, 32); // shadow space
-#endif
-
-    if(saveState == numRegs && (numRegs % 2))
-        builder.add(Reg64::RSP, 8); // alignment
-
-    for(int i = saveState - 1; i >= toIndex; i--)
-        builder.pop(callSavedRegs[i]);
-}
-
-static void callRestore(X86Builder &builder, Reg8 dstReg)
-{
-    int numRegs = static_cast<int>(std::size(callSavedRegs));
-
-    assert(dstReg != Reg8::DIL); // no
-
-    assert(isCallSaved(dstReg));
-
-#ifdef _WIN32
-    builder.add(Reg64::RSP, 32); // shadow space
-#endif
-
-    if(numRegs % 2)
-        builder.add(Reg64::RSP, 8); // alignment
-
-    // pop everything except RAX
-    for(int i = numRegs - 1; i > 0; i--)
-        builder.pop(callSavedRegs[i]);
-
-    assert(callSavedRegs[0] == Reg64::RAX);
-
-    // mov ret val (if not going to RAX)
-    if(dstReg != Reg8::AL && dstReg != Reg8::AH)
-    {
-        builder.mov(dstReg, Reg8::AL);
-        builder.pop(Reg64::RAX);
-    }
-    else if(dstReg == Reg8::AH) // TODO: having a worse case for A is not great
-    {
-        builder.mov(Reg8::AH, Reg8::AL);
-        builder.pop(Reg64::R10);
-        builder.mov(Reg8::AL, Reg8::R10B); // restore low byte
-    }
-    else if(dstReg == Reg8::AL)// ... though this is the worst case... (AL == F, so unlikely)
-    {
-        // EAX = EAX + (R10D & 0xFF00)
-        builder.pop(Reg64::R10);
-        builder.and_(Reg32::R10D, 0xFF00);
-        builder.movzx(Reg32::EAX, Reg8::AL);
-        builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
-    }
-}
-
-static void callSaveIfNeeded(X86Builder &builder, int &saveState)
-{
-    int numRegs = static_cast<int>(std::size(callSavedRegs));
-
-    if(saveState == numRegs)
-        return;
-
-    for(int i = saveState; i < numRegs; i++)
-        builder.push(callSavedRegs[i]);
-
-    if(numRegs % 2)
-        builder.sub(Reg64::RSP, 8); // align stack
-
-#ifdef _WIN32
-    builder.sub(Reg64::RSP, 32); // shadow space
-#endif
-
-    saveState = numRegs;
-}
-
-static void callRestoreIfNeeded(X86Builder &builder, int &saveState)
-{
-    if(!saveState)
-        return;
-
-    callRestore(builder, saveState, 0);
-    saveState = 0;
-}
-
-// restore if it would affect this register
-// takes a variant so it can be passed the result of checkRegOrImm
-static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, int &saveState)
-{
-    if(!saveState)
-        return; // nothing saved
-
-    if(!std::holds_alternative<Reg8>(val) || !isCallSaved(std::get<Reg8>(val)))
-        return; // not a register
-
-    auto index = callSaveIndex(std::get<Reg8>(val));
-
-    if(saveState < index)
-        return; // already restored
-
-    callRestore(builder, saveState, index);
-
-    saveState = index;
-}
-
-static void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, int &saveState)
-{
-    if(!saveState)
-        return;
-
-    if(!std::holds_alternative<Reg16>(val) || !isCallSaved(std::get<Reg16>(val)))
-        return;
-
-    auto index = callSaveIndex(std::get<Reg16>(val));
-
-    if(saveState < index)
-        return;
-
-    callRestore(builder, saveState, index);
-
-    saveState = index;
-}
-
 // 8-bit op helpers
 using ImmOp8 = void(Reg8, uint8_t);
 using RegOp8 = void(Reg8, Reg8);
@@ -2355,4 +2179,178 @@ uint8_t X86Target::flagWriteMask(SourceFlagType flag)
 bool X86Target::writesFlag(uint16_t opFlags, SourceFlagType flag)
 {
     return opFlags & flagWriteMask(flag);
+}
+
+bool X86Target::isCallSaved(Reg16 reg) const
+{
+    for(auto r : callSavedRegs)
+    {
+        if(reg == static_cast<Reg16>(r))
+            return true;
+    }
+
+    return false;
+}
+
+bool X86Target::isCallSaved(Reg8 reg) const
+{
+    return reg == Reg8::AL || reg == Reg8::CL || reg == Reg8::DL || reg == Reg8::AH || reg == Reg8::CH || reg == Reg8::DH || reg == Reg8::DIL;
+}
+
+int X86Target::callSaveIndex(Reg16 reg) const
+{
+    for(size_t i = 0; i < std::size(callSavedRegs); i++)
+    {
+        if(reg == static_cast<Reg16>(callSavedRegs[i]))
+            return static_cast<int>(i);
+    }
+    
+    return -1;
+}
+
+int X86Target::callSaveIndex(Reg8 reg) const
+{
+    Reg16 mappedReg = static_cast<Reg16>(reg);
+    auto iReg = static_cast<int>(reg);
+
+    if(iReg >= 16) // SPL/BPL/SIL/DIL
+        mappedReg = static_cast<Reg16>(iReg - 16);
+    else if(isXHReg(reg))
+        mappedReg = static_cast<Reg16>(iReg - 4);
+
+    for(size_t i = 0; i < std::size(callSavedRegs); i++)
+    {
+        if(mappedReg == static_cast<Reg16>(callSavedRegs[i]))
+            return static_cast<int>(i);
+    }
+    
+    return -1;
+}
+
+void X86Target::callSaveIfNeeded(X86Builder &builder, int &saveState) const
+{
+    int numRegs = static_cast<int>(std::size(callSavedRegs));
+
+    if(saveState == numRegs)
+        return;
+
+    for(int i = saveState; i < numRegs; i++)
+        builder.push(callSavedRegs[i]);
+
+    if(numRegs % 2)
+        builder.sub(Reg64::RSP, 8); // align stack
+
+#ifdef _WIN32
+    builder.sub(Reg64::RSP, 32); // shadow space
+#endif
+
+    saveState = numRegs;
+}
+
+void X86Target::callRestore(X86Builder &builder, int saveState, int toIndex) const
+{
+    int numRegs = static_cast<int>(std::size(callSavedRegs));
+
+    assert(toIndex < numRegs);
+
+#ifdef _WIN32
+    if(saveState == numRegs)
+        builder.add(Reg64::RSP, 32); // shadow space
+#endif
+
+    if(saveState == numRegs && (numRegs % 2))
+        builder.add(Reg64::RSP, 8); // alignment
+
+    for(int i = saveState - 1; i >= toIndex; i--)
+        builder.pop(callSavedRegs[i]);
+}
+
+void X86Target::callRestore(X86Builder &builder, Reg8 dstReg) const
+{
+    int numRegs = static_cast<int>(std::size(callSavedRegs));
+
+    assert(dstReg != Reg8::DIL); // no
+
+    assert(isCallSaved(dstReg));
+
+#ifdef _WIN32
+    builder.add(Reg64::RSP, 32); // shadow space
+#endif
+
+    if(numRegs % 2)
+        builder.add(Reg64::RSP, 8); // alignment
+
+    // pop everything except RAX
+    for(int i = numRegs - 1; i > 0; i--)
+        builder.pop(callSavedRegs[i]);
+
+    assert(callSavedRegs[0] == Reg64::RAX);
+
+    // mov ret val (if not going to RAX)
+    if(dstReg != Reg8::AL && dstReg != Reg8::AH)
+    {
+        builder.mov(dstReg, Reg8::AL);
+        builder.pop(Reg64::RAX);
+    }
+    else if(dstReg == Reg8::AH) // TODO: having a worse case for A is not great
+    {
+        builder.mov(Reg8::AH, Reg8::AL);
+        builder.pop(Reg64::R10);
+        builder.mov(Reg8::AL, Reg8::R10B); // restore low byte
+    }
+    else if(dstReg == Reg8::AL)// ... though this is the worst case... (AL == F, so unlikely)
+    {
+        // EAX = EAX + (R10D & 0xFF00)
+        builder.pop(Reg64::R10);
+        builder.and_(Reg32::R10D, 0xFF00);
+        builder.movzx(Reg32::EAX, Reg8::AL);
+        builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
+    }
+}
+
+void X86Target::callRestoreIfNeeded(X86Builder &builder, int &saveState) const
+{
+    if(!saveState)
+        return;
+
+    callRestore(builder, saveState, 0);
+    saveState = 0;
+}
+
+// restore if it would affect this register
+// takes a variant so it can be passed the result of checkRegOrImm
+void X86Target::callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, int &saveState) const
+{
+    if(!saveState)
+        return; // nothing saved
+
+    if(!std::holds_alternative<Reg8>(val) || !isCallSaved(std::get<Reg8>(val)))
+        return; // not a register
+
+    auto index = callSaveIndex(std::get<Reg8>(val));
+
+    if(saveState < index)
+        return; // already restored
+
+    callRestore(builder, saveState, index);
+
+    saveState = index;
+}
+
+void X86Target::callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, int &saveState) const
+{
+    if(!saveState)
+        return;
+
+    if(!std::holds_alternative<Reg16>(val) || !isCallSaved(std::get<Reg16>(val)))
+        return;
+
+    auto index = callSaveIndex(std::get<Reg16>(val));
+
+    if(saveState < index)
+        return;
+
+    callRestore(builder, saveState, index);
+
+    saveState = index;
 }
