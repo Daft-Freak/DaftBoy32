@@ -484,7 +484,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
     };
 
-    auto setFlags32 = [this, &builder](Reg32 dst, std::variant<std::monostate, Reg32, uint32_t> src, uint16_t flags, bool isSub = false, bool invCarry = false)
+    auto setFlags32 = [this, &builder](Reg32 dst, std::variant<std::monostate, Reg32, uint32_t> src, uint16_t flags, bool isSub = false, bool invCarry = false, bool haveResFlags = true)
     {
         if(!(flags & GenOp_WriteFlags))
             return;
@@ -493,8 +493,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         assert(!writesFlag(flags, SourceFlagType::WasSub));
     
         auto f = mapReg32(flagsReg);
-
-        bool haveResFlags = true;
 
         // overflow
         if(writesFlag(flags, SourceFlagType::Overflow))
@@ -1515,7 +1513,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         builder.not_(*dst);
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(*dst, {}, instr.flags);
+                        assert(!writesFlag(instr.flags, SourceFlagType::Carry));
+                        setFlags32(*dst, {}, instr.flags, false, false, false); // doesn't affect flags
                     }
                 }
                 else if(regSize == 8)
