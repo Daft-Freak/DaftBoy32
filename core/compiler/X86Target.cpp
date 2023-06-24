@@ -1348,13 +1348,13 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         }
                         else
                         {
-                            builder.sub(*dst, std::get<Reg32>(src));
-                        
                             if(*dst == std::get<Reg32>(src) && writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
                             {
                                 builder.mov(Reg32::R11D, std::get<Reg32>(src));
                                 savedSrc = Reg32::R11D;
                             }
+
+                            builder.sub(*dst, std::get<Reg32>(src));
                         }
 
                         // flags
