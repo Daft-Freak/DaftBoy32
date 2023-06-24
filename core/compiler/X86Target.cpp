@@ -1006,7 +1006,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.add(Reg32::ESI, Reg32::R11D);
 
                             // compare and set h bit
-                            builder.cmp(Reg32::ESI, 0xFFF);
+                            builder.cmp(Reg32::ESI, uint32_t(0xFFF));
                             builder.setcc(Condition::A, Reg8::SIL);
                             builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
                         }
@@ -1847,7 +1847,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 // ... || A & (0x0F) > 0x09) ...
                 builder.mov(Reg32::R10D, static_cast<Reg32>(f)); // move the whole thing as we can't easily mov just the high byte
                 builder.and_(Reg32::R10D, 0xF00);
-                builder.cmp(Reg32::R10D, 0x0900);
+                builder.cmp(Reg32::R10D, uint32_t(0x0900));
                 builder.jcc(Condition::BE, 3);
                 // .. A += 0x06
                 builder.add(a, 0x06);
