@@ -777,7 +777,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             if(instr.src[0] != instr.dst[0])
             {
                 if(instr.src[1] == instr.dst[0] && canSwapSrcs)
-                    return;
+                    return true;
 
                 if(!sourceInfo.registers[instr.dst[0]].aliasMask && !sourceInfo.registers[instr.src[0]].aliasMask)
                 {
@@ -808,13 +808,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(src && dst)
                     {
                         builder.mov(*dst, *src);
-                        return;
+                        return false;
                     }
                 }
 
                 printf("unhandled src[0] != dst in op %i\n", int(instr.opcode));
                 err = true;
             }
+
+            return false;
         };
 
         // preserve flags
@@ -1360,16 +1362,31 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                checkSingleSource();
+                bool swapped = checkSingleSource(regSize == 32);
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1]);
+                    auto src = checkRegOrImm32(instr.src[swapped ? 0 : 1]);
                     auto dst = checkReg32(instr.dst[0]);
 
                     if(src.index() && dst)
                     {
                         auto savedDst = *dst;
+
+                        // we lied about being able to use swapped sources
+                        if(swapped)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                // do negate for 0 - x?
+                                auto tmp = mapReg32(0);
+                                builder.mov(*tmp, *dst);
+                                builder.mov(*dst, std::get<uint32_t>(src));
+                                src = *tmp;
+                            }
+                            else
+                                builder.xchg(std::get<Reg32>(src), *dst);
+                        }
 
                         // save dst/src0 if we need it to calc carry
                         if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
