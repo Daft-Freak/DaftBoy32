@@ -120,8 +120,14 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
 
     if(std::holds_alternative<uint8_t>(src))
     {
-        assert(std::get<uint8_t>(src) < 32);
-        immOp(builder, *dst, std::get<uint8_t>(src));
+        auto imm = std::get<uint8_t>(src);
+        assert(imm <= 32);
+        if(imm == 32)
+        {
+            immOp(builder, *dst, 31);
+            imm = 1;
+        }
+        immOp(builder, *dst, imm);
     }
     else
     {
