@@ -36,6 +36,8 @@ private:
     uint8_t flagWriteMask(SourceFlagType flag);
     bool writesFlag(uint16_t opFlags, SourceFlagType flag);
 
+    bool needStackAlign() const;
+
     bool isCallSaved(Reg16 reg) const;
     bool isCallSaved(Reg8 reg) const;
 
@@ -61,4 +63,5 @@ private:
     uint8_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;
 
     uint8_t numSavedRegs;
+    bool saveR15;
 };
