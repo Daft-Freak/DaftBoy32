@@ -1837,19 +1837,48 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         // condition
                         if(condition != GenCondition::Always)
                         {
-                            auto f = checkReg8(flagsReg);
-
                             syncCyclesExecuted();
 
-                            flagSet = condition == GenCondition::Equal || condition == GenCondition::CarrySet;
-                            auto flag = (condition == GenCondition::Equal || condition == GenCondition::NotEqual) ? SourceFlagType::Zero : SourceFlagType::Carry;
+                            SourceFlagType flag;
 
-                            if(f)
+                            switch(condition)
                             {
-                                builder.test(*f, 1 << getFlagInfo(flag).bit);
-                                branchPtr = builder.getPtr();
-                                builder.jcc(Condition::E, 1); // patch later
+                                case GenCondition::Equal:
+                                    flagSet = true;
+                                    flag = SourceFlagType::Zero;
+                                    break;
+                                case GenCondition::NotEqual:
+                                    flagSet = false;
+                                    flag = SourceFlagType::Zero;
+                                    break;
+                                case GenCondition::CarrySet:
+                                    flagSet = true;
+                                    flag = SourceFlagType::Carry;
+                                    break;
+                                case GenCondition::CarryClear:
+                                    flagSet = false;
+                                    flag = SourceFlagType::Carry;
+                                    break;
+
+                                default:
+                                    printf("unhandled cond %i\n", static_cast<int>(condition));
+                                    flag = SourceFlagType::Zero;
+                                    err = true;
                             }
+
+                            if(flagsSize == 8)
+                            {
+                                if(auto f = checkReg8(flagsReg))
+                                    builder.test(*f, 1 << getFlagInfo(flag).bit);
+                            }
+                            else if(flagsSize == 32)
+                            {
+                                if(auto f = checkReg32(flagsReg))
+                                    builder.test(*f, 1 << getFlagInfo(flag).bit);
+                            }
+
+                            branchPtr = builder.getPtr();
+                            builder.jcc(Condition::E, 1); // patch later
                         }
 
                         // need to sync cycles *before* the jump out
@@ -2051,7 +2080,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         // check if this is the end of the source instruction (pc incremented)
         newEmuOp = instr.len != 0;
 
-        if(instIt + 1 == endInstr && instr.opcode != GenOpcode::Jump)
+        if(instIt + 1 == endInstr && (instr.opcode != GenOpcode::Jump || static_cast<GenCondition>(instr.src[0]) != GenCondition::Always))
         {
             // ending on a non-jump probably means this was an incomplete block
             // add an exit
