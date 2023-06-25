@@ -232,6 +232,7 @@ public:
     void sub(Reg64 dst, int8_t imm);
     void sub(Reg32 dst, int8_t imm);
 
+    void test(Reg32 dst, uint32_t imm);
     void test(Reg8 dst, uint8_t imm);
 
     void xchg(Reg32 dst, Reg32 src);
