@@ -1006,6 +1006,22 @@ void X86Builder::sub(Reg32 dst, int8_t imm)
     write(imm);
 }
 
+// imm -> reg
+void X86Builder::test(Reg32 dst, uint32_t imm)
+{
+    auto reg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, reg);
+    write(0xF7); // opcode, s = 0, w = 1
+    encodeModRM(reg);
+
+    // immediate
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
+}
+
 // imm -> reg, 8 bit
 void X86Builder::test(Reg8 r, uint8_t imm)
 {
