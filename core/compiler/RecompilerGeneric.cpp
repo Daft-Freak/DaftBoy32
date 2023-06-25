@@ -2,13 +2,51 @@
 
 #include "RecompilerGeneric.h"
 
+static int getFlagsForCond(GenCondition cond, int carryMask, int zeroMask, int negMask, int overflowMask)
+{
+    switch(cond)
+    {
+        case GenCondition::Equal:
+        case GenCondition::NotEqual:
+            return zeroMask;
+
+        case GenCondition::CarryClear:
+        case GenCondition::CarrySet:
+            return carryMask;
+        
+        case GenCondition::Negative:
+        case GenCondition::Positive:
+            return negMask;
+
+        case GenCondition::OverflowSet:
+        case GenCondition::OverflowClear:
+            return overflowMask;
+
+        case GenCondition::Higher:
+        case GenCondition::LowerSame:
+            return carryMask | zeroMask;
+
+        case GenCondition::GreaterEqual:
+        case GenCondition::LessThan:
+            return negMask | overflowMask;
+    
+        case GenCondition::GreaterThan:
+        case GenCondition::LessThanEqual:
+            return zeroMask | negMask | overflowMask;
+
+        case GenCondition::Always:
+            break;
+    }
+
+    return 0;
+}
 
 void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const SourceInfo &sourceInfo)
 {
     auto startPC = pc;
 
     // find flag masks/reg
-    int carryMask = 0, zeroMask = 0;
+    int carryMask = 0, zeroMask = 0, negMask = 0, overflowMask = 0;
     uint8_t flagsReg = 0xFF;
 
     int i = 0;
@@ -18,6 +56,10 @@ void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const
             carryMask = 1 << i;
         else if(flag.type == SourceFlagType::Zero)
             zeroMask = 1 << i;
+        else if(flag.type == SourceFlagType::Negative)
+            negMask = 1 << i;
+        else if(flag.type == SourceFlagType::Overflow)
+            overflowMask = 1 << i;
 
         i++;
     }
@@ -63,7 +105,7 @@ void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const
         return blockInfo.instructions.end();
     };
 
-    auto getReadFlags = [zeroMask, carryMask, flagsReg](GenOpInfo &instr)
+    auto getReadFlags = [zeroMask, carryMask, negMask, overflowMask, flagsReg](GenOpInfo &instr)
     {
         if(instr.opcode == GenOpcode::AddWithCarry || instr.opcode == GenOpcode::SubtractWithCarry || instr.opcode == GenOpcode::RotateLeftCarry || instr.opcode == GenOpcode::RotateRightCarry)
             return carryMask;
@@ -72,10 +114,7 @@ void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const
         if(instr.opcode == GenOpcode::Jump)
         {
             auto cond = static_cast<GenCondition>(instr.src[0]);
-            if(cond == GenCondition::CarryClear || cond == GenCondition::CarrySet)
-                return carryMask;
-            else if(cond != GenCondition::Always)
-                return zeroMask;
+            return getFlagsForCond(cond, carryMask, zeroMask, negMask, overflowMask);
         }
 
         if(instr.opcode == GenOpcode::DMG_DAA)
@@ -265,13 +304,23 @@ void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sou
         "neq",
         "cas",
         "cac",
+        "neg",
+        "pos",
+        "ovs",
+        "ovc",
+        "hi ",
+        "los",
+        "gte",
+        "lt ",
+        "gt ",
+        "lte",
         "alw",
     };
 
     // flag info
     char flagChars[]{'X', 'X', 'X', 'X'};
 
-    int carryMask = 0, zeroMask = 0;
+    int carryMask = 0, zeroMask = 0, negMask = 0, overflowMask = 0;
 
     int i = 0;
     for(auto &flag : sourceInfo.flags)
@@ -280,6 +329,10 @@ void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sou
             carryMask = 1 << i;
         else if(flag.type == SourceFlagType::Zero)
             zeroMask = 1 << i;
+        else if(flag.type == SourceFlagType::Negative)
+            negMask = 1 << i;
+        else if(flag.type == SourceFlagType::Overflow)
+            overflowMask = 1 << i;
 
         flagChars[i++] = flag.label;
     }
@@ -364,10 +417,7 @@ void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sou
         else if(instr.opcode == GenOpcode::Jump)
         {
             auto cond = static_cast<GenCondition>(instr.src[0]);
-            if(cond == GenCondition::CarryClear || cond == GenCondition::CarrySet)
-                flagsRead = carryMask;
-            else if(cond != GenCondition::Always)
-                flagsRead = zeroMask;
+            flagsRead = getFlagsForCond(cond, carryMask, zeroMask, negMask, overflowMask);
         }
         // else anything that reads a flags register directly
 

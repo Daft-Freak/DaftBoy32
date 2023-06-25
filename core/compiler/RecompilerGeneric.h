@@ -47,6 +47,16 @@ enum class GenCondition : uint8_t
     NotEqual,
     CarrySet,
     CarryClear,
+    Negative,
+    Positive,
+    OverflowSet,
+    OverflowClear,
+    Higher, // C == 1 && Z == 0
+    LowerSame, // C == 0 || Z == 1
+    GreaterEqual, // N == V
+    LessThan, // N != V
+    GreaterThan, // Z == 0 && N == V
+    LessThanEqual, // Z == 1 || N != V
     Always
 };
 
