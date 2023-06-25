@@ -699,8 +699,23 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
             case 0xD: // formats 16-17, conditional branch + SWI
             {
-                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF000);
-                done = true;
+                auto cond = (opcode >> 8) & 0xF;
+                int offset = static_cast<int8_t>(opcode & 0xFF);
+
+                if(cond == 15)
+                {
+                    printf("unhandled SWI in convertToGeneric %04X\n", opcode & 0xF000);
+                    done = true;
+                }
+                else
+                {
+                    auto genCond = static_cast<GenCondition>(cond); // they happen to match
+                    auto addr = pc + 2 + offset * 2;
+                    addInstruction(loadImm(addr, pcSCycles));
+                    addInstruction(jump(genCond, GenReg::Temp, pcSCycles + pcNCycles), 2);
+
+                    updateEnd(addr);
+                }
 
                 break;
             }
