@@ -875,7 +875,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.mov(*dst, std::get<Reg32>(src));
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(*dst, {}, instr.flags);
+                        setFlags32(*dst, {}, instr.flags, false, false, false);
                     }
                 }
                 else if(regSize == 16)
