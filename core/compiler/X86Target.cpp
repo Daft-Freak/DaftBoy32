@@ -1839,42 +1839,104 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         {
                             syncCyclesExecuted();
 
-                            SourceFlagType flag;
+                            std::variant<Reg8, Reg32> f;
+
+                            if(regSize == 8)
+                                f = *mapReg8(flagsReg); // really should not get here without a valid flags reg
+                            else if(regSize == 32)
+                                f = *mapReg32(flagsReg);
+
+                            auto testFlag = [this, &builder, &f](SourceFlagType flag)
+                            {
+                                std::visit([this, &builder, flag](auto &&r){builder.test(r, 1 << getFlagInfo(flag).bit);}, f);
+                            };
+
+                            flagSet = !(static_cast<int>(condition) & 1); // even conds are set, odd are clear
 
                             switch(condition)
                             {
                                 case GenCondition::Equal:
-                                    flagSet = true;
-                                    flag = SourceFlagType::Zero;
-                                    break;
                                 case GenCondition::NotEqual:
-                                    flagSet = false;
-                                    flag = SourceFlagType::Zero;
+                                    testFlag(SourceFlagType::Zero);
                                     break;
                                 case GenCondition::CarrySet:
-                                    flagSet = true;
-                                    flag = SourceFlagType::Carry;
-                                    break;
                                 case GenCondition::CarryClear:
-                                    flagSet = false;
-                                    flag = SourceFlagType::Carry;
+                                    testFlag(SourceFlagType::Carry);
                                     break;
+                                case GenCondition::Negative:
+                                case GenCondition::Positive:
+                                    testFlag(SourceFlagType::Negative);
+                                    break;
+                                case GenCondition::OverflowSet:
+                                case GenCondition::OverflowClear:
+                                    testFlag(SourceFlagType::Overflow);
+                                    break;
+
+                                case GenCondition::Higher:
+                                case GenCondition::LowerSame:
+                                {
+                                    // C && !Z (higher)
+
+                                    // (flags >> C.bit) & (Z.bit | C.bit) == 1
+                                    assert(getFlagInfo(SourceFlagType::Zero).bit > getFlagInfo(SourceFlagType::Carry).bit);
+
+                                    auto carryBit = getFlagInfo(SourceFlagType::Carry).bit;
+                                    auto mask = (1 << (getFlagInfo(SourceFlagType::Zero).bit - carryBit)) | 1;
+
+                                    builder.mov(Reg32::R11D, std::get<Reg32>(f));
+                                    builder.shr(Reg32::R11D, carryBit);
+                                    builder.and_(Reg8::R11B, mask);
+                                    builder.cmp(Reg8::R11B, 1);
+
+                                    flagSet = !flagSet; // oops, backwards
+                                    break;
+                                }
+
+                                case GenCondition::GreaterEqual:
+                                case GenCondition::LessThan:
+                                {
+                                    // N == V (greater equal)
+                                    // N != V (less than)
+
+                                    // shift N to where V is
+                                    assert(getFlagInfo(SourceFlagType::Negative).bit > getFlagInfo(SourceFlagType::Overflow).bit);
+                                    builder.mov(Reg32::R11D, std::get<Reg32>(f));
+                                    builder.shr(Reg32::R11D, getFlagInfo(SourceFlagType::Negative).bit - getFlagInfo(SourceFlagType::Overflow).bit);
+                                    
+                                    // xor
+                                    builder.xor_(Reg32::R11D, std::get<Reg32>(f));
+                                    
+                                    flagSet = !flagSet; // oops, backwards
+                                    f = Reg32::R11D;
+                                    testFlag(SourceFlagType::Overflow); // test the result
+                                    break;
+                                }
+
+                                case GenCondition::GreaterThan:
+                                case GenCondition::LessThanEqual:
+                                {
+                                    // N == V && !Z (greater than)
+                                    // N != V || Z (less than equal)
+
+                                    // shift N to where V is
+                                    assert(getFlagInfo(SourceFlagType::Negative).bit > getFlagInfo(SourceFlagType::Overflow).bit);
+                                    builder.mov(Reg32::R11D, std::get<Reg32>(f));
+                                    builder.shr(Reg32::R11D, getFlagInfo(SourceFlagType::Negative).bit - getFlagInfo(SourceFlagType::Overflow).bit);
+                                    
+                                    // xor
+                                    builder.xor_(Reg32::R11D, std::get<Reg32>(f));
+
+                                    // test result and Z
+                                    auto mask = (1 << getFlagInfo(SourceFlagType::Zero).bit) | (1 << getFlagInfo(SourceFlagType::Overflow).bit);
+                                    builder.test(Reg32::R11D, mask);
+
+                                    flagSet = !flagSet; // oops, backwards
+                                    break;
+                                }
 
                                 default:
                                     printf("unhandled cond %i\n", static_cast<int>(condition));
-                                    flag = SourceFlagType::Zero;
                                     err = true;
-                            }
-
-                            if(flagsSize == 8)
-                            {
-                                if(auto f = checkReg8(flagsReg))
-                                    builder.test(*f, 1 << getFlagInfo(flag).bit);
-                            }
-                            else if(flagsSize == 32)
-                            {
-                                if(auto f = checkReg32(flagsReg))
-                                    builder.test(*f, 1 << getFlagInfo(flag).bit);
                             }
 
                             branchPtr = builder.getPtr();
