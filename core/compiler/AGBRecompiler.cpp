@@ -343,22 +343,13 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return static_cast<GenReg>(reg + 1);
     };
 
-    /*static const GenCondition condMap[]
+    // TODO these are basically the same
+    auto reg = [](int reg)
     {
-        GenCondition::NotEqual,
-        GenCondition::Equal,
-        GenCondition::CarryClear,
-        GenCondition::CarrySet
+        assert(reg < 15);
+
+        return static_cast<GenReg>(reg + 1);
     };
-
-    static const GenCondition invCondMap[]
-    {
-        GenCondition::Equal,
-        GenCondition::NotEqual,
-        GenCondition::CarrySet,
-        GenCondition::CarryClear
-    };*/
-
 
     auto updateEnd = [&startPC, &maxBranch](uint32_t target)
     {
@@ -590,8 +581,49 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 }
                 else if(opcode & (1 << 10)) // format 5, Hi reg/branch exchange
                 {
-                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xFC00);
-                    done = true;
+                    auto op = (opcode >> 8) & 3;
+                    bool h1 = opcode & (1 << 7);
+                    bool h2 = opcode & (1 << 6);
+
+                    auto srcReg = ((opcode >> 3) & 7) + (h2 ? 8 : 0);
+                    auto dstReg = (opcode & 7) + (h1 ? 8 : 0);
+
+                    switch(op)
+                    {
+                        case 0: // ADD
+                            if(srcReg == 15 || dstReg == 15)
+                            {
+                                printf("unhandled add pc in convertToGeneric %i -> %i\n", srcReg, dstReg);
+                                done = true;
+                            }
+                            else
+                                addInstruction(alu(GenOpcode::Add, reg(dstReg), reg(srcReg), reg(dstReg), pcSCycles), 2);
+                            break;
+                        case 1: // CMP
+                            if(srcReg == 15 || dstReg == 15)
+                            {
+                                printf("unhandled add pc in convertToGeneric %i -> %i\n", srcReg, dstReg);
+                                done = true;
+                            }
+                            else
+                                addInstruction(compare(reg(dstReg), reg(srcReg), pcSCycles), 2, writeV | writeC | writeZ | writeN);
+                            break;
+
+                        case 2: // MOV
+                            if(srcReg == 15 || dstReg == 15)
+                            {
+                                printf("unhandled mov pc in convertToGeneric %i -> %i\n", srcReg, dstReg);
+                                done = true;
+                            }
+                            else
+                                addInstruction(move(reg(srcReg), reg(dstReg), pcSCycles), 2);
+                            break;
+
+                        case 3: // BX
+                            printf("unhandled BX in convertToGeneric %04X\n", opcode & 0xFC00);
+                            done = true;
+                            break;
+                    }
                 }
                 else // format 4, alu
                 {
