@@ -645,12 +645,40 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
         bool err = false;
 
+        // helpers to load/store registers we didn't allocate
+        auto loadExtraReg32 = [this, &builder](uint8_t index, Reg32 dst)
+        {
+            auto offset = sourceInfo.getRegOffset(cpuPtr, index);
+            builder.mov(dst, cpuPtrReg, false, offset);
+        };
+
+        auto storeExtraReg32 = [this, &builder](uint8_t index, Reg32 src)
+        {
+            auto offset = sourceInfo.getRegOffset(cpuPtr, index);
+            builder.mov(src, cpuPtrReg, true, offset);
+        };
+
         // validating wrappers
-        auto checkReg32 = [this, &builder, &needCallRestore, &err, &instr](uint8_t index)
+        auto checkReg32 = [this, &builder, &needCallRestore, &err, &instr, &loadExtraReg32](uint8_t index, std::optional<Reg32> loadReg = {}, bool allowExtra = false)
         {
             auto reg = mapReg32(index);
             if(!reg)
             {
+                // if 
+                if(sourceInfo.getRegOffset)
+                {
+                    // load extra reg if we have somewhere to put it
+                    if(loadReg)
+                    {
+                        loadExtraReg32(index, *loadReg);
+                        return loadReg;
+                    }
+
+                    // otherwise return nothing but don't fail if the caller has promised to handle it
+                    if(allowExtra)
+                        return reg;
+                }
+
                 // TODO: opcode labels
                 printf("unhandled reg %s in op %i\n", sourceInfo.registers[index].label, int(instr.opcode));
                 err = true;
@@ -707,7 +735,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             return {};
         };
 
-        auto checkRegOrImm32 = [&checkReg32, &getLastImmLoad](uint8_t index) -> std::variant<std::monostate, Reg32, uint32_t>
+        auto checkRegOrImm32 = [&checkReg32, &getLastImmLoad](uint8_t index, std::optional<Reg32> loadReg = {}, bool allowLoad = false) -> std::variant<std::monostate, Reg32, uint32_t>
         {
             if(index == 0)
             {
@@ -716,7 +744,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     return *imm;
             }
 
-            if(auto reg = checkReg32(index))
+            if(auto reg = checkReg32(index, loadReg, allowLoad))
                 return *reg;
 
             return {};
@@ -864,9 +892,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[0]);
-                    auto dst = checkReg32(instr.dst[0]);
+                    auto dst = checkReg32(instr.dst[0], {}, true);
 
+                    // avoid a mov if we need to load src, but not dst
+                    auto src = checkRegOrImm32(instr.src[0], dst ? *dst : Reg32::R8D);
+                    
                     if(src.index() && dst)
                     {
                         if(std::holds_alternative<uint32_t>(src))
@@ -876,6 +906,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(*dst, {}, instr.flags, false, false, false);
+                    }
+                    else if(src.index() && !err) 
+                    {
+                        // store extra reg
+                        assert(std::holds_alternative<Reg32>(src));
+                        storeExtraReg32(instr.dst[0], std::get<Reg32>(src));
                     }
                 }
                 else if(regSize == 16)
@@ -1029,8 +1065,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1]);
-                    auto dst = checkReg32(instr.dst[0]);
+                    auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
+                    auto dst = checkReg32(instr.dst[0], Reg32::R9D);
 
                     auto savedDst = src;
 
@@ -1058,6 +1094,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         // flags
                         setFlags32(*dst, savedDst, instr.flags);
+
+                        // write back extra reg
+                        if(*dst == Reg32::R9D)
+                            storeExtraReg32(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 16)
@@ -1234,8 +1274,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1]);
-                    auto dst = checkReg32(instr.src[0]);
+                    auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
+                    auto dst = checkReg32(instr.src[0], Reg32::R9D);
                     if(src.index() && dst)
                     {
                         // move the dest and do a sub to make flags handling easier

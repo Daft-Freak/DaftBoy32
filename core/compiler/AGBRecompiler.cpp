@@ -16,6 +16,17 @@
 #include "AGBCPU.h"
 #include "AGBMemory.h"
 
+uint16_t getRegOffset(void *cpuPtr, uint8_t reg)
+{
+    auto cpu = reinterpret_cast<AGBCPU *>(cpuPtr);
+
+    auto cpuPtrInt = reinterpret_cast<uintptr_t>(cpu);
+    uint16_t regsOffset = reinterpret_cast<uintptr_t>(&cpu->regs) - cpuPtrInt;
+
+    auto mapped = cpu->mapReg(static_cast<AGBCPU::Reg>(reg - 1));
+
+    return regsOffset + static_cast<int>(mapped) * 4;
+}
 
 AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
 {
@@ -70,6 +81,8 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
     sourceInfo.pcOffset = reinterpret_cast<uintptr_t>(&cpu.regs[15]) - cpuPtrInt;
 
     sourceInfo.cycleMul = 1;
+
+    sourceInfo.getRegOffset = getRegOffset;
 
     sourceInfo.exitCallFlag = &exitCallFlag;
     sourceInfo.savedExitPtr = &tmpSavedPtr;

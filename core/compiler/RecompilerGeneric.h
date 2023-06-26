@@ -153,6 +153,8 @@ struct SourceInfo
     bool (*shouldSyncForAddress)(uint16_t addr); // return true to sync cycle count before accessing this address
     bool (*shouldSyncForRegIndex)(uint8_t reg, const GenBlockInfo &block);
 
+    uint16_t (*getRegOffset)(void *cpu, uint8_t reg);
+
     // emulator interface
     bool *exitCallFlag;
     uint8_t **savedExitPtr;
