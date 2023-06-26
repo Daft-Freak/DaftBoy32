@@ -333,5 +333,6 @@ private:
 
     AGBRecompiler compiler;
     friend class AGBRecompiler; // needs access to internals
+    friend uint16_t getRegOffset(void *cpu, uint8_t reg);
 #endif
 };
