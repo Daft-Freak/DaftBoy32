@@ -392,16 +392,6 @@ void X86Builder::jmp(Reg64 r)
     encodeModRM(reg, 4);
 }
 
-void X86Builder::lea(Reg32 r, Reg64 base, int disp)
-{
-    auto reg = static_cast<int>(r);
-    auto baseReg = static_cast<int>(base);
-
-    encodeREX(false, reg, 0, baseReg);
-    write(0x8D); // opcode
-    encodeModRM(reg, baseReg, disp);
-}
-
 // wrappers to make sure arg types are sensible
 void X86Builder::mov(Reg64 dst, Reg64 src)
 {
