@@ -649,13 +649,13 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         auto loadExtraReg32 = [this, &builder](uint8_t index, Reg32 dst)
         {
             auto offset = sourceInfo.getRegOffset(cpuPtr, index);
-            builder.mov(dst, cpuPtrReg, false, offset);
+            builder.mov(dst, {cpuPtrReg, offset});
         };
 
         auto storeExtraReg32 = [this, &builder](uint8_t index, Reg32 src)
         {
             auto offset = sourceInfo.getRegOffset(cpuPtr, index);
-            builder.mov(src, cpuPtrReg, true, offset);
+            builder.mov({cpuPtrReg, offset}, src);
         };
 
         // validating wrappers
@@ -2322,7 +2322,7 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     saveAndExitPtr = builder.getPtr();
     builder.pop(Reg64::R10); // ret address (this is called)
     builder.mov(Reg64::R11, reinterpret_cast<uintptr_t>(sourceInfo.savedExitPtr));
-    builder.mov(Reg64::R10, Reg64::R11, true);
+    builder.mov({Reg64::R11, 0}, Reg64::R10);
 
     // just exit
     exitPtr = builder.getPtr();
@@ -2338,12 +2338,12 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
             if(reg.size == 16)
             {
                 if(auto reg16 = mapReg16(i))
-                    builder.mov(*reg16, cpuPtrReg, true, reg.cpuOffset);
+                    builder.mov({cpuPtrReg, reg.cpuOffset}, *reg16);
             }
             else if(reg.size == 32)
             {
                 if(auto reg32 = mapReg32(i))
-                    builder.mov(*reg32, cpuPtrReg, true, reg.cpuOffset);
+                    builder.mov({cpuPtrReg, reg.cpuOffset}, *reg32);
             }
         }
 
@@ -2352,9 +2352,9 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
     // save emu pc
     if(sourceInfo.pcSize == 16)
-        builder.mov(pcReg16, cpuPtrReg, true, sourceInfo.pcOffset);
+        builder.mov({cpuPtrReg, sourceInfo.pcOffset}, pcReg16);
     else if(sourceInfo.pcSize == 32)
-        builder.mov(pcReg32, cpuPtrReg, true, sourceInfo.pcOffset);
+        builder.mov({cpuPtrReg, sourceInfo.pcOffset}, pcReg32);
 
     // restore
 
