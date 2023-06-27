@@ -573,15 +573,15 @@ void X86Builder::movzx(Reg32 dst, Reg8 src)
 }
 
 // zero extend, mem -> reg, 16 bit
-void X86Builder::movzxW(Reg32 r, Reg64 base, int disp)
+void X86Builder::movzxW(Reg32 dst, RMOperand src)
 {
-    auto reg = static_cast<int>(r);
-    auto baseReg = static_cast<int>(base);
+    auto reg = static_cast<int>(dst);
+    auto baseReg = static_cast<int>(src.base);
 
     encodeREX(false, reg, 0, baseReg);
     write(0x0F); // two byte opcode
     write(0xB7); // opcode, w = 1
-    encodeModRM(reg, baseReg, disp);
+    encodeModRM(src, reg);
 }
 
 // reg
