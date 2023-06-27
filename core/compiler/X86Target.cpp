@@ -634,10 +634,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             builder.jcc(Condition::E, 10);
 
             // masterInterruptEnable = true
-            builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+            builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/}, 1);
 
             // enableInterruptsNextCycle = false
-            builder.mov(0, cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/);
+            builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/}, 0);
 
             forceExitAfter = true;
             lastWasEI = false;
@@ -2119,7 +2119,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             case GenOpcode::DMG_Halt:
             {
                 // halted = true
-                builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[2]/*halted*/);
+                builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[2]/*halted*/}, 1);
 
                 // if(!masterInterruptEnable && serviceableInterrupts)
                 builder.cmp(0, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
@@ -2127,7 +2127,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 builder.cmp(0, cpuPtrReg, sourceInfo.extraCPUOffsets[3]/*serviceableInterrupts*/);
                 builder.jcc(Condition::E, 5);
                 // haltBug = true
-                builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[4]/*haltBug*/);
+                builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[4]/*haltBug*/}, 1);
 
                 // exit
                 syncCyclesExecuted();
@@ -2139,18 +2139,18 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
             case GenOpcode::DMG_EnableIntrForRet:
                 // masterInterruptEnable = true
-                builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+                builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/}, 1);
                 break;
 
             case GenOpcode::DMG_DI:
                 // masterInterruptEnable = false
                 // TODO: after next instruction (DMGCPU also has this TODO)
-                builder.mov(0, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+                builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/}, 0);
                 break;
 
             case GenOpcode::DMG_EI:
                 // enableInterruptsNextCycle = true
-                builder.mov(1, cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/);
+                builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/}, 1);
                 lastWasEI = true;
                 break;
 
@@ -2316,7 +2316,7 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     // exit setting the call flag ... and saving ip
     exitForCallPtr = builder.getPtr();
     builder.mov(Reg64::R11, reinterpret_cast<uintptr_t>(sourceInfo.exitCallFlag));
-    builder.mov(1, Reg64::R11);
+    builder.mov({Reg64::R11, 0}, 1);
 
     // exit saving ip
     saveAndExitPtr = builder.getPtr();

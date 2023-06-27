@@ -544,15 +544,15 @@ void X86Builder::mov(Reg8 r, uint8_t imm)
 }
 
 // imm -> mem, 8 bit
-void X86Builder::mov(uint8_t imm, Reg64 base, int disp)
+void X86Builder::mov(RMOperand dst, uint8_t imm)
 {
-    auto baseReg = static_cast<int>(base);
+    auto baseReg = static_cast<int>(dst.base);
 
     encodeREX(false, 0, 0, baseReg);
 
     write(0xC6); // opcode, w = 0
 
-    encodeModRM(0, baseReg, disp);
+    encodeModRM(dst);
 
     // immediate
     write(imm);
