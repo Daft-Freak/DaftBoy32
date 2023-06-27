@@ -1168,29 +1168,6 @@ void X86Builder::write(uint8_t b)
         error = true;
 }
 
-void X86Builder::encodeModRM(int reg, int baseReg, int disp)
-{
-    // FIXME: make sure base isn't ESP or EBP
-
-    // mod r/m
-    if(!disp)
-        write(((reg & 7) << 3) | (baseReg & 7)); // mod = 0
-    else if(disp < 128 && disp >= -128) // 8 bit disp
-    {
-        write(0x40 | ((reg & 7) << 3) | (baseReg & 7)); // mod = 1
-        write(disp);
-    }
-    else
-    {
-        write(0x80 | ((reg & 7) << 3) | (baseReg & 7)); // mod = 2
-
-        write(disp);
-        write(disp >> 8);
-        write(disp >> 16);
-        write(disp >> 24);
-    }
-}
-
 void X86Builder::encodeModRM(int reg1, int reg2Op)
 {
     write(0xC0 | (reg2Op & 7) << 3 | (reg1 & 7)); // mod = 3, reg 2 or sub-opcode, reg 1
