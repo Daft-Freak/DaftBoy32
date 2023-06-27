@@ -630,7 +630,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
             // if(enableInterruptsNextCycle)
             // probably don't need this check... might get a false positive in some extreme case though
-            builder.cmp(0, cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/);
+            builder.cmp({cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/}, 0);
             builder.jcc(Condition::E, 10);
 
             // masterInterruptEnable = true
@@ -2122,9 +2122,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[2]/*halted*/}, 1);
 
                 // if(!masterInterruptEnable && serviceableInterrupts)
-                builder.cmp(0, cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/);
+                builder.cmp({cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/}, 0);
                 builder.jcc(Condition::NE, 12);
-                builder.cmp(0, cpuPtrReg, sourceInfo.extraCPUOffsets[3]/*serviceableInterrupts*/);
+                builder.cmp({cpuPtrReg, sourceInfo.extraCPUOffsets[3]/*serviceableInterrupts*/}, 0);
                 builder.jcc(Condition::E, 5);
                 // haltBug = true
                 builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[4]/*haltBug*/}, 1);
