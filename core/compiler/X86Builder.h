@@ -172,8 +172,6 @@ public:
     void jmp(int disp, bool forceLong = false);
     void jmp(Reg64 r);
 
-    void lea(Reg32 r, Reg64 base, int disp = 0);
-
     void mov(Reg64 dst, Reg64 src);
     void mov(Reg32 dst, Reg32 src);
     void mov(Reg16 dst, Reg16 src);
