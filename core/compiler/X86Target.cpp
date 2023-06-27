@@ -993,7 +993,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         if(isCallSaved(*dst))
                         {
-                            callRestore(builder, *dst);
+                            callRestore(builder, *dst, zeroExtend);
                             needCallRestore = 0;
                         }
                         else if(zeroExtend)
@@ -2567,7 +2567,7 @@ void X86Target::callRestore(X86Builder &builder, int &saveState, int toIndex) co
     saveState = toIndex;
 }
 
-void X86Target::callRestore(X86Builder &builder, Reg8 dstReg) const
+void X86Target::callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend) const
 {
     assert(dstReg != Reg8::DIL); // no
 
@@ -2589,22 +2589,29 @@ void X86Target::callRestore(X86Builder &builder, Reg8 dstReg) const
     // mov ret val (if not going to RAX)
     if(dstReg != Reg8::AL && dstReg != Reg8::AH)
     {
-        builder.mov(dstReg, Reg8::AL);
+        if(zeroExtend)
+            builder.movzx(static_cast<Reg32>(dstReg), Reg8::AL);
+        else
+            builder.mov(dstReg, Reg8::AL);
         builder.pop(Reg64::RAX);
     }
     else if(dstReg == Reg8::AH) // TODO: having a worse case for A is not great
     {
+        assert(!zeroExtend);
         builder.mov(Reg8::AH, Reg8::AL);
         builder.pop(Reg64::R10);
         builder.mov(Reg8::AL, Reg8::R10B); // restore low byte
     }
     else if(dstReg == Reg8::AL)// ... though this is the worst case... (AL == F, so unlikely)
     {
-        // EAX = EAX + (R10D & 0xFF00)
         builder.pop(Reg64::R10);
-        builder.and_(Reg32::R10D, 0xFF00);
-        builder.movzx(Reg32::EAX, Reg8::AL);
-        builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
+        if(!zeroExtend)
+        {
+            // EAX = EAX + (R10D & 0xFF00)
+            builder.and_(Reg32::R10D, 0xFF00);
+            builder.movzx(Reg32::EAX, Reg8::AL);
+            builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
+        }
     }
 }
 
