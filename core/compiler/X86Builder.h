@@ -277,7 +277,6 @@ public:
 private:
     void write(uint8_t b);
 
-    void encodeModRM(int reg, int baseReg, int disp); // mod 0-2
     void encodeModRM(int reg1, int reg2Op = 0); // mod 3
     void encodeModRM(RMOperand rm, int reg2Op = 0);
     void encodeModRMReg8(int reg1, int reg2); // mod 3 (extra validation fot 8bit regs)
