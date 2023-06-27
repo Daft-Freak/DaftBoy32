@@ -497,45 +497,6 @@ void X86Builder::mov(Reg32 dst, RMOperand src, int w)
     encodeModRM(src, dstReg);
 }
 
-// reg <-> mem, 64 bit
-void X86Builder::mov(Reg64 r, Reg64 base, bool isStore, int disp)
-{
-    auto reg = static_cast<int>(r);
-    auto baseReg = static_cast<int>(base);
-
-    encodeREX(true, reg, 0, baseReg);
-
-    if(isStore)
-        write(0x89); // opcode, w = 1
-    else
-        write(0x8B); // opcode, w = 1
-
-    encodeModRM(reg, baseReg, disp);
-}
-
-// reg <-> mem
-void X86Builder::mov(Reg32 r, Reg64 base, bool isStore, int disp)
-{
-    auto reg = static_cast<int>(r);
-    auto baseReg = static_cast<int>(base);
-
-    encodeREX(false, reg, 0, baseReg);
-
-    if(isStore)
-        write(0x89); // opcode, w = 1
-    else
-        write(0x8B); // opcode, w = 1
-
-    encodeModRM(reg, baseReg, disp);
-}
-
-// reg <-> mem, 16 bit
-void X86Builder::mov(Reg16 r, Reg64 base, bool isStore, int disp)
-{
-    write(0x66); // 16 bit override
-    mov(static_cast<Reg32>(r), base, isStore, disp);
-}
-
 // imm -> reg, 64 bit
 void X86Builder::mov(Reg64 r, uint64_t imm)
 {
