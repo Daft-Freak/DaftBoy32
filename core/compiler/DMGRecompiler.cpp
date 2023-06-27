@@ -1050,7 +1050,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
             case 0xDC: // CALL C,nn
             {
                 auto cond = invCondMap[(opcode >> 3) & 3];
-                addInstruction(loadImm(pc, 2));
+                addInstruction(loadImm(pc + 2, 2));
                 addInstruction(jump(cond, GenReg::Temp, 1));
 
                 // push PC
