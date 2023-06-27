@@ -276,7 +276,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         int8_t i8Cycles = delayedCyclesExecuted;
 
         // we don't update cyclesToRun here, do it after returning instead
-        builder.addD(i8Cycles, cpuPtrReg, reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - cpuPtrInt);
+        int offset = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - cpuPtrInt;
+        builder.addD({cpuPtrReg, offset}, i8Cycles);
 
         delayedCyclesExecuted = 0;
     };

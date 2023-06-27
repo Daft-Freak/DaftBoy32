@@ -97,21 +97,21 @@ void X86Builder::add(Reg16 dst, int8_t imm)
 }
 
 // imm -> mem, 32 bit mem, 8 bit sign extended
-void X86Builder::addD(int8_t imm, Reg64 base, int disp)
+void X86Builder::addD(RMOperand dst, int8_t imm)
 {
-    auto baseReg = static_cast<int>(base);
+    auto baseReg = static_cast<int>(dst.base);
 
     encodeREX(false, 0, 0, baseReg);
     write(0x83); // opcode, w = 1, s = 1
-    encodeModRM(0, baseReg, disp);
+    encodeModRM(dst, 0);
     write(imm);
 }
 
 // imm -> mem, 16 bit mem, 8 bit sign extended
-void X86Builder::addW(int8_t imm, Reg64 base, int disp)
+void X86Builder::addW(RMOperand dst, int8_t imm)
 {
     write(0x66); // 16 bit override
-    addD(imm, base, disp);
+    addD(dst, imm);
 }
 
 // reg -> reg, 8bit

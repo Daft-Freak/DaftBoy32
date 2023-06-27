@@ -139,8 +139,8 @@ public:
     void add(Reg64 dst, int8_t imm);
     void add(Reg32 dst, int8_t imm);
     void add(Reg16 dst, int8_t imm);
-    void addD(int8_t imm, Reg64 base, int disp = 0);
-    void addW(int8_t imm, Reg64 base, int disp = 0);
+    void addD(RMOperand dst, int8_t imm);
+    void addW(RMOperand dst, int8_t imm);
 
     void adc(Reg8 dst, Reg8 src);
     void adc(Reg8 dst, uint8_t imm);
