@@ -402,37 +402,99 @@ void X86Builder::lea(Reg32 r, Reg64 base, int disp)
     encodeModRM(reg, baseReg, disp);
 }
 
-// reg -> reg, 64 bit
+// wrappers to make sure arg types are sensible
 void X86Builder::mov(Reg64 dst, Reg64 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(true, srcReg, 0, dstReg);
-    write(0x89); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    mov(RMOperand{dst}, src);
 }
 
-// reg -> reg
 void X86Builder::mov(Reg32 dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x89); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    mov(RMOperand{dst}, src);
 }
 
-// reg -> reg, 8bit
+void X86Builder::mov(Reg16 dst, Reg16 src)
+{
+    mov(RMOperand{dst}, src);
+}
+
 void X86Builder::mov(Reg8 dst, Reg8 src)
 {
-    auto dstReg = static_cast<int>(dst);
+    mov(RMOperand{dst}, src);
+}
+
+void X86Builder::mov(RMOperand dst, Reg64 src)
+{
+    assert(dst.w == 0 || dst.w == 4);
+    mov(dst, static_cast<Reg32>(src), 64);
+}
+
+void X86Builder::mov(RMOperand dst, Reg32 src)
+{
+    assert(dst.w == 0 || dst.w == 3);
+    mov(dst, src, 32);
+}
+
+void X86Builder::mov(RMOperand dst, Reg16 src)
+{
+    assert(dst.w == 0 || dst.w == 2);
+    mov(dst, static_cast<Reg32>(src), 16);
+}
+
+void X86Builder::mov(RMOperand dst, Reg8 src)
+{
+    assert(dst.w == 0 || dst.w == 1);
+    mov(dst, static_cast<Reg32>(src), 8);
+}
+
+void X86Builder::mov(Reg64 dst, RMOperand src)
+{
+    assert(src.w == 0 || src.w == 4);
+    mov(static_cast<Reg32>(dst), src, 64);
+}
+
+void X86Builder::mov(Reg32 dst, RMOperand src)
+{
+    assert(src.w == 0 || src.w == 3);
+    mov(dst, src, 32);
+}
+
+void X86Builder::mov(Reg16 dst, RMOperand src)
+{
+    assert(src.w == 0 || src.w == 2);
+    mov(static_cast<Reg32>(dst), src, 16);
+}
+
+void X86Builder::mov(Reg8 dst, RMOperand src)
+{
+    assert(src.w == 0 || src.w == 1);
+    mov(static_cast<Reg32>(dst), src, 8);
+}
+
+void X86Builder::mov(RMOperand dst, Reg32 src, int w)
+{
+    auto dstReg = static_cast<int>(dst.base);
     auto srcReg = static_cast<int>(src);
 
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x88); // opcode, w = 0
-    encodeModRMReg8(dstReg, srcReg);
+    if(w == 16)
+        write(0x66); // 16 bit override
+
+    encodeREX(w == 64, srcReg, 0, dstReg);
+    write(0x88 | (w > 8 ? 1 : 0)); // opcode, w = width > 8
+    encodeModRM(dst, srcReg);
+}
+
+void X86Builder::mov(Reg32 dst, RMOperand src, int w)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src.base);
+
+    if(w == 16)
+        write(0x66); // 16 bit override
+
+    encodeREX(w == 64, dstReg, 0, srcReg);
+    write(0x8A | (w > 8 ? 1 : 0)); // opcode, w = width > 8
+    encodeModRM(src, dstReg);
 }
 
 // reg <-> mem, 64 bit
@@ -1181,6 +1243,37 @@ void X86Builder::encodeModRM(int reg, int baseReg, int disp)
 void X86Builder::encodeModRM(int reg1, int reg2Op)
 {
     write(0xC0 | (reg2Op & 7) << 3 | (reg1 & 7)); // mod = 3, reg 2 or sub-opcode, reg 1
+}
+
+void X86Builder::encodeModRM(RMOperand rm, int reg2Op)
+{
+    auto baseReg = static_cast<int>(rm.base);
+    if(rm.w) // direct reg
+    {
+        if(rm.w == 1)
+        {
+            // if one reg is >= 8, the other can't be xH (4-7)
+            assert((reg2Op < 8 || baseReg >= 8 || baseReg < 4) && (baseReg < 8 || reg2Op >= 8 || reg2Op < 4));
+        }
+
+        write(0xC0 | (reg2Op & 7) << 3 | (baseReg & 7)); // mod = 3, reg 2 or sub-opcode, reg 1
+    }
+    else if(!rm.disp && rm.base != Reg64::RBP)
+        write(((reg2Op & 7) << 3) | (baseReg & 7)); // mod = 0
+    else if(rm.disp < 128 && rm.disp >= -128) // 8 bit disp
+    {
+        write(0x40 | ((reg2Op & 7) << 3) | (baseReg & 7)); // mod = 1
+        write(rm.disp);
+    }
+    else
+    {
+        write(0x80 | ((reg2Op & 7) << 3) | (baseReg & 7)); // mod = 2
+
+        write(rm.disp);
+        write(rm.disp >> 8);
+        write(rm.disp >> 16);
+        write(rm.disp >> 24);
+    }
 }
 
 void X86Builder::encodeModRMReg8(int reg1, int reg2)

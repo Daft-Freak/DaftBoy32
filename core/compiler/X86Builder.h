@@ -115,6 +115,20 @@ enum class Condition
 class X86Builder
 {
 public:
+    class RMOperand
+    {
+    public:
+        explicit constexpr RMOperand(Reg64 reg) : base(reg), w(4) {} // register
+        explicit constexpr RMOperand(Reg32 reg) : base(static_cast<Reg64>(reg)), w(3) {} // register
+        explicit constexpr RMOperand(Reg16 reg) : base(static_cast<Reg64>(reg)), w(2) {} // register
+        explicit constexpr RMOperand(Reg8 reg) : base(static_cast<Reg64>(reg)), w(1) {} // register
+        constexpr RMOperand(Reg64 base, int disp) : base(base), disp(disp) {} // memory
+
+        Reg64 base;
+        uint8_t w = 0; // 0 = indirect, 1 = 8, 2 = 16, ...
+        int disp = 0;
+    };
+
     X86Builder(uint8_t *ptr, uint8_t *endPtr) : ptr(ptr), endPtr(endPtr){}
 
     void add(Reg32 dst, Reg32 src);
@@ -162,7 +176,18 @@ public:
 
     void mov(Reg64 dst, Reg64 src);
     void mov(Reg32 dst, Reg32 src);
+    void mov(Reg16 dst, Reg16 src);
     void mov(Reg8 dst, Reg8 src);
+    void mov(RMOperand dst, Reg64 src);
+    void mov(RMOperand dst, Reg32 src);
+    void mov(RMOperand dst, Reg16 src);
+    void mov(RMOperand dst, Reg8 src);
+    void mov(Reg64 dst, RMOperand src);
+    void mov(Reg32 dst, RMOperand src);
+    void mov(Reg16 dst, RMOperand src);
+    void mov(Reg8 dst, RMOperand src);
+    void mov(RMOperand dst, Reg32 src, int w); // internal
+    void mov(Reg32 dst, RMOperand src, int w); // internal
     void mov(Reg64 r, Reg64 base, bool isStore, int disp = 0);
     void mov(Reg32 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg16 r, Reg64 base, bool isStore = false, int disp = 0);
