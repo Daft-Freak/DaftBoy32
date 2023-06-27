@@ -2303,7 +2303,7 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
                 if(reg.size == 16)
                     builder.movzxW(*reg32, cpuPtrReg, reg.cpuOffset);
                 else if(reg.size == 32)
-                    builder.mov(*reg32, cpuPtrReg, false, reg.cpuOffset);
+                    builder.mov(*reg32, {cpuPtrReg, reg.cpuOffset});
              }
         }
 
