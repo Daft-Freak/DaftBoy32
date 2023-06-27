@@ -188,9 +188,6 @@ public:
     void mov(Reg8 dst, RMOperand src);
     void mov(RMOperand dst, Reg32 src, int w); // internal
     void mov(Reg32 dst, RMOperand src, int w); // internal
-    void mov(Reg64 r, Reg64 base, bool isStore, int disp = 0);
-    void mov(Reg32 r, Reg64 base, bool isStore = false, int disp = 0);
-    void mov(Reg16 r, Reg64 base, bool isStore = false, int disp = 0);
     void mov(Reg64 r, uint64_t imm);
     void mov(Reg32 r, uint32_t imm);
     void mov(Reg8 r, uint8_t imm);
