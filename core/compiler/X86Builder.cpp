@@ -1185,18 +1185,24 @@ void X86Builder::encodeModRM(RMOperand rm, int reg2Op)
         }
 
         write(0xC0 | (reg2Op & 7) << 3 | (baseReg & 7)); // mod = 3, reg 2 or sub-opcode, reg 1
+        return;
     }
-    else if(!rm.disp && rm.base != Reg64::RBP)
-        write(((reg2Op & 7) << 3) | (baseReg & 7)); // mod = 0
-    else if(rm.disp < 128 && rm.disp >= -128) // 8 bit disp
-    {
-        write(0x40 | ((reg2Op & 7) << 3) | (baseReg & 7)); // mod = 1
-        write(rm.disp);
-    }
-    else
-    {
-        write(0x80 | ((reg2Op & 7) << 3) | (baseReg & 7)); // mod = 2
 
+    int mod = 0; // no disp
+    
+    if(rm.disp || rm.base == Reg64::RBP)
+        mod = (rm.disp >= 128 || rm.disp < -128) ? 2 : 1; // 32-bit or 8-bit disp
+
+    write((mod << 6) | ((reg2Op & 7) << 3) | (baseReg & 7)); // write ModRM byte
+
+    if(rm.base == Reg64::RSP) // need SIB
+        write(0x24); // index = none, base = RSP
+
+    // write disp
+    if(mod == 1)
+        write(rm.disp);
+    else if(mod == 2)
+    {
         write(rm.disp);
         write(rm.disp >> 8);
         write(rm.disp >> 16);
