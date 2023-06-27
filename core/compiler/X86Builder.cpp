@@ -277,13 +277,13 @@ void X86Builder::cmp(Reg32 dst, int8_t imm)
 }
 
 // imm -> mem, 8 bit
-void X86Builder::cmp(uint8_t imm, Reg64 base, int disp)
+void X86Builder::cmp(RMOperand dst, uint8_t imm)
 {
-    auto baseReg = static_cast<int>(base);
+    auto baseReg = static_cast<int>(dst.base);
 
     encodeREX(false, 0, 0, baseReg);
     write(0x80); // opcode, w = 0
-    encodeModRM(7, baseReg, disp);
+    encodeModRM(dst, 7);
     write(imm);
 }
 
