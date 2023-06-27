@@ -193,7 +193,7 @@ public:
 
     void movzx(Reg32 dst, Reg16 src);
     void movzx(Reg32 dst, Reg8 src);
-    void movzxW(Reg32 r, Reg64 base, int disp = 0);
+    void movzxW(Reg32 dst, RMOperand src);
 
     void not_(Reg32 r);
     void not_(Reg8 r);
