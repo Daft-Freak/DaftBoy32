@@ -161,7 +161,9 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
         Reg32::EBP,
         Reg32::R12D,
         Reg32::R13D,
-        Reg32::R15D
+        Reg32::R15D,
+
+        Reg32::R11D, // last resort temp
     };
 
     numSavedRegs = 4; // TODO: can skip RDI/RSI on windows
@@ -196,6 +198,9 @@ void X86Target::init(SourceInfo sourceInfo, void *cpuPtr)
 
         // TODO: make sure we allocate all temps
         if(allocOff == std::size(regList))
+            continue;
+
+        if(it->type != SourceRegType::Temp && regList[allocOff] == Reg32::R11D)
             continue;
 
         regAlloc.emplace(i, regList[allocOff]);
