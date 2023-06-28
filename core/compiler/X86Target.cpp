@@ -984,10 +984,37 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         // maybe push
                         callSaveIfNeeded(builder, needCallRestore);
 
+                        bool needCyclesSeq = sourceInfo.readMem8;
+
                         setupMemAddr(addr, addrSize, instr.src[0]);
 
-                        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.readMem)); // function ptr
+                        if(sourceInfo.readMem)
+                            builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.readMem)); // function ptr
+                        else if(sourceInfo.readMem8)
+                            builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.readMem8)); // function ptr
+                        else
+                        {
+                            printf("unhandled load\n");
+                            err = true;
+                        }
+
                         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
+
+                        if(needCyclesSeq)
+                        {
+                            // cycle count from stack
+                            // could shorten this with LEA?
+                            builder.mov(argumentRegs64[2], Reg64::RSP);
+                            builder.add(argumentRegs64[2], needCallRestore * 8);
+
+                            assert(cyclesThisInstr == delayedCyclesExecuted);
+                            builder.mov({Reg64::RSP, needCallRestore * 8}, uint32_t(cyclesThisInstr + instrCycles));
+
+                            cyclesThisInstr = delayedCyclesExecuted = 0;
+                            instrCycles = 0;
+
+                            builder.mov(argumentRegs32[3], 0); // sequential = false TODO: from flags?
+                        }
 
                         builder.call(Reg64::RAX); // do call
 
@@ -1000,6 +1027,17 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.movzx(static_cast<Reg32>(*dst), Reg8::AL);
                         else
                             builder.mov(*dst, Reg8::AL);
+
+                        if(needCyclesSeq)
+                        {
+                            // add/sub the cycles from the stack
+                            builder.mov(Reg32::R8D, {Reg64::RSP, needCallRestore * 8});
+
+                            int offset = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - reinterpret_cast<uintptr_t>(cpuPtr);
+                            builder.add({cpuPtrReg, offset}, Reg32::R8D);
+
+                            builder.sub(Reg32::EDI, Reg32::R8D);
+                        }
                     }
                 }
                 else
@@ -2293,6 +2331,9 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     builder.mov(Reg64::RDI, argumentRegs64[0]); // move cycle count
 #endif
 
+    if(sourceInfo.readMem8)
+        builder.sub(Reg64::RSP, 16); // save some space if we're using the more advanced memory access
+
     builder.mov(Reg64::R10, argumentRegs64[1]); // code ptr
 
     // store pointer to CPU
@@ -2367,6 +2408,9 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
         builder.mov({cpuPtrReg, sourceInfo.pcOffset}, pcReg32);
 
     // restore
+
+    if(sourceInfo.readMem8)
+        builder.add(Reg64::RSP, 16);
 
 #ifdef _WIN32
     builder.pop(Reg64::RDI);
