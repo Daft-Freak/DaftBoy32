@@ -188,7 +188,7 @@ void DMGRecompiler::handleBranch()
                 auto pc = cpu.pc;
 
                 GenBlockInfo genBlock;
-                genBlock.flags = 0;
+                genBlock.flags = GenBlock_FirstCycleEarly;
 
                 // since we refuse to compile when OAM DMA is active we can skip most of cycleExecuted when not running from HRAM
                 if(cpu.pc >= 0xFF00) // in HRAM
