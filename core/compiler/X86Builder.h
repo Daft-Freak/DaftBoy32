@@ -134,6 +134,7 @@ public:
     void add(Reg32 dst, Reg32 src);
     void add(Reg16 dst, Reg16 src);
     void add(Reg8 dst, Reg8 src);
+    void add(RMOperand dst, Reg32 src);
     void add(Reg32 dst, uint32_t imm);
     void add(Reg8 dst, uint8_t imm);
     void add(Reg64 dst, int8_t imm);
