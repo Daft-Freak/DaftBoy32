@@ -839,8 +839,15 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 }
                 else // format 13, add offset to SP
                 {
-                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
-                    done = true;
+                    bool isNeg = opcode & (1 << 7);
+                    int off = (opcode & 0x7F) << 2;
+
+                    addInstruction(loadImm(off, 0));
+
+                    if(isNeg)
+                        addInstruction(alu(GenOpcode::Subtract, GenReg::R13, GenReg::Temp, GenReg::R13, pcSCycles), 2);
+                    else
+                        addInstruction(alu(GenOpcode::Add, GenReg::R13, GenReg::Temp, GenReg::R13, pcSCycles), 2);
                 }
                 break;
             }
