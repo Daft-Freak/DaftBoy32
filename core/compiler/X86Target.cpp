@@ -851,7 +851,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     }
 
                     // move src0 to dst
-                    auto src = checkReg32(instr.src[0]);
+                    auto src = checkReg32(instr.src[0], Reg32::R8D);
 
                     if(src && dst)
                     {
