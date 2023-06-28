@@ -8,7 +8,11 @@ enum class GenOpcode : uint8_t
     LoadImm, // always to reg 0
     Move,
     Load,
+    Load2,
+    Load4,
     Store,
+    Store2,
+    Store4,
 
     Add,
     AddWithCarry,
