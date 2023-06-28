@@ -2105,7 +2105,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 if(regSize == 16)
                                     builder.movzx(pcReg32, static_cast<Reg16>(std::get<Reg32>(src)));
                                 else
+                                {
                                     builder.mov(pcReg32, std::get<Reg32>(src));
+
+                                    if(sourceInfo.pcPrefetch)
+                                        builder.add(pcReg32, int8_t(sourceInfo.pcPrefetch));
+                                }
                             }
                         }
                         else // or sub cycles early (we jump past the usual code that does this)
