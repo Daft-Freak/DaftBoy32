@@ -825,8 +825,21 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
             case 0xA: // format 12, load address
             {
-                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
-                done = true;
+                bool isSP = opcode & (1 << 11);
+                auto dstReg = lowReg((opcode >> 8) & 7);
+                auto word = (opcode & 0xFF) << 2;
+
+                if(isSP)
+                {
+                    addInstruction(loadImm(word, 0));
+                    addInstruction(alu(GenOpcode::Add, GenReg::R13, GenReg::Temp, dstReg, pcSCycles), 2);
+                }
+                else // PC
+                {
+                    addInstruction(loadImm(((pc + 2) & ~2) + word, 0));
+                    addInstruction(move(GenReg::Temp, dstReg, pcSCycles), 2);
+                }
+
                 break;
             }
 
