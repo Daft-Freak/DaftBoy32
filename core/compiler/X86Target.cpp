@@ -1508,7 +1508,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 src = *tmp;
                             }
                             else
-                                builder.xchg(std::get<Reg32>(src), *dst);
+                            {
+                                assert(instr.src[0]);
+
+                                // save dst, move src to dst
+                                auto tmp = mapReg32(0);
+                                builder.mov(*tmp, *dst);
+                                builder.mov(*dst, std::get<Reg32>(src));                                
+                                src = *tmp;
+                            }
                         }
 
                         // save dst/src0 if we need it to calc carry
