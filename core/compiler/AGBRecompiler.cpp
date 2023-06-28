@@ -70,6 +70,8 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
 
     // SPSR?
 
+    sourceInfo.registers.emplace_back(SourceRegInfo{"tm2", 32, SourceRegType::Temp, 0, 0, 0xFFFF});
+
     // condition flags
     sourceInfo.flags.emplace_back(SourceFlagInfo{'V', 28, SourceFlagType::Overflow});
     sourceInfo.flags.emplace_back(SourceFlagInfo{'C', 29, SourceFlagType::Carry});
@@ -336,6 +338,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         // R15 = PC
 
         CPSR,
+
+        Temp2, // used by BL
     };
 
     auto lowReg = [](int reg)
@@ -886,8 +890,31 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
             case 0xF: // format 19, long branch with link
             {
-                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF000);
-                done = true;
+                bool high = opcode & (1 << 11);
+                uint32_t offset = opcode & 0x7FF;
+
+                if(!high)
+                {
+                    offset <<= 12;
+                    if(offset & (1 << 22))
+                        offset |= 0xFF800000; //sign extend
+
+                    addInstruction(loadImm(pc + 2 + offset, 0));
+                    addInstruction(move(GenReg::Temp, GenReg::R14, pcSCycles), 2);
+                }
+                else
+                {
+                    // addr = LR + offset * 2
+                    addInstruction(loadImm(offset * 2, 0));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::R14, GenReg::Temp2, 0));
+
+                    // LR = PC | 1
+                    addInstruction(loadImm(pc | 1, 0));
+                    addInstruction(move(GenReg::Temp, GenReg::R14, 0));
+
+                    // jump
+                    addInstruction(jump(GenCondition::Always, GenReg::Temp2, pcNCycles + pcSCycles * 2), 2, GenOp_Call);
+                }
 
                 break;
             }
