@@ -172,6 +172,8 @@ struct SourceInfo
 
     // TODO: unify
     uint8_t (*readMem8)(void *cpu, uint32_t addr, int &cycles, bool sequential);
+    uint32_t (*readMem16)(void *cpu, uint32_t addr, int &cycles, bool sequential); // returning 32-bit here is deliberate
+    uint32_t (*readMem32)(void *cpu, uint32_t addr, int &cycles, bool sequential);
 };
 
 void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const SourceInfo &sourceInfo);
