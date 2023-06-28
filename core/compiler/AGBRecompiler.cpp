@@ -792,7 +792,33 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 }
                 break;
             }
+    
             case 0x9: // format 11, SP-relative load/store
+            {
+                bool isLoad = opcode & (1 << 11);
+                auto offset = opcode & 0xFF;
+                auto baseReg = GenReg::R13;
+                auto dstReg = lowReg((opcode >> 8) & 7);
+
+                if(isLoad)
+                {
+                    if(offset == 0)
+                        addInstruction(load(4, baseReg, dstReg, pcSCycles + 1), 2);
+                    else
+                    {
+                        addInstruction(loadImm(offset * 4, 0));
+                        addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                        addInstruction(load(4, GenReg::Temp, dstReg, pcSCycles + 1), 2);
+                    }
+                }
+                else
+                {
+                    printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xF800);
+                    done = true;
+                }
+                break;
+            }
+
             case 0xA: // format 12, load address
             {
                 printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
