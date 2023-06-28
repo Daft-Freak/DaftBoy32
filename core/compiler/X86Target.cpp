@@ -967,6 +967,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             }
 
             case GenOpcode::Load:
+            case GenOpcode::Load2:
+            case GenOpcode::Load4:
             {
                 // TODO: store data width somewhere
                 auto addrSize = sourceInfo.registers[instr.src[0]].size;
@@ -979,7 +981,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(addr.index() && dst)
                     {
                         // zero-extend if not 8 bit dest (a temp)
-                        bool zeroExtend = sourceInfo.registers[instr.dst[0]].size != 8;
+                        bool zeroExtend = instr.opcode == GenOpcode::Load && sourceInfo.registers[instr.dst[0]].size != 8;
                         
                         // maybe push
                         callSaveIfNeeded(builder, needCallRestore);
@@ -988,15 +990,27 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         setupMemAddr(addr, addrSize, instr.src[0]);
 
-                        if(sourceInfo.readMem)
-                            builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.readMem)); // function ptr
-                        else if(sourceInfo.readMem8)
-                            builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.readMem8)); // function ptr
-                        else
+                        uintptr_t func = 0;
+
+                        if(instr.opcode == GenOpcode::Load)
+                        {
+                            if(sourceInfo.readMem)
+                                func = reinterpret_cast<uintptr_t>(sourceInfo.readMem);
+                            else
+                                func = reinterpret_cast<uintptr_t>(sourceInfo.readMem8);
+                        }
+                        else if(instr.opcode == GenOpcode::Load2)
+                            func = reinterpret_cast<uintptr_t>(sourceInfo.readMem16);
+                        else if(instr.opcode == GenOpcode::Load4)
+                            func = reinterpret_cast<uintptr_t>(sourceInfo.readMem32);
+
+                        if(!func)
                         {
                             printf("unhandled load\n");
                             err = true;
                         }
+
+                        builder.mov(Reg64::RAX, func); // function ptr
 
                         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
 
@@ -1018,15 +1032,37 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         builder.call(Reg64::RAX); // do call
 
-                        if(isCallSaved(*dst))
+                        if(instr.opcode == GenOpcode::Load)
                         {
-                            callRestore(builder, *dst, zeroExtend);
-                            needCallRestore = 0;
+                            // 8-bit dest
+                            if(isCallSaved(*dst))
+                            {
+                                callRestore(builder, *dst, zeroExtend);
+                                needCallRestore = 0;
+                            }
+                            else if(zeroExtend)
+                                builder.movzx(static_cast<Reg32>(*dst), Reg8::AL);
+                            else
+                                builder.mov(*dst, Reg8::AL);
                         }
-                        else if(zeroExtend)
-                            builder.movzx(static_cast<Reg32>(*dst), Reg8::AL);
                         else
-                            builder.mov(*dst, Reg8::AL);
+                        {
+                            // 16/32-bit dest
+                            bool saved = isCallSaved(*dst);
+                            if(saved) // restore everything except RAX
+                                callRestoreIfNeeded(builder, static_cast<Reg16>(callSavedRegs[1]), needCallRestore);
+
+                            auto dst32 = static_cast<Reg32>(static_cast<int>(*dst) & 0xF); // bit of a hack
+
+                            if(dst32 != Reg32::EAX)
+                                builder.mov(dst32, Reg32::EAX);
+                            else if(saved)
+                            {
+                                // discard old RAX
+                                builder.pop(Reg64::R10);
+                                needCallRestore = 0;
+                            }
+                        }
 
                         if(needCyclesSeq)
                         {
