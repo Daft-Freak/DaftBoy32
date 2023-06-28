@@ -88,7 +88,7 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
     sourceInfo.savedExitPtr = &tmpSavedPtr;
     sourceInfo.cycleCount = &cpu.cycleCount;
 
-    //sourceInfo.readMem = reinterpret_cast<uint8_t (*)(void *, uint16_t)>(AGBRecompiler::readMem);
+    sourceInfo.readMem8 = reinterpret_cast<uint8_t (*)(void *, uint32_t, int &, bool)>(AGBRecompiler::readMem8);
     //sourceInfo.writeMem = reinterpret_cast<int (*)(void *, uint16_t, uint8_t, int)>(AGBRecompiler::writeMem);
 
     target.init(sourceInfo, &cpu);
@@ -409,7 +409,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return ret;
     };
 
-    auto load = [](GenReg addr, GenReg dst, int cycles = 1)
+    auto load8 = [](GenReg addr, GenReg dst, int cycles)
     {
         GenOpInfo ret{};
         ret.opcode = GenOpcode::Load;
@@ -708,13 +708,39 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
             }
 
             case 0x6: // format 9, load/store with imm offset (words)
-            case 0x7: // ... (bytes)
+            
             case 0x8: // format 10, load/store halfword
             case 0x9: // format 11, SP-relative load/store
             case 0xA: // format 12, load address
             {
                 printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
                 done = true;
+                break;
+            }
+
+            case 0x7: // ... (bytes)
+            {
+                bool isLoad = opcode & (1 << 11);
+                auto offset = ((opcode >> 6) & 0x1F);
+                auto baseReg = lowReg((opcode >> 3) & 7);
+                auto dstReg = lowReg(opcode & 7);
+
+                if(isLoad)
+                {
+                    if(offset == 0)
+                        addInstruction(load8(baseReg, dstReg, pcSCycles + 1), 2);
+                    else
+                    {
+                        addInstruction(loadImm(offset, 0));
+                        addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                        addInstruction(load8(GenReg::Temp, dstReg, pcSCycles + 1), 2);
+                    }
+                }
+                else
+                {
+                    printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xF800);
+                    done = true;
+                }
                 break;
             }
 
