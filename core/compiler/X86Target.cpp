@@ -1499,8 +1499,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[swapped ? 0 : 1]);
-                    auto dst = checkReg32(instr.dst[0]);
+                    auto src = checkRegOrImm32(instr.src[swapped ? 0 : 1], Reg32::R8D);
+                    auto dst = checkReg32(instr.dst[0], Reg32::R9D);
 
                     if(src.index() && dst)
                     {
@@ -1549,6 +1549,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         // flags
                         setFlags32(*dst, savedDst, instr.flags, true, true); // assuming arm inverted carry flag
+
+                        // write back extra reg
+                        if(*dst == Reg32::R9D)
+                            storeExtraReg32(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 16)
