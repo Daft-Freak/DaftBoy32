@@ -626,7 +626,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
         // first cycle (fetch)
         int instrCycles = instr.cycles;
-        if(instrCycles)
+        if(instrCycles && (blockInfo.flags & GenBlock_FirstCycleEarly))
         {
             cycleExecuted();
             instrCycles--;

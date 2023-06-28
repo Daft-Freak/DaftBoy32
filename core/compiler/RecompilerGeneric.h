@@ -93,6 +93,7 @@ struct GenOpInfo
 enum GenBlockFlags
 {
     GenBlock_StrictSync = 1 << 0, // call cycleExecuted for each cycle
+    GenBlock_FirstCycleEarly = 1 << 1, // "execute" first cycle before ops
 
     GenBlock_DMGSPWrite = 1 << 16, // SP is set to point at regs or unknown addr in this block
 };
