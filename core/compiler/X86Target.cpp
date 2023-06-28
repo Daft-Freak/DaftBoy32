@@ -976,7 +976,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 if(addrSize == 16 || addrSize == 32)
                 {
                     auto dst = checkReg8(instr.dst[0]);
-                    auto addr = checkRegOrImm32(instr.src[0]);
+                    auto addr = checkRegOrImm32(instr.src[0], Reg32::R11D);
 
                     if(addr.index() && dst)
                     {
