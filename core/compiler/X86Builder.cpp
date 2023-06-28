@@ -14,12 +14,7 @@ enum REX
 // reg -> reg
 void X86Builder::add(Reg32 dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x01); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    add(RMOperand{dst}, src);
 }
 
 // reg -> reg, 16 bit
@@ -38,6 +33,18 @@ void X86Builder::add(Reg8 dst, Reg8 src)
     encodeREX(false, srcReg, 0, dstReg);
     write(0x00); // opcode
     encodeModRMReg8(dstReg, srcReg);
+}
+
+void X86Builder::add(RMOperand dst, Reg32 src)
+{
+    assert(dst.w == 0 || dst.w == 3);
+
+    auto dstReg = static_cast<int>(dst.base);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x01); // opcode, w = 1
+    encodeModRM(dst, srcReg);
 }
 
 // imm -> reg, 32 bit
