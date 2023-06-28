@@ -533,6 +533,24 @@ void X86Builder::mov(Reg8 r, uint8_t imm)
     write(imm);
 }
 
+// imm -> mem
+void X86Builder::mov(RMOperand dst, uint32_t imm)
+{
+    auto baseReg = static_cast<int>(dst.base);
+
+    encodeREX(false, 0, 0, baseReg);
+
+    write(0xC7); // opcode, w = 1
+
+    encodeModRM(dst);
+
+    // immediate
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
+}
+
 // imm -> mem, 8 bit
 void X86Builder::mov(RMOperand dst, uint8_t imm)
 {
