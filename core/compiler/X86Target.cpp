@@ -661,10 +661,16 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             builder.mov(dst, {cpuPtrReg, offset});
         };
 
-        auto storeExtraReg32 = [this, &builder](uint8_t index, Reg32 src)
+        auto storeExtraReg32 = [this, &builder](uint8_t index, std::variant<std::monostate, Reg32, uint32_t> src)
         {
+            assert(src.index());
+
             auto offset = sourceInfo.getRegOffset(cpuPtr, index);
-            builder.mov({cpuPtrReg, offset}, src);
+
+            if(std::holds_alternative<uint32_t>(src))
+                builder.mov({cpuPtrReg, offset}, std::get<uint32_t>(src));
+            else
+                builder.mov({cpuPtrReg, offset}, std::get<Reg32>(src));
         };
 
         // validating wrappers
@@ -919,8 +925,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     else if(src.index() && !err) 
                     {
                         // store extra reg
-                        assert(std::holds_alternative<Reg32>(src));
-                        storeExtraReg32(instr.dst[0], std::get<Reg32>(src));
+                        storeExtraReg32(instr.dst[0], src);
                     }
                 }
                 else if(regSize == 16)
