@@ -17,8 +17,8 @@ static const Reg16 pcReg16 = Reg16::DI;
 static const Reg64 argumentRegs64[]{Reg64::RCX, Reg64::RDX, Reg64::R8, Reg64::R9};
 static const Reg32 argumentRegs32[]{Reg32::ECX, Reg32::EDX, Reg32::R8D, Reg32::R9D};
 #else
-static const Reg64 argumentRegs64[]{Reg64::RDI, Reg64::RSI, Reg64::RDX, Reg64::RCX}; // + R8/9 but we don't use > 4 args
-static const Reg32 argumentRegs32[]{Reg32::EDI, Reg32::ESI, Reg32::EDX, Reg32::ECX};
+static const Reg64 argumentRegs64[]{Reg64::RDI, Reg64::RSI, Reg64::RDX, Reg64::RCX, Reg64::R8, Reg64::R9};
+static const Reg32 argumentRegs32[]{Reg32::EDI, Reg32::ESI, Reg32::EDX, Reg32::ECX, Reg32::R8D, Reg32::R9D};
 #endif
 
 static const Reg64 callSavedRegs[]{Reg64::RAX, Reg64::RCX, Reg64::RDX, Reg64::RDI, Reg64::RSI};
@@ -1093,6 +1093,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             }
 
             case GenOpcode::Store:
+            case GenOpcode::Store2:
+            case GenOpcode::Store4:
             {
                 // TODO: store data width somewhere
                 auto addrSize = sourceInfo.registers[instr.src[0]].size;
@@ -1107,6 +1109,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
                         callSaveIfNeeded(builder, needCallRestore);
 
+                        bool needCyclesSeq = sourceInfo.writeMem8;
+
 #ifndef _WIN32
                         // setup addr first (data writes DX)
                         setupMemAddr(addr, addrSize, instr.src[0]);
@@ -1114,18 +1118,30 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         if(std::holds_alternative<Reg8>(data))
                         {
-#ifdef _WIN32
-                            // argumentRegs[2] is R8, can't mov from xH to there
-                            auto reg8 = std::get<Reg8>(data);
-                            if(isXHReg(reg8))
+                            if(instr.opcode == GenOpcode::Store)
                             {
-                                builder.mov(Reg8::AL, reg8);
-                                data = Reg8::AL;
-                            }
+#ifdef _WIN32
+                                // argumentRegs[2] is R8, can't mov from xH to there
+                                auto reg8 = std::get<Reg8>(data);
+                                if(isXHReg(reg8))
+                                {
+                                    builder.mov(Reg8::AL, reg8);
+                                    data = Reg8::AL;
+                                }
 #endif
-                            builder.movzx(argumentRegs32[2], std::get<Reg8>(data));
+                                builder.movzx(argumentRegs32[2], std::get<Reg8>(data));
+                            }
+                            else
+                            {
+                                auto data32 = static_cast<Reg32>(static_cast<int>(std::get<Reg8>(data)) & 0xF); // bit of a hack
+
+                                if(instr.opcode == GenOpcode::Store2)
+                                    builder.movzx(argumentRegs32[2], static_cast<Reg16>(data32));
+                                else
+                                    builder.mov(argumentRegs32[2], data32);
+                            }
                         }
-                        else
+                        else // FIXME: will fail if not 8-bit
                             builder.mov(argumentRegs32[2], std::get<uint8_t>(data));
 
 #ifdef _WIN32
@@ -1133,15 +1149,67 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         setupMemAddr(addr, addrSize, instr.src[0]);
 #endif
 
-                        builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
+                        if(needCyclesSeq)
+                        {
+                            // FIXME: win32
 
-                        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.writeMem)); // function ptr
+                            // cycle count from stack
+                            builder.mov(argumentRegs64[3], Reg64::RSP);
+                            builder.add(argumentRegs64[3], needCallRestore * 8);
+
+                            assert(cyclesThisInstr == delayedCyclesExecuted);
+                            builder.mov({Reg64::RSP, needCallRestore * 8}, uint32_t(cyclesThisInstr + instrCycles));
+
+                            cyclesThisInstr = delayedCyclesExecuted = 0;
+                            instrCycles = 0;
+
+                            builder.mov(argumentRegs32[4], 0); // sequential = false TODO: from flags?
+
+                            builder.mov(argumentRegs32[5], Reg32::EDI); // cycle count
+                        }
+                        else
+                            builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
+
+                        // select function to call
+                        uintptr_t func = 0;
+
+                        if(instr.opcode == GenOpcode::Store)
+                        {
+                            if(sourceInfo.writeMem)
+                                func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem);
+                            else
+                                func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem8);
+                        }
+                        else if(instr.opcode == GenOpcode::Store2)
+                            func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem16);
+                        else if(instr.opcode == GenOpcode::Store4)
+                            func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem32);
+
+                        if(!func)
+                        {
+                            printf("unhandled store\n");
+                            err = true;
+                        }
+
+                        builder.mov(Reg64::RAX, func); // function ptr
+
                         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
                         builder.call(Reg64::RAX); // do call
 
                         // just pop EDI... then overrwrite it
                         callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
                         builder.mov(Reg32::EDI, Reg32::EAX);
+
+                        if(needCyclesSeq)
+                        {
+                            // add/sub the cycles from the stack
+                            builder.mov(Reg32::R8D, {Reg64::RSP, needCallRestore * 8});
+
+                            int offset = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - reinterpret_cast<uintptr_t>(cpuPtr);
+                            builder.add({cpuPtrReg, offset}, Reg32::R8D);
+
+                            builder.sub(Reg32::EDI, Reg32::R8D);
+                        }
                     }
                 }
                 else
