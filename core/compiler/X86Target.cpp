@@ -1076,6 +1076,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         if(needCyclesSeq)
                         {
+                            callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
+
                             // add/sub the cycles from the stack
                             builder.mov(Reg32::R8D, {Reg64::RSP, needCallRestore * 8});
 
