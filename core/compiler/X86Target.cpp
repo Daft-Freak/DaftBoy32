@@ -1323,7 +1323,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1]);
+                    auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
                     auto dst = checkReg32(instr.dst[0]);
 
                     if(src.index() && dst)
