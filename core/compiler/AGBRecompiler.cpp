@@ -93,7 +93,10 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
     sourceInfo.readMem8 = reinterpret_cast<uint8_t (*)(void *, uint32_t, int &, bool)>(AGBRecompiler::readMem8);
     sourceInfo.readMem16 = reinterpret_cast<uint32_t (*)(void *, uint32_t, int &, bool)>(AGBRecompiler::readMem16);
     sourceInfo.readMem32 = reinterpret_cast<uint32_t (*)(void *, uint32_t, int &, bool)>(AGBRecompiler::readMem32);
-    //sourceInfo.writeMem = reinterpret_cast<int (*)(void *, uint16_t, uint8_t, int)>(AGBRecompiler::writeMem);
+
+    sourceInfo.writeMem8 = reinterpret_cast<int (*)(void *, uint32_t, uint8_t, int &, bool, int)>(AGBRecompiler::writeMem8);
+    sourceInfo.writeMem16 = reinterpret_cast<int (*)(void *, uint32_t, uint16_t, int &, bool, int)>(AGBRecompiler::writeMem16);
+    sourceInfo.writeMem32 = reinterpret_cast<int (*)(void *, uint32_t, uint32_t, int &, bool, int)>(AGBRecompiler::writeMem32);
 
     target.init(sourceInfo, &cpu);
 
@@ -432,10 +435,16 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return ret;
     };
 
-    auto store = [](GenReg addr, GenReg data, int cycles = 1)
+    auto store = [](int size, GenReg addr, GenReg data, int cycles)
     {
         GenOpInfo ret{};
-        ret.opcode = GenOpcode::Store;
+        if(size == 1)
+            ret.opcode = GenOpcode::Store;
+        else if(size == 2)
+            ret.opcode = GenOpcode::Store2;
+        else if(size == 4)
+            ret.opcode = GenOpcode::Store4;
+
         ret.cycles = cycles;
         ret.src[0] = static_cast<uint8_t>(addr);
         ret.src[1] = static_cast<uint8_t>(data);
@@ -739,16 +748,12 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     }
                     else
                     {
+                        addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
+
                         if(hFlag) // LDRH
-                        {
-                            addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
                             addInstruction(load(2, GenReg::Temp, dstReg, pcSCycles + 1), 2);
-                        }
-                        else
-                        {
-                            printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xFE00);
-                            done = true;
-                        }
+                        else // STRH
+                            addInstruction(store(2, GenReg::Temp, dstReg, pcNCycles), 2);
                     }
                 }
                 else // format 7, load/store with reg offset
@@ -756,16 +761,12 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     bool isLoad = opcode & (1 << 11);
                     bool isByte = opcode & (1 << 10);
 
+                    addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
+
                     if(isLoad)
-                    {
-                        addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
                         addInstruction(load(isByte ? 1 : 4, GenReg::Temp, dstReg, pcSCycles + 1), 2);
-                    }
                     else
-                    {
-                        printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xFE00);
-                        done = true;
-                    }
+                        addInstruction(store(isByte ? 1 : 4, GenReg::Temp, dstReg, pcNCycles), 2);
                 }
 
                 break;
@@ -778,22 +779,17 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 auto baseReg = lowReg((opcode >> 3) & 7);
                 auto dstReg = lowReg(opcode & 7);
 
+                if(offset)
+                {
+                    addInstruction(loadImm(offset * 4, 0));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                }
+
                 if(isLoad)
-                {
-                    if(offset == 0)
-                        addInstruction(load(4, baseReg, dstReg, pcSCycles + 1), 2);
-                    else
-                    {
-                        addInstruction(loadImm(offset * 4, 0));
-                        addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
-                        addInstruction(load(4, GenReg::Temp, dstReg, pcSCycles + 1), 2);
-                    }
-                }
+                    addInstruction(load(4, offset ? GenReg::Temp : baseReg, dstReg, pcSCycles + 1), 2);
                 else
-                {
-                    printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xF800);
-                    done = true;
-                }
+                    addInstruction(store(4, offset ? GenReg::Temp : baseReg, dstReg, pcNCycles), 2);
+
                 break;
             }
 
@@ -804,22 +800,17 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 auto baseReg = lowReg((opcode >> 3) & 7);
                 auto dstReg = lowReg(opcode & 7);
 
+                if(offset)
+                {
+                    addInstruction(loadImm(offset, 0));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                }
+
                 if(isLoad)
-                {
-                    if(offset == 0)
-                        addInstruction(load(1, baseReg, dstReg, pcSCycles + 1), 2);
-                    else
-                    {
-                        addInstruction(loadImm(offset, 0));
-                        addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
-                        addInstruction(load(1, GenReg::Temp, dstReg, pcSCycles + 1), 2);
-                    }
-                }
+                    addInstruction(load(1, offset ? GenReg::Temp : baseReg, dstReg, pcSCycles + 1), 2);
                 else
-                {
-                    printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xF800);
-                    done = true;
-                }
+                    addInstruction(store(1, offset ? GenReg::Temp : baseReg, dstReg, pcNCycles), 2);
+
                 break;
             }
 
@@ -830,22 +821,17 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 auto baseReg = lowReg((opcode >> 3) & 7);
                 auto dstReg = lowReg(opcode & 7);
 
+                if(offset)
+                {
+                    addInstruction(loadImm(offset * 2, 0));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                }
+
                 if(isLoad)
-                {
-                    if(offset == 0)
-                        addInstruction(load(2, baseReg, dstReg, pcSCycles + 1), 2);
-                    else
-                    {
-                        addInstruction(loadImm(offset * 2, 0));
-                        addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
-                        addInstruction(load(2, GenReg::Temp, dstReg, pcSCycles + 1), 2);
-                    }
-                }
+                    addInstruction(load(2, offset ? GenReg::Temp : baseReg, dstReg, pcSCycles + 1), 2);
                 else
-                {
-                    printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xF800);
-                    done = true;
-                }
+                    addInstruction(store(2, offset ? GenReg::Temp : baseReg, dstReg, pcNCycles), 2);
+
                 break;
             }
     
@@ -856,22 +842,17 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 auto baseReg = GenReg::R13;
                 auto dstReg = lowReg((opcode >> 8) & 7);
 
+                if(offset)
+                {
+                    addInstruction(loadImm(offset * 4, 0));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                }
+
                 if(isLoad)
-                {
-                    if(offset == 0)
-                        addInstruction(load(4, baseReg, dstReg, pcSCycles + 1), 2);
-                    else
-                    {
-                        addInstruction(loadImm(offset * 4, 0));
-                        addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
-                        addInstruction(load(4, GenReg::Temp, dstReg, pcSCycles + 1), 2);
-                    }
-                }
+                    addInstruction(load(4, offset ? GenReg::Temp : baseReg, dstReg, pcSCycles + 1), 2);
                 else
-                {
-                    printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xF800);
-                    done = true;
-                }
+                    addInstruction(store(4, offset ? GenReg::Temp : baseReg, dstReg, pcNCycles), 2);
+
                 break;
             }
 
