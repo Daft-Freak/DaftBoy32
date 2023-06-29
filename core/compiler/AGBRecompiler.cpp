@@ -714,8 +714,51 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
             case 0x5: // formats 7-8
             {
-                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xFE00);
-                done = true;
+                auto offReg = lowReg((opcode >> 6) & 7);
+                auto baseReg = lowReg((opcode >> 3) & 7);
+                auto dstReg = lowReg(opcode & 7);
+
+                if(opcode & (1 << 9)) // format 8, load/store sign-extended byte/halfword
+                {
+                    bool hFlag = opcode & (1 << 11);
+                    bool signEx = opcode & (1 << 10);
+
+                    if(signEx)
+                    {
+                        printf("unhandled op in convertToGeneric %04X (signed)\n", opcode & 0xFE00);
+                        done = true;
+                    }
+                    else
+                    {
+                        if(hFlag) // LDRH
+                        {
+                            addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
+                            addInstruction(load(2, GenReg::Temp, dstReg, pcSCycles + 1), 2);
+                        }
+                        else
+                        {
+                            printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xFE00);
+                            done = true;
+                        }
+                    }
+                }
+                else // format 7, load/store with reg offset
+                {
+                    bool isLoad = opcode & (1 << 11);
+                    bool isByte = opcode & (1 << 10);
+
+                    if(isLoad)
+                    {
+                        addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
+                        addInstruction(load(isByte ? 1 : 4, GenReg::Temp, dstReg, pcSCycles + 1), 2);
+                    }
+                    else
+                    {
+                        printf("unhandled op in convertToGeneric %04X (store)\n", opcode & 0xFE00);
+                        done = true;
+                    }
+                }
+
                 break;
             }
 
