@@ -614,7 +614,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         case 1: // CMP
                             if(srcReg == 15 || dstReg == 15)
                             {
-                                printf("unhandled add pc in convertToGeneric %i -> %i\n", srcReg, dstReg);
+                                printf("unhandled cmp pc in convertToGeneric %i -> %i\n", srcReg, dstReg);
                                 done = true;
                             }
                             else
@@ -622,10 +622,19 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             break;
 
                         case 2: // MOV
-                            if(srcReg == 15 || dstReg == 15)
+                            if(srcReg == 15)
                             {
                                 printf("unhandled mov pc in convertToGeneric %i -> %i\n", srcReg, dstReg);
                                 done = true;
+                            }
+                            else if(dstReg == 15)
+                            {
+                                // clear low bit (no interworking here)
+                                addInstruction(loadImm(~1u, 0));
+                                addInstruction(alu(GenOpcode::And, GenReg::Temp, reg(srcReg), GenReg::Temp, 0));
+                                addInstruction(jump(GenCondition::Always, GenReg::Temp, pcNCycles + pcSCycles * 2), 2);
+                                if(pc > maxBranch)
+                                    done = true;
                             }
                             else
                                 addInstruction(move(reg(srcReg), reg(dstReg), pcSCycles), 2);
