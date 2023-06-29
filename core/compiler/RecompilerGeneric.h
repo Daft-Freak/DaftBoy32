@@ -174,6 +174,10 @@ struct SourceInfo
     uint8_t (*readMem8)(void *cpu, uint32_t addr, int &cycles, bool sequential);
     uint32_t (*readMem16)(void *cpu, uint32_t addr, int &cycles, bool sequential); // returning 32-bit here is deliberate
     uint32_t (*readMem32)(void *cpu, uint32_t addr, int &cycles, bool sequential);
+
+    int (*writeMem8)(void *cpu, uint32_t addr, uint8_t data, int &cycles, bool sequential, int cyclesToRun);
+    int (*writeMem16)(void *cpu, uint32_t addr, uint16_t data, int &cycles, bool sequential, int cyclesToRun);
+    int (*writeMem32)(void *cpu, uint32_t addr, uint32_t data, int &cycles, bool sequential, int cyclesToRun);
 };
 
 void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const SourceInfo &sourceInfo);
