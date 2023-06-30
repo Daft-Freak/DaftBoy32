@@ -880,8 +880,105 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
             {
                 if(opcode & (1 << 10)) // format 14, push/pop
                 {
-                    printf("unhandled op in convertToGeneric %04X\n", opcode & 0xFC00);
-                    done = true;
+                    bool isLoad = opcode & (1 << 11);
+                    bool pclr = opcode & (1 << 8); // store LR/load PC
+                    uint8_t regList = opcode & 0xFF;
+                    auto baseReg = GenReg::R13;
+
+                    // FIXME: align base reg
+
+                    if(isLoad) // POP
+                    {
+                        uint32_t offset = 0;
+                        for(int i = 0; i < 8; i++)
+                        {
+                            if(regList & (1 << i))
+                            {
+                                // load
+                                auto reg = lowReg(i);
+                                if(offset)
+                                {
+                                    addInstruction(loadImm(offset, 0));
+                                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                                }
+
+                                addInstruction(load(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, offset ? GenOp_Sequential : 0);
+
+                                offset += 4;
+                            }
+                        }
+
+                        if(pclr)
+                        {
+                            // load pc (to temp)
+                            addInstruction(loadImm(offset, 0));
+                            addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                            addInstruction(load(4, offset ? GenReg::Temp : baseReg, GenReg::Temp2, 0), 0, offset ? GenOp_Sequential : 0);
+
+                            // clear thumb bit
+                            addInstruction(loadImm(~1u, 0));
+                            addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2, 0));
+    
+                            offset += 4;
+
+                            if(pc > maxBranch)
+                                done = true;
+                        }
+
+                        // update SP
+                        addInstruction(loadImm(offset, 0));
+                        addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg, pclr ? 0 : pcSCycles + 1), pclr ? 0 : 2);
+
+                        if(pclr)
+                            addInstruction(jump(GenCondition::Always, GenReg::Temp2, pcSCycles + 1), 2); // TODO: cycles for branch (not implemented in CPU either)
+                    }
+                    else
+                    {
+                        uint32_t offset = 0;
+
+                        if(pclr)
+                            offset += 4;
+
+                        for(int i = 0; i < 8; i++)
+                        {
+                            if(regList & (1 << i))
+                                offset += 4;
+                        }
+
+                        // update SP
+                        addInstruction(loadImm(offset, 0));
+                        addInstruction(alu(GenOpcode::Subtract, baseReg, GenReg::Temp, baseReg, 0));
+
+                        offset = 0;
+                        for(int i = 0; i < 8; i++)
+                        {
+                            if(regList & (1 << i))
+                            {
+                                // store
+                                auto reg = lowReg(i);
+                                if(offset)
+                                {
+                                    addInstruction(loadImm(offset, 0));
+                                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                                }
+
+                                addInstruction(store(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, offset ? GenOp_Sequential : 0);
+
+                                offset += 4;
+                            }
+                        }
+
+                        if(pclr) // store LR
+                        {
+                            addInstruction(loadImm(offset, 0));
+                            addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                            addInstruction(store(4, GenReg::Temp, GenReg::R14, 0), 0, offset ? GenOp_Sequential : 0);
+                        }
+
+                        genBlock.instructions.back().cycles = pcNCycles;
+                        genBlock.instructions.back().len = 2;
+                    }
+                    
                 }
                 else // format 13, add offset to SP
                 {
