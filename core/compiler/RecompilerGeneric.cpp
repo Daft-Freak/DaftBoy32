@@ -203,7 +203,7 @@ void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const
                             if(falseInstr->opcode == GenOpcode::Jump)
                                 break;
 
-                            read |= getReadFlags(*falseInstr);
+                            read |= getReadFlags(*falseInstr) & ((instr.flags & GenOp_WriteFlags) >> 4);
                             falseBranchFlags = (falseBranchFlags & ~getWrittenFlags(*falseInstr)) | read << 4;
                         }
 
