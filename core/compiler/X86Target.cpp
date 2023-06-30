@@ -504,7 +504,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
     };
 
-    auto setFlags32 = [this, &builder](Reg32 dst, Reg32 src, uint16_t flags, bool isSub = false, bool invCarry = false, bool haveResFlags = true)
+    auto setFlags32 = [this, &builder](Reg32 dst, Reg32 src, uint16_t flags, bool isSub = false, bool invCarry = false, bool haveResFlags = true, bool srcIsCFlag = false)
     {
         if(!(flags & GenOp_WriteFlags))
             return;
@@ -525,21 +525,31 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         // carry
         if(writesFlag(flags, SourceFlagType::Carry))
         {
-            if(!haveResFlags)
+            if(!haveResFlags && srcIsCFlag)
             {
-                // dst < src0 for add
-                // dst > src0 for sub
-                builder.cmp(dst, src);
-
-                if(isSub)
-                    builder.jcc(invCarry ? Condition::A : Condition::BE, 6);
-                else
-                    builder.jcc(invCarry ? Condition::B : Condition::AE, 6);
+                // the "src" is actually the carry flag from the op
+                // this is easier than re-calc sometimes
+                builder.shl(src, getFlagInfo(SourceFlagType::Carry).bit);
+                builder.or_(*f, src);
             }
             else
-                builder.jcc(invCarry ? Condition::B : Condition::AE, 6);
+            {
+                if(!haveResFlags)
+                {
+                    // dst < src0 for add
+                    // dst > src0 for sub
+                    builder.cmp(dst, src);
 
-            builder.or_(*f, 1u << getFlagInfo(SourceFlagType::Carry).bit);
+                    if(isSub)
+                        builder.jcc(invCarry ? Condition::A : Condition::BE, 6);
+                    else
+                        builder.jcc(invCarry ? Condition::B : Condition::AE, 6);
+                }
+                else
+                    builder.jcc(invCarry ? Condition::B : Condition::AE, 6);
+
+                builder.or_(*f, 1u << getFlagInfo(SourceFlagType::Carry).bit);
+            }
             haveResFlags = false;
         }
 
@@ -927,6 +937,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             }
             else if(flagsSize == 32)
             {
+                // preserve carry if op needs it
+                bool needCarry = instr.opcode == GenOpcode::AddWithCarry
+                              || instr.opcode == GenOpcode::SubtractWithCarry
+                              || instr.opcode == GenOpcode::RotateLeftCarry
+                              || instr.opcode == GenOpcode::RotateRightCarry;
+
+                if(needCarry)
+                    preserveMask |= 1 << getFlagInfo(SourceFlagType::Carry).bit;
+
                 // also preserve non-flags bits
                 if(auto f = checkReg32(flagsReg))
                     builder.and_(*f, preserveMask | (~flagsMask));
@@ -1415,7 +1434,27 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    auto src = checkReg32(instr.src[1], Reg32::R8D);
+                    auto dst = checkReg32(instr.dst[0], Reg32::R9D);
+
+                    if(src && dst)
+                    {
+                        // carry in (and clear it)
+                        builder.btr(*mapReg32(flagsReg), getFlagInfo(SourceFlagType::Carry).bit);
+
+                        builder.adc(*dst, *src);
+
+                        // copy C flag if we need it
+                        if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
+                            builder.setcc(Condition::B, Reg8::R11B);
+                        
+                        // flags
+                        setFlags32(*dst, Reg32::R11D, instr.flags, false, false, true, true);
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
@@ -1743,7 +1782,28 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    auto src = checkReg32(instr.src[1], Reg32::R8D);
+                    auto dst = checkReg32(instr.dst[0], Reg32::R9D);
+
+                    if(src && dst)
+                    {
+                        // carry in (and clear it)
+                        builder.btr(*mapReg32(flagsReg), getFlagInfo(SourceFlagType::Carry).bit);
+                        builder.cmc(); // inverted
+
+                        builder.sbb(*dst, *src);
+
+                        // copy _inverted_ C flag if we need it
+                        if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
+                            builder.setcc(Condition::AE, Reg8::R11B);
+
+                        // flags
+                        setFlags32(*dst, Reg32::R11D, instr.flags, true, true, true, true); // assuming arm inverted carry flag
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
