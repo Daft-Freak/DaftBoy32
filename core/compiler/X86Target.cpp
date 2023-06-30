@@ -679,6 +679,44 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         };
 
         // validating wrappers
+        auto checkReg = [this, &builder, &needCallRestore, &err, &instr](uint8_t index, int size, bool allowExtra = false)
+        {
+            // this one doesn't return the reg, just validates and makes sure it's available
+            bool found = false;
+            int saveIndex = -1;
+
+            if(size == 8)
+            {
+                if(auto reg = mapReg8(index))
+                {
+                    found = true;
+                    saveIndex = callSaveIndex(*reg);
+                }
+            }
+            else
+            {
+                // 16/32-bit registers are the same as far as this validation is concerned
+                if(auto reg = mapReg32(index))
+                {
+                    found = true;
+                    saveIndex = callSaveIndex(static_cast<Reg16>(*reg));
+                }
+            }
+
+            if(!found)
+            {
+                if(allowExtra)
+                    return true;
+
+                printf("unhandled reg %s in op %i\n", sourceInfo.registers[index].label, int(instr.opcode));
+                err = true;
+            }
+            else if(saveIndex != -1)
+                callRestore(builder, needCallRestore, saveIndex);
+
+            return found;
+        };
+
         auto checkReg32 = [this, &builder, &needCallRestore, &err, &instr, &loadExtraReg32](uint8_t index, std::optional<Reg32> loadReg = {}, bool allowExtra = false)
         {
             auto reg = mapReg32(index);
@@ -1098,15 +1136,18 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             case GenOpcode::Store2:
             case GenOpcode::Store4:
             {
-                // TODO: store data width somewhere
                 auto addrSize = sourceInfo.registers[instr.src[0]].size;
+                int dataSize = 8;
+                if(instr.opcode == GenOpcode::Store2)
+                    dataSize = 16;
+                else if(instr.opcode == GenOpcode::Store4)
+                    dataSize = 32;
 
                 if(addrSize == 16 || addrSize == 32)
                 {
                     auto addr = checkRegOrImm32(instr.src[0], Reg32::R8D);
-                    auto data = checkRegOrImm8(instr.src[1]);
 
-                    if(addr.index() && data.index())
+                    if(addr.index() && checkReg(instr.src[1], dataSize, true))
                     {
                         callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
                         callSaveIfNeeded(builder, needCallRestore);
@@ -1117,10 +1158,25 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         // setup addr first (data writes DX)
                         setupMemAddr(addr, addrSize, instr.src[0]);
 #endif
-
-                        if(std::holds_alternative<Reg8>(data))
+                        
+                        if(instr.opcode == GenOpcode::Store)
                         {
-                            if(instr.opcode == GenOpcode::Store)
+                            // TODO: this is mostly checkRegOrImm8, without the check
+                            std::variant<std::monostate, Reg8, uint8_t> data;
+
+                            if(instr.src[1] == 0)
+                            {
+                                if(auto imm = getLastImmLoad())
+                                {
+                                    assert(!(*imm & 0xFFFFFF00));
+                                    data = static_cast<uint8_t>(*imm);
+                                }
+                            }
+
+                            if(!data.index())
+                                data = *mapReg8(instr.src[1]);
+
+                            if(std::holds_alternative<Reg8>(data))
                             {
 #ifdef _WIN32
                                 // argumentRegs[2] is R8, can't mov from xH to there
@@ -1134,17 +1190,19 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 builder.movzx(argumentRegs32[2], std::get<Reg8>(data));
                             }
                             else
-                            {
-                                auto data32 = static_cast<Reg32>(static_cast<int>(std::get<Reg8>(data)) & 0xF); // bit of a hack
-
-                                if(instr.opcode == GenOpcode::Store2)
-                                    builder.movzx(argumentRegs32[2], static_cast<Reg16>(data32));
-                                else
-                                    builder.mov(argumentRegs32[2], data32);
-                            }
+                                builder.mov(argumentRegs32[2], std::get<uint8_t>(data));
                         }
-                        else // FIXME: will fail if not 8-bit
-                            builder.mov(argumentRegs32[2], std::get<uint8_t>(data));
+                        else
+                        {
+                            auto data32 = mapReg32(instr.src[1]); // already checked
+
+                            if(!data32)
+                                loadExtraReg32(instr.src[1], argumentRegs32[2]);
+                            else if(instr.opcode == GenOpcode::Store2)
+                                builder.movzx(argumentRegs32[2], static_cast<Reg16>(*data32));
+                            else
+                                builder.mov(argumentRegs32[2], *data32);
+                        }
 
 #ifdef _WIN32
                         // setup addr after data (addr writes DX)
