@@ -2343,7 +2343,7 @@ void AGBCPU::updateARMPC(uint32_t pc)
     loReg(Reg::PC) = pc + 4; // pointing at last fetch
 }
 
-void AGBCPU::updateTHUMBPC(uint32_t pc)
+void AGBCPU::updateTHUMBPC(uint32_t pc, bool fromCompiler)
 {
     // called when PC is updated in THUMB mode (except for incrementing)
     assert(!(pc & 1));
@@ -2371,7 +2371,8 @@ void AGBCPU::updateTHUMBPC(uint32_t pc)
 
     loReg(Reg::PC) = pc + 2; // pointing at last fetch
 
-    enterCompiledCode();
+    if(!fromCompiler)
+        enterCompiledCode();
 }
 
 int AGBCPU::serviceInterrupts()
