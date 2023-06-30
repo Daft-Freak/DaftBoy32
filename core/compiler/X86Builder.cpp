@@ -210,6 +210,17 @@ void X86Builder::and_(Reg8 dst, uint8_t imm)
     write(imm); // imm
 }
 
+void X86Builder::btr(Reg32 base, uint8_t off)
+{
+    auto baseReg = static_cast<int>(base);
+
+    encodeREX(false, 0, 0, baseReg);
+    write(0x0F); // two byte op
+    write(0xBA); // opcode
+    encodeModRM(baseReg, 6);
+    write(off); // offset
+}
+
 // direct
 void X86Builder::call(int disp)
 {
@@ -233,6 +244,11 @@ void X86Builder::call(Reg64 r)
     encodeREX(false, 0, 0, reg);
     write(0xFF); // opcode
     encodeModRM(reg, 2);
+}
+
+void X86Builder::cmc()
+{
+    write(0xF5); // opcode
 }
 
 // reg -> reg
