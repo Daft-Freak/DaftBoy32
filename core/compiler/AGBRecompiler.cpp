@@ -133,6 +133,9 @@ int AGBRecompiler::run(int cyclesToRun)
         return 0;
 
     int cyclesExecuted = 0;
+    bool didIntr = false;
+
+    auto inPC = cpu.loReg(AGBCPU::Reg::PC);
 
     while(true)
     {
@@ -157,6 +160,8 @@ int AGBRecompiler::run(int cyclesToRun)
         else if(!attemptToRun(cycles, cyclesExecuted))
             break;
 
+        didIntr = false;
+
         // CPU not running, stop
         if(cpu.halted)
             break;
@@ -168,6 +173,9 @@ int AGBRecompiler::run(int cyclesToRun)
             int intrCycles = cpu.serviceInterrupts();
             cyclesExecuted += intrCycles;
             cpu.cycleCount += intrCycles;
+
+            if(intrCycles)
+                didIntr = true;
 
             if(cpu.interruptDelay)
             {
@@ -186,13 +194,36 @@ int AGBRecompiler::run(int cyclesToRun)
         }
     }
 
-    // if we executed anything, we need to refill the pipeline
-    if(cyclesExecuted && (cpu.cpsr & AGBCPU::Flag_T))
+    // if we executed anything, we need to update PC
+    if(cyclesExecuted && !didIntr)
     {
-        auto pc = cpu.loReg(AGBCPU::Reg::PC) - 2;
-        auto thumbPCPtr = reinterpret_cast<const uint16_t *>(cpu.pcPtr + pc);
-        cpu.decodeOp = *thumbPCPtr++;
-        cpu.fetchOp = *thumbPCPtr;
+        if(cpu.cpsr & AGBCPU::Flag_T)
+        {
+            auto pc = cpu.loReg(AGBCPU::Reg::PC) - 2;
+
+            if(inPC >> 24 != pc >> 24)
+            {
+                cpu.pcPtr = nullptr; // force remap
+                cpu.updateTHUMBPC(pc, true);
+            }
+            else
+            {
+                auto thumbPCPtr = reinterpret_cast<const uint16_t *>(cpu.pcPtr + pc);
+                cpu.decodeOp = *thumbPCPtr++;
+                cpu.fetchOp = *thumbPCPtr;
+            }
+        }
+        else
+        {
+            // assuming we're switching from thumb
+            // (compiled code always sets +2)
+            auto pc = cpu.loReg(AGBCPU::Reg::PC) - 2;
+
+            if(inPC >> 24 != pc >> 24)
+                cpu.pcPtr = nullptr; // force remap
+
+            cpu.updateARMPC(pc);
+        }
     }
 
     return cyclesExecuted;

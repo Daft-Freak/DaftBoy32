@@ -243,7 +243,7 @@ private:
     int doTHUMB19LongBranchLink(uint16_t opcode, uint32_t pc);
 
     void updateARMPC(uint32_t pc);
-    void updateTHUMBPC(uint32_t pc);
+    void updateTHUMBPC(uint32_t pc, bool fromCompiler = false);
 
     int serviceInterrupts();
 
