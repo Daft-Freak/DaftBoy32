@@ -342,7 +342,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
         CPSR,
 
-        Temp2, // used by BL
+        Temp2, // used by BL, POP
     };
 
     auto lowReg = [](int reg)
