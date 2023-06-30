@@ -76,6 +76,8 @@ enum GenOpFlags
 
     GenOp_MagicAlt1 = 1 << 11, // for when an op sometimes has slightly different behaviour
     GenOp_MagicAlt2 = 1 << 12,
+
+    GenOp_Sequential = 1 << 11, // for load/store
 };
 
 struct GenOpInfo
