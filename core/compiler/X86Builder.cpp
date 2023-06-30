@@ -121,6 +121,17 @@ void X86Builder::addW(RMOperand dst, int8_t imm)
     addD(dst, imm);
 }
 
+// reg -> reg
+void X86Builder::adc(Reg32 dst, Reg32 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x11); // opcode, w = 1
+    encodeModRMReg8(dstReg, srcReg);
+}
+
 // reg -> reg, 8bit
 void X86Builder::adc(Reg8 dst, Reg8 src)
 {
@@ -834,6 +845,17 @@ void X86Builder::sar(Reg8 r, uint8_t count)
     write(0xC0); // opcode, w = 0
     encodeModRM(reg, 7);
     write(count);
+}
+
+// reg -> reg
+void X86Builder::sbb(Reg32 dst, Reg32 src)
+{
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, 0, dstReg);
+    write(0x19); // opcode, w = 1
+    encodeModRM(dstReg, srcReg);
 }
 
 // reg -> reg, 8bit
