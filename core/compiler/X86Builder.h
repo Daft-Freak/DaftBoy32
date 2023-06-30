@@ -153,8 +153,12 @@ public:
     void and_(Reg32 dst, uint32_t imm);
     void and_(Reg8 dst, uint8_t imm);
 
+    void btr(Reg32 base, uint8_t off);
+
     void call(int disp);
     void call(Reg64 r);
+
+    void cmc();
 
     void cmp(Reg32 dst, Reg32 src);
     void cmp(Reg8 dst, Reg8 src);
