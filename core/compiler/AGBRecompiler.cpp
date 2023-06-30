@@ -373,7 +373,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
         CPSR,
 
-        Temp2, // used by BL, POP
+        Temp2, // used by BL, POP, BX
     };
 
     auto lowReg = [](int reg)
@@ -681,8 +681,36 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             break;
 
                         case 3: // BX
-                            printf("unhandled BX in convertToGeneric %04X\n", opcode & 0xFC00);
-                            done = true;
+                            if(srcReg == 15)
+                            {
+                                printf("unhandled BX in convertToGeneric %04X\n", opcode & 0xFC00);
+                                done = true;
+                            }
+                            else
+                            {
+                                // clear T flag
+                                addInstruction(loadImm(~AGBCPU::Flag_T, 0));
+                                addInstruction(alu(GenOpcode::And, GenReg::CPSR, GenReg::Temp, GenReg::CPSR, 0));
+
+                                // set if low bit in src set
+                                // pile of instructions since we can't branch here
+                                addInstruction(move(reg(srcReg), GenReg::Temp2, 0));
+
+                                addInstruction(loadImm(1, 0));
+                                addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2, 0));
+
+                                addInstruction(loadImm(5, 0)); // T is bit 5
+                                addInstruction(alu(GenOpcode::ShiftLeft, GenReg::Temp2, GenReg::Temp, GenReg::Temp2, 0));
+                                addInstruction(alu(GenOpcode::Or, GenReg::CPSR, GenReg::Temp2, GenReg::CPSR, 0));
+
+                                // finally do the jump
+                                addInstruction(loadImm(~1u, 0));
+                                addInstruction(alu(GenOpcode::And, GenReg::Temp, reg(srcReg), GenReg::Temp, 0));
+                                addInstruction(jump(GenCondition::Always, GenReg::Temp, pcNCycles + pcSCycles * 2), 2);
+
+                                if(pc > maxBranch)
+                                    done = true;
+                            }
                             break;
                     }
                 }
