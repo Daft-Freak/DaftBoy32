@@ -143,6 +143,7 @@ public:
     void addD(RMOperand dst, int8_t imm);
     void addW(RMOperand dst, int8_t imm);
 
+    void adc(Reg32 dst, Reg32 src);
     void adc(Reg8 dst, Reg8 src);
     void adc(Reg8 dst, uint8_t imm);
 
@@ -229,6 +230,7 @@ public:
     void sar(Reg32 r, uint8_t count);
     void sar(Reg8 r, uint8_t count);
 
+    void sbb(Reg32 dst, Reg32 src);
     void sbb(Reg8 dst, Reg8 src);
     void sbb(Reg8 dst, uint8_t imm);
 
