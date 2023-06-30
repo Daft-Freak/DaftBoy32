@@ -1308,19 +1308,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
                     auto dst = checkReg32(instr.dst[0], Reg32::R9D);
 
-                    auto savedDst = src;
-
                     if(src.index() && dst)
                     {
-                        auto savedDst = *dst;
-
-                        // save dst/src0 if we need it to calc carry
-                        if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
-                        {
-                            builder.mov(Reg32::R11D, *dst);
-                            savedDst = Reg32::R11D;
-                        }
-
                         if(std::holds_alternative<uint32_t>(src))
                         {
                             auto imm = std::get<uint32_t>(src);
@@ -1332,8 +1321,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         else
                             builder.add(*dst, std::get<Reg32>(src));
 
+                        // copy C flag if we need it
+                        if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
+                            builder.setcc(Condition::B, Reg8::R11B);
+
                         // flags
-                        setFlags32(*dst, savedDst, instr.flags);
+                        setFlags32(*dst, Reg32::R11D, instr.flags, false, false, true, true);
 
                         // write back extra reg
                         if(*dst == Reg32::R9D)
@@ -1671,8 +1664,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                     if(src.index() && dst)
                     {
-                        auto savedDst = *dst;
-
                         // we lied about being able to use swapped sources
                         if(swapped)
                         {
@@ -1696,13 +1687,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             }
                         }
 
-                        // save dst/src0 if we need it to calc carry
-                        if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
-                        {
-                            builder.mov(Reg32::R11D, *dst);
-                            savedDst = Reg32::R11D;
-                        }
-
                         if(std::holds_alternative<uint32_t>(src))
                         {
                             auto imm = std::get<uint32_t>(src);
@@ -1714,8 +1698,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         else
                             builder.sub(*dst, std::get<Reg32>(src));
 
+                        // copy _inverted_ C flag if we need it
+                        if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
+                            builder.setcc(Condition::AE, Reg8::R11B);
+
                         // flags
-                        setFlags32(*dst, savedDst, instr.flags, true, true); // assuming arm inverted carry flag
+                        setFlags32(*dst, Reg32::R11D, instr.flags, true, true, true, true); // assuming arm inverted carry flag
 
                         // write back extra reg
                         if(*dst == Reg32::R9D)
