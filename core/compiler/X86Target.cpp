@@ -1546,8 +1546,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         else
                             builder.sub(Reg32::R11D, std::get<Reg32>(src));
 
+                        // copy _inverted_ C flag if we need it
+                        if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
+                            builder.setcc(Condition::AE, Reg8::R10B);
+
                         // flags
-                        setFlags32(Reg32::R11D, *dst, instr.flags, true, true); // assuming arm inverted carry flag
+                        setFlags32(Reg32::R11D, Reg32::R10D, instr.flags, true, true, true, true); // assuming arm inverted carry flag
                     }
                 }
                 else if(regSize == 8)
