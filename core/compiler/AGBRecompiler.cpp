@@ -802,8 +802,16 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
                     if(signEx)
                     {
-                        printf("unhandled op in convertToGeneric %04X (signed)\n", opcode & 0xFE00);
-                        done = true;
+                        if(hFlag) // LDRSH
+                        {
+                            printf("unhandled op in convertToGeneric %04X (signed)\n", opcode & 0xFE00);
+                            done = true;
+                        }
+                        else // LDRSB
+                        {
+                            addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
+                            addInstruction(load(1, GenReg::Temp, dstReg, pcSCycles + 1), 2, GenOp_SignExtend);
+                        }
                     }
                     else
                     {
