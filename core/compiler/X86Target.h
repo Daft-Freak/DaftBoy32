@@ -47,7 +47,7 @@ private:
     void callSaveIfNeeded(X86Builder &builder, int &saveState) const;
 
     void callRestore(X86Builder &builder, int &saveState, int toIndex) const;
-    void callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend) const;
+    void callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend, bool signExtend) const;
     void callRestoreIfNeeded(X86Builder &builder, int &saveState) const;
     void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, int &saveState) const;
     void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, int &saveState) const;
