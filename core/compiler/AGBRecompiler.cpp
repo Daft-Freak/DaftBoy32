@@ -797,6 +797,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 auto baseReg = lowReg((opcode >> 3) & 7);
                 auto dstReg = lowReg(opcode & 7);
 
+                addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
+
                 if(opcode & (1 << 9)) // format 8, load/store sign-extended byte/halfword
                 {
                     bool hFlag = opcode & (1 << 11);
@@ -805,20 +807,12 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     if(signEx)
                     {
                         if(hFlag) // LDRSH
-                        {
-                            addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
                             addInstruction(load(2, GenReg::Temp, dstReg, pcSCycles + 1), 2, GenOp_SignExtend);
-                        }
                         else // LDRSB
-                        {
-                            addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
                             addInstruction(load(1, GenReg::Temp, dstReg, pcSCycles + 1), 2, GenOp_SignExtend);
-                        }
                     }
                     else
                     {
-                        addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
-
                         if(hFlag) // LDRH
                             addInstruction(load(2, GenReg::Temp, dstReg, pcSCycles + 1), 2);
                         else // STRH
@@ -829,8 +823,6 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 {
                     bool isLoad = opcode & (1 << 11);
                     bool isByte = opcode & (1 << 10);
-
-                    addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
 
                     if(isLoad)
                         addInstruction(load(isByte ? 1 : 4, GenReg::Temp, dstReg, pcSCycles + 1), 2);
