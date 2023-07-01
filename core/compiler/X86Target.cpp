@@ -1691,18 +1691,25 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         // we lied about being able to use swapped sources
                         if(swapped)
                         {
+                            // src1 == dst
                             if(std::holds_alternative<uint32_t>(src))
                             {
+                                // immediate src0
                                 // do negate for 0 - x?
                                 auto tmp = mapReg32(0);
                                 builder.mov(*tmp, *dst);
                                 builder.mov(*dst, std::get<uint32_t>(src));
                                 src = *tmp;
                             }
+                            else if(instr.src[1] == 0)
+                            {
+                                // immediate src1, move src to dest
+                                builder.mov(*dst, std::get<Reg32>(src));
+                                src = *getLastImmLoad(); 
+                            }
                             else
                             {
-                                assert(instr.src[0]);
-
+                                // both reg sources
                                 // save dst, move src to dst
                                 auto tmp = mapReg32(0);
                                 builder.mov(*tmp, *dst);
