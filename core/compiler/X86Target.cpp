@@ -1589,6 +1589,30 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 break;
             }
 
+            case GenOpcode::Multiply:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                checkSingleSource();
+
+                if(regSize == 32)
+                {
+                    auto src = checkReg32(instr.src[1]);
+                    auto dst = checkReg32(instr.dst[0]);
+
+                    if(src && dst)
+                    {
+                        builder.imul(*dst, *src);
+                    
+                        assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
+                        setFlags32(*dst, {}, instr.flags, false, false);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+                break;
+            }
+
             case GenOpcode::Or:
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
