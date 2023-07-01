@@ -277,6 +277,7 @@ void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sou
         {"addc", 2, 1},
         {"and ", 2, 1},
         {"comp", 2, 0},
+        {"mult", 2, 1},
         {"or  ", 2, 1},
         {"sub ", 2, 1},
         {"subc", 2, 1},

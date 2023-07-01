@@ -18,6 +18,7 @@ enum class GenOpcode : uint8_t
     AddWithCarry,
     And,
     Compare,
+    Multiply,
     Or,
     Subtract,
     SubtractWithCarry,
