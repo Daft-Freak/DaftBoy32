@@ -78,6 +78,7 @@ enum GenOpFlags
     GenOp_MagicAlt2 = 1 << 12,
 
     GenOp_Sequential = 1 << 11, // for load/store
+    GenOp_SignExtend = 1 << 12, // for load
 };
 
 struct GenOpInfo

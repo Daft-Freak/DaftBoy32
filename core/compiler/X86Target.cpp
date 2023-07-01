@@ -1035,6 +1035,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     {
                         // zero-extend if not 8 bit dest (a temp)
                         bool zeroExtend = instr.opcode == GenOpcode::Load && sourceInfo.registers[instr.dst[0]].size != 8;
+
+                        // unless we want to sign extend instead
+                        if(instr.flags & GenOp_SignExtend)
+                            zeroExtend = false;
                         
                         // maybe push
                         callSaveIfNeeded(builder, needCallRestore);
@@ -1090,9 +1094,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             // 8-bit dest
                             if(isCallSaved(*dst))
                             {
-                                callRestore(builder, *dst, zeroExtend);
+                                callRestore(builder, *dst, zeroExtend, instr.flags & GenOp_SignExtend);
                                 needCallRestore = 0;
                             }
+                            else if(instr.flags & GenOp_SignExtend)
+                                builder.movsx(static_cast<Reg32>(*dst), Reg8::AL);
                             else if(zeroExtend)
                                 builder.movzx(static_cast<Reg32>(*dst), Reg8::AL);
                             else
@@ -1107,9 +1113,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                             auto dst32 = static_cast<Reg32>(static_cast<int>(*dst) & 0xF); // bit of a hack
 
-                            if(dst32 != Reg32::EAX)
+                            if(instr.opcode == GenOpcode::Load2 && (instr.flags & GenOp_SignExtend))
+                                builder.movsx(dst32, Reg16::AX);
+                            else if(dst32 != Reg32::EAX)
                                 builder.mov(dst32, Reg32::EAX);
-                            else if(saved)
+
+                            if(dst32 == Reg32::EAX)
                             {
                                 // discard old RAX
                                 builder.pop(Reg64::R10);
@@ -2844,11 +2853,13 @@ void X86Target::callRestore(X86Builder &builder, int &saveState, int toIndex) co
     saveState = toIndex;
 }
 
-void X86Target::callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend) const
+void X86Target::callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend, bool signExtend) const
 {
     assert(dstReg != Reg8::DIL); // no
 
     assert(isCallSaved(dstReg));
+
+    assert(!zeroExtend || !signExtend); // both makes no sense
 
 #ifdef _WIN32
     builder.add(Reg64::RSP, 32); // shadow space
@@ -2866,7 +2877,9 @@ void X86Target::callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend) c
     // mov ret val (if not going to RAX)
     if(dstReg != Reg8::AL && dstReg != Reg8::AH)
     {
-        if(zeroExtend)
+        if(signExtend)
+            builder.movsx(static_cast<Reg32>(dstReg), Reg8::AL);
+        else if(zeroExtend)
             builder.movzx(static_cast<Reg32>(dstReg), Reg8::AL);
         else
             builder.mov(dstReg, Reg8::AL);
@@ -2874,7 +2887,7 @@ void X86Target::callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend) c
     }
     else if(dstReg == Reg8::AH) // TODO: having a worse case for A is not great
     {
-        assert(!zeroExtend);
+        assert(!zeroExtend && !signExtend);
         builder.mov(Reg8::AH, Reg8::AL);
         builder.pop(Reg64::R10);
         builder.mov(Reg8::AL, Reg8::R10B); // restore low byte
@@ -2882,7 +2895,10 @@ void X86Target::callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend) c
     else if(dstReg == Reg8::AL)// ... though this is the worst case... (AL == F, so unlikely)
     {
         builder.pop(Reg64::R10);
-        if(!zeroExtend)
+        
+        if(signExtend)
+            builder.movsx(Reg32::EAX, Reg8::AL);
+        else if(!zeroExtend)
         {
             // EAX = EAX + (R10D & 0xFF00)
             builder.and_(Reg32::R10D, 0xFF00);
