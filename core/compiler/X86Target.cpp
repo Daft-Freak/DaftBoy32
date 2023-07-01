@@ -1084,7 +1084,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             cyclesThisInstr = delayedCyclesExecuted = 0;
                             instrCycles = 0;
 
-                            builder.mov(argumentRegs32[3], (instr.flags & GenOp_Sequential) ? 1 : 0); // sequential flag
+                            builder.mov(argumentRegs32[3], instr.flags >> 8); // flags
                         }
 
                         builder.call(Reg64::RAX); // do call
@@ -1237,7 +1237,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             cyclesThisInstr = delayedCyclesExecuted = 0;
                             instrCycles = 0;
 
-                            builder.mov(argumentRegs32[4], (instr.flags & GenOp_Sequential) ? 1 : 0); // sequential flag
+                            builder.mov(argumentRegs32[4], instr.flags >> 8);
 
                             builder.mov(argumentRegs32[5], Reg32::EDI); // cycle count
                         }

@@ -32,13 +32,13 @@ protected:
 
     void compileEntry();
 
-    static uint8_t readMem8(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential);
-    static uint32_t readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential);
-    static uint32_t readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential);
+    static uint8_t readMem8(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t flags);
+    static uint32_t readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t flags);
+    static uint32_t readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t flags);
 
-    static int writeMem8(AGBCPU *cpu, uint32_t addr, uint8_t data, int &cycles, bool sequential, int cyclesToRun);
-    static int writeMem16(AGBCPU *cpu, uint32_t addr, uint16_t data, int &cycles, bool sequential, int cyclesToRun);
-    static int writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cycles, bool sequential, int cyclesToRun);
+    static int writeMem8(AGBCPU *cpu, uint32_t addr, uint8_t data, int &cycles, uint8_t flags, int cyclesToRun);
+    static int writeMem16(AGBCPU *cpu, uint32_t addr, uint16_t data, int &cycles, uint8_t flags, int cyclesToRun);
+    static int writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cycles, uint8_t flags, int cyclesToRun);
 
     static int updateCyclesForWrite(AGBCPU *cpu, int cyclesToRun);
 
