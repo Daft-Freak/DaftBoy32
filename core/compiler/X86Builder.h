@@ -198,6 +198,9 @@ public:
     void mov(RMOperand dst, uint32_t imm);
     void mov(RMOperand dst, uint8_t imm);
 
+    void movsx(Reg32 dst, Reg16 src);
+    void movsx(Reg32 dst, Reg8 src);
+
     void movzx(Reg32 dst, Reg16 src);
     void movzx(Reg32 dst, Reg8 src);
     void movzxW(Reg32 dst, RMOperand src);
