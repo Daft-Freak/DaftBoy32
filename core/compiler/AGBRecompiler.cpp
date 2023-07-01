@@ -90,13 +90,13 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
     sourceInfo.savedExitPtr = &tmpSavedPtr;
     sourceInfo.cycleCount = &cpu.cycleCount;
 
-    sourceInfo.readMem8 = reinterpret_cast<uint8_t (*)(void *, uint32_t, int &, bool)>(AGBRecompiler::readMem8);
-    sourceInfo.readMem16 = reinterpret_cast<uint32_t (*)(void *, uint32_t, int &, bool)>(AGBRecompiler::readMem16);
-    sourceInfo.readMem32 = reinterpret_cast<uint32_t (*)(void *, uint32_t, int &, bool)>(AGBRecompiler::readMem32);
+    sourceInfo.readMem8 = reinterpret_cast<uint8_t (*)(void *, uint32_t, int &, uint8_t)>(AGBRecompiler::readMem8);
+    sourceInfo.readMem16 = reinterpret_cast<uint32_t (*)(void *, uint32_t, int &, uint8_t)>(AGBRecompiler::readMem16);
+    sourceInfo.readMem32 = reinterpret_cast<uint32_t (*)(void *, uint32_t, int &, uint8_t)>(AGBRecompiler::readMem32);
 
-    sourceInfo.writeMem8 = reinterpret_cast<int (*)(void *, uint32_t, uint8_t, int &, bool, int)>(AGBRecompiler::writeMem8);
-    sourceInfo.writeMem16 = reinterpret_cast<int (*)(void *, uint32_t, uint16_t, int &, bool, int)>(AGBRecompiler::writeMem16);
-    sourceInfo.writeMem32 = reinterpret_cast<int (*)(void *, uint32_t, uint32_t, int &, bool, int)>(AGBRecompiler::writeMem32);
+    sourceInfo.writeMem8 = reinterpret_cast<int (*)(void *, uint32_t, uint8_t, int &, uint8_t, int)>(AGBRecompiler::writeMem8);
+    sourceInfo.writeMem16 = reinterpret_cast<int (*)(void *, uint32_t, uint16_t, int &, uint8_t, int)>(AGBRecompiler::writeMem16);
+    sourceInfo.writeMem32 = reinterpret_cast<int (*)(void *, uint32_t, uint32_t, int &, uint8_t, int)>(AGBRecompiler::writeMem32);
 
     target.init(sourceInfo, &cpu);
 
@@ -1152,39 +1152,39 @@ void AGBRecompiler::compileEntry()
 }
 
 // wrappers around member funcs
-uint8_t AGBRecompiler::readMem8(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential)
+uint8_t AGBRecompiler::readMem8(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t flags)
 {
-    return cpu->readMem8(addr, cycles, sequential);
+    return cpu->readMem8(addr, cycles, flags & (GenOp_Sequential >> 8));
 }
 
-uint32_t AGBRecompiler::readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential)
+uint32_t AGBRecompiler::readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t flags)
 {
-    return cpu->readMem16(addr, cycles, sequential);
+    return cpu->readMem16(addr, cycles, flags & (GenOp_Sequential >> 8));
 }
 
-uint32_t AGBRecompiler::readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, bool sequential)
+uint32_t AGBRecompiler::readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t flags)
 {
-    return cpu->readMem32(addr, cycles, sequential);
+    return cpu->readMem32(addr, cycles, flags & (GenOp_Sequential >> 8));
 }
 
-int AGBRecompiler::writeMem8(AGBCPU *cpu, uint32_t addr, uint8_t data, int &cycles, bool sequential, int cyclesToRun)
+int AGBRecompiler::writeMem8(AGBCPU *cpu, uint32_t addr, uint8_t data, int &cycles, uint8_t flags, int cyclesToRun)
 {
     // TODO: invalidate code
-    cpu->writeMem8(addr, data, cycles, sequential);
+    cpu->writeMem8(addr, data, cycles, flags & (GenOp_Sequential >> 8));
     return updateCyclesForWrite(cpu, cyclesToRun);
 }
 
-int AGBRecompiler::writeMem16(AGBCPU *cpu, uint32_t addr, uint16_t data, int &cycles, bool sequential, int cyclesToRun)
+int AGBRecompiler::writeMem16(AGBCPU *cpu, uint32_t addr, uint16_t data, int &cycles, uint8_t flags, int cyclesToRun)
 {
     // TODO: invalidate code
-    cpu->writeMem16(addr, data, cycles, sequential);
+    cpu->writeMem16(addr, data, cycles, flags & (GenOp_Sequential >> 8));
     return updateCyclesForWrite(cpu, cyclesToRun);
 }
 
-int AGBRecompiler::writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cycles, bool sequential, int cyclesToRun)
+int AGBRecompiler::writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cycles, uint8_t flags, int cyclesToRun)
 {
     // TODO: invalidate code
-    cpu->writeMem32(addr, data, cycles, sequential);
+    cpu->writeMem32(addr, data, cycles, flags & (GenOp_Sequential >> 8));
     return updateCyclesForWrite(cpu, cyclesToRun);
 }
 
