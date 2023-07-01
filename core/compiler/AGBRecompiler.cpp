@@ -756,8 +756,10 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         case 0xC: // ORR
                             addInstruction(alu(GenOpcode::Or, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeZ | writeN);
                             break;
-                        //case 0xD:
-                            // variable cycles
+                        case 0xD: // MUL
+                            // FIXME: variable cycles
+                            addInstruction(alu(GenOpcode::Multiply, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | writeZ | writeN);
+                            break;
                         case 0xE: // BIC
                         {
                             GenOpInfo notOp{};
