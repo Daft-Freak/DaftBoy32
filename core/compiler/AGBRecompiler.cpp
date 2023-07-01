@@ -804,8 +804,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     {
                         if(hFlag) // LDRSH
                         {
-                            printf("unhandled op in convertToGeneric %04X (signed)\n", opcode & 0xFE00);
-                            done = true;
+                            addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
+                            addInstruction(load(2, GenReg::Temp, dstReg, pcSCycles + 1), 2, GenOp_SignExtend);
                         }
                         else // LDRSB
                         {
@@ -1159,7 +1159,13 @@ uint8_t AGBRecompiler::readMem8(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t
 
 uint32_t AGBRecompiler::readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t flags)
 {
-    return cpu->readMem16(addr, cycles, flags & (GenOp_Sequential >> 8));
+    auto ret = cpu->readMem16(addr, cycles, flags & (GenOp_Sequential >> 8));
+
+    // unaligned sign extend half -> byte
+    if((addr & 1) && (flags & (GenOp_SignExtend >> 8)) && (ret & 0x80))
+        ret |= 0xFF00;
+
+    return ret;
 }
 
 uint32_t AGBRecompiler::readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t flags)
