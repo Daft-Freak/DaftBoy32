@@ -696,8 +696,19 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         case 3: // BX
                             if(srcReg == 15)
                             {
-                                printf("unhandled BX in convertToGeneric %04X\n", opcode & 0xFC00);
-                                done = true;
+                                auto target = pc + 2;
+                                
+                                // clear T flag
+                                // (thumb bit can't be set here)
+                                addInstruction(loadImm(~AGBCPU::Flag_T, 0));
+                                addInstruction(alu(GenOpcode::And, GenReg::CPSR, GenReg::Temp, GenReg::CPSR, 0));
+
+                                // do the jump
+                                addInstruction(loadImm(target, 0));
+                                addInstruction(jump(GenCondition::Always, GenReg::Temp, pcNCycles + pcSCycles * 2), 2);
+
+                                if(pc > maxBranch)
+                                    done = true;
                             }
                             else
                             {
