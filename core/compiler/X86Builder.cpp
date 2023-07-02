@@ -438,6 +438,30 @@ void X86Builder::jmp(Reg64 r)
     encodeModRM(reg, 4);
 }
 
+void X86Builder::lea(Reg64 dst, RMOperand m)
+{
+    assert(m.w == 0); // not a register
+
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(m.base);
+
+    encodeREX(true, dstReg, 0, srcReg);
+    write(0x8D); // opcode
+    encodeModRM(m, dstReg);
+}
+
+void X86Builder::lea(Reg32 dst, RMOperand m)
+{
+    assert(m.w == 0); // not a register
+
+    auto dstReg = static_cast<int>(dst);
+    auto srcReg = static_cast<int>(m.base);
+
+    encodeREX(false, dstReg, 0, srcReg);
+    write(0x8D); // opcode
+    encodeModRM(m, dstReg);
+}
+
 // wrappers to make sure arg types are sensible
 void X86Builder::mov(Reg64 dst, Reg64 src)
 {
