@@ -1065,8 +1065,97 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
             case 0xC: // format 15, multiple load/store
             {
-                printf("unhandled op in convertToGeneric %04X\n", opcode & 0xF800);
-                done = true;
+                bool isLoad = opcode & (1 << 11);
+                int baseRegIndex = (opcode >> 8) & 7;
+                auto baseReg = lowReg(baseRegIndex);
+                uint8_t regList = opcode & 0xFF;
+
+                if(!regList)
+                {
+                    // load/store PC
+                    printf("unhandled op in convertToGeneric %04X (empty)\n", opcode & 0xF800);
+                    done = true;
+                }
+                else if(!genBlock.instructions.empty())
+                    done = true;
+                else
+                {
+                    // FIXME: align base reg
+
+                    int regCount = 0;
+                    int lastRegIndex = 0;
+                    for(int i = 0; i < 8; i++)
+                    {
+                        if(regList & (1 << i))
+                        {
+                            regCount++;
+                            lastRegIndex = i;
+                        }
+                    }
+                   
+                    bool first = true;
+                    bool wroteBack = false;
+
+                    // prevent overriding base for loads
+                    // "A LDM will always overwrite the updated base if the base is in the list."
+                    if(isLoad && (regList & (1 << baseRegIndex)))
+                    {
+                        first = false;
+
+                        // move the base to the last loaded reg so it doesn't get overwritten until we're done
+                        auto lastReg = lowReg(lastRegIndex);
+                        if(lastReg != baseReg)
+                        {
+                            addInstruction(move(baseReg, lastReg, 0));
+                            baseReg = lastReg;
+                        }
+                    }
+
+                    uint32_t offset = 0;
+
+                    for(int i = 0; i < 8; i++)
+                    {
+                        if(!(regList & (1 << i)))
+                            continue;
+
+                        auto reg = lowReg(i);
+                        if(offset)
+                        {
+                            if(wroteBack)
+                            {
+                                // we updated it so index backwards
+                                addInstruction(loadImm(regCount * 4 - offset, 0));
+                                addInstruction(alu(GenOpcode::Subtract, baseReg, GenReg::Temp, GenReg::Temp, 0));
+                            }
+                            else
+                            {
+                                addInstruction(loadImm(offset, 0));
+                                addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                            }
+                        }
+
+                        if(isLoad)
+                            addInstruction(load(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, offset ? GenOp_Sequential : 0);
+                        else
+                            addInstruction(store(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, offset ? GenOp_Sequential : 0);
+
+                        // base write-back is on the second cycle of the instruction
+                        // which is when the first reg is written
+                        if(first)
+                        {
+                            addInstruction(loadImm(regCount * 4, 0));
+                            addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg, 0));
+                            wroteBack = true; // unfortunately, we're still using it to index
+                        }
+
+                        first = false;
+
+                        offset += 4;
+                    }
+
+                    genBlock.instructions.back().cycles = isLoad ? (pcSCycles + 1) : pcNCycles;
+                    genBlock.instructions.back().len = 2;
+                }
 
                 break;
             }
