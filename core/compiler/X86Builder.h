@@ -231,7 +231,9 @@ public:
     void rolCL(Reg8 dst);
     void rol(Reg8 r, uint8_t count);
 
+    void rorCL(Reg32 dst);
     void rorCL(Reg8 dst);
+    void ror(Reg32 r, uint8_t count);
     void ror(Reg8 r, uint8_t count);
 
     void sarCL(Reg32 dst);
