@@ -133,7 +133,8 @@ void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const
         if(instr.opcode == GenOpcode::Load && instr.dst[0] == flagsReg)
             return GenOp_WriteFlags;
 
-        return instr.flags & GenOp_WriteFlags;
+        // if the write and preserve flag are both set, it might not set the flag depending on the inputs
+        return instr.flags & GenOp_WriteFlags & ~((instr.flags & GenOp_PreserveFlags) << 4);
     };
 
     std::vector<uint8_t> origFlags; // there aren't enough bits in ->flags...
