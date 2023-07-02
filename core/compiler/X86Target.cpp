@@ -2044,7 +2044,18 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 checkSingleSource();
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    auto src = checkRegOrImm8(instr.src[1]);
+                    auto dst = checkReg32(instr.dst[0]);
+
+                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::rorCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::ror)))
+                    {
+                        assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
+                        setFlags32(*dst, {}, instr.flags); // FIXME: doesn't set Z
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
