@@ -180,6 +180,9 @@ public:
     void jmp(int disp, bool forceLong = false);
     void jmp(Reg64 r);
 
+    void lea(Reg64 dst, RMOperand m);
+    void lea(Reg32 dst, RMOperand m);
+
     void mov(Reg64 dst, Reg64 src);
     void mov(Reg32 dst, Reg32 src);
     void mov(Reg16 dst, Reg16 src);
