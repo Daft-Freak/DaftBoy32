@@ -1075,7 +1075,6 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 break;
             }
 
-
             case 0xC: // format 15, multiple load/store
             {
                 bool isLoad = opcode & (1 << 11);
@@ -1085,9 +1084,34 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
                 if(!regList)
                 {
-                    // load/store PC
-                    printf("unhandled op in convertToGeneric %04X (empty)\n", opcode & 0xF800);
-                    done = true;
+                    if(isLoad)
+                    {
+                        // load PC
+                        addInstruction(load(4, baseReg, GenReg::Temp2, 0));
+
+                        // clear thumb bit
+                        addInstruction(loadImm(~1u, 0));
+                        addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2, 0));
+
+                        if(pc > maxBranch)
+                            done = true;
+
+                        // update base
+                        addInstruction(loadImm(0x40, 0));
+                        addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg, 0));
+
+                        addInstruction(jump(GenCondition::Always, GenReg::Temp2, pcSCycles + 1), 2); // TODO: cycles for branch (not implemented in CPU either)
+                    }
+                    else
+                    {
+                        // store PC
+                        addInstruction(loadImm(pc + 4, 0));
+                        addInstruction(store(4, baseReg, GenReg::Temp, 0));
+
+                        // update base
+                        addInstruction(loadImm(0x40, 0));
+                        addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg, pcSCycles), 2);
+                    }
                 }
                 else if(!genBlock.instructions.empty())
                     done = true;
