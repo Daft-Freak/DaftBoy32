@@ -734,18 +734,24 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         case 0x1: // EOR
                             addInstruction(alu(GenOpcode::Xor, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeZ | writeN);
                             break;
-                        //case 0x2: // LSL
-                        //case 0x3: // LSR
-                        //case 0x4: // ASR
-                            // preserves C if src == 0
+                        case 0x2: // LSL
+                            addInstruction(alu(GenOpcode::ShiftLeft, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeC | writeZ | writeN);
+                            break;
+                        case 0x3: // LSR
+                            addInstruction(alu(GenOpcode::ShiftRightLogic, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeC | writeZ | writeN);
+                            break;
+                        case 0x4: // ASR
+                            addInstruction(alu(GenOpcode::ShiftRightArith, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeC | writeZ | writeN);
+                            break;
                         case 0x5: // ADC
                             addInstruction(alu(GenOpcode::AddWithCarry, dstReg, srcReg, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
                             break;
                         case 0x6: // SBC
                             addInstruction(alu(GenOpcode::SubtractWithCarry, dstReg, srcReg, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
                             break;
-                        //case 0x7: // ROR
-                            // preserves C if src == 0
+                        case 0x7: // ROR
+                            addInstruction(alu(GenOpcode::RotateRight, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeC | writeZ | writeN);
+                            break;
                         case 0x8: // TST
                             addInstruction(alu(GenOpcode::And, dstReg, srcReg, GenReg::Temp, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
                             break;
