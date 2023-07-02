@@ -1127,9 +1127,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         if(needCyclesSeq)
                         {
                             // cycle count from stack
-                            // could shorten this with LEA?
-                            builder.mov(argumentRegs64[2], Reg64::RSP);
-                            builder.add(argumentRegs64[2], needCallRestore * 8);
+                            builder.lea(argumentRegs64[2], {Reg64::RSP, needCallRestore * 8});
 
                             assert(cyclesThisInstr == delayedCyclesExecuted);
                             builder.mov({Reg64::RSP, needCallRestore * 8}, uint32_t(cyclesThisInstr + instrCycles));
@@ -1281,8 +1279,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             // FIXME: win32
 
                             // cycle count from stack
-                            builder.mov(argumentRegs64[3], Reg64::RSP);
-                            builder.add(argumentRegs64[3], needCallRestore * 8);
+                            builder.lea(argumentRegs64[3], {Reg64::RSP, needCallRestore * 8});
 
                             assert(cyclesThisInstr == delayedCyclesExecuted);
                             builder.mov({Reg64::RSP, needCallRestore * 8}, uint32_t(cyclesThisInstr + instrCycles));
