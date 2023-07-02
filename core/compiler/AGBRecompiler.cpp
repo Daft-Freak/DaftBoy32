@@ -434,7 +434,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
     };
 
     // helpers
-    auto loadImm = [](uint32_t imm, int cycles = 1)
+    auto loadImm = [](uint32_t imm, int cycles = 0)
     {
         GenOpInfo ret{};
         ret.opcode = GenOpcode::LoadImm;
@@ -444,7 +444,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return ret;
     };
 
-    auto move = [](GenReg src, GenReg dst, int cycles = 1)
+    auto move = [](GenReg src, GenReg dst, int cycles = 0)
     {
         GenOpInfo ret{};
         ret.opcode = GenOpcode::Move;
@@ -489,7 +489,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return ret;
     };
 
-    auto alu = [](GenOpcode op, GenReg src0, GenReg src1, GenReg dst, int cycles = 1)
+    auto alu = [](GenOpcode op, GenReg src0, GenReg src1, GenReg dst, int cycles = 0)
     {
         GenOpInfo ret{};
         ret.opcode = op;
@@ -501,7 +501,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return ret;
     };
 
-    auto compare = [](GenReg src0, GenReg src1, int cycles = 1)
+    auto compare = [](GenReg src0, GenReg src1, int cycles)
     {
         GenOpInfo ret{};
         ret.opcode = GenOpcode::Compare;
@@ -512,7 +512,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return ret;
     };
 
-    auto jump = [](GenCondition cond = GenCondition::Always, GenReg src = GenReg::Temp, int cycles = 2)
+    auto jump = [](GenCondition cond = GenCondition::Always, GenReg src = GenReg::Temp, int cycles)
     {
         GenOpInfo ret{};
         ret.opcode = GenOpcode::Jump;
@@ -558,7 +558,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     auto src1Reg = GenReg::Temp;
 
                     if(isImm)
-                        addInstruction(loadImm((opcode >> 6) & 7, 0));
+                        addInstruction(loadImm((opcode >> 6) & 7));
                     else
                         src1Reg = lowReg((opcode >> 6) & 7);
 
@@ -576,18 +576,18 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         case 0: // LSL
                         {
                             int cFlag = offset == 0 ? preserveC : writeC; // C preserved if shift by 0
-                            addInstruction(loadImm(offset, 0));
+                            addInstruction(loadImm(offset));
                             addInstruction(alu(GenOpcode::ShiftLeft, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | cFlag | writeZ | writeN);
                             break;
                         }
 
                         case 1: // LSR
-                            addInstruction(loadImm(offset ? offset : 32, 0));
+                            addInstruction(loadImm(offset ? offset : 32));
                             addInstruction(alu(GenOpcode::ShiftRightLogic, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
                             break;
 
                         case 2: // ASR
-                            addInstruction(loadImm(offset ? offset : 32, 0));
+                            addInstruction(loadImm(offset ? offset : 32));
                             addInstruction(alu(GenOpcode::ShiftRightArith, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
                             break;
                     }
@@ -602,7 +602,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 auto instOp = (opcode >> 11) & 0x3;
                 auto dstReg = lowReg((opcode >> 8) & 7);
 
-                addInstruction(loadImm(opcode & 0xFF, 0));
+                addInstruction(loadImm(opcode & 0xFF));
 
                 switch(instOp)
                 {
@@ -634,7 +634,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
                     int cycles = pcSCycles + 1;
 
-                    addInstruction(loadImm(mem.read<uint32_t>(addr, cycles, false), 0));
+                    addInstruction(loadImm(mem.read<uint32_t>(addr, cycles, false)));
                     addInstruction(move(GenReg::Temp, dstReg, cycles), 2);
                 }
                 else if(opcode & (1 << 10)) // format 5, Hi reg/branch exchange
@@ -652,7 +652,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             if(srcReg == 15) // read pc
                             {
                                 assert(dstReg != 15);
-                                addInstruction(loadImm(pc + 2, 0));
+                                addInstruction(loadImm(pc + 2));
                                 addInstruction(alu(GenOpcode::Add, reg(dstReg), GenReg::Temp, reg(dstReg), pcSCycles), 2);
                             }
                             else if(dstReg == 15)
@@ -677,14 +677,14 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             if(srcReg == 15) // read pc
                             {
                                 assert(dstReg != 15);
-                                addInstruction(loadImm(pc + 2, 0));
+                                addInstruction(loadImm(pc + 2));
                                 addInstruction(move(GenReg::Temp, reg(dstReg), pcSCycles), 2);
                             }
                             else if(dstReg == 15)
                             {
                                 // clear low bit (no interworking here)
-                                addInstruction(loadImm(~1u, 0));
-                                addInstruction(alu(GenOpcode::And, GenReg::Temp, reg(srcReg), GenReg::Temp, 0));
+                                addInstruction(loadImm(~1u));
+                                addInstruction(alu(GenOpcode::And, GenReg::Temp, reg(srcReg), GenReg::Temp));
                                 addInstruction(jump(GenCondition::Always, GenReg::Temp, pcNCycles + pcSCycles * 2), 2);
                                 if(pc > maxBranch)
                                     done = true;
@@ -700,11 +700,11 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                                 
                                 // clear T flag
                                 // (thumb bit can't be set here)
-                                addInstruction(loadImm(~AGBCPU::Flag_T, 0));
-                                addInstruction(alu(GenOpcode::And, GenReg::CPSR, GenReg::Temp, GenReg::CPSR, 0));
+                                addInstruction(loadImm(~AGBCPU::Flag_T));
+                                addInstruction(alu(GenOpcode::And, GenReg::CPSR, GenReg::Temp, GenReg::CPSR));
 
                                 // do the jump
-                                addInstruction(loadImm(target, 0));
+                                addInstruction(loadImm(target));
                                 addInstruction(jump(GenCondition::Always, GenReg::Temp, pcNCycles + pcSCycles * 2), 2);
 
                                 if(pc > maxBranch)
@@ -713,23 +713,23 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             else
                             {
                                 // clear T flag
-                                addInstruction(loadImm(~AGBCPU::Flag_T, 0));
-                                addInstruction(alu(GenOpcode::And, GenReg::CPSR, GenReg::Temp, GenReg::CPSR, 0));
+                                addInstruction(loadImm(~AGBCPU::Flag_T));
+                                addInstruction(alu(GenOpcode::And, GenReg::CPSR, GenReg::Temp, GenReg::CPSR));
 
                                 // set if low bit in src set
                                 // pile of instructions since we can't branch here
-                                addInstruction(move(reg(srcReg), GenReg::Temp2, 0));
+                                addInstruction(move(reg(srcReg), GenReg::Temp2));
 
-                                addInstruction(loadImm(1, 0));
-                                addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2, 0));
+                                addInstruction(loadImm(1));
+                                addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2));
 
-                                addInstruction(loadImm(5, 0)); // T is bit 5
-                                addInstruction(alu(GenOpcode::ShiftLeft, GenReg::Temp2, GenReg::Temp, GenReg::Temp2, 0));
-                                addInstruction(alu(GenOpcode::Or, GenReg::CPSR, GenReg::Temp2, GenReg::CPSR, 0));
+                                addInstruction(loadImm(5)); // T is bit 5
+                                addInstruction(alu(GenOpcode::ShiftLeft, GenReg::Temp2, GenReg::Temp, GenReg::Temp2));
+                                addInstruction(alu(GenOpcode::Or, GenReg::CPSR, GenReg::Temp2, GenReg::CPSR));
 
                                 // finally do the jump
-                                addInstruction(loadImm(~1u, 0));
-                                addInstruction(alu(GenOpcode::And, GenReg::Temp, reg(srcReg), GenReg::Temp, 0));
+                                addInstruction(loadImm(~1u));
+                                addInstruction(alu(GenOpcode::And, GenReg::Temp, reg(srcReg), GenReg::Temp));
                                 addInstruction(jump(GenCondition::Always, GenReg::Temp, pcNCycles + pcSCycles * 2), 2);
 
                                 if(pc > maxBranch)
@@ -774,7 +774,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             addInstruction(alu(GenOpcode::And, dstReg, srcReg, GenReg::Temp, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
                             break;
                         case 0x9: // NEG
-                            addInstruction(loadImm(0, 0));
+                            addInstruction(loadImm(0));
                             addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, srcReg, dstReg, pcSCycles), 2, writeV | writeC | writeZ | writeN);
                             break;
                         case 0xA: // CMP
@@ -827,7 +827,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 auto baseReg = lowReg((opcode >> 3) & 7);
                 auto dstReg = lowReg(opcode & 7);
 
-                addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp, 0));
+                addInstruction(alu(GenOpcode::Add, baseReg, offReg, GenReg::Temp));
 
                 if(opcode & (1 << 9)) // format 8, load/store sign-extended byte/halfword
                 {
@@ -872,8 +872,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
                 if(offset)
                 {
-                    addInstruction(loadImm(offset * 4, 0));
-                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                    addInstruction(loadImm(offset * 4));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
                 }
 
                 if(isLoad)
@@ -893,8 +893,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
                 if(offset)
                 {
-                    addInstruction(loadImm(offset, 0));
-                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                    addInstruction(loadImm(offset));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
                 }
 
                 if(isLoad)
@@ -914,8 +914,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
                 if(offset)
                 {
-                    addInstruction(loadImm(offset * 2, 0));
-                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                    addInstruction(loadImm(offset * 2));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
                 }
 
                 if(isLoad)
@@ -935,8 +935,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
                 if(offset)
                 {
-                    addInstruction(loadImm(offset * 4, 0));
-                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                    addInstruction(loadImm(offset * 4));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
                 }
 
                 if(isLoad)
@@ -955,12 +955,12 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
                 if(isSP)
                 {
-                    addInstruction(loadImm(word, 0));
+                    addInstruction(loadImm(word));
                     addInstruction(alu(GenOpcode::Add, GenReg::R13, GenReg::Temp, dstReg, pcSCycles), 2);
                 }
                 else // PC
                 {
-                    addInstruction(loadImm(((pc + 2) & ~2) + word, 0));
+                    addInstruction(loadImm(((pc + 2) & ~2) + word));
                     addInstruction(move(GenReg::Temp, dstReg, pcSCycles), 2);
                 }
 
@@ -989,8 +989,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                                 auto reg = lowReg(i);
                                 if(offset)
                                 {
-                                    addInstruction(loadImm(offset, 0));
-                                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                                    addInstruction(loadImm(offset));
+                                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
                                 }
 
                                 addInstruction(load(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, offset ? GenOp_Sequential : 0);
@@ -1002,13 +1002,13 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         if(pclr)
                         {
                             // load pc (to temp)
-                            addInstruction(loadImm(offset, 0));
-                            addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                            addInstruction(loadImm(offset));
+                            addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
                             addInstruction(load(4, offset ? GenReg::Temp : baseReg, GenReg::Temp2, 0), 0, offset ? GenOp_Sequential : 0);
 
                             // clear thumb bit
-                            addInstruction(loadImm(~1u, 0));
-                            addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2, 0));
+                            addInstruction(loadImm(~1u));
+                            addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2));
     
                             offset += 4;
 
@@ -1017,7 +1017,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         }
 
                         // update SP
-                        addInstruction(loadImm(offset, 0));
+                        addInstruction(loadImm(offset));
                         addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg, pclr ? 0 : pcSCycles + 1), pclr ? 0 : 2);
 
                         if(pclr)
@@ -1037,8 +1037,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         }
 
                         // update SP
-                        addInstruction(loadImm(offset, 0));
-                        addInstruction(alu(GenOpcode::Subtract, baseReg, GenReg::Temp, baseReg, 0));
+                        addInstruction(loadImm(offset));
+                        addInstruction(alu(GenOpcode::Subtract, baseReg, GenReg::Temp, baseReg));
 
                         offset = 0;
                         for(int i = 0; i < 8; i++)
@@ -1049,8 +1049,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                                 auto reg = lowReg(i);
                                 if(offset)
                                 {
-                                    addInstruction(loadImm(offset, 0));
-                                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                                    addInstruction(loadImm(offset));
+                                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
                                 }
 
                                 addInstruction(store(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, offset ? GenOp_Sequential : 0);
@@ -1061,8 +1061,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
 
                         if(pclr) // store LR
                         {
-                            addInstruction(loadImm(offset, 0));
-                            addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                            addInstruction(loadImm(offset));
+                            addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
                             addInstruction(store(4, GenReg::Temp, GenReg::R14, 0), 0, offset ? GenOp_Sequential : 0);
                         }
 
@@ -1076,7 +1076,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     bool isNeg = opcode & (1 << 7);
                     int off = (opcode & 0x7F) << 2;
 
-                    addInstruction(loadImm(off, 0));
+                    addInstruction(loadImm(off));
 
                     if(isNeg)
                         addInstruction(alu(GenOpcode::Subtract, GenReg::R13, GenReg::Temp, GenReg::R13, pcSCycles), 2);
@@ -1101,26 +1101,26 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         addInstruction(load(4, baseReg, GenReg::Temp2, 0));
 
                         // clear thumb bit
-                        addInstruction(loadImm(~1u, 0));
-                        addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2, 0));
+                        addInstruction(loadImm(~1u));
+                        addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2));
 
                         if(pc > maxBranch)
                             done = true;
 
                         // update base
-                        addInstruction(loadImm(0x40, 0));
-                        addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg, 0));
+                        addInstruction(loadImm(0x40));
+                        addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg));
 
                         addInstruction(jump(GenCondition::Always, GenReg::Temp2, pcSCycles + 1), 2); // TODO: cycles for branch (not implemented in CPU either)
                     }
                     else
                     {
                         // store PC
-                        addInstruction(loadImm(pc + 4, 0));
+                        addInstruction(loadImm(pc + 4));
                         addInstruction(store(4, baseReg, GenReg::Temp, 0));
 
                         // update base
-                        addInstruction(loadImm(0x40, 0));
+                        addInstruction(loadImm(0x40));
                         addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg, pcSCycles), 2);
                     }
                 }
@@ -1154,7 +1154,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         auto lastReg = lowReg(lastRegIndex);
                         if(lastReg != baseReg)
                         {
-                            addInstruction(move(baseReg, lastReg, 0));
+                            addInstruction(move(baseReg, lastReg));
                             baseReg = lastReg;
                         }
                     }
@@ -1172,13 +1172,13 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             if(wroteBack)
                             {
                                 // we updated it so index backwards
-                                addInstruction(loadImm(regCount * 4 - offset, 0));
-                                addInstruction(alu(GenOpcode::Subtract, baseReg, GenReg::Temp, GenReg::Temp, 0));
+                                addInstruction(loadImm(regCount * 4 - offset));
+                                addInstruction(alu(GenOpcode::Subtract, baseReg, GenReg::Temp, GenReg::Temp));
                             }
                             else
                             {
-                                addInstruction(loadImm(offset, 0));
-                                addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp, 0));
+                                addInstruction(loadImm(offset));
+                                addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
                             }
                         }
 
@@ -1191,8 +1191,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         // which is when the first reg is written
                         if(first)
                         {
-                            addInstruction(loadImm(regCount * 4, 0));
-                            addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg, 0));
+                            addInstruction(loadImm(regCount * 4));
+                            addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg));
                             wroteBack = true; // unfortunately, we're still using it to index
                         }
 
@@ -1234,7 +1234,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
             case 0xE: // format 18, unconditional branch
             {
                 uint32_t offset = static_cast<int16_t>(opcode << 5) >> 4; // sign extend and * 2
-                addInstruction(loadImm(pc + 2 + offset, 0));
+                addInstruction(loadImm(pc + 2 + offset));
                 addInstruction(jump(GenCondition::Always, GenReg::Temp, pcSCycles * 2 + pcNCycles), 2);
 
                 if(pc > maxBranch)
@@ -1253,18 +1253,18 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     if(offset & (1 << 22))
                         offset |= 0xFF800000; //sign extend
 
-                    addInstruction(loadImm(pc + 2 + offset, 0));
+                    addInstruction(loadImm(pc + 2 + offset));
                     addInstruction(move(GenReg::Temp, GenReg::R14, pcSCycles), 2);
                 }
                 else
                 {
                     // addr = LR + offset * 2
-                    addInstruction(loadImm(offset * 2, 0));
-                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::R14, GenReg::Temp2, 0));
+                    addInstruction(loadImm(offset * 2));
+                    addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::R14, GenReg::Temp2));
 
                     // LR = PC | 1
-                    addInstruction(loadImm(pc | 1, 0));
-                    addInstruction(move(GenReg::Temp, GenReg::R14, 0));
+                    addInstruction(loadImm(pc | 1));
+                    addInstruction(move(GenReg::Temp, GenReg::R14));
 
                     // jump
                     addInstruction(jump(GenCondition::Always, GenReg::Temp2, pcNCycles + pcSCycles * 2), 2, GenOp_Call);
