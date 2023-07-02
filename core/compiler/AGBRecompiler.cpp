@@ -160,6 +160,14 @@ int AGBRecompiler::run(int cyclesToRun)
         else if(!attemptToRun(cycles, cyclesExecuted))
             break;
 
+        if(!!(cpu.cpsr & AGBCPU::Flag_T) != isThumb)
+        {
+            // mode change, correct PC
+            if(isThumb)
+                cpu.loReg(AGBCPU::Reg::PC) += 2;
+            // else can't happen yet
+        }
+
         didIntr = false;
 
         // CPU not running, stop
@@ -215,9 +223,7 @@ int AGBRecompiler::run(int cyclesToRun)
         }
         else
         {
-            // assuming we're switching from thumb
-            // (compiled code always sets +2)
-            auto pc = cpu.loReg(AGBCPU::Reg::PC) - 2;
+            auto pc = cpu.loReg(AGBCPU::Reg::PC) - 4;
 
             if(inPC >> 24 != pc >> 24)
                 cpu.pcPtr = nullptr; // force remap
