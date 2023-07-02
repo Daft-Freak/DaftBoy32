@@ -649,7 +649,13 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     switch(op)
                     {
                         case 0: // ADD
-                            if(srcReg == 15 || dstReg == 15)
+                            if(srcReg == 15) // read pc
+                            {
+                                assert(dstReg != 15);
+                                addInstruction(loadImm(pc + 2, 0));
+                                addInstruction(alu(GenOpcode::Add, reg(dstReg), GenReg::Temp, reg(dstReg), pcSCycles), 2);
+                            }
+                            else if(dstReg == 15)
                             {
                                 printf("unhandled add pc in convertToGeneric %i -> %i\n", srcReg, dstReg);
                                 done = true;
@@ -668,10 +674,11 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             break;
 
                         case 2: // MOV
-                            if(srcReg == 15)
+                            if(srcReg == 15) // read pc
                             {
-                                printf("unhandled mov pc in convertToGeneric %i -> %i\n", srcReg, dstReg);
-                                done = true;
+                                assert(dstReg != 15);
+                                addInstruction(loadImm(pc + 2, 0));
+                                addInstruction(move(GenReg::Temp, reg(dstReg), pcSCycles), 2);
                             }
                             else if(dstReg == 15)
                             {
