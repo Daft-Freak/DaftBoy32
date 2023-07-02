@@ -129,7 +129,7 @@ void X86Builder::adc(Reg32 dst, Reg32 src)
 
     encodeREX(false, srcReg, 0, dstReg);
     write(0x11); // opcode, w = 1
-    encodeModRMReg8(dstReg, srcReg);
+    encodeModRM(dstReg, srcReg);
 }
 
 // reg -> reg, 8bit
