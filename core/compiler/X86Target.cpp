@@ -133,7 +133,6 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
     {
         auto srcReg = std::get<Reg8>(src);
         auto srcReg32 = static_cast<Reg32>(srcReg);
-        assert(srcReg32 != *dst);
 
         auto patchCondBranch = [&builder](uint8_t *branchPtr, Condition cond)
         {
@@ -185,8 +184,11 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
         if(swap)
             builder.xchg(srcReg32, Reg32::ECX);
 
+        // if src/dst were the same, they're now both ECX
+        if(srcReg32 == *dst)
+            regOp(builder, Reg32::ECX);
         // if it was the dst swap the args around
-        if(dst == Reg32::ECX)
+        else if(dst == Reg32::ECX)
             regOp(builder, srcReg32);
         else
             regOp(builder, *dst);
