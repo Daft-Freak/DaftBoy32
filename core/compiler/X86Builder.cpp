@@ -42,7 +42,7 @@ void X86Builder::add(RMOperand dst, Reg32 src)
     auto dstReg = static_cast<int>(dst.base);
     auto srcReg = static_cast<int>(src);
 
-    encodeREX(false, srcReg, 0, dstReg);
+    encodeREX(false, srcReg, static_cast<int>(dst.index), dstReg);
     write(0x01); // opcode, w = 1
     encodeModRM(dst, srcReg);
 }
@@ -108,7 +108,7 @@ void X86Builder::addD(RMOperand dst, int8_t imm)
 {
     auto baseReg = static_cast<int>(dst.base);
 
-    encodeREX(false, 0, 0, baseReg);
+    encodeREX(false, 0, static_cast<int>(dst.index), baseReg);
     write(0x83); // opcode, w = 1, s = 1
     encodeModRM(dst, 0);
     write(imm);
@@ -315,7 +315,7 @@ void X86Builder::cmp(RMOperand dst, uint8_t imm)
 {
     auto baseReg = static_cast<int>(dst.base);
 
-    encodeREX(false, 0, 0, baseReg);
+    encodeREX(false, 0, static_cast<int>(dst.index), baseReg);
     write(0x80); // opcode, w = 0
     encodeModRM(dst, 7);
     write(imm);
@@ -445,7 +445,7 @@ void X86Builder::lea(Reg64 dst, RMOperand m)
     auto dstReg = static_cast<int>(dst);
     auto srcReg = static_cast<int>(m.base);
 
-    encodeREX(true, dstReg, 0, srcReg);
+    encodeREX(true, dstReg, static_cast<int>(m.index), srcReg);
     write(0x8D); // opcode
     encodeModRM(m, dstReg);
 }
@@ -457,7 +457,7 @@ void X86Builder::lea(Reg32 dst, RMOperand m)
     auto dstReg = static_cast<int>(dst);
     auto srcReg = static_cast<int>(m.base);
 
-    encodeREX(false, dstReg, 0, srcReg);
+    encodeREX(false, dstReg, static_cast<int>(m.index), srcReg);
     write(0x8D); // opcode
     encodeModRM(m, dstReg);
 }
@@ -539,7 +539,7 @@ void X86Builder::mov(RMOperand dst, Reg32 src, int w)
     if(w == 16)
         write(0x66); // 16 bit override
 
-    encodeREX(w == 64, srcReg, 0, dstReg);
+    encodeREX(w == 64, srcReg, static_cast<int>(dst.index), dstReg);
     write(0x88 | (w > 8 ? 1 : 0)); // opcode, w = width > 8
     encodeModRM(dst, srcReg);
 }
@@ -552,7 +552,7 @@ void X86Builder::mov(Reg32 dst, RMOperand src, int w)
     if(w == 16)
         write(0x66); // 16 bit override
 
-    encodeREX(w == 64, dstReg, 0, srcReg);
+    encodeREX(w == 64, dstReg, static_cast<int>(src.index), srcReg);
     write(0x8A | (w > 8 ? 1 : 0)); // opcode, w = width > 8
     encodeModRM(src, dstReg);
 }
@@ -608,7 +608,7 @@ void X86Builder::mov(RMOperand dst, uint32_t imm)
 {
     auto baseReg = static_cast<int>(dst.base);
 
-    encodeREX(false, 0, 0, baseReg);
+    encodeREX(false, 0, static_cast<int>(dst.index), baseReg);
 
     write(0xC7); // opcode, w = 1
 
@@ -626,7 +626,7 @@ void X86Builder::mov(RMOperand dst, uint8_t imm)
 {
     auto baseReg = static_cast<int>(dst.base);
 
-    encodeREX(false, 0, 0, baseReg);
+    encodeREX(false, 0, static_cast<int>(dst.index), baseReg);
 
     write(0xC6); // opcode, w = 0
 
@@ -690,7 +690,7 @@ void X86Builder::movzxW(Reg32 dst, RMOperand src)
     auto reg = static_cast<int>(dst);
     auto baseReg = static_cast<int>(src.base);
 
-    encodeREX(false, reg, 0, baseReg);
+    encodeREX(false, reg, static_cast<int>(src.index), baseReg);
     write(0x0F); // two byte opcode
     write(0xB7); // opcode, w = 1
     encodeModRM(src, reg);
@@ -1334,14 +1334,29 @@ void X86Builder::encodeModRM(RMOperand rm, int reg2Op)
     }
 
     int mod = 0; // no disp
+    int rmVal = baseReg & 7;
     
     if(rm.disp || rm.base == Reg64::RBP)
         mod = (rm.disp >= 128 || rm.disp < -128) ? 2 : 1; // 32-bit or 8-bit disp
 
-    write((mod << 6) | ((reg2Op & 7) << 3) | (baseReg & 7)); // write ModRM byte
+    if(rm.scale)
+        rmVal = 4; // use SIB
 
-    if(rm.base == Reg64::RSP) // need SIB
-        write(0x24); // index = none, base = RSP
+    write((mod << 6) | ((reg2Op & 7) << 3) | rmVal); // write ModRM byte
+
+    if(rm.base == Reg64::RSP || rm.scale) // need SIB
+    {
+        // scale
+        int ss = 0;
+        if(rm.scale == 2)
+            ss = 1;
+        else if(rm.scale == 4)
+            ss = 2;
+        else if(rm.scale == 8)
+            ss = 3;
+
+        write(ss << 6 | static_cast<int>(rm.index) << 3 | (baseReg & 7)); // write SIB
+    }
 
     // write disp
     if(mod == 1)

@@ -123,9 +123,14 @@ public:
         explicit constexpr RMOperand(Reg16 reg) : base(static_cast<Reg64>(reg)), w(2) {} // register
         explicit constexpr RMOperand(Reg8 reg) : base(static_cast<Reg64>(reg)), w(1) {} // register
         constexpr RMOperand(Reg64 base, int disp) : base(base), disp(disp) {} // memory
+        constexpr RMOperand(Reg64 base, Reg64 index, int disp = 0, int scale = 1) : base(base), index(index), scale(scale), disp(disp) // memory, with index/scale
+        {
+            assert(scale == 1 || scale == 2 || scale == 4 || scale == 8);
+        }
 
-        Reg64 base;
+        Reg64 base, index = Reg64::RSP;
         uint8_t w = 0; // 0 = indirect, 1 = 8, 2 = 16, ...
+        uint8_t scale = 0;
         int disp = 0;
     };
 
