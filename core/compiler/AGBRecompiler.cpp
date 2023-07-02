@@ -1124,8 +1124,6 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, baseReg, pcSCycles), 2);
                     }
                 }
-                else if(!genBlock.instructions.empty())
-                    done = true;
                 else
                 {
                     // FIXME: align base reg
