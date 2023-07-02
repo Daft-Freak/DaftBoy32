@@ -135,6 +135,51 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
         auto srcReg32 = static_cast<Reg32>(srcReg);
         assert(srcReg32 != *dst);
 
+        auto patchCondBranch = [&builder](uint8_t *branchPtr, Condition cond)
+        {
+            auto off = builder.getPtr() - branchPtr - 2;
+            builder.patch(branchPtr, branchPtr + 2);
+            builder.jcc(cond, off);
+            builder.endPatch();
+        };
+
+        auto patchBranch = [&builder](uint8_t *branchPtr)
+        {
+            auto off = builder.getPtr() - branchPtr - 2;
+            builder.patch(branchPtr, branchPtr + 2);
+            builder.jmp(off);
+            builder.endPatch();
+        };
+
+        // special cases
+        uint8_t *ltBranch, *eqBranch;
+        uint8_t *gtDoneBranch, *eqDoneBranch;
+
+        builder.cmp(srcReg32, int8_t(32));
+
+        ltBranch = builder.getPtr();
+        builder.jcc(Condition::L, 0); // < 32
+
+        eqBranch = builder.getPtr();
+        builder.jcc(Condition::E, 0); // == 32
+
+        // > 32
+        // need to set to 0 and set appropriate flags
+        immOp(builder, *dst, 31);
+        immOp(builder, *dst, 2);
+        gtDoneBranch = builder.getPtr();
+        builder.jmp(0);
+
+        // == 32
+        patchCondBranch(eqBranch, Condition::E);
+        immOp(builder, *dst, 31);
+        immOp(builder, *dst, 1);
+        eqDoneBranch = builder.getPtr();
+        builder.jmp(0);
+
+        // < 32
+        patchCondBranch(ltBranch, Condition::L);
+
         bool swap = srcReg != Reg8::CL;
 
         if(swap)
@@ -148,6 +193,9 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
 
         if(swap)
             builder.xchg(srcReg32, Reg32::ECX);
+
+        patchBranch(gtDoneBranch);
+        patchBranch(eqDoneBranch);
     }
 
     return true;
