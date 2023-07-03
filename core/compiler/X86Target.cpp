@@ -1346,14 +1346,49 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                checkSingleSource();
-
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
-                    auto dst = checkReg32(instr.dst[0], Reg32::R9D);
+                    if(instr.flags & GenOp_WriteFlags)
+                        checkSingleSource();
 
-                    if(src.index() && dst)
+                    auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
+                    auto dst = checkReg32(instr.dst[0], Reg32::R9D); // TODO: only load if src0 == dst
+
+                    bool done = false;
+
+                    if(!(instr.flags & GenOp_WriteFlags) && instr.src[0] != instr.dst[0])
+                    {
+                        // we don't need the flags, so use LEA to avoid moves
+                        auto src0 = checkRegOrImm32(instr.src[0], Reg32::R9D);
+
+                        if(src0.index() && src.index() && dst)
+                        {
+                            bool src0Imm = std::holds_alternative<uint32_t>(src0);
+                            bool src1Imm =  std::holds_alternative<uint32_t>(src);
+                            assert(!src0Imm || !src1Imm);
+
+                            if(src0Imm || src1Imm)
+                            {
+                                auto imm = std::get<uint32_t>(src0Imm ? src0 : src);
+                                auto reg = std::get<Reg32>(src0Imm ? src : src0);
+                                builder.lea(*dst, {static_cast<Reg64>(reg), static_cast<int>(imm)});
+                            }
+                            else
+                            {
+                                auto reg0 = std::get<Reg32>(src0);
+                                auto reg1 = std::get<Reg32>(src);
+                                builder.lea(*dst, {static_cast<Reg64>(reg0), static_cast<Reg64>(reg1)});
+                            }
+
+                            // write back extra reg
+                            if(*dst == Reg32::R9D)
+                                storeExtraReg32(instr.dst[0], *dst);
+
+                            done = true;
+                        }
+                    }
+
+                    if(src.index() && dst && !done)
                     {
                         if(std::holds_alternative<uint32_t>(src))
                         {
@@ -1380,6 +1415,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 }
                 else if(regSize == 16)
                 {
+                    checkSingleSource();
+
                     auto src = checkRegOrImm16(instr.src[1]);
                     auto dst = checkReg16(instr.dst[0]);
                     
@@ -1435,6 +1472,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 }
                 else if(regSize == 8)
                 {
+                    checkSingleSource();
+
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
