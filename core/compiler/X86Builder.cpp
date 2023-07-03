@@ -1336,7 +1336,7 @@ void X86Builder::encodeModRM(RMOperand rm, int reg2Op)
     int mod = 0; // no disp
     int rmVal = baseReg & 7;
     
-    if(rm.disp || rm.base == Reg64::RBP)
+    if(rm.disp || rmVal == 5 /*BP*/)
         mod = (rm.disp >= 128 || rm.disp < -128) ? 2 : 1; // 32-bit or 8-bit disp
 
     if(rm.scale)
@@ -1344,7 +1344,7 @@ void X86Builder::encodeModRM(RMOperand rm, int reg2Op)
 
     write((mod << 6) | ((reg2Op & 7) << 3) | rmVal); // write ModRM byte
 
-    if(rm.base == Reg64::RSP || rm.scale) // need SIB
+    if(rmVal == 4) // need SIB (base is SP)
     {
         // scale
         int ss = 0;
