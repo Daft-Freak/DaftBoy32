@@ -1355,7 +1355,7 @@ void X86Builder::encodeModRM(RMOperand rm, int reg2Op)
         else if(rm.scale == 8)
             ss = 3;
 
-        write(ss << 6 | static_cast<int>(rm.index) << 3 | (baseReg & 7)); // write SIB
+        write(ss << 6 | (static_cast<int>(rm.index) & 7) << 3 | (baseReg & 7)); // write SIB
     }
 
     // write disp
