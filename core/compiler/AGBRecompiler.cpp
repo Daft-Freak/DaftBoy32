@@ -529,7 +529,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         if(offset)
         {
             addInstruction(loadImm(offset * size));
-            addInstruction(alu(GenOpcode::Add, GenReg::Temp, base, GenReg::Temp));
+            addInstruction(alu(GenOpcode::Add, base, GenReg::Temp, GenReg::Temp));
         }
 
         addInstruction(load(size, offset ? GenReg::Temp : base, dst, cycles), len, flags);
@@ -540,7 +540,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         if(offset)
         {
             addInstruction(loadImm(offset * size));
-            addInstruction(alu(GenOpcode::Add, GenReg::Temp, base, GenReg::Temp));
+            addInstruction(alu(GenOpcode::Add, base, GenReg::Temp, GenReg::Temp));
         }
 
         addInstruction(store(size, offset ? GenReg::Temp : base, dst, cycles), len, flags);
@@ -1153,7 +1153,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             else
                             {
                                 addInstruction(loadImm(offset));
-                                addInstruction(alu(GenOpcode::Add, GenReg::Temp, baseReg, GenReg::Temp));
+                                addInstruction(alu(GenOpcode::Add, baseReg, GenReg::Temp, GenReg::Temp));
                             }
                         }
 
