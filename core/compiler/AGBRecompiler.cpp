@@ -1287,23 +1287,63 @@ uint32_t AGBRecompiler::readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, uint8
 
 int AGBRecompiler::writeMem8(AGBCPU *cpu, uint32_t addr, uint8_t data, int &cycles, uint8_t flags, int cyclesToRun)
 {
-    // TODO: invalidate code
+    invalidateCode(cpu, addr);
     cpu->writeMem8(addr, data, cycles, flags & (GenOp_Sequential >> 8));
     return updateCyclesForWrite(cpu, cyclesToRun);
 }
 
 int AGBRecompiler::writeMem16(AGBCPU *cpu, uint32_t addr, uint16_t data, int &cycles, uint8_t flags, int cyclesToRun)
 {
-    // TODO: invalidate code
+    invalidateCode(cpu, addr);
     cpu->writeMem16(addr, data, cycles, flags & (GenOp_Sequential >> 8));
     return updateCyclesForWrite(cpu, cyclesToRun);
 }
 
 int AGBRecompiler::writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cycles, uint8_t flags, int cyclesToRun)
 {
-    // TODO: invalidate code
+    invalidateCode(cpu, addr);
     cpu->writeMem32(addr, data, cycles, flags & (GenOp_Sequential >> 8));
     return updateCyclesForWrite(cpu, cyclesToRun);
+}
+
+void AGBRecompiler::invalidateCode(AGBCPU *cpu, uint32_t addr)
+{
+    // only check EWRAM/IWRAM
+    if(addr < 0x2000000 || addr >= 0x4000000)
+        return;
+
+    auto &compiler = cpu->compiler;
+    
+    for(auto it = compiler.compiled.lower_bound(0x2000000); it != compiler.compiled.end();)
+    {
+        if(addr >= it->first && addr < it->second.endPC)
+        {
+#ifdef RECOMPILER_DEBUG
+            printf("invalidate compiled code @%08X in %08X-%08X\n", addr, it->first, it->second.endPC);
+#endif
+            // rewind if last code compiled
+            // TODO: reclaim memory in other cases
+            if(it->second.endPtr == compiler.curCodePtr)
+                compiler.curCodePtr = it->second.startPtr;
+
+            // invalidate any saved return addresses
+            for(auto &saved : compiler.savedExits)
+            {
+                if(std::get<1>(saved) >= it->first && std::get<1>(saved) <= it->second.endPC)
+                    saved = {nullptr, 0, 0};
+            }
+
+            it = compiler.compiled.erase(it);
+
+            continue; // might have compiled the same code more than once
+        }
+
+        // past this address, stop
+        if(it->first > addr)
+            break;
+
+        ++it;
+    }
 }
 
 int AGBRecompiler::updateCyclesForWrite(AGBCPU *cpu, int cyclesToRun)

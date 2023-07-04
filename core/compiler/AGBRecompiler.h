@@ -40,6 +40,7 @@ protected:
     static int writeMem16(AGBCPU *cpu, uint32_t addr, uint16_t data, int &cycles, uint8_t flags, int cyclesToRun);
     static int writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cycles, uint8_t flags, int cyclesToRun);
 
+    static void invalidateCode(AGBCPU *cpu, uint32_t addr);
     static int updateCyclesForWrite(AGBCPU *cpu, int cyclesToRun);
 
     /*
