@@ -794,7 +794,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             addInstruction(alu(GenOpcode::RotateRight, dstReg, srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeC | writeZ | writeN);
                             break;
                         case 0x8: // TST
-                            addInstruction(alu(GenOpcode::And, dstReg, srcReg, GenReg::Temp, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
+                            addInstruction(alu(GenOpcode::And, dstReg, srcReg, GenReg::Temp, pcSCycles), 2, preserveV | preserveC | writeZ | writeN);
                             break;
                         case 0x9: // NEG
                             addInstruction(loadImm(0));
