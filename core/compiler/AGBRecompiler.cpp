@@ -598,9 +598,13 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     {
                         case 0: // LSL
                         {
-                            int cFlag = offset == 0 ? preserveC : writeC; // C preserved if shift by 0
-                            addInstruction(loadImm(offset));
-                            addInstruction(alu(GenOpcode::ShiftLeft, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | cFlag | writeZ | writeN);
+                            if(offset == 0)
+                                addInstruction(move(srcReg, dstReg, pcSCycles), 2, preserveV | preserveC | writeZ | writeN);
+                            else
+                            {
+                                addInstruction(loadImm(offset));
+                                addInstruction(alu(GenOpcode::ShiftLeft, srcReg, GenReg::Temp, dstReg, pcSCycles), 2, preserveV | writeC | writeZ | writeN);
+                            }
                             break;
                         }
 
