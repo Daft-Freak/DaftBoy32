@@ -574,7 +574,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         builder.shl(Reg8::SIL, getFlagInfo(SourceFlagType::HalfCarry).bit);
     };
 
-    auto setFlags32 = [this, &builder](Reg32 dst, Reg32 carryFlagCopy, uint16_t flags, bool invCarry = false, bool haveResFlags = true, bool isRot = false)
+    auto setFlags32 = [this, &builder](Reg32 dst, Reg32 carryFlagCopy, uint16_t flags, bool invCarry = false, uint8_t haveResFlags = 0xF0)
     {
         if(!(flags & GenOp_WriteFlags))
             return;
@@ -593,9 +593,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         }
 
         // carry
-        if(writesFlag(flags, SourceFlagType::Carry))
+        auto cFlag = flagWriteMask(SourceFlagType::Carry);
+        if(flags & cFlag)
         {
-            if(!haveResFlags)
+            if(!(haveResFlags & cFlag))
             {
                 builder.shl(carryFlagCopy, getFlagInfo(SourceFlagType::Carry).bit);
                 builder.or_(*f, carryFlagCopy);
@@ -606,13 +607,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 builder.or_(*f, 1u << getFlagInfo(SourceFlagType::Carry).bit);
             }
-            haveResFlags = false;
+            haveResFlags = 0;
         }
 
         // negative
-        if(writesFlag(flags, SourceFlagType::Negative))
+        auto nFlag = flagWriteMask(SourceFlagType::Negative);
+        if(flags & nFlag)
         {
-            if(haveResFlags && !isRot)
+            if(haveResFlags & nFlag)
                 builder.jcc(Condition::NS, 6);
             else
             {
@@ -622,18 +624,19 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             }
 
             builder.or_(*f, 1u << getFlagInfo(SourceFlagType::Negative).bit);
-            haveResFlags = false;
+            haveResFlags = 0;
         }
 
         // zero
-        if(writesFlag(flags, SourceFlagType::Zero))
+        auto zFlag = flagWriteMask(SourceFlagType::Zero);
+        if(flags & zFlag)
         {
-            if(!haveResFlags || isRot)
+            if(!(haveResFlags & zFlag))
                 builder.cmp(dst, int8_t(0));
 
             builder.jcc(Condition::NE, 6);
             builder.or_(*f, 1u << getFlagInfo(SourceFlagType::Zero).bit);
-            haveResFlags = false;
+            haveResFlags = 0;
         }
     };
 
@@ -1038,7 +1041,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.mov(*dst, std::get<Reg32>(src));
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(*dst, {}, instr.flags, false, false);
+                        setFlags32(*dst, {}, instr.flags, false, 0);
                     }
                     else if(src.index() && !err) 
                     {
@@ -1711,7 +1714,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         builder.imul(*dst, *src);
                     
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(*dst, {}, instr.flags, false, false);
+                        setFlags32(*dst, {}, instr.flags, false, 0);
                     }
                 }
                 else
@@ -2019,7 +2022,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         assert(!writesFlag(instr.flags, SourceFlagType::Carry));
-                        setFlags32(*dst, {}, instr.flags, false, false); // doesn't affect flags
+                        setFlags32(*dst, {}, instr.flags, false, 0); // doesn't affect flags
                     }
                 }
                 else if(regSize == 8)
@@ -2114,7 +2117,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::rorCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::ror), preOp, true))
                     {
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(*dst, {}, instr.flags, false, true, true);
+                        auto setFlags = flagWriteMask(SourceFlagType::Carry); // only have carry
+                        setFlags32(*dst, {}, instr.flags, false, setFlags);
                     }
                 }
                 else if(regSize == 8)
