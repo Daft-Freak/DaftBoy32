@@ -154,10 +154,10 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
         uint8_t *ltBranch, *eqBranch;
         uint8_t *gtDoneBranch, *eqDoneBranch;
 
-        builder.cmp(srcReg32, int8_t(32));
+        builder.cmp(srcReg, 32);
 
         ltBranch = builder.getPtr();
-        builder.jcc(Condition::L, 0); // < 32
+        builder.jcc(Condition::B, 0); // < 32
 
         eqBranch = builder.getPtr();
         builder.jcc(Condition::E, 0); // == 32
@@ -177,7 +177,7 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
         builder.jmp(0);
 
         // < 32
-        patchCondBranch(ltBranch, Condition::L);
+        patchCondBranch(ltBranch, Condition::B);
 
         bool swap = srcReg != Reg8::CL;
 
