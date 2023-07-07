@@ -113,7 +113,7 @@ static bool doRegImmShift8(X86Builder &builder, std::optional<Reg8> dst, std::va
 }
 
 // more shift helpers
-static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::variant<std::monostate, Reg8, uint8_t> src, std::function<void(X86Builder &, Reg32)> regOp, std::function<void(X86Builder &, Reg32, uint8_t)> immOp)
+static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::variant<std::monostate, Reg8, uint8_t> src, std::function<void(X86Builder &, Reg32)> regOp, std::function<void(X86Builder &, Reg32, uint8_t)> immOp, bool rotate = false)
 {
     if(!src.index() || !dst)
         return false;
@@ -136,6 +136,9 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
 
         auto patchCondBranch = [&builder](uint8_t *branchPtr, Condition cond)
         {
+            if(!branchPtr)
+                return;
+
             auto off = builder.getPtr() - branchPtr - 2;
             builder.patch(branchPtr, branchPtr + 2);
             builder.jcc(cond, off);
@@ -144,6 +147,9 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
 
         auto patchBranch = [&builder](uint8_t *branchPtr)
         {
+            if(!branchPtr)
+                return;
+
             auto off = builder.getPtr() - branchPtr - 2;
             builder.patch(branchPtr, branchPtr + 2);
             builder.jmp(off);
@@ -151,23 +157,28 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
         };
 
         // special cases
-        uint8_t *ltBranch, *eqBranch;
-        uint8_t *gtDoneBranch, *eqDoneBranch;
+        uint8_t *ltBranch, *eqBranch = nullptr;
+        uint8_t *gtDoneBranch = nullptr, *eqDoneBranch;
 
         builder.cmp(srcReg, 32);
 
         ltBranch = builder.getPtr();
         builder.jcc(Condition::B, 0); // < 32
 
-        eqBranch = builder.getPtr();
-        builder.jcc(Condition::E, 0); // == 32
+        // skip the > case for rotates
+        // in this case the condition above is != 32
+        if(!rotate)
+        {
+            eqBranch = builder.getPtr();
+            builder.jcc(Condition::E, 0); // == 32
 
-        // > 32
-        // need to set to 0 and set appropriate flags
-        immOp(builder, *dst, 31);
-        immOp(builder, *dst, 2);
-        gtDoneBranch = builder.getPtr();
-        builder.jmp(0);
+            // > 32
+            // need to set to 0 and set appropriate flags
+            immOp(builder, *dst, 31);
+            immOp(builder, *dst, 2);
+            gtDoneBranch = builder.getPtr();
+            builder.jmp(0);
+        }
 
         // == 32
         patchCondBranch(eqBranch, Condition::E);
@@ -176,8 +187,8 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
         eqDoneBranch = builder.getPtr();
         builder.jmp(0);
 
-        // < 32
-        patchCondBranch(ltBranch, Condition::B);
+        // < 32 (!= 32 for rotates)
+        patchCondBranch(ltBranch, rotate ? Condition::NE : Condition::B);
 
         bool swap = srcReg != Reg8::CL;
 
@@ -2091,7 +2102,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(writesFlag(instr.flags, SourceFlagType::Carry))
                         builder.btr(*mapReg32(flagsReg), getFlagInfo(SourceFlagType::Carry).bit);
 
-                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::rorCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::ror)))
+                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::rorCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::ror), true))
                     {
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(*dst, {}, instr.flags, false, true, true);
