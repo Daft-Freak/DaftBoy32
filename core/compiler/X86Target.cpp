@@ -2190,7 +2190,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shlCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shl), preOp))
                     {
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(*dst, {}, instr.flags);
+                        auto setFlags = 0xF0;
+                        if(std::holds_alternative<Reg8>(src))
+                            setFlags = flagWriteMask(SourceFlagType::Carry); // if the src is a reg, it might be 0 (doesn't affect flags)
+    
+                        setFlags32(*dst, {}, instr.flags, false, setFlags);
                     }
                 }
                 else if(regSize == 16)
@@ -2244,7 +2248,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::sarCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::sar), preOp))
                     {
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(*dst, {}, instr.flags);
+                        auto setFlags = 0xF0;
+                        if(std::holds_alternative<Reg8>(src))
+                            setFlags = flagWriteMask(SourceFlagType::Carry); // if the src is a reg, it might be 0 (doesn't affect flags)
+    
+                        setFlags32(*dst, {}, instr.flags, false, setFlags);
                     }
                 }
                 else if(regSize == 8)
@@ -2285,7 +2293,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shrCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shr), preOp))
                     {
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(*dst, {}, instr.flags);
+                        auto setFlags = 0xF0;
+                        if(std::holds_alternative<Reg8>(src))
+                            setFlags = flagWriteMask(SourceFlagType::Carry); // if the src is a reg, it might be 0 (doesn't affect flags)
+    
+                        setFlags32(*dst, {}, instr.flags, false, setFlags);
                     }
                 }
                 else if(regSize == 16)
