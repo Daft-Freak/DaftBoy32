@@ -595,7 +595,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         // negative
         if(writesFlag(flags, SourceFlagType::Negative))
         {
-            if(haveResFlags)
+            if(haveResFlags && !isRot)
                 builder.jcc(Condition::NS, 6);
             else
             {
