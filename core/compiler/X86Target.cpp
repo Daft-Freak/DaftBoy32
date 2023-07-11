@@ -128,7 +128,8 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
 
     if(std::holds_alternative<uint8_t>(src))
     {
-        preOp(builder);
+        if(preOp)
+            preOp(builder);
 
         auto imm = std::get<uint8_t>(src);
         assert(imm <= 32);
@@ -184,7 +185,8 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
 
             // > 32
             // need to set to 0 and set appropriate flags
-            preOp(builder);
+            if(preOp)
+                preOp(builder);
             immOp(builder, *dst, 31);
             immOp(builder, *dst, 2);
             gtDoneBranch = builder.getPtr();
@@ -193,7 +195,8 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
 
         // == 32
         patchCondBranch(eqBranch, Condition::E);
-        preOp(builder);
+        if(preOp)
+            preOp(builder);
         immOp(builder, *dst, 31);
         immOp(builder, *dst, 1);
         eqDoneBranch = builder.getPtr();
@@ -207,7 +210,8 @@ static bool doRegImmShift32(X86Builder &builder, std::optional<Reg32> dst, std::
         if(swap)
             builder.xchg(srcReg32, Reg32::ECX);
 
-        preOp(builder);
+        if(preOp)
+            preOp(builder);
 
         // if src/dst were the same, they're now both ECX
         if(srcReg32 == *dst)
