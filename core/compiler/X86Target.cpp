@@ -1581,8 +1581,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         if(std::holds_alternative<uint32_t>(src))
                         {
                             auto imm = std::get<uint32_t>(src);
-                            // use sign extended if imm < 0x80? 
-                            builder.and_(*dst, imm);
+                            if(imm < 0x80 || imm >= 0xFFFFFF80)
+                                builder.and_(*dst, static_cast<int8_t>(imm));
+                            else 
+                                builder.and_(*dst, imm);
                         }
                         else
                             builder.and_(*dst, std::get<Reg32>(src));
