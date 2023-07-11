@@ -1130,14 +1130,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     }
                     else
                     {
-                        auto src = checkRegOrImm32(instr.src[0]);
+                        auto src = checkValue32(instr.src[0]);
 
                         if(src.index() && dst)
                         {
                             if(std::holds_alternative<uint32_t>(src))
                                 builder.mov(*dst, std::get<uint32_t>(src));
                             else
-                                builder.mov(*dst, std::get<Reg32>(src));
+                                builder.mov(*dst, std::get<RMOperand>(src).getReg32());
                         }
                     }
                 }
@@ -1401,7 +1401,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(instr.flags & GenOp_WriteFlags)
                         checkSingleSource();
 
-                    auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
+                    auto src = checkValue32(instr.src[1], Value_Immediate, Reg32::R8D);
                     auto dst = checkValue32(instr.dst[0], Value_Memory);
 
                     bool done = false;
@@ -1409,7 +1409,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(!(instr.flags & GenOp_WriteFlags) && instr.src[0] != instr.dst[0])
                     {
                         // we don't need the flags, so use LEA to avoid moves
-                        auto src0 = checkRegOrImm32(instr.src[0], Reg32::R9D);
+                        auto src0 = checkValue32(instr.src[0], Value_Immediate, Reg32::R9D);
 
                         if(src0.index() && src.index() && dst.index())
                         {
@@ -1427,14 +1427,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             if(src0Imm || src1Imm)
                             {
                                 auto imm = std::get<uint32_t>(src0Imm ? src0 : src);
-                                auto reg = std::get<Reg32>(src0Imm ? src : src0);
-                                builder.lea(rmDst.getReg32(), {static_cast<Reg64>(reg), static_cast<int>(imm)});
+                                auto reg = std::get<RMOperand>(src0Imm ? src : src0).base;
+                                builder.lea(rmDst.getReg32(), {reg, static_cast<int>(imm)});
                             }
                             else
                             {
-                                auto reg0 = std::get<Reg32>(src0);
-                                auto reg1 = std::get<Reg32>(src);
-                                builder.lea(rmDst.getReg32(), {static_cast<Reg64>(reg0), static_cast<Reg64>(reg1)});
+                                auto reg0 = std::get<RMOperand>(src0).base;
+                                auto reg1 = std::get<RMOperand>(src).base;
+                                builder.lea(rmDst.getReg32(), {reg0, reg1});
                             }
 
                             // write back extra reg
@@ -1457,7 +1457,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 builder.add(rmDst, imm);
                         }
                         else
-                            builder.add(rmDst, std::get<Reg32>(src));
+                            builder.add(rmDst, std::get<RMOperand>(src).getReg32());
 
                         // copy C flag if we need it
                         if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
@@ -1622,7 +1622,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
+                    auto src = checkValue32(instr.src[1], Value_Immediate, Reg32::R8D);
                     auto dst = checkReg32(instr.dst[0]);
 
                     if(src.index() && dst)
@@ -1636,7 +1636,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 builder.and_(*dst, imm);
                         }
                         else
-                            builder.and_(*dst, std::get<Reg32>(src));
+                            builder.and_(*dst, std::get<RMOperand>(src).getReg32());
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(*dst, {}, instr.flags);
@@ -1668,7 +1668,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
+                    auto src = checkValue32(instr.src[1], Value_Immediate, Reg32::R8D);
                     auto dst = checkReg32(instr.src[0], Reg32::R9D);
                     if(src.index() && dst)
                     {
@@ -1685,7 +1685,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 builder.sub(Reg32::R11D, imm);
                         }
                         else
-                            builder.sub(Reg32::R11D, std::get<Reg32>(src));
+                            builder.sub(Reg32::R11D, std::get<RMOperand>(src).getReg32());
 
                         // copy _inverted_ C flag if we need it
                         // assuming arm inverted carry flag
@@ -1767,7 +1767,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1]);
+                    auto src = checkValue32(instr.src[1], Value_Immediate);
                     auto dst = checkReg32(instr.dst[0]);
 
                     if(src.index() && dst)
@@ -1779,7 +1779,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.or_(*dst, imm);
                         }
                         else
-                            builder.or_(*dst, std::get<Reg32>(src));
+                            builder.or_(*dst, std::get<RMOperand>(src).getReg32());
                     
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(*dst, {}, instr.flags);
@@ -1829,7 +1829,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[swapped ? 0 : 1], Reg32::R8D);
+                    auto src = checkValue32(instr.src[swapped ? 0 : 1], Value_Immediate, Reg32::R8D);
                     auto dst = checkValue32(instr.dst[0], Value_Memory);
 
                     if(src.index() && dst.index())
@@ -1846,12 +1846,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 auto tmp = mapReg32(0);
                                 builder.mov(*tmp, rmDst);
                                 builder.mov(rmDst, std::get<uint32_t>(src));
-                                src = *tmp;
+                                src = RMOperand{*tmp};
                             }
                             else if(instr.src[1] == 0)
                             {
                                 // immediate src1, move src to dest
-                                builder.mov(rmDst, std::get<Reg32>(src));
+                                builder.mov(rmDst, std::get<RMOperand>(src).getReg32());
                                 src = *getLastImmLoad(); 
                             }
                             else
@@ -1860,8 +1860,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 // save dst, move src to dst
                                 auto tmp = mapReg32(0);
                                 builder.mov(*tmp, rmDst);
-                                builder.mov(rmDst, std::get<Reg32>(src));                                
-                                src = *tmp;
+                                builder.mov(rmDst, std::get<RMOperand>(src).getReg32());                                
+                                src = RMOperand{*tmp};
                             }
                         }
 
@@ -1874,7 +1874,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 builder.sub(rmDst, imm);
                         }
                         else
-                            builder.sub(rmDst, std::get<Reg32>(src));
+                            builder.sub(rmDst, std::get<RMOperand>(src).getReg32());
 
                         // copy _inverted_ C flag if we need it
                         // assuming arm inverted carry flag
@@ -2004,7 +2004,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1]);
+                    auto src = checkValue32(instr.src[1], Value_Immediate);
                     auto dst = checkReg32(instr.dst[0]);
 
                     if(src.index() && dst)
@@ -2016,7 +2016,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.xor_(*dst, imm);
                         }
                         else
-                            builder.xor_(*dst, std::get<Reg32>(src));
+                            builder.xor_(*dst, std::get<RMOperand>(src).getReg32());
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(*dst, {}, instr.flags);
@@ -2374,7 +2374,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 16 || regSize == 32)
                 {
-                    auto src = checkRegOrImm32(instr.src[1]);
+                    auto src = checkValue32(instr.src[1], Value_Immediate);
                     if(src.index())
                     {
                         callRestoreIfNeeded(builder, needCallRestore);
@@ -2509,14 +2509,15 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         {
                             if(std::holds_alternative<uint32_t>(src))
                                 builder.mov(pcReg32, std::get<uint32_t>(src) + sourceInfo.pcPrefetch);
-                            else if(std::get<Reg32>(src) != pcReg32)
+                            else if(std::get<RMOperand>(src).getReg32() != pcReg32)
                             {
+                                auto reg32 = std::get<RMOperand>(src).getReg32();
                                 if(regSize == 16)
-                                    builder.movzx(pcReg32, static_cast<Reg16>(std::get<Reg32>(src)));
+                                    builder.movzx(pcReg32, static_cast<Reg16>(reg32));
                                 else if(sourceInfo.pcPrefetch)
-                                    builder.lea(pcReg32, {static_cast<Reg64>(std::get<Reg32>(src)), sourceInfo.pcPrefetch});
+                                    builder.lea(pcReg32, {static_cast<Reg64>(reg32), sourceInfo.pcPrefetch});
                                 else
-                                    builder.mov(pcReg32, std::get<Reg32>(src));
+                                    builder.mov(pcReg32, reg32);
                             }
                         }
                         else // or sub cycles early (we jump past the usual code that does this)
