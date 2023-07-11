@@ -1456,7 +1456,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         {
                             auto imm = std::get<uint32_t>(src);
                             if(imm < 0x80)
-                                builder.add(rmDst, static_cast<int8_t>(imm));
+                                builder.addD(rmDst, static_cast<int8_t>(imm));
                             else
                                 builder.add(rmDst, imm);
                         }
