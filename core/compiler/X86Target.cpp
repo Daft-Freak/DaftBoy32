@@ -821,7 +821,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             {
                 // if 
                 if(sourceInfo.getRegOffset)
-                {
+                { 
+                    // return nothing but don't fail if the caller has promised to handle it
+                    if(allowExtra)
+                        return reg;
+
                     // load extra reg if we have somewhere to put it
                     if(loadReg)
                     {
@@ -829,9 +833,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         return loadReg;
                     }
 
-                    // otherwise return nothing but don't fail if the caller has promised to handle it
-                    if(allowExtra)
-                        return reg;
+                    // otherwise fail
                 }
 
                 // TODO: opcode labels
