@@ -157,6 +157,7 @@ public:
     void and_(Reg8 dst, Reg8 src);
     void and_(Reg32 dst, uint32_t imm);
     void and_(Reg8 dst, uint8_t imm);
+    void and_(Reg32 dst, int8_t imm);
 
     void btr(Reg32 base, uint8_t off);
 

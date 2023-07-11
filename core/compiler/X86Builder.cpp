@@ -210,6 +210,17 @@ void X86Builder::and_(Reg8 dst, uint8_t imm)
     write(imm); // imm
 }
 
+// imm -> reg, 8 bit sign extended
+void X86Builder::and_(Reg32 dst, int8_t imm)
+{
+    auto dstReg = static_cast<int>(dst);
+
+    encodeREX(false, 0, 0, dstReg);
+    write(0x83); // opcode, w = 1, s = 1
+    encodeModRM(dstReg, 4);
+    write(imm);
+}
+
 void X86Builder::btr(Reg32 base, uint8_t off)
 {
     auto baseReg = static_cast<int>(base);
