@@ -1808,11 +1808,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 if(regSize == 32)
                 {
                     auto src = checkRegOrImm32(instr.src[swapped ? 0 : 1], Reg32::R8D);
-                    auto dst = checkReg32(instr.dst[0], Reg32::R9D);
+                    auto dst = checkValue32(instr.dst[0], Value_Memory);
 
-                    if(src.index() && dst)
+                    if(src.index() && dst.index())
                     {
                         // we lied about being able to use swapped sources
+                        auto rmDst = std::get<X86Builder::RMOperand>(dst);
                         if(swapped)
                         {
                             // src1 == dst
@@ -1821,14 +1822,14 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 // immediate src0
                                 // do negate for 0 - x?
                                 auto tmp = mapReg32(0);
-                                builder.mov(*tmp, *dst);
-                                builder.mov(*dst, std::get<uint32_t>(src));
+                                builder.mov(*tmp, rmDst);
+                                builder.mov(rmDst, std::get<uint32_t>(src));
                                 src = *tmp;
                             }
                             else if(instr.src[1] == 0)
                             {
                                 // immediate src1, move src to dest
-                                builder.mov(*dst, std::get<Reg32>(src));
+                                builder.mov(rmDst, std::get<Reg32>(src));
                                 src = *getLastImmLoad(); 
                             }
                             else
@@ -1836,8 +1837,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 // both reg sources
                                 // save dst, move src to dst
                                 auto tmp = mapReg32(0);
-                                builder.mov(*tmp, *dst);
-                                builder.mov(*dst, std::get<Reg32>(src));                                
+                                builder.mov(*tmp, rmDst);
+                                builder.mov(rmDst, std::get<Reg32>(src));                                
                                 src = *tmp;
                             }
                         }
@@ -1846,12 +1847,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         {
                             auto imm = std::get<uint32_t>(src);
                             if(imm < 0x80)
-                                builder.sub(*dst, static_cast<int8_t>(imm));
+                                builder.subD(rmDst, static_cast<int8_t>(imm));
                             else
-                                builder.sub(*dst, imm);
+                                builder.sub(rmDst, imm);
                         }
                         else
-                            builder.sub(*dst, std::get<Reg32>(src));
+                            builder.sub(rmDst, std::get<Reg32>(src));
 
                         // copy _inverted_ C flag if we need it
                         // assuming arm inverted carry flag
@@ -1859,11 +1860,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.setcc(Condition::AE, Reg8::R11B);
 
                         // flags
-                        setFlags32(*dst, Reg32::R11D, instr.flags, true);
-
-                        // write back extra reg
-                        if(*dst == Reg32::R9D)
-                            storeExtraReg32(instr.dst[0], *dst);
+                        assert(!(instr.flags & GenOp_WriteFlags) || !rmDst.isMem());
+                        setFlags32(rmDst.getReg32(), Reg32::R11D, instr.flags, true);
                     }
                 }
                 else if(regSize == 16)
