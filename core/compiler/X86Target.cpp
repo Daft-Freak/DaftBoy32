@@ -1622,11 +1622,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                checkSingleSource(true);
+                bool swapped = checkSingleSource(true);
 
                 if(regSize == 32)
                 {
-                    auto src = checkValue32(instr.src[1], Value_Immediate, Reg32::R8D);
+                    auto src = checkValue32(instr.src[swapped ? 0 : 1], Value_Immediate, Reg32::R8D);
                     auto dst = checkReg32(instr.dst[0]);
 
                     if(src.index() && dst)
@@ -1649,9 +1649,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 else if(regSize == 8)
                 {
                     // d = s0 & d -> d = d & s0
-                    int srcIndex = instr.src[1] == instr.dst[0] ? 0 : 1;
-
-                    auto src = checkRegOrImm8(instr.src[srcIndex]);
+                    auto src = checkRegOrImm8(instr.src[swapped ? 0 : 1]);
                     auto dst = checkReg8(instr.dst[0]);
 
                     if(doRegImmOp8(builder, dst, src, std::mem_fn<RegOp8>(&X86Builder::and_), std::mem_fn<ImmOp8>(&X86Builder::and_)))
