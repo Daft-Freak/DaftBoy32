@@ -1398,7 +1398,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         checkSingleSource();
 
                     auto src = checkRegOrImm32(instr.src[1], Reg32::R8D);
-                    auto dst = checkReg32(instr.dst[0], Reg32::R9D); // TODO: only load if src0 == dst
+                    auto dst = checkValue32(instr.dst[0], Value_Memory);
 
                     bool done = false;
 
@@ -1407,56 +1407,61 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         // we don't need the flags, so use LEA to avoid moves
                         auto src0 = checkRegOrImm32(instr.src[0], Reg32::R9D);
 
-                        if(src0.index() && src.index() && dst)
+                        if(src0.index() && src.index() && dst.index())
                         {
                             bool src0Imm = std::holds_alternative<uint32_t>(src0);
                             bool src1Imm =  std::holds_alternative<uint32_t>(src);
                             assert(!src0Imm || !src1Imm);
 
+                            // if dst is mem dst = r9
+                            auto rmDst = std::get<RMOperand>(dst);
+
+                            // use temp and store
+                            if(rmDst.isMem())
+                                rmDst = RMOperand{Reg32::R9D};
+
                             if(src0Imm || src1Imm)
                             {
                                 auto imm = std::get<uint32_t>(src0Imm ? src0 : src);
                                 auto reg = std::get<Reg32>(src0Imm ? src : src0);
-                                builder.lea(*dst, {static_cast<Reg64>(reg), static_cast<int>(imm)});
+                                builder.lea(rmDst.getReg32(), {static_cast<Reg64>(reg), static_cast<int>(imm)});
                             }
                             else
                             {
                                 auto reg0 = std::get<Reg32>(src0);
                                 auto reg1 = std::get<Reg32>(src);
-                                builder.lea(*dst, {static_cast<Reg64>(reg0), static_cast<Reg64>(reg1)});
+                                builder.lea(rmDst.getReg32(), {static_cast<Reg64>(reg0), static_cast<Reg64>(reg1)});
                             }
 
                             // write back extra reg
-                            if(*dst == Reg32::R9D)
-                                storeExtraReg32(instr.dst[0], *dst);
+                            if(rmDst.getReg32() == Reg32::R9D)
+                                storeExtraReg32(instr.dst[0], rmDst.getReg32());
 
                             done = true;
                         }
                     }
 
-                    if(src.index() && dst && !done)
+                    if(src.index() && dst.index() && !done)
                     {
+                        auto rmDst = std::get<RMOperand>(dst);
                         if(std::holds_alternative<uint32_t>(src))
                         {
                             auto imm = std::get<uint32_t>(src);
                             if(imm < 0x80)
-                                builder.add(*dst, static_cast<int8_t>(imm));
+                                builder.add(rmDst, static_cast<int8_t>(imm));
                             else
-                                builder.add(*dst, imm);
+                                builder.add(rmDst, imm);
                         }
                         else
-                            builder.add(*dst, std::get<Reg32>(src));
+                            builder.add(rmDst, std::get<Reg32>(src));
 
                         // copy C flag if we need it
                         if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
                             builder.setcc(Condition::B, Reg8::R11B);
 
                         // flags
-                        setFlags32(*dst, Reg32::R11D, instr.flags);
-
-                        // write back extra reg
-                        if(*dst == Reg32::R9D)
-                            storeExtraReg32(instr.dst[0], *dst);
+                        assert(!(instr.flags & GenOp_WriteFlags) || !rmDst.isMem());
+                        setFlags32(rmDst.getReg32(), Reg32::R11D, instr.flags);
                     }
                 }
                 else if(regSize == 16)
