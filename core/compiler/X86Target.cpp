@@ -6,6 +6,12 @@
 #include "X86Target.h"
 #include "X86Builder.h"
 
+enum CheckValueFlags
+{
+    Value_Immediate = 1 << 0,
+    Value_Memory    = 1 << 1,
+};
+
 // reg helpers
 static const Reg64 cpuPtrReg = Reg64::R14;
 
@@ -929,6 +935,27 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
             if(auto reg = checkReg8(index))
                 return *reg;
+
+            return {};
+        };
+
+        auto checkValue32 = [this, &checkReg32, &getLastImmLoad, &err](uint8_t index, int flags = 0, std::optional<Reg32> loadReg = {}) -> std::variant<std::monostate, X86Builder::RMOperand, uint32_t>
+        {
+            if(index == 0 && (flags & Value_Immediate))
+            {
+                auto imm = getLastImmLoad();
+                if(imm)
+                    return *imm;
+            }
+
+            if(auto reg = checkReg32(index, loadReg, flags & Value_Memory))
+                return X86Builder::RMOperand{*reg};
+
+            if(!err) // must be memory, checkReg didn't set an error
+            {
+                auto offset = sourceInfo.getRegOffset(cpuPtr, index);
+                return X86Builder::RMOperand{cpuPtrReg, offset};
+            }
 
             return {};
         };
