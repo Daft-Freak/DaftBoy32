@@ -12,6 +12,8 @@ enum CheckValueFlags
     Value_Memory    = 1 << 1,
 };
 
+using RMOperand = X86Builder::RMOperand;
+
 // reg helpers
 static const Reg64 cpuPtrReg = Reg64::R14;
 
@@ -939,7 +941,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             return {};
         };
 
-        auto checkValue32 = [this, &checkReg32, &getLastImmLoad, &err](uint8_t index, int flags = 0, std::optional<Reg32> loadReg = {}) -> std::variant<std::monostate, X86Builder::RMOperand, uint32_t>
+        auto checkValue32 = [this, &checkReg32, &getLastImmLoad, &err](uint8_t index, int flags = 0, std::optional<Reg32> loadReg = {}) -> std::variant<std::monostate, RMOperand, uint32_t>
         {
             if(index == 0 && (flags & Value_Immediate))
             {
@@ -949,12 +951,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             }
 
             if(auto reg = checkReg32(index, loadReg, flags & Value_Memory))
-                return X86Builder::RMOperand{*reg};
+                return RMOperand{*reg};
 
             if(!err) // must be memory, checkReg didn't set an error
             {
                 auto offset = sourceInfo.getRegOffset(cpuPtr, index);
-                return X86Builder::RMOperand{cpuPtrReg, offset};
+                return RMOperand{cpuPtrReg, offset};
             }
 
             return {};
@@ -1813,7 +1815,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(src.index() && dst.index())
                     {
                         // we lied about being able to use swapped sources
-                        auto rmDst = std::get<X86Builder::RMOperand>(dst);
+                        auto rmDst = std::get<RMOperand>(dst);
                         if(swapped)
                         {
                             // src1 == dst
