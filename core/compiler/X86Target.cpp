@@ -574,7 +574,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             // reg
             builder.mov(Reg8::AL, std::get<Reg8>(src));
 
-            builder.and_(Reg32::EAX, 0x0F0F); // mask both
+            builder.and_(Reg32::EAX, 0x0F0Fu); // mask both
 
             if(withCarry)
                 builder.add(Reg8::AL, Reg8::SIL); // add carry
@@ -1433,7 +1433,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         {
                             // dst & 0xFFF
                             builder.mov(Reg32::ESI, static_cast<Reg32>(*dst));
-                            builder.and_(Reg32::ESI, 0xFFF);
+                            builder.and_(Reg32::ESI, 0xFFFu);
 
                             // src & 0xFFF
                             if(std::holds_alternative<uint16_t>(src))
@@ -1441,7 +1441,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             else
                             {
                                 builder.mov(Reg32::R11D, static_cast<Reg32>(std::get<Reg16>(src)));
-                                builder.and_(Reg32::R11D, 0xFFF);
+                                builder.and_(Reg32::R11D, 0xFFFu);
                             }
 
                             // "half" add
@@ -2562,7 +2562,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 builder.jcc(Condition::NE, 19); // H set
                 // ... || A & (0x0F) > 0x09) ...
                 builder.mov(Reg32::R10D, static_cast<Reg32>(f)); // move the whole thing as we can't easily mov just the high byte
-                builder.and_(Reg32::R10D, 0xF00);
+                builder.and_(Reg32::R10D, 0xF00u);
                 builder.cmp(Reg32::R10D, uint32_t(0x0900));
                 builder.jcc(Condition::BE, 3);
                 // .. A += 0x06
@@ -3091,7 +3091,7 @@ void X86Target::callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend, b
         else if(!zeroExtend)
         {
             // EAX = EAX + (R10D & 0xFF00)
-            builder.and_(Reg32::R10D, 0xFF00);
+            builder.and_(Reg32::R10D, 0xFF00u);
             builder.movzx(Reg32::EAX, Reg8::AL);
             builder.add(Reg32::EAX, Reg32::R10D); // TODO: OR? (haven't added that to builder yet)
         }
