@@ -1100,12 +1100,7 @@ void X86Builder::stc()
 // reg -> reg
 void X86Builder::sub(Reg32 dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x29); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    sub(RMOperand{dst}, src);
 }
 
 // reg -> reg, 16 bit
@@ -1126,20 +1121,22 @@ void X86Builder::sub(Reg8 dst, Reg8 src)
     encodeModRMReg8(dstReg, srcReg);
 }
 
+void X86Builder::sub(RMOperand dst, Reg32 src)
+{
+    assert(dst.w == 0 || dst.w == 3);
+
+    auto dstReg = static_cast<int>(dst.base);
+    auto srcReg = static_cast<int>(src);
+
+    encodeREX(false, srcReg, static_cast<int>(dst.index), dstReg);
+    write(0x29); // opcode, w = 1
+    encodeModRM(dst, srcReg);
+}
+
 // imm -> reg, 32 bit
 void X86Builder::sub(Reg32 dst, uint32_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x81); // opcode, w = 1, s = 0
-    encodeModRM(dstReg, 5);
-
-    // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    sub(RMOperand{dst}, imm);
 }
 
 // imm -> reg, 8 bit
@@ -1151,6 +1148,23 @@ void X86Builder::sub(Reg8 dst, uint8_t imm)
     write(0x80); // opcode, w = 0, s = 0
     encodeModRM(dstReg, 5);
     write(imm);
+}
+
+void X86Builder::sub(RMOperand dst, uint32_t imm)
+{
+    assert(dst.w == 0 || dst.w == 3);
+
+    auto dstReg = static_cast<int>(dst.base);
+
+    encodeREX(false, 0, static_cast<int>(dst.index), dstReg);
+    write(0x81); // opcode, w = 1, s = 0
+    encodeModRM(dst, 5);
+
+    // immediate
+    write(imm);
+    write(imm >> 8);
+    write(imm >> 16);
+    write(imm >> 24);
 }
 
 // imm -> reg, 64 bit reg, 8 bit sign extended
@@ -1167,11 +1181,19 @@ void X86Builder::sub(Reg64 dst, int8_t imm)
 // imm -> reg, 8 bit sign extended
 void X86Builder::sub(Reg32 dst, int8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
+    subD(RMOperand{dst}, imm);
+}
 
-    encodeREX(false, 0, 0, dstReg);
+// imm -> mem, 32 bit mem, 8 bit sign extended
+void X86Builder::subD(RMOperand dst, int8_t imm)
+{
+    assert(dst.w == 0 || dst.w == 3);
+
+    auto dstReg = static_cast<int>(dst.base);
+
+    encodeREX(false, 0, static_cast<int>(dst.index), dstReg);
     write(0x83); // opcode, w = 1, s = 1
-    encodeModRM(dstReg, 5);
+    encodeModRM(dst, 5);
     write(imm);
 }
 

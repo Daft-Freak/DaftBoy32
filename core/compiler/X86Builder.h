@@ -271,10 +271,13 @@ public:
     void sub(Reg32 dst, Reg32 src);
     void sub(Reg16 dst, Reg16 src);
     void sub(Reg8 dst, Reg8 src);
+    void sub(RMOperand dst, Reg32 src);
     void sub(Reg32 dst, uint32_t imm);
     void sub(Reg8 dst, uint8_t imm);
+    void sub(RMOperand dst, uint32_t src);
     void sub(Reg64 dst, int8_t imm);
     void sub(Reg32 dst, int8_t imm);
+    void subD(RMOperand dst, int8_t imm);
 
     void test(Reg32 dst, uint32_t imm);
     void test(Reg8 dst, uint8_t imm);
