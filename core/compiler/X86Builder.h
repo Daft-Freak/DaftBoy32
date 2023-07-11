@@ -128,6 +128,10 @@ public:
             assert(scale == 1 || scale == 2 || scale == 4 || scale == 8);
         }
 
+        constexpr bool isMem() const {return w == 0;}
+
+        constexpr Reg32 getReg32() const {return static_cast<Reg32>(base);}
+
         Reg64 base, index = Reg64::RSP;
         uint8_t w = 0; // 0 = indirect, 1 = 8, 2 = 16, ...
         uint8_t scale = 0;
