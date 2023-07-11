@@ -979,8 +979,6 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     uint8_t regList = opcode & 0xFF;
                     auto baseReg = GenReg::R13;
 
-                    // FIXME: align base reg
-
                     if(isLoad) // POP
                     {
                         uint32_t offset = 0;
@@ -989,7 +987,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             if(regList & (1 << i))
                             {
                                 // load
-                                loadWithOffset(4, baseReg, offset, lowReg(i), 0, 0, offset ? GenOp_Sequential : 0);
+                                loadWithOffset(4, baseReg, offset, lowReg(i), 0, 0, (offset ? GenOp_Sequential : 0) | GenOp_ForceAlign);
                                 offset++;
                             }
                         }
@@ -997,7 +995,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         if(pclr)
                         {
                             // load pc (to temp)
-                            loadWithOffset(4, baseReg, offset, GenReg::Temp2, 0, 0, offset ? GenOp_Sequential : 0);
+                            loadWithOffset(4, baseReg, offset, GenReg::Temp2, 0, 0, (offset ? GenOp_Sequential : 0) | GenOp_ForceAlign);
 
                             // clear thumb bit
                             addInstruction(loadImm(~1u));
@@ -1161,10 +1159,11 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             }
                         }
 
+                        int flags = (offset ? GenOp_Sequential : 0) | GenOp_ForceAlign;
                         if(isLoad)
-                            addInstruction(load(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, offset ? GenOp_Sequential : 0);
+                            addInstruction(load(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, flags);
                         else
-                            addInstruction(store(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, offset ? GenOp_Sequential : 0);
+                            addInstruction(store(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, flags);
 
                         // base write-back is on the second cycle of the instruction
                         // which is when the first reg is written
@@ -1286,6 +1285,9 @@ uint32_t AGBRecompiler::readMem16(AGBCPU *cpu, uint32_t addr, int &cycles, uint8
 
 uint32_t AGBRecompiler::readMem32(AGBCPU *cpu, uint32_t addr, int &cycles, uint8_t flags)
 {
+    if(flags & (GenOp_ForceAlign >> 8))
+        addr &= ~3;
+
     return cpu->readMem32(addr, cycles, flags & (GenOp_Sequential >> 8));
 }
 
