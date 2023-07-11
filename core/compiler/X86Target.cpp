@@ -899,21 +899,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             return {};
         };
 
-        auto checkRegOrImm32 = [&checkReg32, &getLastImmLoad](uint8_t index, std::optional<Reg32> loadReg = {}, bool allowLoad = false) -> std::variant<std::monostate, Reg32, uint32_t>
-        {
-            if(index == 0)
-            {
-                auto imm = getLastImmLoad();
-                if(imm)
-                    return *imm;
-            }
-
-            if(auto reg = checkReg32(index, loadReg, allowLoad))
-                return *reg;
-
-            return {};
-        };
-
         auto checkRegOrImm16 = [&checkReg16, &getLastImmLoad](uint8_t index) -> std::variant<std::monostate, Reg16, uint16_t>
         {
             if(index == 0)
