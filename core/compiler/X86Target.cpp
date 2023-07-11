@@ -319,9 +319,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
     // cycle executed sync
     int cyclesThisInstr = 0;
     int delayedCyclesExecuted = 0;
+    bool stackCycleCount = false; // cycle count stored to stack
 
-    auto cycleExecuted = [this, &builder, &needCallRestore, &blockInfo, &cyclesThisInstr, &delayedCyclesExecuted]()
+    auto cycleExecuted = [this, &builder, &needCallRestore, &blockInfo, &cyclesThisInstr, &delayedCyclesExecuted, &stackCycleCount]()
     {
+        assert(!stackCycleCount);
+
         cyclesThisInstr += sourceInfo.cycleMul;
 
         if(!(blockInfo.flags & GenBlock_StrictSync))
@@ -340,10 +343,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         builder.call(Reg64::RAX); // do call
     };
 
-    auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted]()
+    auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted, &stackCycleCount]()
     {
         if(!delayedCyclesExecuted)
             return;
+
+        assert(!stackCycleCount);
 
         assert(delayedCyclesExecuted < 127);
         auto cpuPtrInt = reinterpret_cast<uintptr_t>(cpuPtr);
@@ -355,6 +360,21 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         builder.addD({cpuPtrReg, offset}, i8Cycles);
 
         delayedCyclesExecuted = 0;
+    };
+
+    auto writeCycleCountToStack = [this, &builder, &needCallRestore, &cyclesThisInstr, &delayedCyclesExecuted, &stackCycleCount](int &instrCycles)
+    {
+        if(!stackCycleCount)
+        {
+            assert(cyclesThisInstr == delayedCyclesExecuted);
+            builder.mov({Reg64::RSP, needCallRestore * 8}, uint32_t(cyclesThisInstr + instrCycles));
+
+            cyclesThisInstr = delayedCyclesExecuted = 0;
+            instrCycles = 0;
+            stackCycleCount = true;
+        }
+        else
+            assert(!cyclesThisInstr && !delayedCyclesExecuted);
     };
 
     // load/store helpers
@@ -1148,12 +1168,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         {
                             // cycle count from stack
                             builder.lea(argumentRegs64[2], {Reg64::RSP, needCallRestore * 8});
-
-                            assert(cyclesThisInstr == delayedCyclesExecuted);
-                            builder.mov({Reg64::RSP, needCallRestore * 8}, uint32_t(cyclesThisInstr + instrCycles));
-
-                            cyclesThisInstr = delayedCyclesExecuted = 0;
-                            instrCycles = 0;
+                            writeCycleCountToStack(instrCycles);
 
                             builder.mov(argumentRegs32[3], instr.flags >> 8); // flags
                         }
@@ -1195,19 +1210,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                                 builder.pop(Reg64::R10);
                                 needCallRestore = 0;
                             }
-                        }
-
-                        if(needCyclesSeq)
-                        {
-                            callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
-
-                            // add/sub the cycles from the stack
-                            builder.mov(Reg32::R8D, {Reg64::RSP, needCallRestore * 8});
-
-                            int offset = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - reinterpret_cast<uintptr_t>(cpuPtr);
-                            builder.add({cpuPtrReg, offset}, Reg32::R8D);
-
-                            builder.sub(Reg32::EDI, Reg32::R8D);
                         }
                     }
                 }
@@ -1300,12 +1302,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                             // cycle count from stack
                             builder.lea(argumentRegs64[3], {Reg64::RSP, needCallRestore * 8});
-
-                            assert(cyclesThisInstr == delayedCyclesExecuted);
-                            builder.mov({Reg64::RSP, needCallRestore * 8}, uint32_t(cyclesThisInstr + instrCycles));
-
-                            cyclesThisInstr = delayedCyclesExecuted = 0;
-                            instrCycles = 0;
+                            writeCycleCountToStack(instrCycles);
 
                             builder.mov(argumentRegs32[4], instr.flags >> 8);
 
@@ -1343,17 +1340,6 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         // just pop EDI... then overrwrite it
                         callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
                         builder.mov(Reg32::EDI, Reg32::EAX);
-
-                        if(needCyclesSeq)
-                        {
-                            // add/sub the cycles from the stack
-                            builder.mov(Reg32::R8D, {Reg64::RSP, needCallRestore * 8});
-
-                            int offset = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - reinterpret_cast<uintptr_t>(cpuPtr);
-                            builder.add({cpuPtrReg, offset}, Reg32::R8D);
-
-                            builder.sub(Reg32::EDI, Reg32::R8D);
-                        }
                     }
                 }
                 else
@@ -2646,6 +2632,21 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             builder.mov(pcReg32, pc - instr.len + sourceInfo.pcPrefetch);
             builder.jmp(exitPtr - builder.getPtr());
             break;
+        }
+
+        // sync cycle count from stack at the end of the op, or if something updates cycles before that
+        if(stackCycleCount && (instrCycles || instr.len || (instIt + 1)->opcode == GenOpcode::Jump))
+        {
+            callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
+
+            // add/sub the cycles from the stack
+            builder.mov(Reg32::R8D, {Reg64::RSP, needCallRestore * 8});
+
+            int offset = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - reinterpret_cast<uintptr_t>(cpuPtr);
+            builder.add({cpuPtrReg, offset}, Reg32::R8D);
+
+            builder.sub(Reg32::EDI, Reg32::R8D);
+            stackCycleCount = false;
         }
 
         // additional cycles
