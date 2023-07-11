@@ -386,20 +386,23 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
     };
 
     // load/store helpers
-    auto setupMemAddr = [this, &blockInfo, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg32, uint32_t> addr, int addrSize, uint8_t addrIndex)
+    auto setupMemAddr = [this, &blockInfo, &builder, &syncCyclesExecuted](std::variant<std::monostate, RMOperand, uint32_t> addr, int addrSize, uint8_t addrIndex)
     {
         if(!addr.index())
             return; // err should already be set
 
-        if(std::holds_alternative<Reg32>(addr))
+        if(std::holds_alternative<RMOperand>(addr))
         {
             if(!sourceInfo.shouldSyncForRegIndex || sourceInfo.shouldSyncForRegIndex(addrIndex, blockInfo))
                 syncCyclesExecuted();
 
-            auto addrReg = std::get<Reg32>(addr);
+            auto addrReg = std::get<RMOperand>(addr);
 
             if(addrSize == 16)
-                builder.movzx(argumentRegs32[1], static_cast<Reg16>(addrReg));
+            {
+                assert(!addrReg.isMem());
+                builder.movzx(argumentRegs32[1], static_cast<Reg16>(addrReg.base));
+            }
             else
                 builder.mov(argumentRegs32[1], addrReg);
         }
@@ -1159,7 +1162,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 if(addrSize == 16 || addrSize == 32)
                 {
                     auto dst = checkReg8(instr.dst[0]);
-                    auto addr = checkRegOrImm32(instr.src[0], Reg32::R11D);
+                    auto addr = checkValue32(instr.src[0], Value_Immediate | Value_Memory);
 
                     if(addr.index() && dst)
                     {
@@ -1269,7 +1272,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(addrSize == 16 || addrSize == 32)
                 {
-                    auto addr = checkRegOrImm32(instr.src[0], Reg32::R8D);
+                    auto addr = checkValue32(instr.src[0], Value_Immediate | Value_Memory);
 
                     if(addr.index() && checkReg(instr.src[1], dataSize, true))
                     {
