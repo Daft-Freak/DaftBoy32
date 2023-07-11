@@ -1079,25 +1079,31 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
-                    auto dst = checkReg32(instr.dst[0], {}, true);
+                    auto dst = checkValue32(instr.dst[0], Value_Memory);
 
-                    // avoid a mov if we need to load src, but not dst
-                    auto src = checkRegOrImm32(instr.src[0], dst ? *dst : Reg32::R8D);
+                    bool dstIsMem = std::holds_alternative<RMOperand>(dst) && std::get<RMOperand>(dst).isMem();
+
+                    auto src = checkValue32(instr.src[0], Value_Immediate | (dstIsMem ? 0 : Value_Memory), Reg32::R8D);
                     
-                    if(src.index() && dst)
+                    if(src.index() && dst.index())
                     {
+                        auto rmDst = std::get<RMOperand>(dst);
+
                         if(std::holds_alternative<uint32_t>(src))
-                            builder.mov(*dst, std::get<uint32_t>(src));
+                            builder.mov(rmDst, std::get<uint32_t>(src));
                         else
-                            builder.mov(*dst, std::get<Reg32>(src));
+                        {
+                            auto rmSrc = std::get<RMOperand>(src);
+                            assert(!rmSrc.isMem() || !rmDst.isMem());
+                            if(rmDst.isMem())
+                                builder.mov(rmDst, rmSrc.getReg32());
+                            else
+                                builder.mov(rmDst.getReg32(), rmSrc);
+                        }
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(*dst, {}, instr.flags, false, 0);
-                    }
-                    else if(src.index() && !err) 
-                    {
-                        // store extra reg
-                        storeExtraReg32(instr.dst[0], src);
+                        assert(!rmDst.isMem() || !(instr.flags & GenOp_WriteFlags));
+                        setFlags32(rmDst.getReg32(), {}, instr.flags, false, 0);
                     }
                 }
                 else if(regSize == 16)
