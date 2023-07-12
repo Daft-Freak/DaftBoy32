@@ -64,6 +64,12 @@ private:
 
     uint8_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;
 
+    // everything we might call
+    uint8_t *cycleExecutedPtr = nullptr;
+    uint8_t *readMemPtr = nullptr, *writeMemPtr = nullptr;
+    uint8_t *readMem8Ptr = nullptr, *readMem16Ptr = nullptr, *readMem32Ptr = nullptr;
+    uint8_t *writeMem8Ptr = nullptr, *writeMem16Ptr = nullptr, *writeMem32Ptr = nullptr;
+
     uint8_t numSavedRegs;
     bool saveR15;
 };
