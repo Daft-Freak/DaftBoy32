@@ -325,6 +325,8 @@ bool AGBRecompiler::attemptToRun(int cyclesToRun, int &cyclesExecuted)
                 if(pc > maxRAMCode)
                     maxRAMCode = pc;
             }
+
+            ramStartIt = compiled.lower_bound(0x2000000); // cache this iterator
         }
 
         // reject code if compiled for a different CPU mode
@@ -1323,7 +1325,11 @@ void AGBRecompiler::invalidateCode(AGBCPU *cpu, uint32_t addr)
     if(addr < compiler.minRAMCode || addr >= compiler.maxRAMCode)
         return;
 
-    for(auto it = compiler.compiled.lower_bound(0x2000000); it != compiler.compiled.end();)
+    auto end = compiler.compiled.end();
+
+    bool erased = false;
+
+    for(auto it = compiler.ramStartIt; it != end;)
     {
         if(addr >= it->first && addr < it->second.endPC)
         {
@@ -1343,6 +1349,7 @@ void AGBRecompiler::invalidateCode(AGBCPU *cpu, uint32_t addr)
             }
 
             it = compiler.compiled.erase(it);
+            erased = true;
 
             continue; // might have compiled the same code more than once
         }
@@ -1353,6 +1360,9 @@ void AGBRecompiler::invalidateCode(AGBCPU *cpu, uint32_t addr)
 
         ++it;
     }
+
+    if(erased)
+        compiler.ramStartIt = compiler.compiled.lower_bound(0x2000000);
 }
 
 int AGBRecompiler::updateCyclesForWrite(AGBCPU *cpu, int cyclesToRun)
