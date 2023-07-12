@@ -1273,7 +1273,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                     if(addr.index() && checkReg(instr.src[1], dataSize, true))
                     {
-                        callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
+                        bool updateCycles = instr.flags & GenOp_UpdateCycles;
+                        if(updateCycles)
+                            callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
+
                         callSaveIfNeeded(builder, needCallRestore);
 
                         bool needCyclesSeq = sourceInfo.writeMem8;
@@ -1343,9 +1346,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                             builder.mov(argumentRegs32[4], instr.flags >> 8);
 
-                            builder.mov(argumentRegs32[5], Reg32::EDI); // cycle count
+                            if(updateCycles)
+                                builder.mov(argumentRegs32[5], Reg32::EDI); // cycle count
                         }
-                        else
+                        else if(updateCycles)
                             builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
 
                         // select function to call
@@ -1374,9 +1378,12 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
                         builder.call(Reg64::RAX); // do call
 
-                        // just pop EDI... then overrwrite it
-                        callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
-                        builder.mov(Reg32::EDI, Reg32::EAX);
+                        if(updateCycles)
+                        {
+                            // just pop EDI... then overrwrite it
+                            callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
+                            builder.mov(Reg32::EDI, Reg32::EAX);
+                        }
                     }
                 }
                 else

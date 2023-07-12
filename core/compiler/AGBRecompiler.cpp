@@ -873,7 +873,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         if(hFlag) // LDRH
                             addInstruction(load(2, GenReg::Temp, dstReg, pcSCycles + 1), 2);
                         else // STRH
-                            addInstruction(store(2, GenReg::Temp, dstReg, pcNCycles), 2);
+                            addInstruction(store(2, GenReg::Temp, dstReg, pcNCycles), 2, GenOp_UpdateCycles);
                     }
                 }
                 else // format 7, load/store with reg offset
@@ -884,7 +884,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     if(isLoad)
                         addInstruction(load(isByte ? 1 : 4, GenReg::Temp, dstReg, pcSCycles + 1), 2);
                     else
-                        addInstruction(store(isByte ? 1 : 4, GenReg::Temp, dstReg, pcNCycles), 2);
+                        addInstruction(store(isByte ? 1 : 4, GenReg::Temp, dstReg, pcNCycles), 2, GenOp_UpdateCycles);
                 }
 
                 break;
@@ -900,7 +900,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 if(isLoad)
                     loadWithOffset(4, baseReg, offset, dstReg, pcSCycles + 1, 2);
                 else
-                    storeWithOffset(4, baseReg, offset, dstReg, pcNCycles, 2);
+                    storeWithOffset(4, baseReg, offset, dstReg, pcNCycles, 2, GenOp_UpdateCycles);
 
                 break;
             }
@@ -915,7 +915,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 if(isLoad)
                     loadWithOffset(1, baseReg, offset, dstReg, pcSCycles + 1, 2);
                 else
-                    storeWithOffset(1, baseReg, offset, dstReg, pcNCycles, 2);
+                    storeWithOffset(1, baseReg, offset, dstReg, pcNCycles, 2, GenOp_UpdateCycles);
 
                 break;
             }
@@ -930,7 +930,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 if(isLoad)
                     loadWithOffset(2, baseReg, offset, dstReg, pcSCycles + 1, 2);
                 else
-                    storeWithOffset(2, baseReg, offset, dstReg, pcNCycles, 2);
+                    storeWithOffset(2, baseReg, offset, dstReg, pcNCycles, 2, GenOp_UpdateCycles);
 
                 break;
             }
@@ -945,7 +945,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 if(isLoad)
                     loadWithOffset(4, baseReg, offset, dstReg, pcSCycles + 1, 2);
                 else
-                    storeWithOffset(4, baseReg, offset, dstReg, pcNCycles, 2);
+                    storeWithOffset(4, baseReg, offset, dstReg, pcNCycles, 2, GenOp_UpdateCycles);
 
                 break;
             }
@@ -1037,13 +1037,14 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                             if(regList & (1 << i))
                             {
                                 // store
-                                storeWithOffset(4, baseReg, offset, lowReg(i), 0, 0, offset ? GenOp_Sequential : 0);
+                                bool last = !pclr && (regList >> i) == 1;
+                                storeWithOffset(4, baseReg, offset, lowReg(i), 0, 0, (offset ? GenOp_Sequential : 0) | (last ? GenOp_UpdateCycles : 0));
                                 offset++;
                             }
                         }
 
                         if(pclr) // store LR
-                            storeWithOffset(4, baseReg, offset, GenReg::R14, 0, 0, offset ? GenOp_Sequential : 0);
+                            storeWithOffset(4, baseReg, offset, GenReg::R14, 0, 0, (offset ? GenOp_Sequential : 0) | GenOp_UpdateCycles);
 
                         genBlock.instructions.back().cycles = pcNCycles;
                         genBlock.instructions.back().len = 2;
@@ -1096,7 +1097,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                     {
                         // store PC
                         addInstruction(loadImm(pc + 4));
-                        addInstruction(store(4, baseReg, GenReg::Temp, 0));
+                        addInstruction(store(4, baseReg, GenReg::Temp, 0), 0, GenOp_UpdateCycles);
 
                         // update base
                         addInstruction(loadImm(0x40));
@@ -1105,8 +1106,6 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                 }
                 else
                 {
-                    // FIXME: align base reg
-
                     int regCount = 0;
                     int lastRegIndex = 0;
                     for(int i = 0; i < 8; i++)
@@ -1143,6 +1142,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         if(!(regList & (1 << i)))
                             continue;
 
+                        bool last = (regList >> i) == 1;
+
                         auto reg = lowReg(i);
                         if(offset)
                         {
@@ -1163,7 +1164,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                         if(isLoad)
                             addInstruction(load(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, flags);
                         else
-                            addInstruction(store(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, flags);
+                            addInstruction(store(4, offset ? GenReg::Temp : baseReg, reg, 0), 0, flags | (last ? GenOp_UpdateCycles : 0));
 
                         // base write-back is on the second cycle of the instruction
                         // which is when the first reg is written
