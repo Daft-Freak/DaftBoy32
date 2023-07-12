@@ -103,7 +103,7 @@ AGBRecompiler::AGBRecompiler(AGBCPU &cpu) : cpu(cpu)
 #if defined(__linux__)
     // allocate some memory
     auto pageSize = sysconf(_SC_PAGE_SIZE);
-    int numPages = 256;
+    int numPages = 256 * 8;
 
     // FIXME: alloc RW, switch to RX
     codeBufSize = pageSize * numPages;
