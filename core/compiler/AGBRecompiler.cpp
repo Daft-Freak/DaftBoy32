@@ -160,10 +160,17 @@ int AGBRecompiler::run(int cyclesToRun)
         else if(!attemptToRun(cycles, cyclesExecuted))
             break;
 
+        // might have changed mode
         if(!!(cpu.cpsr & AGBCPU::Flag_T) != isThumb)
         {
+            if(isThumb && (cpu.loReg(AGBCPU::Reg::PC) & 1))
+            {
+                // nope, it's still thumb (we just did a bx)
+                cpu.cpsr |= AGBCPU::Flag_T;
+                cpu.loReg(AGBCPU::Reg::PC) &= ~1;
+            }
             // mode change, correct PC
-            if(isThumb)
+            else if(isThumb)
                 cpu.loReg(AGBCPU::Reg::PC) += 2;
             // else can't happen yet
         }
@@ -743,21 +750,8 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
                                 addInstruction(loadImm(~AGBCPU::Flag_T));
                                 addInstruction(alu(GenOpcode::And, GenReg::CPSR, GenReg::Temp, GenReg::CPSR));
 
-                                // set if low bit in src set
-                                // pile of instructions since we can't branch here
-                                addInstruction(move(reg(srcReg), GenReg::Temp2));
-
-                                addInstruction(loadImm(1));
-                                addInstruction(alu(GenOpcode::And, GenReg::Temp2, GenReg::Temp, GenReg::Temp2));
-
-                                addInstruction(loadImm(5)); // T is bit 5
-                                addInstruction(alu(GenOpcode::ShiftLeft, GenReg::Temp2, GenReg::Temp, GenReg::Temp2));
-                                addInstruction(alu(GenOpcode::Or, GenReg::CPSR, GenReg::Temp2, GenReg::CPSR));
-
-                                // finally do the jump
-                                addInstruction(loadImm(~1u));
-                                addInstruction(alu(GenOpcode::And, GenReg::Temp, reg(srcReg), GenReg::Temp));
-                                addInstruction(jump(GenCondition::Always, GenReg::Temp, pcNCycles + pcSCycles * 2), 2);
+                                // jump (without clearing low bit, will use to correct flags later)
+                                addInstruction(jump(GenCondition::Always, reg(srcReg), pcNCycles + pcSCycles * 2), 2);
 
                                 if(pc > maxBranch)
                                     done = true;
