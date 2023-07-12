@@ -1677,6 +1677,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 32)
                 {
+                    auto writtenFlags = instr.flags & GenOp_WriteFlags;
+
                     auto src = checkValue32(instr.src[1], Value_Immediate, Reg32::R8D);
                     auto dst = checkReg32(instr.src[0], Reg32::R9D);
                     if(src.index() && dst)
@@ -1688,6 +1690,10 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         if(std::holds_alternative<uint32_t>(src))
                         {
                             auto imm = std::get<uint32_t>(src);
+
+                            if(imm == 0) // cmp 0 can't set V to 1 (TODO: also always sets C)
+                                writtenFlags &= ~flagWriteMask(SourceFlagType::Overflow);
+
                             if(imm < 0x80)
                                 builder.sub(Reg32::R11D, static_cast<int8_t>(imm));
                             else
@@ -1698,11 +1704,11 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         // copy _inverted_ C flag if we need it
                         // assuming arm inverted carry flag
-                        if(writesFlag(instr.flags, SourceFlagType::Carry) && writesFlag(instr.flags, SourceFlagType::Overflow))
+                        if(writesFlag(writtenFlags, SourceFlagType::Carry) && writesFlag(writtenFlags, SourceFlagType::Overflow))
                             builder.setcc(Condition::AE, Reg8::R10B);
 
                         // flags
-                        setFlags32(Reg32::R11D, Reg32::R10D, instr.flags, true);
+                        setFlags32(Reg32::R11D, Reg32::R10D, writtenFlags, true);
                     }
                 }
                 else if(regSize == 8)
