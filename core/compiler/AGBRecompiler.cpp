@@ -316,6 +316,15 @@ bool AGBRecompiler::attemptToRun(int cyclesToRun, int &cyclesExecuted)
             }
             
             it = compiled.emplace(cpuPC, info).first;
+
+            // track range of code in RAM
+            if(cpuPC >= 0x2000000 && cpuPC < 0x8000000)
+            {
+                if(cpuPC < minRAMCode)
+                    minRAMCode = cpuPC;
+                if(pc > maxRAMCode)
+                    maxRAMCode = pc;
+            }
         }
 
         // reject code if compiled for a different CPU mode
@@ -1309,12 +1318,11 @@ int AGBRecompiler::writeMem32(AGBCPU *cpu, uint32_t addr, uint32_t data, int &cy
 
 void AGBRecompiler::invalidateCode(AGBCPU *cpu, uint32_t addr)
 {
-    // only check EWRAM/IWRAM
-    if(addr < 0x2000000 || addr >= 0x4000000)
-        return;
-
     auto &compiler = cpu->compiler;
     
+    if(addr < compiler.minRAMCode || addr >= compiler.maxRAMCode)
+        return;
+
     for(auto it = compiler.compiled.lower_bound(0x2000000); it != compiler.compiled.end();)
     {
         if(addr >= it->first && addr < it->second.endPC)

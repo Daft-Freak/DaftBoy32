@@ -66,6 +66,7 @@ protected:
     };
 
     std::map<uint32_t, FuncInfo> compiled;
+    uint32_t minRAMCode = 0xFFFFFFFF, maxRAMCode = 0;
 
     // common code
     CompiledFunc entryFunc = nullptr;
