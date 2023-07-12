@@ -47,4 +47,10 @@ if(HAVE_RECOMPILER)
         compiler/DMGRecompiler.cpp
     )
     target_link_libraries(DaftBoyCore INTERFACE DaftBoyRecompiler)
+
+    #enable AGB recompiler
+    target_sources(DaftBoyAdvanceCore INTERFACE
+        compiler/AGBRecompiler.cpp
+    )
+    target_link_libraries(DaftBoyAdvanceCore INTERFACE DaftBoyRecompiler)
 endif()
