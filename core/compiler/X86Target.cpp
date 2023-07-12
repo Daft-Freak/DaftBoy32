@@ -2383,7 +2383,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                 if(regSize == 16 || regSize == 32)
                 {
-                    auto src = checkValue32(instr.src[1], Value_Immediate);
+                    auto src = checkValue32(instr.src[1], Value_Immediate, Reg32::R8D);
                     if(src.index())
                     {
                         callRestoreIfNeeded(builder, needCallRestore);
