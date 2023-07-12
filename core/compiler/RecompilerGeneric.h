@@ -80,6 +80,7 @@ enum GenOpFlags
 
     GenOp_Sequential = 1 << 11, // for load/store
     GenOp_SignExtend = 1 << 12, // for load
+    GenOp_UpdateCycles = 1 << 12, // for store
     GenOp_ForceAlign = 1 << 13, // for load/store
 };
 

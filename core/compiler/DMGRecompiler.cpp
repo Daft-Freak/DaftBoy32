@@ -547,7 +547,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
 
             case 0x02: // LD (BC),A
             case 0x12: // LD (DE),A
-                addInstruction(store(regMap16[opcode >> 4], GenReg::A, 2), 1);
+                addInstruction(store(regMap16[opcode >> 4], GenReg::A, 2), 1, GenOp_UpdateCycles);
                 break;
             
             case 0x03: // INC BC
@@ -616,7 +616,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
                 addInstruction(loadImm(8, 0));
                 addInstruction(alu(GenOpcode::ShiftRightLogic, GenReg::Temp, GenReg::Temp2, 0)); // SP >> 8
                 addInstruction(loadImm((imm16.imm + 1) & 0xFFFF, 0));
-                addInstruction(store(GenReg::Temp, GenReg::Temp2, 2), 3);
+                addInstruction(store(GenReg::Temp, GenReg::Temp2, 2), 3, GenOp_UpdateCycles);
 
                 break;
             }
@@ -690,7 +690,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
             }
 
             case 0x22: // LDI (HL),A
-                addInstruction(store(GenReg::HL, GenReg::A));
+                addInstruction(store(GenReg::HL, GenReg::A), 0, GenOp_UpdateCycles);
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::HL), 1);
                 break;
@@ -721,7 +721,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
             }
 
             case 0x32: // LDD (HL),A
-                addInstruction(store(GenReg::HL, GenReg::A));
+                addInstruction(store(GenReg::HL, GenReg::A), 0, GenOp_UpdateCycles);
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::HL), 1);
                 break;
@@ -730,19 +730,19 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
                 addInstruction(load(GenReg::HL, GenReg::Temp2B));
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Add, GenReg::Temp, GenReg::Temp2B, 0), 0, writeH | writeN | writeZ | preserveC);
-                addInstruction(store(GenReg::HL, GenReg::Temp2B, 2), 1);
+                addInstruction(store(GenReg::HL, GenReg::Temp2B, 2), 1, GenOp_UpdateCycles);
                 break;
 
             case 0x35: // DEC (HL)
                 addInstruction(load(GenReg::HL, GenReg::Temp2B));
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::Temp2B, 0), 0, writeH | writeN | writeZ | preserveC);
-                addInstruction(store(GenReg::HL, GenReg::Temp2B, 2), 1);
+                addInstruction(store(GenReg::HL, GenReg::Temp2B, 2), 1, GenOp_UpdateCycles);
                 break;
 
             case 0x36: // LD (HL),n
                 addInstruction(loadImm(mem.read(pc++)));
-                addInstruction(store(GenReg::HL, GenReg::Temp, 2), 2);
+                addInstruction(store(GenReg::HL, GenReg::Temp, 2), 2, GenOp_UpdateCycles);
                 break;
     
             case 0x37: // SCF
@@ -834,7 +834,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
             case 0x74: // LD (HL),H
             case 0x75: // LD (HL),L
             case 0x77: // LD (HL),A
-                addInstruction(store(GenReg::HL, regMap8[opcode & 7], 2), 1);
+                addInstruction(store(GenReg::HL, regMap8[opcode & 7], 2), 1, GenOp_UpdateCycles);
                 break;
 
             case 0x76: // HALT
@@ -1064,7 +1064,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::SP, 0));
                 addInstruction(loadImm((pc + 2) & 0xFF, 0));
-                addInstruction(store(GenReg::SP, GenReg::Temp));
+                addInstruction(store(GenReg::SP, GenReg::Temp), 0, GenOp_UpdateCycles);
 
                 // jump
                 addInstruction(loadImm16(0));
@@ -1087,7 +1087,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
                 // low
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::SP, 0));
-                addInstruction(store(GenReg::SP, lowHalf(reg), 2), 1);
+                addInstruction(store(GenReg::SP, lowHalf(reg), 2), 1, GenOp_UpdateCycles);
 
                 break;
             }
@@ -1117,7 +1117,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::SP, 0));
                 addInstruction(loadImm(pc & 0xFF, 0));
-                addInstruction(store(GenReg::SP, GenReg::Temp));
+                addInstruction(store(GenReg::SP, GenReg::Temp), 0, GenOp_UpdateCycles);
 
                 // jump
                 addInstruction(loadImm(opcode & 0x38, 0));
@@ -1249,7 +1249,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
                 }
 
                 if(isMem && (extOpcode >= 0x80 || extOpcode < 0x40)) // BIT doesn't write back
-                    addInstruction(store(GenReg::HL, reg, 2), 2);
+                    addInstruction(store(GenReg::HL, reg, 2), 2, GenOp_UpdateCycles);
 
                 break;
             }
@@ -1267,7 +1267,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
                 addInstruction(loadImm(1, 0));
                 addInstruction(alu(GenOpcode::Subtract, GenReg::Temp, GenReg::SP, 0));
                 addInstruction(loadImm((pc + 2) & 0xFF, 0));
-                addInstruction(store(GenReg::SP, GenReg::Temp));
+                addInstruction(store(GenReg::SP, GenReg::Temp), 0, GenOp_UpdateCycles);
 
                 // jump
                 addInstruction(loadImm16(0));
@@ -1329,7 +1329,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
                 op.cycles = 1;
                 op.imm = 0xFF00 | mem.read(pc++);
                 addInstruction(op);
-                addInstruction(store(GenReg::Temp, GenReg::A, 2), 2);
+                addInstruction(store(GenReg::Temp, GenReg::A, 2), 2, GenOp_UpdateCycles);
                 break;
             }
 
@@ -1337,7 +1337,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
                 addInstruction(loadImm(0xFF00, 0));
                 addInstruction(move(GenReg::C, GenReg::Temp2, 0));
                 addInstruction(alu(GenOpcode::Or, GenReg::Temp2, GenReg::Temp, 0));
-                addInstruction(store(GenReg::Temp, GenReg::A, 2), 1);
+                addInstruction(store(GenReg::Temp, GenReg::A, 2), 1, GenOp_UpdateCycles);
                 break;
 
             case 0xE6: // AND n
@@ -1384,7 +1384,7 @@ void DMGRecompiler::convertToGeneric(uint16_t &pc, GenBlockInfo &genBlock)
 
             case 0xEA: // LD (nn),A
                 addInstruction(loadImm16());
-                addInstruction(store(GenReg::Temp, GenReg::A, 2), 3);
+                addInstruction(store(GenReg::Temp, GenReg::A, 2), 3, GenOp_UpdateCycles);
                 break;
 
             case 0xEE: // XOR n
