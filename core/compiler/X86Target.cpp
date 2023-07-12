@@ -350,9 +350,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
         callSaveIfNeeded(builder, needCallRestore);
 
-        builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(sourceInfo.cycleExecuted)); // function ptr
         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
-        builder.call(Reg64::RAX); // do call
+        builder.call(cycleExecutedPtr - builder.getPtr()); // do call
     };
 
     auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted, &stackCycleCount]()
@@ -892,13 +891,16 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             return {};
         };
     
-        auto getLastImmLoad = [&builder, &instIt, &beginInstr, &lastImmLoadStart, &lastImmLoadEnd]() -> std::optional<uint32_t>
+        auto getLastImmLoad = [&blockInfo, &builder, &instIt, &beginInstr, &lastImmLoadStart, &lastImmLoadEnd]() -> std::optional<uint32_t>
         {
             if(instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::LoadImm)
             {
                 // remove the load
                 assert(lastImmLoadStart);
-                builder.removeRange(lastImmLoadStart, lastImmLoadEnd);
+
+                if(!instIt->cycles || !(blockInfo.flags & GenBlock_StrictSync)) // FIXME: can't remove if we've already done a cycleExecuted call
+                    builder.removeRange(lastImmLoadStart, lastImmLoadEnd);
+
                 lastImmLoadStart = lastImmLoadEnd = nullptr;
 
                 return (instIt - 1)->imm;
@@ -1177,27 +1179,25 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         setupMemAddr(addr, addrSize, instr.src[0]);
 
-                        uintptr_t func = 0;
+                        uint8_t *func = nullptr;
 
                         if(instr.opcode == GenOpcode::Load)
                         {
                             if(sourceInfo.readMem)
-                                func = reinterpret_cast<uintptr_t>(sourceInfo.readMem);
+                                func = readMemPtr;
                             else
-                                func = reinterpret_cast<uintptr_t>(sourceInfo.readMem8);
+                                func = readMem8Ptr;
                         }
                         else if(instr.opcode == GenOpcode::Load2)
-                            func = reinterpret_cast<uintptr_t>(sourceInfo.readMem16);
+                            func = readMem16Ptr;
                         else if(instr.opcode == GenOpcode::Load4)
-                            func = reinterpret_cast<uintptr_t>(sourceInfo.readMem32);
+                            func = readMem32Ptr;
 
                         if(!func)
                         {
                             printf("unhandled load\n");
                             err = true;
                         }
-
-                        builder.mov(Reg64::RAX, func); // function ptr
 
                         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
 
@@ -1210,7 +1210,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.mov(argumentRegs32[3], instr.flags >> 8); // flags
                         }
 
-                        builder.call(Reg64::RAX); // do call
+                        builder.call(func - builder.getPtr()); // do call
 
                         if(instr.opcode == GenOpcode::Load)
                         {
@@ -1353,19 +1353,19 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
 
                         // select function to call
-                        uintptr_t func = 0;
+                        uint8_t *func = nullptr;
 
                         if(instr.opcode == GenOpcode::Store)
                         {
                             if(sourceInfo.writeMem)
-                                func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem);
+                                func = writeMemPtr;
                             else
-                                func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem8);
+                                func = writeMem8Ptr;
                         }
                         else if(instr.opcode == GenOpcode::Store2)
-                            func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem16);
+                            func = writeMem16Ptr;
                         else if(instr.opcode == GenOpcode::Store4)
-                            func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem32);
+                            func = writeMem32Ptr;
 
                         if(!func)
                         {
@@ -1373,10 +1373,8 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             err = true;
                         }
 
-                        builder.mov(Reg64::RAX, func); // function ptr
-
                         builder.mov(argumentRegs64[0], cpuPtrReg); // cpu/this ptr
-                        builder.call(Reg64::RAX); // do call
+                        builder.call(func - builder.getPtr()); // do call
 
                         if(updateCycles)
                         {
@@ -2924,6 +2922,29 @@ uint8_t *X86Target::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     // epilogue
     builder.pop(Reg64::RBP);
     builder.ret();
+
+    // generate trampolines for calls
+    auto bounce = [&builder](auto *func)
+    {
+        uint8_t *ret = nullptr;
+        if(func)
+        {
+            ret = builder.getPtr();
+            builder.mov(Reg64::RAX, reinterpret_cast<uintptr_t>(func));
+            builder.jmp(Reg64::RAX);
+        }
+        return ret;
+    };
+
+    cycleExecutedPtr = bounce(sourceInfo.cycleExecuted);
+    readMemPtr = bounce(sourceInfo.readMem);
+    writeMemPtr = bounce(sourceInfo.writeMem);
+    readMem8Ptr = bounce(sourceInfo.readMem8);
+    readMem16Ptr = bounce(sourceInfo.readMem16);
+    readMem32Ptr = bounce(sourceInfo.readMem32);
+    writeMem8Ptr = bounce(sourceInfo.writeMem8);
+    writeMem16Ptr = bounce(sourceInfo.writeMem16);
+    writeMem32Ptr = bounce(sourceInfo.writeMem32);
 
 #ifdef RECOMPILER_DEBUG
     int len = builder.getPtr() - codeBuf;
