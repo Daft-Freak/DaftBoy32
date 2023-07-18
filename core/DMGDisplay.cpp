@@ -627,7 +627,7 @@ void DMGDisplay::drawScanLine(int y)
     // contains palette index + a tile priority flag
     uint8_t bgRaw[screenWidth]{0};
 
-#ifdef PICO_BUILD
+#ifdef BLIT_BOARD_PIMORONI_PICOSYSTEM
     // need to avoid writing unfinished lines directly to the framebuffer as we're not synced
     uint16_t scanLine[screenWidth];
 #else
@@ -668,7 +668,7 @@ void DMGDisplay::drawScanLine(int y)
     if(lcdc & LCDC_OBJDisp)
         drawSprites(scanLine, bgRaw);
 
-#ifdef PICO_BUILD
+#ifdef BLIT_BOARD_PIMORONI_PICOSYSTEM
     memcpy(screenData + y * screenWidth, scanLine, screenWidth * 2);
 #endif
 }

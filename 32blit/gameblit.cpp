@@ -3,7 +3,7 @@
 #include "gameblit.hpp"
 #include "assets.hpp"
 
-#ifdef PICO_BUILD
+#ifdef BLIT_BOARD_PIMORONI_PICOSYSTEM
 #include "st7789.hpp"
 #endif
 
@@ -82,7 +82,7 @@ duh::FileBrowser fileBrowser(tallFont);
 
 DMGCPU cpu;
 
-#ifndef PICO_BUILD
+#ifndef BLIT_BOARD_PIMORONI_PICOSYSTEM
 static uint16_t screenData[160 * 144];
 #endif
 
@@ -382,7 +382,7 @@ void init()
 
     cpu.getMem().addROMCache(romBankCache, romBankCacheSize * 0x4000);
 
-#ifdef PICO_BUILD
+#ifdef BLIT_BOARD_PIMORONI_PICOSYSTEM
     // force the background onto the screen
     packedToRGB(asset_background_square, blit::screen.data);
     st7789::update();
@@ -399,9 +399,12 @@ void init()
 
     cpu.getDisplay().setFramebuffer(reinterpret_cast<uint16_t *>(blit::screen.data));
 #else
+    cpu.getDisplay().setFramebuffer(screenData);
+#endif
+
+#ifndef PICO_BUILD
     // 32blit extra cache
     cpu.getMem().addROMCache(extraROMBankCache, extraROMBankCacheSize * 0x4000);
-    cpu.getDisplay().setFramebuffer(screenData);
 #endif
 
     blit::channels[0].waveforms = blit::Waveform::WAVE;
