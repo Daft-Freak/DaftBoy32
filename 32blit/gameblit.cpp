@@ -128,7 +128,7 @@ Menu menu("Menu",
 
 bool menuOpen = false;
 
-bool redwawBG = true;
+bool redrawBG = true;
 uint32_t lastUpdate = 0;
 
 #ifdef _MSC_VER
@@ -470,7 +470,7 @@ void render(uint32_t time_ms)
 #ifndef PICO_BUILD
     bool updateRunning = time_ms - lastUpdate < 20;
 
-    if(redwawBG || !updateRunning)
+    if(redrawBG || !updateRunning)
     {
         if(awfulScale)
         {
@@ -480,7 +480,7 @@ void render(uint32_t time_ms)
         else
             packedToRGB(asset_background, blit::screen); // unpack directly to the screen
 
-        redwawBG = !updateRunning;
+        redrawBG = !updateRunning;
     }
 
     auto gbScreen = screenData;
@@ -562,7 +562,7 @@ void render(uint32_t time_ms)
     if(menuOpen)
     {
         menu.render();
-        redwawBG = true;
+        redrawBG = true;
     }
 
 #ifdef PROFILER
@@ -614,7 +614,7 @@ void update(uint32_t time_ms)
     if(blit::buttons.released & blit::Button::JOYSTICK)
     {
         awfulScale = !awfulScale;
-        redwawBG = true;
+        redrawBG = true;
     }
 
     loadedBanks = 0;
