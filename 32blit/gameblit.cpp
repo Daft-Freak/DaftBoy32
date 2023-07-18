@@ -147,7 +147,7 @@ static int log2i(unsigned int x)
 #endif
 
 // assuming RLE/palette and that data is the right size
-void packedToRGB(const uint8_t *packed_data, uint8_t *data)
+void packedToRGB(const uint8_t *packed_data, blit::Surface &surf)
 {
     auto image = *(const blit::packed_image *)packed_data;
 
@@ -161,8 +161,8 @@ void packedToRGB(const uint8_t *packed_data, uint8_t *data)
     auto image_data = packed_data + sizeof(blit::packed_image) + palette_entry_count * 4;
     auto end = packed_data + image.byte_count;
 
-    uint8_t *pdest = (uint8_t *)data;
-    auto dest_end = pdest + blit::screen.row_stride * blit::screen.bounds.h;
+    uint32_t offset = 0;
+    uint32_t surf_len = surf.bounds.area();
     int parse_state = 0;
     uint8_t count = 0, col = 0, bit = 0;
 
@@ -195,25 +195,17 @@ void packedToRGB(const uint8_t *packed_data, uint8_t *data)
 
                     if(++bit == bit_depth)
                     {
-                        for (int c = 0; c <= count; c++)
-                        {
-#ifdef PICO_BUILD
-                            uint16_t packed = (palette[col].r >> 3) | ((palette[col].g >> 2) << 5) | ((palette[col].b >> 3) << 11);
-                            *pdest++ = packed & 0xFF;
-                            *pdest++ = packed >> 8;
-#else
-                            *pdest++ = palette[col].r;
-                            *pdest++ = palette[col].g;
-                            *pdest++ = palette[col].b;
-#endif
-                        }
+                        blit::Pen p{palette[col].r, palette[col].g, palette[col].b}; // attempting to avoid unaligned load...
+
+                        surf.pbf(&p, &surf, offset, count + 1);
+                        offset += count + 1;
 
                         bit = 0; col = 0;
                         parse_state = 0;
                         count = 0;
 
                         // done, skip any remaining padding
-                        if(pdest == dest_end)
+                        if(offset == surf_len)
                             parse_state = 3;
                     }
                     break;
@@ -384,7 +376,7 @@ void init()
 
 #ifdef BLIT_BOARD_PIMORONI_PICOSYSTEM
     // force the background onto the screen
-    packedToRGB(asset_background_square, blit::screen.data);
+    packedToRGB(asset_background_square, blit::screen);
     st7789::update();
 
     // reduce the framebuffer to the size of the emulated screen
@@ -486,7 +478,7 @@ void render(uint32_t time_ms)
             blit::screen.clear();
         }
         else
-            packedToRGB(asset_background, blit::screen.data); // unpack directly to the screen
+            packedToRGB(asset_background, blit::screen); // unpack directly to the screen
 
         redwawBG = !updateRunning;
     }
