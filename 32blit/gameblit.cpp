@@ -86,8 +86,14 @@ DMGCPU cpu;
 static uint16_t screenData[160 * 144];
 #endif
 
+#ifdef BLIT_BOARD_PIMORONI_PICOVISION
+static blit::Surface dmgScreen((uint8_t *)screenData, blit::PixelFormat::RGB565, {160, 144});
+#endif
+
 // ROM cache
-#ifdef PICO_BUILD
+#ifdef BLIT_BOARD_PIMORONI_PICOVISION
+static const int romBankCacheSize = 5;
+#elif defined(PICO_BUILD) // really picosystem
 static const int romBankCacheSize = 0; // could fit 2 with GBC removed
 #else
 static const int romBankCacheSize = 11;
@@ -467,8 +473,8 @@ void render(uint32_t time_ms)
         return;
     }
 
-#ifndef PICO_BUILD
-    bool updateRunning = time_ms - lastUpdate < 20;
+#ifndef BLIT_BOARD_PIMORONI_PICOSYSTEM
+    bool updateRunning = time_ms - lastUpdate < 30;
 
     if(redrawBG || !updateRunning)
     {
@@ -482,7 +488,14 @@ void render(uint32_t time_ms)
 
         redrawBG = !updateRunning;
     }
+#endif
 
+// PicoVision display is implemented with a blit (it supports RGB555)
+#ifdef BLIT_BOARD_PIMORONI_PICOVISION
+    blit::screen.blit(&dmgScreen, {0, 0, 160, 144}, {80, 48});
+#endif
+
+#ifndef PICO_BUILD
     auto gbScreen = screenData;
 
     auto expandCol = [](uint16_t rgb555, uint8_t &r, uint8_t &g, uint8_t &b)
