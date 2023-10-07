@@ -87,7 +87,7 @@ static uint16_t screenData[160 * 144];
 #endif
 
 #ifdef BLIT_BOARD_PIMORONI_PICOVISION
-static blit::Surface dmgScreen((uint8_t *)screenData, blit::PixelFormat::RGB565, {160, 144});
+static blit::Surface dmgScreen((uint8_t *)screenData, blit::PixelFormat::BGR555, {160, 144});
 #endif
 
 // ROM cache
