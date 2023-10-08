@@ -134,7 +134,7 @@ Menu menu("Menu",
 
 bool menuOpen = false;
 
-bool redrawBG = true;
+int redrawBG = 2;
 uint32_t lastUpdate = 0;
 
 #ifdef _MSC_VER
@@ -486,7 +486,8 @@ void render(uint32_t time_ms)
         else
             packedToRGB(asset_background, blit::screen); // unpack directly to the screen
 
-        redrawBG = !updateRunning;
+        if(updateRunning)
+            redrawBG--;
     }
 #endif
 
@@ -575,7 +576,7 @@ void render(uint32_t time_ms)
     if(menuOpen)
     {
         menu.render();
-        redrawBG = true;
+        redrawBG = 2;
     }
 
 #ifdef PROFILER
@@ -627,7 +628,7 @@ void update(uint32_t time_ms)
     if(blit::buttons.released & blit::Button::JOYSTICK)
     {
         awfulScale = !awfulScale;
-        redrawBG = true;
+        redrawBG = 2;
     }
 
     loadedBanks = 0;
