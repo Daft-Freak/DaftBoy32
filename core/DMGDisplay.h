@@ -59,7 +59,7 @@ private:
     // GBC
     uint16_t bgPalette[8 * 4], objPalette[8 * 4];
 
-#ifdef DISPLAY_RGB565
+#if defined(DISPLAY_RGB565) || defined(DISPLAY_RB_SWAP)
     uint16_t bgPaletteRaw[8 * 4], objPaletteRaw[8 * 4];
     bool bgPaletteDirty = false, objPaletteDirty = false;
 #endif

@@ -463,7 +463,7 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
             auto bcps = mem.readIOReg(IO_BCPS);
 
-#ifdef DISPLAY_RGB565
+#if defined(DISPLAY_RGB565) || defined(DISPLAY_RB_SWAP)
             reinterpret_cast<uint8_t *>(bgPaletteRaw)[bcps & 0x3F] = data;
             bgPaletteDirty = true;
 #else
@@ -485,7 +485,7 @@ bool DMGDisplay::writeReg(uint16_t addr, uint8_t data)
 
             auto ocps = mem.readIOReg(IO_OCPS);
 
-#ifdef DISPLAY_RGB565
+#if defined(DISPLAY_RGB565) || defined(DISPLAY_RB_SWAP)
             reinterpret_cast<uint8_t *>(objPaletteRaw)[ocps & 0x3F] = data;
             objPaletteDirty = true;
 #else
@@ -639,12 +639,24 @@ void DMGDisplay::drawScanLine(int y)
     const bool isColour = cpu.getColourMode();
 
 // sync palettes
+#if defined(DISPLAY_RGB565) || defined(DISPLAY_RB_SWAP)
+
+    const auto convert = [](uint16_t col)
+    {
+#ifdef DISPLAY_RB_SWAP
+        col = col << 10 | (col & 0x3E0) | (col << 1) >> 11;
+#endif
 #ifdef DISPLAY_RGB565
+    col = (col & 0x1F)  | (col & 0x7FE0) << 1;
+#endif
+        return col;
+    };
+
     if(bgPaletteDirty)
     {
         auto outCol = bgPalette;
-        for(auto &col : bgPaletteRaw)
-            *outCol++ = (col & 0x1F)  | (col & 0x7FE0) << 1;
+        for(auto col : bgPaletteRaw)
+            *outCol++ = convert(col);
 
         bgPaletteDirty = false;
     }
@@ -652,8 +664,8 @@ void DMGDisplay::drawScanLine(int y)
     if(objPaletteDirty)
     {
         auto outCol = objPalette;
-        for(auto &col : objPaletteRaw)
-            *outCol++ = (col & 0x1F)  | (col & 0x7FE0) << 1;
+        for(auto col : objPaletteRaw)
+            *outCol++ = convert(col);
 
         objPaletteDirty = false;
     }
