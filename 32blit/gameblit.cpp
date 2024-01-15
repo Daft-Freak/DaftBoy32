@@ -478,7 +478,7 @@ void render(uint32_t time_ms)
 
     if(redrawBG || !updateRunning)
     {
-        if(awfulScale)
+        if(awfulScale || blit::screen.bounds.w < 320)
         {
             blit::screen.pen = blit::Pen(145, 142, 147);
             blit::screen.clear();
@@ -494,6 +494,14 @@ void render(uint32_t time_ms)
 // PicoVision display is implemented with a blit (it supports RGB555)
 #ifdef BLIT_BOARD_PIMORONI_PICOVISION
     blit::screen.blit(&dmgScreen, {0, 0, 160, 144}, {80, 48});
+#endif
+
+#ifdef BLIT_BOARD_GBACART
+    for(int y = 0; y < 144; y++)
+    {
+        auto ptr = blit::screen.ptr(40, y + 8);
+        memcpy(ptr, screenData + y * 160, 160 * 2);
+    }
 #endif
 
 #ifndef PICO_BUILD
