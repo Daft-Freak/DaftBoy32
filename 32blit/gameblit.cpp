@@ -3,10 +3,6 @@
 #include "gameblit.hpp"
 #include "assets.hpp"
 
-#ifdef BLIT_BOARD_PIMORONI_PICOSYSTEM
-#include "st7789.hpp"
-#endif
-
 #include "DMGAPU.h"
 #include "DMGDisplay.h"
 #include "DMGCPU.h"
@@ -84,6 +80,8 @@ DMGCPU cpu;
 
 #ifndef BLIT_BOARD_PIMORONI_PICOSYSTEM
 static uint16_t screenData[160 * 144];
+#else
+static uint8_t renderCounter = 0;
 #endif
 
 #ifdef BLIT_BOARD_PIMORONI_PICOVISION
@@ -386,23 +384,7 @@ void init()
 
     cpu.getMem().addROMCache(romBankCache, romBankCacheSize * 0x4000);
 
-#ifdef BLIT_BOARD_PIMORONI_PICOSYSTEM
-    // force the background onto the screen
-    packedToRGB(asset_background_square, blit::screen);
-    st7789::update();
-
-    // reduce the framebuffer to the size of the emulated screen
-    auto origSize = blit::screen.row_stride * blit::screen.bounds.h;
-    blit::screen.bounds = {160, 144};
-    blit::screen.row_stride = blit::screen.bounds.w * blit::screen.pixel_stride;
-    st7789::set_window(40, 48, 160, 144);
-
-    // ... and steal that extra RAM
-    auto newSize = blit::screen.row_stride * blit::screen.bounds.h;
-    cpu.getMem().addROMCache(blit::screen.data + newSize, origSize - newSize);
-
-    cpu.getDisplay().setFramebuffer(reinterpret_cast<uint16_t *>(blit::screen.data));
-#else
+#ifndef BLIT_BOARD_PIMORONI_PICOSYSTEM
     cpu.getDisplay().setFramebuffer(screenData);
 #endif
 
@@ -468,6 +450,41 @@ void render(uint32_t time_ms)
 {
 #ifdef PROFILER
     profilerRenderProbe->start();
+#endif
+
+#ifdef BLIT_BOARD_PIMORONI_PICOSYSTEM
+    if(renderCounter < 2)
+    {
+        if(renderCounter == 0)
+        {
+            // render the background while we still have a full framebuffer
+            packedToRGB(asset_background_square, blit::screen);
+        }
+        else if(renderCounter == 1)
+        {
+            // bg render should be done, reconfigure screen
+            auto origSize = blit::screen.row_stride * blit::screen.bounds.h;
+            
+            // 182 height is a hack to avoid double-buffering
+            blit::set_screen_mode(blit::ScreenMode::hires, {160, /*144*/182});
+
+            cpu.getDisplay().setFramebuffer(reinterpret_cast<uint16_t *>(blit::screen.data) + 160 * 19);
+
+            // ... and steal that extra RAM
+            auto newSize = blit::screen.row_stride * blit::screen.bounds.h;
+            cpu.getMem().addROMCache(blit::screen.data + newSize, origSize - newSize);
+        }
+        renderCounter++;
+        return;
+    }
+    else if(loaded && renderCounter == 2)
+    {
+        // clear on game load
+        blit::screen.pen = blit::Pen(145, 142, 147);
+        blit::screen.clear();
+        // could try to repair the header but...
+        renderCounter++;
+    }
 #endif
 
     if(!loaded)
