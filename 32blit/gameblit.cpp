@@ -376,7 +376,11 @@ void openROM(std::string filename)
 
 void init()
 {
+#ifdef BLIT_BOARD_PIMORONI_PICOVISION
     blit::set_screen_mode(blit::ScreenMode::hires);
+#else
+    blit::set_screen_mode(blit::ScreenMode::hires, blit::PixelFormat::RGB565);
+#endif
 
     cpu.getMem().addROMCache(romBankCache, romBankCacheSize * 0x4000);
 
@@ -506,13 +510,24 @@ void render(uint32_t time_ms)
         b = (rgb555 & 0x7C00) >> 7;
     };
 
+    // TODO: always enable conversion in DMGDisplay?
+    auto expandCol565 = [](uint16_t rgb555)
+    {
+        return (rgb555 & 0x1F)| (rgb555 & 0x7FE0) << 1;
+    };
+
     if(awfulScale)
     {
         int oy = 0;
 
         auto copyLine = [gbScreen, &expandCol](int y, int y1, int oy)
         {
-            auto ptr = blit::screen.ptr(27, oy++);
+            auto packCol565 = [](uint8_t r, uint8_t g, uint8_t b)
+            {
+                return (r >> 3) | ((g >> 2) << 5) | ((b >> 3) << 11);
+            };
+        
+            auto ptr = reinterpret_cast<uint16_t*>(blit::screen.ptr(27, oy++));
             for(int x = 0; x < 158; x += 3)
             {
                 uint8_t tmpR, tmpG, tmpB;
@@ -536,11 +551,11 @@ void render(uint32_t time_ms)
                 g3 = (g3 + tmpG) / 2;
                 b3 = (b3 + tmpB) / 2;
 
-                *ptr++ = r1; *ptr++ = g1; *ptr++ = b1;
-                *ptr++ = (r1 + r2) / 2; *ptr++ = (g1 + g2) / 2; *ptr++ = (b1 + b2) / 2;
-                *ptr++ = r2; *ptr++ = g2; *ptr++ = b2;
-                *ptr++ = (r2 + r3) / 2; *ptr++ = (g2 + g3) / 2; *ptr++ = (b2 + b3) / 2;
-                *ptr++ = r3; *ptr++ = g3; *ptr++ = b3;
+                *ptr++ = packCol565(r1, g1, b1);
+                *ptr++ = packCol565((r1 + r2) / 2, (g1 + g2) / 2, (b1 + b2) / 2);
+                *ptr++ = packCol565(r2, g2, b2);
+                *ptr++ = packCol565((r2 + r3) / 2, (g2 + g3) / 2, (b2 + b3) / 2);
+                *ptr++ = packCol565(r3, g3, b3);
             }
 
             // one pixel left
@@ -548,7 +563,7 @@ void render(uint32_t time_ms)
             expandCol(gbScreen[159 + y * 160], r1, g1, b1);
             expandCol(gbScreen[159 + y1 * 160], r2, g2, b2);
 
-            *ptr++ = (r1 + r2) / 2; *ptr++ = (g1 + g2) / 2; *ptr++ = (b1 + b2) / 2;
+            *ptr++ = packCol565((r1 + r2) / 2, (g1 + g2) / 2, (b1 + b2) / 2);
         };
         for(int y = 0; y < 144; y += 3)
         {
@@ -563,12 +578,9 @@ void render(uint32_t time_ms)
     {
         for(int y = 0; y < 144; y++)
         {
-            auto ptr = blit::screen.ptr(80, y + 48);
+            auto ptr = reinterpret_cast<uint16_t*>(blit::screen.ptr(80, y + 48));
             for(int x = 0; x < 160; x++)
-            {
-                expandCol(gbScreen[x + y * 160], *ptr, *(ptr + 1), *(ptr + 2));
-                ptr += 3;
-            }
+                *ptr++ = expandCol565(gbScreen[x + y * 160]);
         }
     }
 #endif
