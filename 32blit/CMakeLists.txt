@@ -11,6 +11,9 @@ add_subdirectory(DUH)
 target_link_libraries(DaftBoy32 DaftBoyCore DUH)
 
 if(32BLIT_PICO)
+    # we do very little in render and need the extra RAM
+    target_compile_definitions(DaftBoy32 PRIVATE -DDOUBLE_BUFFERED_HIRES=0)
+
     if(${PICO_BOARD} STREQUAL "pimoroni_picosystem")
         target_compile_definitions(DaftBoy32 PRIVATE -DDISPLAY_RGB565)
     elseif(${PICO_ADDON} STREQUAL "pimoroni_picovision")
