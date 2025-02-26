@@ -92,7 +92,7 @@ static blit::Surface dmgScreen((uint8_t *)screenData, blit::PixelFormat::BGR555,
 #ifdef BLIT_BOARD_PIMORONI_PICOVISION
 static const int romBankCacheSize = 5;
 #elif defined(PICO_RP2350) // generic device with 320x240 framebuffer
-static const int romBankCacheSize = 11;
+static const int romBankCacheSize = 10; // 11 if standalone
 #elif defined(PICO_BUILD) // really picosystem
 static const int romBankCacheSize = 0; // could fit 2 with GBC removed
 #else
