@@ -378,6 +378,8 @@ void init()
 {
 #ifdef BLIT_BOARD_PIMORONI_PICOVISION
     blit::set_screen_mode(blit::ScreenMode::hires);
+#elif defined(BLIT_BOARD_PIMORONI_PRESTO)
+    blit::set_screen_mode(blit::ScreenMode::hires, blit::PixelFormat::RGB565, {160, 160});
 #else
     blit::set_screen_mode(blit::ScreenMode::hires, blit::PixelFormat::RGB565);
 #endif
@@ -501,7 +503,7 @@ void render(uint32_t time_ms)
 
     if(redrawBG || !updateRunning)
     {
-        if(awfulScale)
+        if(awfulScale || blit::screen.bounds.w != 320)
         {
             blit::screen.pen = blit::Pen(145, 142, 147);
             blit::screen.clear();
@@ -595,9 +597,11 @@ void render(uint32_t time_ms)
     }
     else
     {
+        int xOff = (blit::screen.bounds.w - 160) / 2;
+        int yOff = (blit::screen.bounds.h - 144) / 2;
         for(int y = 0; y < 144; y++)
         {
-            auto ptr = reinterpret_cast<uint16_t*>(blit::screen.ptr(80, y + 48));
+            auto ptr = reinterpret_cast<uint16_t*>(blit::screen.ptr(xOff, y + yOff));
             for(int x = 0; x < 160; x++)
                 *ptr++ = expandCol565(gbScreen[x + y * 160]);
         }
