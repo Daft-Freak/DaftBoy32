@@ -77,7 +77,7 @@ void X86Builder::adc(RMOperand dst, Reg8 src)
 // imm -> reg/mem, 8 bit
 void X86Builder::adc(RMOperand dst, uint8_t imm)
 {
-    encode(0x10, 2, dst, imm);
+    encode(0x80, 2, dst, imm);
 }
 
 // reg -> reg/mem
