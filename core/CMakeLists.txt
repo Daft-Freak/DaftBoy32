@@ -35,7 +35,7 @@ if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" OR ${CMAKE_SYSTEM_PROCESSOR} STRE
     target_sources(DaftBoyRecompiler INTERFACE compiler/X86Builder.cpp compiler/X86Target.cpp)
     target_compile_definitions(DaftBoyRecompiler INTERFACE RECOMPILER_X86)
     set(HAVE_RECOMPILER TRUE)
-elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm" AND NOT ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64") # 32 bit arm
     target_sources(DaftBoyRecompiler INTERFACE compiler/ThumbBuilder.cpp compiler/ThumbTarget.cpp)
     target_compile_definitions(DaftBoyRecompiler INTERFACE RECOMPILER_THUMB)
     set(HAVE_RECOMPILER TRUE)
