@@ -425,27 +425,6 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         if(flags & GenOp_Exit)
             assert(op.opcode == GenOpcode::Jump);
 
-        // move branch target flag up to the start of the original instruction
-        if((flags & GenOp_BranchTarget) && !genBlock.instructions.empty() && !genBlock.instructions.back().len)
-        {
-            flags &= ~GenOp_BranchTarget;
-            auto rit = genBlock.instructions.rbegin();
-            for(;rit != genBlock.instructions.rend(); ++rit)
-            {
-                if(rit->len) // end of previous instr
-                {
-                    rit--; // the one after
-                    break;
-                }
-            }
-
-            // must be the first instruction
-            if(rit == genBlock.instructions.rend())
-                rit--;
-
-            rit->flags |= GenOp_BranchTarget;
-        }
-
         op.len = len;
         op.flags = flags;
         genBlock.instructions.emplace_back(std::move(op));
