@@ -166,7 +166,7 @@ void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const
                 read |= getReadFlags(*next);
                 read &= (instr.flags & GenOp_WriteFlags) >> 4; // can't have a read for a flag we're not setting
 
-                if(next->opcode == GenOpcode::Jump)
+                if(next->opcode == GenOpcode::Jump || next->opcode == GenOpcode::CompareJump)
                 {
                     // don't go too deep
                     if(inBranch)
@@ -201,7 +201,7 @@ void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const
                         falseBranchFlags = instr.flags & GenOp_WriteFlags;
                         for(auto falseInstr = next + 1; falseInstr != blockInfo.instructions.end() && falseBranchFlags != read << 4; ++falseInstr)
                         {
-                            if(falseInstr->opcode == GenOpcode::Jump)
+                            if(falseInstr->opcode == GenOpcode::Jump || falseInstr->opcode == GenOpcode::CompareJump)
                                 break;
 
                             read |= getReadFlags(*falseInstr) & ((instr.flags & GenOp_WriteFlags) >> 4);
@@ -227,7 +227,7 @@ void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const
         }
 
         // jumps with immediate addr may be branches
-        if(instr.opcode == GenOpcode::Jump && instr.src[1] == 0 && (it - 1)->opcode == GenOpcode::LoadImm)
+        if((instr.opcode == GenOpcode::Jump || instr.opcode == GenOpcode::CompareJump) && instr.src[1] == 0 && (it - 1)->opcode == GenOpcode::LoadImm)
         {
             // get target from LoadImm
             auto target = (it - 1)->imm;
@@ -250,7 +250,7 @@ void analyseGenBlock(uint32_t pc, uint32_t endPC, GenBlockInfo &blockInfo, const
                 }
             }
         }
-        else if(instr.opcode == GenOpcode::Jump)
+        else if(instr.opcode == GenOpcode::Jump || instr.opcode == GenOpcode::CompareJump)
             instr.flags |= GenOp_Exit; // we don't know where it goes
     }
 }
@@ -278,6 +278,8 @@ void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sou
         {"addc", 2, 1},
         {"and ", 2, 1},
         {"comp", 2, 0},
+        {"divs", 2, 1},
+        {"divu", 2, 1},
         {"mult", 2, 1},
         {"or  ", 2, 1},
         {"sub ", 2, 1},
@@ -291,7 +293,10 @@ void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sou
         {"shl ", 2, 1},
         {"shra", 2, 1},
         {"shrl", 2, 1},
+        {"sx8 ", 1, 1},
+        {"sx16", 1, 1},
         {"jump", 2, 0},
+        {"cjmp", 2, 1},
     };
 
     static const OpMeta specialOpMeta[]
@@ -377,7 +382,7 @@ void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sou
             int i = 0;
             
             // first jump src is the condition
-            if(instr.opcode == GenOpcode::Jump)
+            if(instr.opcode == GenOpcode::Jump || instr.opcode == GenOpcode::CompareJump)
             {
                 printf(" %s", condName[instr.src[0]]);
                 i++;
@@ -395,7 +400,7 @@ void printGenBlock(uint32_t pc, const GenBlockInfo &block, const SourceInfo &sou
             for(; i < 2; i++)
                 printf("    ");
 
-            if(meta.numDst)
+            if(meta.numDst && instr.opcode != GenOpcode::CompareJump)
                 printf(" ->");
             else
                 printf("   ");

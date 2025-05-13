@@ -18,6 +18,8 @@ enum class GenOpcode : uint8_t
     AddWithCarry,
     And,
     Compare,
+    DivideSigned,
+    DivideUnsigned,
     Multiply,
     Or,
     Subtract,
@@ -34,7 +36,11 @@ enum class GenOpcode : uint8_t
     ShiftRightArith,
     ShiftRightLogic,
 
+    SignExtend8,
+    SignExtend16,
+
     Jump,
+    CompareJump, // does internal comparison (dst[0] against 0)
 
     // not-so-generic
     DMG_Stop = 0x80,
