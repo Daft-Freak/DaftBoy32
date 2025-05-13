@@ -140,48 +140,76 @@ public:
 
     X86Builder(uint8_t *ptr, uint8_t *endPtr) : ptr(ptr), endPtr(endPtr){}
 
-    void add(Reg32 dst, Reg32 src);
-    void add(Reg16 dst, Reg16 src);
-    void add(Reg8 dst, Reg8 src);
     void add(RMOperand dst, Reg32 src);
-    void add(Reg32 dst, uint32_t imm);
-    void add(Reg8 dst, uint8_t imm);
+    void add(RMOperand dst, Reg16 src);
+    void add(RMOperand dst, Reg8 src);
     void add(RMOperand dst, uint32_t imm);
-    void add(Reg64 dst, int8_t imm);
-    void add(Reg32 dst, int8_t imm);
-    void add(Reg16 dst, int8_t imm);
+    void add(RMOperand dst, uint8_t imm);
+    void addQ(RMOperand dst, int8_t imm);
     void addD(RMOperand dst, int8_t imm);
     void addW(RMOperand dst, int8_t imm);
+    void add(Reg32 dst, Reg32 src) {add(RMOperand{dst}, src);}
+    void add(Reg16 dst, Reg16 src) {add(RMOperand{dst}, src);}
+    void add(Reg8 dst, Reg8 src) {add(RMOperand{dst}, src);}
+    void add(Reg32 dst, uint32_t imm) {add(RMOperand{dst}, imm);}
+    void add(Reg8 dst, uint8_t imm) {add(RMOperand{dst}, imm);}
+    void add(Reg64 dst, int8_t imm) {addQ(RMOperand{dst}, imm);}
+    void add(Reg32 dst, int8_t imm) {addD(RMOperand{dst}, imm);}
+    void add(Reg16 dst, int8_t imm) {addW(RMOperand{dst}, imm);}
 
-    void adc(Reg32 dst, Reg32 src);
-    void adc(Reg8 dst, Reg8 src);
-    void adc(Reg8 dst, uint8_t imm);
 
-    void and_(Reg32 dst, Reg32 src);
-    void and_(Reg16 dst, Reg16 src);
-    void and_(Reg8 dst, Reg8 src);
-    void and_(Reg32 dst, uint32_t imm);
-    void and_(Reg8 dst, uint8_t imm);
-    void and_(Reg32 dst, int8_t imm);
+    void adc(RMOperand dst, Reg32 src);
+    void adc(RMOperand dst, Reg8 src);
+    void adc(RMOperand dst, uint8_t imm);
+    void adc(Reg32 dst, Reg32 src) {adc(RMOperand{dst}, src);}
+    void adc(Reg8 dst, Reg8 src) {adc(RMOperand{dst}, src);}
+    void adc(Reg8 dst, uint8_t imm) {adc(RMOperand{dst}, imm);}
 
+    void and_(RMOperand dst, Reg32 src);
+    void and_(RMOperand dst, Reg16 src);
+    void and_(RMOperand dst, Reg8 src);
+    void and_(RMOperand dst, uint32_t imm);
+    void and_(RMOperand dst, uint8_t imm);
+    void andD(RMOperand dst, int8_t imm);
+    void and_(Reg32 dst, Reg32 src) {and_(RMOperand{dst}, src);}
+    void and_(Reg16 dst, Reg16 src) {and_(RMOperand{dst}, src);}
+    void and_(Reg8 dst, Reg8 src) {and_(RMOperand{dst}, src);}
+    void and_(Reg32 dst, uint32_t imm) {and_(RMOperand{dst}, imm);}
+    void and_(Reg8 dst, uint8_t imm) {and_(RMOperand{dst}, imm);}
+    void and_(Reg32 dst, int8_t imm)  {andD(RMOperand{dst}, imm);}
+
+    void bt(Reg32 base, uint8_t off);
     void btr(Reg32 base, uint8_t off);
 
     void call(int disp);
     void call(Reg64 r);
 
+    void cdq();
+
     void cmc();
 
-    void cmp(Reg32 dst, Reg32 src);
-    void cmp(Reg8 dst, Reg8 src);
-    void cmp(Reg32 dst, uint32_t imm);
-    void cmp(Reg8 dst, uint8_t imm);
-    void cmp(Reg32 dst, int8_t imm);
+    void cmp(RMOperand dst, Reg32 src);
+    void cmp(RMOperand dst, Reg8 src);
+    void cmp(RMOperand dst, uint32_t imm);
     void cmp(RMOperand dst, uint8_t imm);
+    void cmpD(RMOperand dst, int8_t imm);
+    void cmp(Reg32 dst, Reg32 src) {cmp(RMOperand{dst}, src);}
+    void cmp(Reg8 dst, Reg8 src) {cmp(RMOperand{dst}, src);}
+    void cmp(Reg32 dst, uint32_t imm) {cmp(RMOperand{dst}, imm);}
+    void cmp(Reg8 dst, uint8_t imm) {cmp(RMOperand{dst}, imm);}
+    void cmp(Reg32 dst, int8_t imm)  {cmpD(RMOperand{dst}, imm);}
 
     void dec(Reg16 r);
     void dec(Reg8 r);
 
-    void imul(Reg32 dst, Reg32 src);
+    void divD(RMOperand src);
+    void div(Reg32 src) {divD(RMOperand{src});}
+
+    void idivD(RMOperand src);
+    void idiv(Reg32 src) {idivD(RMOperand{src});}
+
+    void imul(Reg32 dst, RMOperand src);
+    void imul(Reg32 dst, Reg32 src) {imul(dst, RMOperand{src});}
 
     void inc(Reg16 r);
     void inc(Reg8 r);
@@ -194,10 +222,6 @@ public:
     void lea(Reg64 dst, RMOperand m);
     void lea(Reg32 dst, RMOperand m);
 
-    void mov(Reg64 dst, Reg64 src);
-    void mov(Reg32 dst, Reg32 src);
-    void mov(Reg16 dst, Reg16 src);
-    void mov(Reg8 dst, Reg8 src);
     void mov(RMOperand dst, Reg64 src);
     void mov(RMOperand dst, Reg32 src);
     void mov(RMOperand dst, Reg16 src);
@@ -206,94 +230,151 @@ public:
     void mov(Reg32 dst, RMOperand src);
     void mov(Reg16 dst, RMOperand src);
     void mov(Reg8 dst, RMOperand src);
-    void mov(RMOperand dst, Reg32 src, int w); // internal
-    void mov(Reg32 dst, RMOperand src, int w); // internal
     void mov(Reg64 r, uint64_t imm);
     void mov(Reg32 r, uint32_t imm);
     void mov(Reg8 r, uint8_t imm);
     void mov(RMOperand dst, uint32_t imm);
     void mov(RMOperand dst, uint8_t imm);
+    void mov(Reg64 dst, Reg64 src) {mov(RMOperand{dst}, src);}
+    void mov(Reg32 dst, Reg32 src) {mov(RMOperand{dst}, src);}
+    void mov(Reg16 dst, Reg16 src) {mov(RMOperand{dst}, src);}
+    void mov(Reg8  dst, Reg8  src) {mov(RMOperand{dst}, src);}
 
-    void movsx(Reg32 dst, Reg16 src);
-    void movsx(Reg32 dst, Reg8 src);
+    void movsxW(Reg32 dst, RMOperand src);
+    void movsxB(Reg32 dst, RMOperand src);
+    void movsx(Reg32 dst, Reg16 src) {movsxW(dst, RMOperand{src});}
+    void movsx(Reg32 dst, Reg8 src) {movsxB(dst, RMOperand{src});}
 
-    void movzx(Reg32 dst, Reg16 src);
-    void movzx(Reg32 dst, Reg8 src);
     void movzxW(Reg32 dst, RMOperand src);
+    void movzxB(Reg32 dst, RMOperand src);
+    void movzx(Reg32 dst, Reg16 src) {movzxW(dst, RMOperand{src});}
+    void movzx(Reg32 dst, Reg8 src) {movzxB(dst, RMOperand{src});}
 
     void not_(Reg32 r);
     void not_(Reg8 r);
 
-    void or_(Reg32 dst, Reg32 src);
-    void or_(Reg16 dst, Reg16 src);
-    void or_(Reg8 dst, Reg8 src);
-    void or_(Reg32 dst, uint32_t imm);
-    void or_(Reg8 dst, uint8_t imm);
+    void or_(RMOperand dst, Reg32 src);
+    void or_(RMOperand dst, Reg16 src);
+    void or_(RMOperand dst, Reg8 src);
+    void or_(RMOperand dst, uint32_t imm);
+    void or_(RMOperand dst, uint8_t imm);
+    void or_(Reg32 dst, Reg32 src) {or_(RMOperand{dst}, src);}
+    void or_(Reg16 dst, Reg16 src) {or_(RMOperand{dst}, src);}
+    void or_(Reg8 dst, Reg8 src) {or_(RMOperand{dst}, src);}
+    void or_(Reg32 dst, uint32_t imm) {or_(RMOperand{dst}, imm);}
+    void or_(Reg8 dst, uint8_t imm) {or_(RMOperand{dst}, imm);}
 
     void pop(Reg64 r);
 
     void push(Reg64 r);
 
-    void rclCL(Reg8 dst);
-    void rcl(Reg8 r, uint8_t count);
+    void rclD(RMOperand r);
+    void rclB(RMOperand r);
+    void rclD(RMOperand r, uint8_t count);
+    void rclB(RMOperand r, uint8_t count);
+    void rcl(Reg32 dst) {rclD(RMOperand{dst});}
+    void rcl(Reg8 dst) {rclB(RMOperand{dst});}
+    void rcl(Reg32 r, uint8_t count) {rclD(RMOperand{r}, count);}
+    void rcl(Reg8 r, uint8_t count) {rclB(RMOperand{r}, count);}
 
-    void rcrCL(Reg8 dst);
-    void rcr(Reg8 r, uint8_t count);
+    void rcrD(RMOperand r);
+    void rcrB(RMOperand r);
+    void rcrD(RMOperand r, uint8_t count);
+    void rcrB(RMOperand r, uint8_t count);
+    void rcr(Reg32 dst) {rcrD(RMOperand{dst});}
+    void rcr(Reg8 dst) {rcrB(RMOperand{dst});}
+    void rcr(Reg32 r, uint8_t count) {rcrD(RMOperand{r}, count);}
+    void rcr(Reg8 r, uint8_t count) {rcrB(RMOperand{r}, count);}
 
     void ret();
 
-    void rolCL(Reg8 dst);
-    void rol(Reg8 r, uint8_t count);
+    void rolD(RMOperand r);
+    void rolB(RMOperand r);
+    void rolD(RMOperand r, uint8_t count);
+    void rolB(RMOperand r, uint8_t count);
+    void rol(Reg32 dst) {rolD(RMOperand{dst});}
+    void rol(Reg8 dst) {rolB(RMOperand{dst});}
+    void rol(Reg32 r, uint8_t count) {rolD(RMOperand{r}, count);}
+    void rol(Reg8 r, uint8_t count) {rolB(RMOperand{r}, count);}
 
-    void rorCL(Reg32 dst);
-    void rorCL(Reg8 dst);
-    void ror(Reg32 r, uint8_t count);
-    void ror(Reg8 r, uint8_t count);
+    void rorD(RMOperand r);
+    void rorB(RMOperand r);
+    void rorD(RMOperand r, uint8_t count);
+    void rorB(RMOperand r, uint8_t count);
+    void ror(Reg32 dst) {rorD(RMOperand{dst});}
+    void ror(Reg8 dst) {rorB(RMOperand{dst});}
+    void ror(Reg32 r, uint8_t count) {rorD(RMOperand{r}, count);}
+    void ror(Reg8 r, uint8_t count) {rorB(RMOperand{r}, count);}
 
-    void sarCL(Reg32 dst);
-    void sarCL(Reg8 dst);
-    void sar(Reg32 r, uint8_t count);
-    void sar(Reg8 r, uint8_t count);
+    void sarD(RMOperand r);
+    void sarB(RMOperand r);
+    void sarD(RMOperand r, uint8_t count);
+    void sarB(RMOperand r, uint8_t count);
+    void sar(Reg32 dst) {sarD(RMOperand{dst});}
+    void sar(Reg8 dst) {sarB(RMOperand{dst});}
+    void sar(Reg32 r, uint8_t count) {sarD(RMOperand{r}, count);}
+    void sar(Reg8 r, uint8_t count) {sarB(RMOperand{r}, count);}
 
-    void sbb(Reg32 dst, Reg32 src);
-    void sbb(Reg8 dst, Reg8 src);
-    void sbb(Reg8 dst, uint8_t imm);
+    void sbb(RMOperand dst, Reg32 src);
+    void sbb(RMOperand dst, Reg8 src);
+    void sbb(RMOperand dst, uint8_t imm);
+    void sbb(Reg32 dst, Reg32 src) {sbb(RMOperand{dst}, src);}
+    void sbb(Reg8 dst, Reg8 src) {sbb(RMOperand{dst}, src);}
+    void sbb(Reg8 dst, uint8_t imm) {sbb(RMOperand{dst}, imm);}
 
     void setcc(Condition cc, Reg8 dst);
 
-    void shrCL(Reg32 dst);
-    void shrCL(Reg8 dst);
-    void shr(Reg32 r, uint8_t count);
-    void shr(Reg8 r, uint8_t count);
+    void shrD(RMOperand r);
+    void shrB(RMOperand r);
+    void shrD(RMOperand r, uint8_t count);
+    void shrB(RMOperand r, uint8_t count);
+    void shr(Reg32 dst) {shrD(RMOperand{dst});}
+    void shr(Reg8 dst) {shrB(RMOperand{dst});}
+    void shr(Reg32 r, uint8_t count) {shrD(RMOperand{r}, count);}
+    void shr(Reg8 r, uint8_t count) {shrB(RMOperand{r}, count);}
 
-    void shlCL(Reg32 dst);
-    void shlCL(Reg8 dst);
-    void shl(Reg32 r, uint8_t count);
-    void shl(Reg8 r, uint8_t count);
+    void shlD(RMOperand r);
+    void shlB(RMOperand r);
+    void shlD(RMOperand r, uint8_t count);
+    void shlB(RMOperand r, uint8_t count);
+    void shl(Reg32 dst) {shlD(RMOperand{dst});}
+    void shl(Reg8 dst) {shlB(RMOperand{dst});}
+    void shl(Reg32 r, uint8_t count) {shlD(RMOperand{r}, count);}
+    void shl(Reg8 r, uint8_t count) {shlB(RMOperand{r}, count);}
 
     void stc();
 
-    void sub(Reg32 dst, Reg32 src);
-    void sub(Reg16 dst, Reg16 src);
-    void sub(Reg8 dst, Reg8 src);
     void sub(RMOperand dst, Reg32 src);
-    void sub(Reg32 dst, uint32_t imm);
-    void sub(Reg8 dst, uint8_t imm);
-    void sub(RMOperand dst, uint32_t src);
-    void sub(Reg64 dst, int8_t imm);
-    void sub(Reg32 dst, int8_t imm);
+    void sub(RMOperand dst, Reg16 src);
+    void sub(RMOperand dst, Reg8 src);
+    void sub(RMOperand dst, uint32_t imm);
+    void sub(RMOperand dst, uint8_t imm);
+    void subQ(RMOperand dst, int8_t imm);
     void subD(RMOperand dst, int8_t imm);
+    void sub(Reg32 dst, Reg32 src) {sub(RMOperand{dst}, src);}
+    void sub(Reg16 dst, Reg16 src) {sub(RMOperand{dst}, src);}
+    void sub(Reg8 dst, Reg8 src) {sub(RMOperand{dst}, src);}
+    void sub(Reg32 dst, uint32_t imm) {sub(RMOperand{dst}, imm);}
+    void sub(Reg8 dst, uint8_t imm) {sub(RMOperand{dst}, imm);}
+    void sub(Reg64 dst, int8_t imm) {subQ(RMOperand{dst}, imm);}
+    void sub(Reg32 dst, int8_t imm) {subD(RMOperand{dst}, imm);}
 
     void test(Reg32 dst, uint32_t imm);
     void test(Reg8 dst, uint8_t imm);
 
-    void xchg(Reg32 dst, Reg32 src);
-    void xchg(Reg8 dst, Reg8 src);
+    void xchg(RMOperand dst, Reg32 src);
+    void xchg(RMOperand dst, Reg8 src);
+    void xchg(Reg32 dst, Reg32 src) {xchg(RMOperand{dst}, src);}
+    void xchg(Reg8 dst, Reg8 src) {xchg(RMOperand{dst}, src);}
 
-    void xor_(Reg32 dst, Reg32 src);
-    void xor_(Reg8 dst, Reg8 src);
-    void xor_(Reg32 dst, uint32_t imm);
-    void xor_(Reg8 dst, uint8_t imm);
+    void xor_(RMOperand dst, Reg32 src);
+    void xor_(RMOperand dst, Reg8 src);
+    void xor_(RMOperand dst, uint32_t imm);
+    void xor_(RMOperand dst, uint8_t imm);
+    void xor_(Reg32 dst, Reg32 src) {xor_(RMOperand{dst}, src);}
+    void xor_(Reg8 dst, Reg8 src) {xor_(RMOperand{dst}, src);}
+    void xor_(Reg32 dst, uint32_t imm) {xor_(RMOperand{dst}, imm);}
+    void xor_(Reg8 dst, uint8_t imm) {xor_(RMOperand{dst}, imm);}
 
     uint8_t *getPtr() const {return ptr;}
 
@@ -309,11 +390,28 @@ public:
 private:
     void write(uint8_t b);
 
-    void encodeModRM(int reg1, int reg2Op = 0); // mod 3
-    void encodeModRM(RMOperand rm, int reg2Op = 0);
-    void encodeModRMReg8(int reg1, int reg2); // mod 3 (extra validation fot 8bit regs)
+    // generic/sub-opcodes
+    void encode(uint8_t opcode, int regOp, RMOperand rm, int width, bool isReg = false);
+    void encode0F(uint8_t opcode, int regOp, RMOperand rm, int width, bool isReg = false);
+
+    // helpers for 2nd register operand
+    void encode(uint8_t opcode, RMOperand rm, Reg64 r) {encode(opcode, static_cast<int>(r), rm, 64, true);}
+    void encode(uint8_t opcode, RMOperand rm, Reg32 r) {encode(opcode, static_cast<int>(r), rm, 32, true);}
+    void encode(uint8_t opcode, RMOperand rm, Reg16 r) {encode(opcode, static_cast<int>(r), rm, 16, true);}
+    void encode(uint8_t opcode, RMOperand rm, Reg8 r)  {encode(opcode, static_cast<int>(r), rm,  8, true);}
+
+    void encode0F(uint8_t opcode, RMOperand rm, Reg32 r) {encode0F(opcode, static_cast<int>(r), rm, 32, true);}
+
+    // for immediate operands
+    void encode(uint8_t opcode, int subOp, RMOperand rm, uint32_t imm);
+    void encode(uint8_t opcode, int subOp, RMOperand rm, uint8_t imm);
+
+    void encodeModRM(RMOperand rm, int reg2Op = 0, bool isReg = true);
     void encodeREX(bool w, int reg, int index, int base);
     void encodeREX(bool w, int reg, RMOperand rm);
+
+    void encode(uint32_t v);
+    void encode(uint64_t v);
 
     uint8_t *ptr, *endPtr;
     uint8_t *savedPtr, *savedEndPtr;

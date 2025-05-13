@@ -747,7 +747,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
             // if(enableInterruptsNextCycle)
             // probably don't need this check... might get a false positive in some extreme case though
-            builder.cmp({cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/}, 0);
+            builder.cmp({cpuPtrReg, sourceInfo.extraCPUOffsets[1]/*enableInterruptsNextCycle*/}, uint8_t(0));
             builder.jcc(Condition::E, 10);
 
             // masterInterruptEnable = true
@@ -2103,7 +2103,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     bool setZ = !(instr.flags & GenOp_MagicAlt1); // RLCA sets Z to 0, RLC A sets Z based on the result
                     bool setC = !(instr.flags & GenOp_MagicAlt2); // SWAP sets C to 0 (translated to rot by 4)
 
-                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::rolCL), std::mem_fn<ImmOp8>(&X86Builder::rol)))
+                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::rol), std::mem_fn<ImmOp8>(&X86Builder::rol)))
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -2132,7 +2132,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(src.index() && dst && f)
                     {
                         carryIn(*f);
-                        doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::rclCL), std::mem_fn<ImmOp8>(&X86Builder::rcl));
+                        doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::rcl), std::mem_fn<ImmOp8>(&X86Builder::rcl));
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -2162,7 +2162,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.btr(*mapReg32(flagsReg), getFlagInfo(SourceFlagType::Carry).bit);
                     };
 
-                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::rorCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::ror), preOp, true))
+                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::ror), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::ror), preOp, true))
                     {
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         auto setFlags = flagWriteMask(SourceFlagType::Carry); // only have carry
@@ -2176,7 +2176,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                     bool setZ = !(instr.flags & GenOp_MagicAlt1);
 
-                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::rorCL), std::mem_fn<ImmOp8>(&X86Builder::ror)))
+                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::ror), std::mem_fn<ImmOp8>(&X86Builder::ror)))
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -2205,7 +2205,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     if(src.index() && dst && f)
                     {
                         carryIn(*f);
-                        doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::rcrCL), std::mem_fn<ImmOp8>(&X86Builder::rcr));
+                        doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::rcr), std::mem_fn<ImmOp8>(&X86Builder::rcr));
 
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -2235,7 +2235,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.btr(*mapReg32(flagsReg), getFlagInfo(SourceFlagType::Carry).bit);
                     };
 
-                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shlCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shl), preOp))
+                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shl), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shl), preOp))
                     {
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         auto setFlags = 0xF0;
@@ -2255,7 +2255,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         auto src = checkRegOrImm8(instr.src[1]);
                         auto dst = checkReg32(instr.dst[0]);
 
-                        doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shlCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shl), {});
+                        doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shl), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shl), {});
                     }
                 }
                 else if(regSize == 8)
@@ -2263,7 +2263,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::shlCL), std::mem_fn<ImmOp8>(&X86Builder::shl)))
+                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::shl), std::mem_fn<ImmOp8>(&X86Builder::shl)))
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -2293,7 +2293,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.btr(*mapReg32(flagsReg), getFlagInfo(SourceFlagType::Carry).bit);
                     };
 
-                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::sarCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::sar), preOp))
+                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::sar), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::sar), preOp))
                     {
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         auto setFlags = 0xF0;
@@ -2308,7 +2308,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::sarCL), std::mem_fn<ImmOp8>(&X86Builder::sar)))
+                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::sar), std::mem_fn<ImmOp8>(&X86Builder::sar)))
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -2338,7 +2338,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                             builder.btr(*mapReg32(flagsReg), getFlagInfo(SourceFlagType::Carry).bit);
                     };
 
-                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shrCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shr), preOp))
+                    if(doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shr), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shr), preOp))
                     {
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         auto setFlags = 0xF0;
@@ -2358,7 +2358,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         auto src = checkRegOrImm8(instr.src[1]);
                         auto dst = checkReg32(instr.dst[0]);
 
-                        doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shrCL), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shr), {});
+                        doRegImmShift32(builder, dst, src, std::mem_fn<void(Reg32)>(&X86Builder::shr), std::mem_fn<void(Reg32, uint8_t)>(&X86Builder::shr), {});
                     }
                 }
                 else if(regSize == 8)
@@ -2366,7 +2366,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.dst[0]);
 
-                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::shrCL), std::mem_fn<ImmOp8>(&X86Builder::shr)))
+                    if(doRegImmShift8(builder, dst, src, std::mem_fn<RegUnOp8>(&X86Builder::shr), std::mem_fn<ImmOp8>(&X86Builder::shr)))
                     {
                         // flags
                         uint8_t flags = instr.flags & GenOp_WriteFlags;
@@ -2648,9 +2648,9 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                 builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[2]/*halted*/}, uint8_t(1));
 
                 // if(!masterInterruptEnable && serviceableInterrupts)
-                builder.cmp({cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/}, 0);
+                builder.cmp({cpuPtrReg, sourceInfo.extraCPUOffsets[0]/*masterInterruptEnable*/}, uint8_t(0));
                 builder.jcc(Condition::NE, 12);
-                builder.cmp({cpuPtrReg, sourceInfo.extraCPUOffsets[3]/*serviceableInterrupts*/}, 0);
+                builder.cmp({cpuPtrReg, sourceInfo.extraCPUOffsets[3]/*serviceableInterrupts*/}, uint8_t(0));
                 builder.jcc(Condition::E, 5);
                 // haltBug = true
                 builder.mov({cpuPtrReg, sourceInfo.extraCPUOffsets[4]/*haltBug*/}, uint8_t(1));

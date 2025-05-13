@@ -11,220 +11,121 @@ enum REX
     REX_W = 1 << 3,
 };
 
-// reg -> reg
-void X86Builder::add(Reg32 dst, Reg32 src)
-{
-    add(RMOperand{dst}, src);
-}
-
-// reg -> reg, 16 bit
-void X86Builder::add(Reg16 dst, Reg16 src)
-{
-    write(0x66); // 16 bit override
-    add(static_cast<Reg32>(dst), static_cast<Reg32>(src));
-}
-
-// reg -> reg, 8bit
-void X86Builder::add(Reg8 dst, Reg8 src)
-{
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x00); // opcode
-    encodeModRMReg8(dstReg, srcReg);
-}
-
+// reg -> reg/mem
 void X86Builder::add(RMOperand dst, Reg32 src)
 {
-    assert(dst.w == 0 || dst.w == 3);
-
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, dst);
-    write(0x01); // opcode, w = 1
-    encodeModRM(dst, srcReg);
+    encode(0x00, dst, src);
 }
 
-// imm -> reg, 32 bit
-void X86Builder::add(Reg32 dst, uint32_t imm)
+// reg -> reg/mem, 16 bit
+void X86Builder::add(RMOperand dst, Reg16 src)
 {
-    add(RMOperand{dst}, imm);
+    encode(0x00, dst, src);
 }
 
-// imm -> reg, 8 bit
-void X86Builder::add(Reg8 dst, uint8_t imm)
+// reg -> reg/mem, 8 bit
+void X86Builder::add(RMOperand dst, Reg8 src)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x80); // opcode, w = 0, s = 0
-    encodeModRM(dstReg);
-    write(imm);
+    encode(0x00, dst, src);
 }
 
+// imm -> reg/mem
 void X86Builder::add(RMOperand dst, uint32_t imm)
 {
-    assert(dst.w == 0 || dst.w == 3);
-
-    encodeREX(false, 0, dst);
-    write(0x81); // opcode, w = 1, s = 0
-    encodeModRM(dst);
-
-    // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    encode(0x80, 0, dst, imm);
 }
 
-// imm -> reg, 8 bit sign extended
-void X86Builder::add(Reg64 dst, int8_t imm)
+// imm -> reg/mem, 16 bit
+void X86Builder::add(RMOperand dst, uint8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
+    encode(0x80, 0, dst, imm);
+}
 
-    encodeREX(true, 0, 0, dstReg);
-    write(0x83); // opcode, w = 1, s = 1
-    encodeModRM(dstReg);
+// imm -> reg/mem, 64 bit mem, 8 bit sign extended
+void X86Builder::addQ(RMOperand dst, int8_t imm)
+{
+    encode(0x82, 0, dst, 64); // s = 1
     write(imm);
 }
 
-// imm -> reg, 8 bit sign extended
-void X86Builder::add(Reg32 dst, int8_t imm)
-{
-    addD(RMOperand{dst}, imm);
-}
-
-// imm -> reg, 8 bit sign extended
-void X86Builder::add(Reg16 dst, int8_t imm)
-{
-    addW(RMOperand{dst}, imm);
-}
-
-// imm -> mem, 32 bit mem, 8 bit sign extended
+// imm -> reg/mem, 32 bit mem, 8 bit sign extended
 void X86Builder::addD(RMOperand dst, int8_t imm)
 {
-    encodeREX(false, 0, dst);
-    write(0x83); // opcode, w = 1, s = 1
-    encodeModRM(dst, 0);
+    encode(0x82, 0, dst, 32); // s = 1
     write(imm);
 }
 
-// imm -> mem, 16 bit mem, 8 bit sign extended
+// imm -> reg/mem, 16 bit mem, 8 bit sign extended
 void X86Builder::addW(RMOperand dst, int8_t imm)
 {
-    write(0x66); // 16 bit override
-    addD(dst, imm);
-}
-
-// reg -> reg
-void X86Builder::adc(Reg32 dst, Reg32 src)
-{
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x11); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
-}
-
-// reg -> reg, 8bit
-void X86Builder::adc(Reg8 dst, Reg8 src)
-{
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x10); // opcode
-    encodeModRMReg8(dstReg, srcReg);
-}
-
-// imm -> reg, 8 bit
-void X86Builder::adc(Reg8 dst, uint8_t imm)
-{
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x80); // opcode, w = 0, s = 0
-    encodeModRM(dstReg, 2);
+    encode(0x82, 0, dst, 16); // s = 1
     write(imm);
 }
 
-// reg -> reg
-void X86Builder::and_(Reg32 dst, Reg32 src)
+// reg -> reg/mem
+void X86Builder::adc(RMOperand dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x21); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    encode(0x10, dst, src);
 }
 
-// reg -> reg, 16 bit
-void X86Builder::and_(Reg16 dst, Reg16 src)
+// reg -> reg/mem, 8bit
+void X86Builder::adc(RMOperand dst, Reg8 src)
 {
-    write(0x66); // 16 bit override
-    and_(static_cast<Reg32>(dst), static_cast<Reg32>(src));
+    encode(0x10, dst, src);
 }
 
-// reg -> reg, 8 bit
-void X86Builder::and_(Reg8 dst, Reg8 src)
+// imm -> reg/mem, 8 bit
+void X86Builder::adc(RMOperand dst, uint8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x20); // opcode, w = 0
-    encodeModRMReg8(dstReg, srcReg);
+    encode(0x10, 2, dst, imm);
 }
 
-// imm -> reg
-void X86Builder::and_(Reg32 dst, uint32_t imm)
+// reg -> reg/mem
+void X86Builder::and_(RMOperand dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x81); // opcode, s = 0, w = 1
-    encodeModRM(dstReg, 4);
-
-    // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    encode(0x20, dst, src);
 }
 
-// imm -> reg, 8 bit
-void X86Builder::and_(Reg8 dst, uint8_t imm)
+// reg -> reg/mem, 16 bit
+void X86Builder::and_(RMOperand dst, Reg16 src)
 {
-    auto dstReg = static_cast<int>(dst);
+    encode(0x20, dst, src);
+}
 
-    encodeREX(false, 0, 0, dstReg);
-    write(0x80); // opcode, s = 0, w = 0
-    encodeModRM(dstReg, 4);
-    write(imm); // imm
+// reg -> reg/mem, 8 bit
+void X86Builder::and_(RMOperand dst, Reg8 src)
+{
+    encode(0x20, dst, src);
+}
+
+// imm -> reg/mem
+void X86Builder::and_(RMOperand dst, uint32_t imm)
+{
+    encode(0x80, 4, dst, imm);
+}
+
+// imm -> reg/mem, 8 bit
+void X86Builder::and_(RMOperand dst, uint8_t imm)
+{
+    encode(0x80, 4, dst, imm);
 }
 
 // imm -> reg, 8 bit sign extended
-void X86Builder::and_(Reg32 dst, int8_t imm)
+void X86Builder::andD(RMOperand dst, int8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x83); // opcode, w = 1, s = 1
-    encodeModRM(dstReg, 4);
+    encode(0x82, 4, dst, 32); // s = 1
     write(imm);
+}
+
+void X86Builder::bt(Reg32 base, uint8_t off)
+{
+    encode0F(0xBA, 4, RMOperand(base), 32);
+    write(off); // offset
 }
 
 void X86Builder::btr(Reg32 base, uint8_t off)
 {
-    auto baseReg = static_cast<int>(base);
-
-    encodeREX(false, 0, 0, baseReg);
-    write(0x0F); // two byte op
-    write(0xBA); // opcode
-    encodeModRM(baseReg, 6);
+    encode0F(0xBA, 6, RMOperand(base), 32);
     write(off); // offset
 }
 
@@ -237,20 +138,23 @@ void X86Builder::call(int disp)
 
     write(0xE8); // opcode
 
-    write(disp);
-    write(disp >> 8);
-    write(disp >> 16);
-    write(disp >> 24);
+    encode(static_cast<uint32_t>(disp));
 }
 
 // indirect
 void X86Builder::call(Reg64 r)
 {
-    auto reg = static_cast<int>(r);
+    auto rm = RMOperand(r);
 
-    encodeREX(false, 0, 0, reg);
+    encodeREX(false, 0, rm);
     write(0xFF); // opcode
-    encodeModRM(reg, 2);
+    encodeModRM(rm, 2);
+}
+
+// sign extend EAX -> EDX:EAX
+void X86Builder::cdq()
+{
+    write(0x99);
 }
 
 void X86Builder::cmc()
@@ -258,126 +162,77 @@ void X86Builder::cmc()
     write(0xF5); // opcode
 }
 
-// reg -> reg
-void X86Builder::cmp(Reg32 dst, Reg32 src)
+// reg -> reg/mem
+void X86Builder::cmp(RMOperand dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x39); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    encode(0x38, dst, src);
 }
 
-// reg -> reg, 8 bit
-void X86Builder::cmp(Reg8 dst, Reg8 src)
+// reg -> reg/mem, 8 bit
+void X86Builder::cmp(RMOperand dst, Reg8 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x38); // opcode, w = 0
-    encodeModRMReg8(dstReg, srcReg);
+    encode(0x38, dst, src);
 }
 
-// imm -> reg
-void X86Builder::cmp(Reg32 dst, uint32_t imm)
+// imm -> reg/mem
+void X86Builder::cmp(RMOperand dst, uint32_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x81); // opcode, w = 0, s = 0
-    encodeModRM(dstReg, 7);
-
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    encode(0x80, 7, dst, imm);
 }
 
-// imm -> reg, 8 bit
-void X86Builder::cmp(Reg8 dst, uint8_t imm)
-{
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x80); // opcode, w = 0, s = 0
-    encodeModRM(dstReg, 7);
-    write(imm);
-}
-
-// imm -> reg, 8 bit sign extended
-void X86Builder::cmp(Reg32 dst, int8_t imm)
-{
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x83); // opcode, w = 1, s = 1
-    encodeModRM(dstReg, 7);
-    write(imm);
-}
-
-// imm -> mem, 8 bit
+// imm -> reg/mem, 8 bit
 void X86Builder::cmp(RMOperand dst, uint8_t imm)
 {
-    encodeREX(false, 0, dst);
-    write(0x80); // opcode, w = 0
-    encodeModRM(dst, 7);
+    encode(0x80, 7, dst, imm);
+}
+
+// imm -> reg/mem, 8 bit sign extended
+void X86Builder::cmpD(RMOperand dst, int8_t imm)
+{
+    encode(0x82, 7, dst, 32); // s = 1
     write(imm);
 }
 
 // reg, 16 bit
 void X86Builder::dec(Reg16 r)
 {
-    auto reg = static_cast<int>(r);
-
-    write(0x66); // 16 bit override
-    encodeREX(false, 0, 0, reg);
-    write(0xFF); // opcode, w = 1
-    encodeModRM(reg, 1);
+    encode(0xFE, 1, RMOperand(r), 16);
 }
 
 // reg, 8 bit
 void X86Builder::dec(Reg8 r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xFE); // opcode, w = 0
-    encodeModRM(reg, 1);
+    encode(0xFE, 1, RMOperand(r), 8);
 }
 
-// reg -> reg
-void X86Builder::imul(Reg32 dst, Reg32 src)
+// reg/mem -> EDX:EAX
+void X86Builder::divD(RMOperand src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
+    encode(0xF6, 6, src, 32);
+}
 
-    encodeREX(false, dstReg, 0, srcReg);
-    write(0x0F); // two byte opcode
-    write(0xAF); // opcode
-    encodeModRM(srcReg, dstReg);
+// reg/mem -> EDX:EAX
+void X86Builder::idivD(RMOperand src)
+{
+    encode(0xF6, 7, src, 32);
+}
+
+// reg/mem -> reg
+void X86Builder::imul(Reg32 dst, RMOperand src)
+{
+    encode0F(0xAF, src, dst);
 }
 
 // reg, 16 bit
 void X86Builder::inc(Reg16 r)
 {
-    auto reg = static_cast<int>(r);
-
-    write(0x66); // 16 bit override
-    encodeREX(false, 0, 0, reg);
-    write(0xFF); // opcode, w = 1
-    encodeModRM(reg, 0);
+    encode(0xFE, 0, RMOperand(r), 16);
 }
 
 // reg, 8 bit
 void X86Builder::inc(Reg8 r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xFE); // opcode, w = 0
-    encodeModRM(reg, 0);
+    encode(0xFE, 0, RMOperand(r), 8);
 }
 
 void X86Builder::jcc(Condition cc, int disp)
@@ -400,10 +255,7 @@ void X86Builder::jcc(Condition cc, int disp)
         write(0x0F); // two byte opcode
         write(0x80 | static_cast<int>(cc)); // opcode
 
-        write(disp);
-        write(disp >> 8);
-        write(disp >> 16);
-        write(disp >> 24);
+        encode(static_cast<uint32_t>(disp));
     }
 }
 
@@ -426,136 +278,72 @@ void X86Builder::jmp(int disp, bool forceLong)
 
         write(0xE9); // opcode
 
-        write(disp);
-        write(disp >> 8);
-        write(disp >> 16);
-        write(disp >> 24);
+        encode(static_cast<uint32_t>(disp));
     }
 }
 
 // indirect
 void X86Builder::jmp(Reg64 r)
 {
-    auto reg = static_cast<int>(r);
+    auto rm = RMOperand(r);
 
-    encodeREX(false, 0, 0, reg);
+    encodeREX(false, 0, rm);
     write(0xFF); // opcode
-    encodeModRM(reg, 4);
+    encodeModRM(rm, 4);
 }
 
 void X86Builder::lea(Reg64 dst, RMOperand m)
 {
     assert(m.w == 0); // not a register
 
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(true, dstReg, m);
-    write(0x8D); // opcode
-    encodeModRM(m, dstReg);
+    encode(0x8D, RMOperand(m), dst);
 }
 
 void X86Builder::lea(Reg32 dst, RMOperand m)
 {
     assert(m.w == 0); // not a register
 
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, dstReg, m);
-    write(0x8D); // opcode
-    encodeModRM(m, dstReg);
-}
-
-// wrappers to make sure arg types are sensible
-void X86Builder::mov(Reg64 dst, Reg64 src)
-{
-    mov(RMOperand{dst}, src);
-}
-
-void X86Builder::mov(Reg32 dst, Reg32 src)
-{
-    mov(RMOperand{dst}, src);
-}
-
-void X86Builder::mov(Reg16 dst, Reg16 src)
-{
-    mov(RMOperand{dst}, src);
-}
-
-void X86Builder::mov(Reg8 dst, Reg8 src)
-{
-    mov(RMOperand{dst}, src);
+    encode(0x8D, RMOperand(m), dst);
 }
 
 void X86Builder::mov(RMOperand dst, Reg64 src)
 {
-    assert(dst.w == 0 || dst.w == 4);
-    mov(dst, static_cast<Reg32>(src), 64);
+    encode(0x88, dst, src);
 }
 
 void X86Builder::mov(RMOperand dst, Reg32 src)
 {
-    assert(dst.w == 0 || dst.w == 3);
-    mov(dst, src, 32);
+    encode(0x88, dst, src);
 }
 
 void X86Builder::mov(RMOperand dst, Reg16 src)
 {
-    assert(dst.w == 0 || dst.w == 2);
-    mov(dst, static_cast<Reg32>(src), 16);
+    encode(0x88, dst, src);
 }
 
 void X86Builder::mov(RMOperand dst, Reg8 src)
 {
-    assert(dst.w == 0 || dst.w == 1);
-    mov(dst, static_cast<Reg32>(src), 8);
+    encode(0x88, dst, src);
 }
 
 void X86Builder::mov(Reg64 dst, RMOperand src)
 {
-    assert(src.w == 0 || src.w == 4);
-    mov(static_cast<Reg32>(dst), src, 64);
+    encode(0x8A, src, dst);
 }
 
 void X86Builder::mov(Reg32 dst, RMOperand src)
 {
-    assert(src.w == 0 || src.w == 3);
-    mov(dst, src, 32);
+    encode(0x8A, src, dst);
 }
 
 void X86Builder::mov(Reg16 dst, RMOperand src)
 {
-    assert(src.w == 0 || src.w == 2);
-    mov(static_cast<Reg32>(dst), src, 16);
+    encode(0x8A, src, dst);
 }
 
 void X86Builder::mov(Reg8 dst, RMOperand src)
 {
-    assert(src.w == 0 || src.w == 1);
-    mov(static_cast<Reg32>(dst), src, 8);
-}
-
-void X86Builder::mov(RMOperand dst, Reg32 src, int w)
-{
-    auto srcReg = static_cast<int>(src);
-
-    if(w == 16)
-        write(0x66); // 16 bit override
-
-    encodeREX(w == 64, srcReg, dst);
-    write(0x88 | (w > 8 ? 1 : 0)); // opcode, w = width > 8
-    encodeModRM(dst, srcReg);
-}
-
-void X86Builder::mov(Reg32 dst, RMOperand src, int w)
-{
-    auto dstReg = static_cast<int>(dst);
-
-    if(w == 16)
-        write(0x66); // 16 bit override
-
-    encodeREX(w == 64, dstReg, src);
-    write(0x8A | (w > 8 ? 1 : 0)); // opcode, w = width > 8
-    encodeModRM(src, dstReg);
+    encode(0x8A, src, dst);
 }
 
 // imm -> reg, 64 bit
@@ -567,14 +355,7 @@ void X86Builder::mov(Reg64 r, uint64_t imm)
     write(0xB8 | (reg & 7)); // opcode
 
     // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
-    write(imm >> 32);
-    write(imm >> 40);
-    write(imm >> 48);
-    write(imm >> 56);
+    encode(imm);
 }
 
 // imm -> reg
@@ -586,10 +367,7 @@ void X86Builder::mov(Reg32 r, uint32_t imm)
     write(0xB8 | (reg & 7)); // opcode
 
     // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    encode(imm);
 }
 
 // imm -> reg, 8 bit
@@ -607,165 +385,79 @@ void X86Builder::mov(Reg8 r, uint8_t imm)
 // imm -> mem
 void X86Builder::mov(RMOperand dst, uint32_t imm)
 {
-    encodeREX(false, 0, dst);
-
-    write(0xC7); // opcode, w = 1
-
-    encodeModRM(dst);
-
-    // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    encode(0xC6, 0, dst, imm);
 }
 
 // imm -> mem, 8 bit
 void X86Builder::mov(RMOperand dst, uint8_t imm)
 {
-    encodeREX(false, 0, dst);
-
-    write(0xC6); // opcode, w = 0
-
-    encodeModRM(dst);
-
-    // immediate
-    write(imm);
+    encode(0xC6, 0, dst, imm);
 }
 
-// sign extend, reg -> reg, 16 bit
-void X86Builder::movsx(Reg32 dst, Reg16 src)
+// sign extend, reg/mem -> reg, 16 bit
+void X86Builder::movsxW(Reg32 dst, RMOperand src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, dstReg, 0, srcReg);
-    write(0x0F); // two byte opcode
-    write(0xBF); // opcode, w = 1
-    encodeModRM(srcReg, dstReg);
+    encode0F(0xBF, src, dst);
 }
 
-// sign extend, reg -> reg, 8 bit
-void X86Builder::movsx(Reg32 dst, Reg8 src)
+// sign extend, reg/mem -> reg, 8 bit
+void X86Builder::movsxB(Reg32 dst, RMOperand src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, dstReg, 0, srcReg);
-    write(0x0F); // two byte opcode
-    write(0xBE); // opcode, w = 0
-    encodeModRMReg8(srcReg, dstReg);
+    encode0F(0xBE, src, dst);
 }
 
-// zero extend, reg -> reg, 16 bit
-void X86Builder::movzx(Reg32 dst, Reg16 src)
-{
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, dstReg, 0, srcReg);
-    write(0x0F); // two byte opcode
-    write(0xB7); // opcode, w = 1
-    encodeModRM(srcReg, dstReg);
-}
-
-// zero extend, reg -> reg, 8 bit
-void X86Builder::movzx(Reg32 dst, Reg8 src)
-{
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, dstReg, 0, srcReg);
-    write(0x0F); // two byte opcode
-    write(0xB6); // opcode, w = 0
-    encodeModRMReg8(srcReg, dstReg);
-}
-
-// zero extend, mem -> reg, 16 bit
+// zero extend, reg/mem -> reg, 16 bit
 void X86Builder::movzxW(Reg32 dst, RMOperand src)
 {
-    auto reg = static_cast<int>(dst);
+    encode0F(0xB7, src, dst);
+}
 
-    encodeREX(false, reg, src);
-    write(0x0F); // two byte opcode
-    write(0xB7); // opcode, w = 1
-    encodeModRM(src, reg);
+// zero extend, reg/mem -> reg, 8 bit
+void X86Builder::movzxB(Reg32 dst, RMOperand src)
+{
+    encode0F(0xB6, RMOperand(src), dst);
 }
 
 // reg
 void X86Builder::not_(Reg32 r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xF7); // opcode, w = 1
-    encodeModRM(reg, 2);
+    encode(0xF6, 2, RMOperand(r), 32);
 }
 
 // reg, 8 bit
 void X86Builder::not_(Reg8 r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xF6); // opcode, w = 0
-    encodeModRM(reg, 2);
+    encode(0xF6, 2, RMOperand(r), 8);
 }
 
-// reg -> reg
-void X86Builder::or_(Reg32 dst, Reg32 src)
+// reg -> reg/mem
+void X86Builder::or_(RMOperand dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x09); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    encode(0x08, dst, src);
 }
 
-// reg -> reg, 16 bit
-void X86Builder::or_(Reg16 dst, Reg16 src)
+// reg -> reg/mem, 16 bit
+void X86Builder::or_(RMOperand dst, Reg16 src)
 {
-    write(0x66); // 16 bit override
-    or_(static_cast<Reg32>(dst), static_cast<Reg32>(src));
+    encode(0x08, dst, src);
 }
 
-// reg -> reg, 8 bit
-void X86Builder::or_(Reg8 dst, Reg8 src)
+// reg -> reg/mem, 8 bit
+void X86Builder::or_(RMOperand dst, Reg8 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x08); // opcode, w = 0
-    encodeModRMReg8(dstReg, srcReg);
+    encode(0x08, dst, src);
 }
 
-// imm -> reg
-void X86Builder::or_(Reg32 dst, uint32_t imm)
+// imm -> reg/mem
+void X86Builder::or_(RMOperand dst, uint32_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x81); // opcode, s = 0, w = 1
-    encodeModRM(dstReg, 1);
-
-    // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    encode(0x80, 1, dst, imm);
 }
 
-// imm -> reg, 8 bit
-void X86Builder::or_(Reg8 dst, uint8_t imm)
+// imm -> reg/mem, 8 bit
+void X86Builder::or_(RMOperand dst, uint8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x80); // opcode, s = 0, w = 0
-    encodeModRM(dstReg, 1);
-    write(imm); // imm
+    encode(0x80, 1, dst, imm);
 }
 
 void X86Builder::pop(Reg64 r)
@@ -784,46 +476,55 @@ void X86Builder::push(Reg64 r)
     write(0x50 | (reg & 0x7)); // opcode
 }
 
-// reg by CL, 8bit
-void X86Builder::rclCL(Reg8 r)
-{
-    auto reg = static_cast<int>(r);
 
-    encodeREX(false, 0, 0, reg);
-    write(0xD2); // opcode, w = 0
-    encodeModRM(reg, 2);
+// reg/mem by CL
+void X86Builder::rclD(RMOperand r)
+{
+    encode(0xD2, 32, r, 32);
 }
 
-// reg, 8 bit
-void X86Builder::rcl(Reg8 r, uint8_t count)
+// reg/mem by CL, 8bit
+void X86Builder::rclB(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
+    encode(0xD2, 2, r, 8);
+}
 
-    encodeREX(false, 0, 0, reg);
-    write(0xC0); // opcode, w = 0
-    encodeModRM(reg, 2);
+// reg/mem
+void X86Builder::rclD(RMOperand r, uint8_t count)
+{
+    encode(0xC0, 2, r, 32);
     write(count);
 }
 
-// reg by CL, 8bit
-void X86Builder::rcrCL(Reg8 r)
+// reg/mem, 8 bit
+void X86Builder::rclB(RMOperand r, uint8_t count)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD2); // opcode, w = 0
-    encodeModRM(reg, 3);
+    encode(0xC0, 2, r, count);
 }
 
-// reg, 8 bit
-void X86Builder::rcr(Reg8 r, uint8_t count)
+// reg/mem by CL
+void X86Builder::rcrD(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
+    encode(0xD2, 3, r, 32);
+}
 
-    encodeREX(false, 0, 0, reg);
-    write(0xC0); // opcode, w = 0
-    encodeModRM(reg, 3);
+// reg/mem by CL, 8bit
+void X86Builder::rcrB(RMOperand r)
+{
+    encode(0xD2, 3, r, 8);
+}
+
+// reg/mem
+void X86Builder::rcrD(RMOperand r, uint8_t count)
+{
+    encode(0xC0, 3, r, 32);
     write(count);
+}
+
+// reg/mem, 8 bit
+void X86Builder::rcrB(RMOperand r, uint8_t count)
+{
+    encode(0xC0, 3, r, count);
 }
 
 void X86Builder::ret()
@@ -831,250 +532,158 @@ void X86Builder::ret()
     write(0xC3); // opcode
 }
 
-// reg by CL, 8bit
-void X86Builder::rolCL(Reg8 r)
+// reg/mem by CL
+void X86Builder::rolD(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD2); // opcode, w = 0
-    encodeModRM(reg);
+    encode(0xD2, 0, r, 32);
 }
 
-// reg, 8 bit
-void X86Builder::rol(Reg8 r, uint8_t count)
+// reg/mem by CL, 8bit
+void X86Builder::rolB(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
+    encode(0xD2, 0, r, 8);
+}
 
-    encodeREX(false, 0, 0, reg);
-    write(0xC0); // opcode, w = 0
-    encodeModRM(reg);
+// reg/mem
+void X86Builder::rolD(RMOperand r, uint8_t count)
+{
+    encode(0xC0, 0, r, 32);
     write(count);
 }
 
-// reg by CL
-void X86Builder::rorCL(Reg32 r)
+// reg/mem, 8 bit
+void X86Builder::rolB(RMOperand r, uint8_t count)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD3); // opcode, w = 1
-    encodeModRM(reg, 1);
+    encode(0xC0, 0, r, count);
 }
 
-// reg by CL, 8bit
-void X86Builder::rorCL(Reg8 r)
+// reg/mem by CL
+void X86Builder::rorD(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD2); // opcode, w = 0
-    encodeModRM(reg, 1);
+    encode(0xD2, 1, r, 32);
 }
 
-// reg
-void X86Builder::ror(Reg32 r, uint8_t count)
+// reg/mem by CL, 8bit
+void X86Builder::rorB(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
+    encode(0xD2, 1, r, 8);
+}
 
-    encodeREX(false, 0, 0, reg);
-    write(0xC1); // opcode, w = 1
-    encodeModRM(reg, 1);
+// reg/mem
+void X86Builder::rorD(RMOperand r, uint8_t count)
+{
+    encode(0xC0, 1, r, 32);
     write(count);
 }
 
-// reg, 8 bit
-void X86Builder::ror(Reg8 r, uint8_t count)
+// reg/mem, 8 bit
+void X86Builder::rorB(RMOperand r, uint8_t count)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xC0); // opcode, w = 0
-    encodeModRM(reg, 1);
-    write(count);
+    encode(0xC0, 1, r, count);
 }
 
-// reg by CL
-void X86Builder::sarCL(Reg32 r)
+// reg/mem by CL
+void X86Builder::sarD(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD3); // opcode, w = 1
-    encodeModRM(reg, 7);
+    encode(0xD2, 7, r, 32);
 }
 
-
-// reg by CL, 8bit
-void X86Builder::sarCL(Reg8 r)
+// reg/mem by CL, 8bit
+void X86Builder::sarB(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD2); // opcode
-    encodeModRM(reg, 7);
+    encode(0xD2, 7, r, 8);
 }
 
-// reg
-void X86Builder::sar(Reg32 r, uint8_t count)
+// reg/mem
+void X86Builder::sarD(RMOperand r, uint8_t count)
 {
-    auto reg = static_cast<int>(r);
-
     // TODO: 0xD0 for 1
-
-    encodeREX(false, 0, 0, reg);
-    write(0xC1); // opcode, w = 1
-    encodeModRM(reg, 7);
+    encode(0xC0, 7, r, 32);
     write(count);
 }
 
-// reg, 8 bit
-void X86Builder::sar(Reg8 r, uint8_t count)
+// reg/mem, 8 bit
+void X86Builder::sarB(RMOperand r, uint8_t count)
 {
-    auto reg = static_cast<int>(r);
-
     // TODO: 0xD0 for 1
-
-    encodeREX(false, 0, 0, reg);
-    write(0xC0); // opcode, w = 0
-    encodeModRM(reg, 7);
-    write(count);
+    encode(0xC0, 7, r, count);
 }
 
-// reg -> reg
-void X86Builder::sbb(Reg32 dst, Reg32 src)
+// reg -> reg/mem
+void X86Builder::sbb(RMOperand dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x19); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    encode(0x18, dst, src);
 }
 
-// reg -> reg, 8bit
-void X86Builder::sbb(Reg8 dst, Reg8 src)
+// reg -> reg/mem, 8bit
+void X86Builder::sbb(RMOperand dst, Reg8 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x18); // opcode
-    encodeModRMReg8(dstReg, srcReg);
+    encode(0x18, dst, src);
 }
 
-// imm -> reg, 8 bit
-void X86Builder::sbb(Reg8 dst, uint8_t imm)
+// imm -> reg/mem, 8 bit
+void X86Builder::sbb(RMOperand dst, uint8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x80); // opcode, w = 0, s = 0
-    encodeModRMReg8(dstReg, 3);
-    write(imm);
+    encode(0x80, 3, dst, imm);
 }
 
 // -> reg
 void X86Builder::setcc(Condition cc, Reg8 dst)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x0F); // two byte opcode
-    write(0x90 | static_cast<int>(cc)); // opcode
-    encodeModRM(dstReg);
+    // width here is a lie, but there are no width overrides for these
+    encode0F(0x90 | static_cast<int>(cc), 0, RMOperand(dst), 32);
 }
 
-// reg by CL
-void X86Builder::shrCL(Reg32 r)
+// reg/mem by CL
+void X86Builder::shrD(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD3); // opcode, w = 1
-    encodeModRM(reg, 5);
+    encode(0xD2, 5, r, 32);
 }
 
-// reg by CL, 8bit
-void X86Builder::shrCL(Reg8 r)
+// reg/mem by CL, 8bit
+void X86Builder::shrB(RMOperand r)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD2); // opcode
-    encodeModRM(reg, 5);
+    encode(0xD2, 5, r, 8);
 }
 
-// reg
-void X86Builder::shr(Reg32 r, uint8_t count)
+// reg/mem
+void X86Builder::shrD(RMOperand r, uint8_t count)
 {
-    auto reg = static_cast<int>(r);
-
-    // TODO: 0xD0 for 1
-
-    encodeREX(false, 0, 0, reg);
-    write(0xC1); // opcode, w = 1
-    encodeModRM(reg, 5);
+    encode(0xC0, 5, r, 32);
     write(count);
 }
 
-// reg, 8 bit
-void X86Builder::shr(Reg8 r, uint8_t count)
+// reg/mem, 8 bit
+void X86Builder::shrB(RMOperand r, uint8_t count)
 {
-    auto reg = static_cast<int>(r);
+    encode(0xC0, 5, r, count);
+}
 
+// reg/mem by CL
+void X86Builder::shlD(RMOperand r)
+{
+    encode(0xD2, 4, r, 32);
+}
+
+// reg/mem by CL, 8bit
+void X86Builder::shlB(RMOperand r)
+{
+    encode(0xD2, 4, r, 8);
+}
+
+// reg/mem
+void X86Builder::shlD(RMOperand r, uint8_t count)
+{
     // TODO: 0xD0 for 1
-
-    encodeREX(false, 0, 0, reg);
-    write(0xC0); // opcode, w = 0
-    encodeModRM(reg, 5);
+    encode(0xC0, 4, r, 32);
     write(count);
 }
 
-// reg by CL
-void X86Builder::shlCL(Reg32 r)
+// reg/mem, 8 bit
+void X86Builder::shlB(RMOperand r, uint8_t count)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD3); // opcode, w = 1
-    encodeModRM(reg, 4);
-}
-
-// reg by CL, 8bit
-void X86Builder::shlCL(Reg8 r)
-{
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xD2); // opcode, w = 0
-    encodeModRM(reg, 4);
-}
-
-// reg
-void X86Builder::shl(Reg32 r, uint8_t count)
-{
-    auto reg = static_cast<int>(r);
-
     // TODO: 0xD0 for 1
-
-    encodeREX(false, 0, 0, reg);
-    write(0xC1); // opcode, w = 1
-    encodeModRM(reg, 4);
-    write(count);
-}
-
-// reg, 8 bit
-void X86Builder::shl(Reg8 r, uint8_t count)
-{
-    auto reg = static_cast<int>(r);
-
-    // TODO: 0xD0 for 1
-
-    encodeREX(false, 0, 0, reg);
-    write(0xC0); // opcode, w = 0
-    encodeModRM(reg, 4);
-    write(count);
+    encode(0xC0, 4, r, count);
 }
 
 void X86Builder::stc()
@@ -1082,198 +691,95 @@ void X86Builder::stc()
     write(0xF9); // opcode
 }
 
-// reg -> reg
-void X86Builder::sub(Reg32 dst, Reg32 src)
-{
-    sub(RMOperand{dst}, src);
-}
-
-// reg -> reg, 16 bit
-void X86Builder::sub(Reg16 dst, Reg16 src)
-{
-    write(0x66); // 16 bit override
-    sub(static_cast<Reg32>(dst), static_cast<Reg32>(src));
-}
-
-// reg -> reg, 8bit
-void X86Builder::sub(Reg8 dst, Reg8 src)
-{
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x28); // opcode
-    encodeModRMReg8(dstReg, srcReg);
-}
-
+// reg -> reg/mem
 void X86Builder::sub(RMOperand dst, Reg32 src)
 {
-    assert(dst.w == 0 || dst.w == 3);
-
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, dst);
-    write(0x29); // opcode, w = 1
-    encodeModRM(dst, srcReg);
+    encode(0x28, dst, src);
 }
 
-// imm -> reg, 32 bit
-void X86Builder::sub(Reg32 dst, uint32_t imm)
+// reg -> reg/mem, 16 bit
+void X86Builder::sub(RMOperand dst, Reg16 src)
 {
-    sub(RMOperand{dst}, imm);
+    encode(0x28, dst, src);
+}
+
+// reg -> reg/mem, 8bit
+void X86Builder::sub(RMOperand dst, Reg8 src)
+{
+    encode(0x28, dst, src);
+}
+
+// imm -> reg/mem, 32 bit
+void X86Builder::sub(RMOperand dst, uint32_t imm)
+{
+    encode(0x80, 5, dst, imm);
 }
 
 // imm -> reg, 8 bit
-void X86Builder::sub(Reg8 dst, uint8_t imm)
+void X86Builder::sub(RMOperand dst, uint8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x80); // opcode, w = 0, s = 0
-    encodeModRM(dstReg, 5);
-    write(imm);
-}
-
-void X86Builder::sub(RMOperand dst, uint32_t imm)
-{
-    assert(dst.w == 0 || dst.w == 3);
-
-    encodeREX(false, 0, dst);
-    write(0x81); // opcode, w = 1, s = 0
-    encodeModRM(dst, 5);
-
-    // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    encode(0x80, 5, dst, imm);
 }
 
 // imm -> reg, 64 bit reg, 8 bit sign extended
-void X86Builder::sub(Reg64 dst, int8_t imm)
+void X86Builder::subQ(RMOperand dst, int8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(true, 0, 0, dstReg);
-    write(0x83); // opcode, w = 1, s = 1
-    encodeModRM(dstReg, 5);
+    encode(0x82, 5, dst, 64); // s = 1
     write(imm);
 }
 
-// imm -> reg, 8 bit sign extended
-void X86Builder::sub(Reg32 dst, int8_t imm)
-{
-    subD(RMOperand{dst}, imm);
-}
-
-// imm -> mem, 32 bit mem, 8 bit sign extended
+// imm -> reg/mem, 32 bit mem, 8 bit sign extended
 void X86Builder::subD(RMOperand dst, int8_t imm)
 {
-    assert(dst.w == 0 || dst.w == 3);
-
-    encodeREX(false, 0, dst);
-    write(0x83); // opcode, w = 1, s = 1
-    encodeModRM(dst, 5);
+    encode(0x82, 5, dst, 32); // s = 1
     write(imm);
 }
 
 // imm -> reg
 void X86Builder::test(Reg32 dst, uint32_t imm)
 {
-    auto reg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xF7); // opcode, s = 0, w = 1
-    encodeModRM(reg);
-
-    // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    encode(0xF6, 0, RMOperand(dst), imm);
 }
 
 // imm -> reg, 8 bit
 void X86Builder::test(Reg8 r, uint8_t imm)
 {
-    auto reg = static_cast<int>(r);
-
-    encodeREX(false, 0, 0, reg);
-    write(0xF6); // opcode, s = 0, w = 0
-    encodeModRM(reg);
-    write(imm); // imm
+    encode(0xF6, 0, RMOperand(r), imm);
 }
 
-
 // reg -> reg
-void X86Builder::xchg(Reg32 dst, Reg32 src)
+void X86Builder::xchg(RMOperand dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x87); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    encode(0x86, dst, src);
 }
 
 // reg -> reg, 8bit
-void X86Builder::xchg(Reg8 dst, Reg8 src)
+void X86Builder::xchg(RMOperand dst, Reg8 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x86); // opcode, w = 0
-    encodeModRMReg8(dstReg, srcReg);
+    encode(0x86, dst, src);
 }
 
-// reg -> reg
-void X86Builder::xor_(Reg32 dst, Reg32 src)
+// reg -> reg/mem
+void X86Builder::xor_(RMOperand dst, Reg32 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x31); // opcode, w = 1
-    encodeModRM(dstReg, srcReg);
+    encode(0x30, dst, src);
 }
 
-// reg -> reg, 8 bit
-void X86Builder::xor_(Reg8 dst, Reg8 src)
+// reg -> reg/mem, 8 bit
+void X86Builder::xor_(RMOperand dst, Reg8 src)
 {
-    auto dstReg = static_cast<int>(dst);
-    auto srcReg = static_cast<int>(src);
-
-    encodeREX(false, srcReg, 0, dstReg);
-    write(0x30); // opcode, w = 0
-    encodeModRMReg8(dstReg, srcReg);
+    encode(0x30, dst, src);
 }
-
-// imm -> reg
-void X86Builder::xor_(Reg32 dst, uint32_t imm)
+// imm -> reg/mem
+void X86Builder::xor_(RMOperand dst, uint32_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x81); // opcode, s = 0, w = 1
-    encodeModRM(dstReg, 6);
-
-    // immediate
-    write(imm);
-    write(imm >> 8);
-    write(imm >> 16);
-    write(imm >> 24);
+    encode(0x80, 6, dst, imm);
 }
 
 // imm -> reg, 8 bit
-void X86Builder::xor_(Reg8 dst, uint8_t imm)
+void X86Builder::xor_(RMOperand dst, uint8_t imm)
 {
-    auto dstReg = static_cast<int>(dst);
-
-    encodeREX(false, 0, 0, dstReg);
-    write(0x80); // opcode, s = 0, w = 0
-    encodeModRM(dstReg, 6);
-    write(imm); // imm
+    encode(0x80, 6, dst, imm);
 }
 
 void X86Builder::resetPtr(uint8_t *oldPtr)
@@ -1326,17 +832,59 @@ void X86Builder::write(uint8_t b)
         error = true;
 }
 
-void X86Builder::encodeModRM(int reg1, int reg2Op)
+void X86Builder::encode(uint8_t opcode, int regOp, RMOperand rm, int width, bool isReg)
 {
-    write(0xC0 | (reg2Op & 7) << 3 | (reg1 & 7)); // mod = 3, reg 2 or sub-opcode, reg 1
+    // make sure register sizes are consistent
+    // (unless one is memory)
+    assert(rm.w == 0 || (4 << rm.w) == width);
+
+    // make sure width is sensible
+    assert(width == 8 || width == 16 || width == 32 || width == 64);
+
+    if(width == 16)
+        write(0x66); // 16 bit override
+
+    encodeREX(width == 64, regOp, rm);
+    write(opcode | (width > 8 ? 1 : 0)); // set w bit if not 8bit
+    encodeModRM(rm, regOp, isReg);
 }
 
-void X86Builder::encodeModRM(RMOperand rm, int reg2Op)
+void X86Builder::encode0F(uint8_t opcode, int regOp, RMOperand rm, int width, bool isReg)
+{
+    // width handling is... less consistent here...
+
+    // make sure width is sensible
+    assert(width == 16 || width == 32 || width == 64);
+
+    if(width == 16)
+        write(0x66); // 16 bit override
+
+    encodeREX(width == 64, regOp, rm);
+    write(0x0F);
+    write(opcode);
+    encodeModRM(rm, regOp, isReg);
+}
+
+void X86Builder::encode(uint8_t opcode, int subOp, RMOperand rm, uint32_t imm)
+{
+    encode(opcode, subOp, rm, 32);
+
+    // immediate
+    encode(imm);
+}
+
+void X86Builder::encode(uint8_t opcode, int subOp, RMOperand rm, uint8_t imm)
+{
+    encode(opcode, subOp, rm, 8);
+    write(imm);
+}
+
+void X86Builder::encodeModRM(RMOperand rm, int reg2Op, bool isReg)
 {
     auto baseReg = static_cast<int>(rm.base);
     if(rm.w) // direct reg
     {
-        if(rm.w == 1)
+        if(rm.w == 1 && isReg)
         {
             // if one reg is >= 8, the other can't be xH (4-7)
             assert((reg2Op < 8 || baseReg >= 8 || baseReg < 4) && (baseReg < 8 || reg2Op >= 8 || reg2Op < 4));
@@ -1375,20 +923,7 @@ void X86Builder::encodeModRM(RMOperand rm, int reg2Op)
     if(mod == 1)
         write(rm.disp);
     else if(mod == 2)
-    {
-        write(rm.disp);
-        write(rm.disp >> 8);
-        write(rm.disp >> 16);
-        write(rm.disp >> 24);
-    }
-}
-
-void X86Builder::encodeModRMReg8(int reg1, int reg2)
-{
-    // if one reg is >= 8, the other can't be xH (4-7)
-    assert((reg2 < 8 || reg1 >= 8 || reg1 < 4) && (reg1 < 8 || reg2 >= 8 || reg2 < 4));
-
-    encodeModRM(reg1, reg2);
+        encode(static_cast<uint32_t>(rm.disp));
 }
 
 void X86Builder::encodeREX(bool w, int reg, int index, int base)
@@ -1405,4 +940,24 @@ void X86Builder::encodeREX(bool w, int reg, int index, int base)
 void X86Builder::encodeREX(bool w, int reg, RMOperand rm)
 {
     encodeREX(w, reg, static_cast<int>(rm.index), static_cast<int>(rm.base));
+}
+
+void X86Builder::encode(uint32_t v)
+{
+    write(v);
+    write(v >> 8);
+    write(v >> 16);
+    write(v >> 24);
+}
+
+void X86Builder::encode(uint64_t v)
+{
+    write(v);
+    write(v >> 8);
+    write(v >> 16);
+    write(v >> 24);
+    write(v >> 32);
+    write(v >> 40);
+    write(v >> 48);
+    write(v >> 56);
 }
