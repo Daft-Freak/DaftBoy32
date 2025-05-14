@@ -373,12 +373,24 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
         delayedCyclesExecuted = 0;
     };
 
-    auto writeCycleCountToStack = [this, &builder, &needCallRestore, &cyclesThisInstr, &delayedCyclesExecuted, &stackCycleCount](int &instrCycles)
+    auto getCycleCountStackOffset = [this, &needCallRestore]()
+    {
+        int ret = needCallRestore * 8;
+
+#ifdef _WIN32
+        // add extra stack offset for shadow + args
+        if(needCallRestore == numSavedRegs)
+            ret += 16 + 32;
+#endif
+        return ret;
+    };
+
+    auto writeCycleCountToStack = [this, &builder, &getCycleCountStackOffset, &cyclesThisInstr, &delayedCyclesExecuted, &stackCycleCount](int &instrCycles)
     {
         if(!stackCycleCount)
         {
             assert(cyclesThisInstr == delayedCyclesExecuted);
-            builder.mov({Reg64::RSP, needCallRestore * 8}, uint32_t(cyclesThisInstr + instrCycles));
+            builder.mov({Reg64::RSP, getCycleCountStackOffset()}, uint32_t(cyclesThisInstr + instrCycles));
 
             cyclesThisInstr = delayedCyclesExecuted = 0;
             instrCycles = 0;
@@ -1204,7 +1216,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
                         if(needCyclesSeq)
                         {
                             // cycle count from stack
-                            builder.lea(argumentRegs64[2], {Reg64::RSP, needCallRestore * 8});
+                            builder.lea(argumentRegs64[2], {Reg64::RSP, getCycleCountStackOffset()});
                             writeCycleCountToStack(instrCycles);
 
                             builder.mov(argumentRegs32[3], instr.flags >> 8); // flags
@@ -1338,16 +1350,23 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
 
                         if(needCyclesSeq)
                         {
-                            // FIXME: win32
-
                             // cycle count from stack
-                            builder.lea(argumentRegs64[3], {Reg64::RSP, needCallRestore * 8});
+                            builder.lea(argumentRegs64[3], {Reg64::RSP, getCycleCountStackOffset()});
                             writeCycleCountToStack(instrCycles);
 
+#ifdef _WIN32
+                            // push 4th/5th arg
+                            // start at 32 to avoid the shadow space
+                            builder.mov({Reg64::RSP, 32}, uint32_t(instr.flags >> 8));
+
+                            if(updateCycles)
+                                builder.mov({Reg64::RSP, 40}, Reg32::EDI); // cycle count
+#else
                             builder.mov(argumentRegs32[4], instr.flags >> 8);
 
                             if(updateCycles)
                                 builder.mov(argumentRegs32[5], Reg32::EDI); // cycle count
+#endif
                         }
                         else if(updateCycles)
                             builder.mov(argumentRegs32[3], Reg32::EDI); // cycle count
@@ -2703,7 +2722,7 @@ bool X86Target::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, Gen
             callRestoreIfNeeded(builder, Reg16::DI, needCallRestore);
 
             // add/sub the cycles from the stack
-            builder.mov(Reg32::R8D, {Reg64::RSP, needCallRestore * 8});
+            builder.mov(Reg32::R8D, {Reg64::RSP, getCycleCountStackOffset()});
 
             int offset = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - reinterpret_cast<uintptr_t>(cpuPtr);
             builder.add({cpuPtrReg, offset}, Reg32::R8D);
@@ -3212,6 +3231,9 @@ int X86Target::getCallStackAdjust() const
 
 #ifdef _WIN32
     adjust += 32; // shadow space
+
+    if(sourceInfo.writeMem8)
+        adjust += 16; // reverve some extra for args
 #endif
 
     return adjust;
