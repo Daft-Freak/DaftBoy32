@@ -509,7 +509,7 @@ void AGBRecompiler::convertTHUMBToGeneric(uint32_t &pc, GenBlockInfo &genBlock)
         return ret;
     };
 
-    auto jump = [](GenCondition cond = GenCondition::Always, GenReg src = GenReg::Temp, int cycles)
+    auto jump = [](GenCondition cond = GenCondition::Always, GenReg src = GenReg::Temp, int cycles = 0)
     {
         GenOpInfo ret{};
         ret.opcode = GenOpcode::Jump;
