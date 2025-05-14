@@ -3096,12 +3096,9 @@ void X86Target::callSaveIfNeeded(X86Builder &builder, int &saveState) const
     for(int i = saveState; i < numRegs; i++)
         builder.push(callSavedRegs[i]);
 
-    if(needStackAlign())
-        builder.sub(Reg64::RSP, 8); // align stack
-
-#ifdef _WIN32
-    builder.sub(Reg64::RSP, 32); // shadow space
-#endif
+    int adjust = getCallStackAdjust();
+    if(adjust)
+        builder.sub(Reg64::RSP, adjust);
 
     saveState = numRegs;
 }
@@ -3115,13 +3112,12 @@ void X86Target::callRestore(X86Builder &builder, int &saveState, int toIndex) co
 
     assert(toIndex < numRegs);
 
-#ifdef _WIN32
     if(saveState == numRegs)
-        builder.add(Reg64::RSP, 32); // shadow space
-#endif
-
-    if(saveState == numRegs && needStackAlign())
-        builder.add(Reg64::RSP, 8); // alignment
+    {
+        int adjust = getCallStackAdjust();
+        if(adjust)
+            builder.add(Reg64::RSP, adjust);
+    }
 
     for(int i = saveState - 1; i >= toIndex; i--)
         builder.pop(callSavedRegs[i]);
@@ -3137,12 +3133,9 @@ void X86Target::callRestore(X86Builder &builder, Reg8 dstReg, bool zeroExtend, b
 
     assert(!zeroExtend || !signExtend); // both makes no sense
 
-#ifdef _WIN32
-    builder.add(Reg64::RSP, 32); // shadow space
-#endif
-
-    if(needStackAlign())
-        builder.add(Reg64::RSP, 8); // alignment
+    int adjust = getCallStackAdjust();
+    if(adjust)
+        builder.add(Reg64::RSP, adjust);
 
     // pop everything except RAX
     for(unsigned i = numSavedRegs - 1; i > 0; i--)
@@ -3211,4 +3204,15 @@ void X86Target::callRestoreIfNeeded(X86Builder &builder, std::variant<std::monos
 
     if(index != -1)
         callRestore(builder, saveState, index);
+}
+
+int X86Target::getCallStackAdjust() const
+{
+    int adjust = needStackAlign() ? 8 : 0;
+
+#ifdef _WIN32
+    adjust += 32; // shadow space
+#endif
+
+    return adjust;
 }

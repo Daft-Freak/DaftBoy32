@@ -52,6 +52,8 @@ private:
     void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg16, uint16_t> val, int &saveState) const;
     void callRestoreIfNeeded(X86Builder &builder, std::variant<std::monostate, Reg8, uint8_t> val, int &saveState) const;
 
+    int getCallStackAdjust() const;
+
     SourceInfo sourceInfo;
     void *cpuPtr;
 
