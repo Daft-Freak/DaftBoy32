@@ -5,7 +5,7 @@
 #include "AGBDisplay.h"
 #include "AGBMemory.h"
 
-#if defined(RECOMPILER_X86)
+#if defined(RECOMPILER_X86) || defined(RECOMPILER_THUMB)
 #define RECOMPILER
 #include "compiler/AGBRecompiler.h"
 #endif
