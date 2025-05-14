@@ -1994,7 +1994,8 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     builder.orr(Reg::R1, Reg::R2);
 
     // load cpu pointer
-    builder.ldr(Reg::R2, 64); // FIXME: hardcoded offset
+    auto cpuPtrLoadPtr = builder.getPtr();
+    builder.ldr(Reg::R2, 64); // patched later
     builder.mov(cpuPtrReg, Reg::R2);
 
     // load emu regs
@@ -2039,14 +2040,18 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     // exit setting the call flag ... and saving LR
     exitForCallPtr = builder.getPtr();
     builder.mov(Reg::R0, 1);
-    builder.ldr(Reg::R2, 44); // FIXME: hardcoded offset
+
+    auto callFlagPtrLoadPtr = builder.getPtr();
+    builder.ldr(Reg::R2, 0); // patched later
     builder.strb(Reg::R0, Reg::R2, 0);
 
     // exit saving LR
     saveAndExitPtr = builder.getPtr();
 
     builder.mov(Reg::R0, Reg::LR);
-    builder.ldr(Reg::R2, 44); // FIXME: hardcoded offset
+
+    auto exitPtrLoadPtr = builder.getPtr();
+    builder.ldr(Reg::R2, 0); // patched later
     builder.str(Reg::R0, Reg::R2, 0);
 
     // exit
@@ -2103,15 +2108,27 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     if((ptr - codePtr16) & 1)
         *ptr++ = 0; // align
 
+    auto patchLoad = [&builder](uint16_t *curPtr, uint16_t *loadPtr)
+    {
+        auto aligned = (reinterpret_cast<uintptr_t>(loadPtr) + 4) & ~2;
+        int offset = reinterpret_cast<uintptr_t>(curPtr) - aligned;
+        builder.patch(loadPtr, loadPtr + 1);
+        builder.ldr(Reg::R2, offset);
+        builder.endPatch();
+    };
+
+    patchLoad(ptr, cpuPtrLoadPtr);
     *ptr++ = cpuPtrInt;
     *ptr++ = cpuPtrInt >> 16;
 
     // write addr of exitCallFlag
+    patchLoad(ptr, callFlagPtrLoadPtr);
     auto addr = reinterpret_cast<uintptr_t>(sourceInfo.exitCallFlag);
     *ptr++ = addr;
     *ptr++ = addr >> 16;
 
     // write addr of tmpSavedPtr
+    patchLoad(ptr, exitPtrLoadPtr);
     addr = reinterpret_cast<uintptr_t>(sourceInfo.savedExitPtr);
     *ptr++ = addr;
     *ptr++ = addr >> 16;
