@@ -5,7 +5,8 @@
 #include "ThumbTarget.h"
 #include "ThumbBuilder.h"
 
-const Reg pcReg = Reg::R1;
+const Reg cycleCountReg = Reg::R0;
+const Reg pcReg = Reg::R1; // output, can be used as a temp as well
 const Reg cpuPtrReg = Reg::R8;
 
 static bool isLowReg(Reg r)
@@ -363,7 +364,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
             // if(enableInterruptsNextCycle)
             // probably don't need this check... might get a false positive in some extreme case though
-            builder.mov(Reg::R3, Reg::R8); // cpu ptr
+            builder.mov(Reg::R3, cpuPtrReg);
             builder.ldrb(Reg::R1, Reg::R3, enableInterruptsNextCycleOff);
 
             builder.cmp(Reg::R1, 0);
@@ -613,7 +614,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
                         setupMemAddr(addr, instr.src[0], skipMov);
 
-                        builder.mov(Reg::R0, Reg::R8); // cpu pointer
+                        builder.mov(Reg::R0, cpuPtrReg);
 
                         // get func ptr
                         loadLiteral(builder, Reg::R2, reinterpret_cast<uintptr_t>(sourceInfo.readMem));
@@ -656,9 +657,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
                         setupMemAddr(addr, instr.src[0], skipMov);
                         get8BitValue(builder, Reg::R2, data);
-                        builder.mov(Reg::R3, Reg::R0); // cycle count
+                        builder.mov(Reg::R3, cycleCountReg);
 
-                        builder.mov(Reg::R0, Reg::R8); // cpu pointer
+                        builder.mov(Reg::R0, cpuPtrReg);
 
                         // get func ptr
                         loadLiteral(builder, Reg::R4, reinterpret_cast<uintptr_t>(sourceInfo.writeMem));
@@ -1661,7 +1662,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                             builder.mov(pcReg, std::get<Reg>(src));
                     
                         if(!isExit)
-                            builder.sub(Reg::R0, cyclesThisInstr);
+                            builder.sub(cycleCountReg, cyclesThisInstr);
 
                         // don't update twice for unconditional branches
                         if(condition == GenCondition::Always)
@@ -1800,7 +1801,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                 assert(serviceableInterruptsOff < 32);
                 assert(haltBugOff < 32);
 
-                builder.mov(Reg::R2, Reg::R8); // cpu ptr
+                builder.mov(Reg::R2, cpuPtrReg);
 
                 // halted = true
                 builder.mov(Reg::R1, 1);
@@ -1905,7 +1906,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
             // cycles -= executed
             if(cyclesThisInstr) // 0 means we already did the sub
-                builder.sub(Reg::R0, cyclesThisInstr);
+                builder.sub(cycleCountReg, cyclesThisInstr);
 
             lastInstrCycleCheck = builder.getPtr(); // save in case the next instr is a branch target
 
@@ -2054,9 +2055,9 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     // store PC
     int pcOff = sourceInfo.pcOffset;
     assert(pcOff <= 0xFF);
-    builder.mov(Reg::R2, Reg::R8); // cpu ptr
+    builder.mov(Reg::R2, cpuPtrReg); // cpu ptr
     builder.mov(Reg::R0, pcOff);
-    builder.strh(Reg::R1, Reg::R2, Reg::R0);
+    builder.strh(pcReg, Reg::R2, Reg::R0);
 
     // save emu regs
     if(firstRegOff)
