@@ -165,6 +165,15 @@ void ThumbBuilder::ldr(LowReg t, uint16_t imm)
     write(0x4800 | reg << 8 | imm >> 2);
 }
 
+// reg
+void ThumbBuilder::ldr(LowReg t, LowReg n, LowReg m)
+{
+    int tReg = static_cast<int>(t.val);
+    int nReg = static_cast<int>(n.val);
+    int mReg = static_cast<int>(m.val);
+    write(0x5800 | mReg << 6 | nReg << 3 | tReg);
+}
+
 // imm
 void ThumbBuilder::ldrb(LowReg t, LowReg n, uint8_t imm)
 {
@@ -270,6 +279,15 @@ void ThumbBuilder::str(LowReg t, LowReg n, uint8_t imm)
     int tReg = static_cast<int>(t.val);
     int nReg = static_cast<int>(n.val);
     write(0x6000 | (imm >> 2) << 6 | nReg << 3 | tReg);
+}
+
+// reg
+void ThumbBuilder::str(LowReg t, LowReg n, LowReg m)
+{
+    int tReg = static_cast<int>(t.val);
+    int nReg = static_cast<int>(n.val);
+    int mReg = static_cast<int>(m.val);
+    write(0x5000 | mReg << 6 | nReg << 3 | tReg);
 }
 
 // imm

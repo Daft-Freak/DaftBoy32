@@ -91,6 +91,7 @@ public:
 
     void ldr(LowReg t, LowReg n, uint8_t imm);
     void ldr(LowReg t, uint16_t imm);
+    void ldr(LowReg t, LowReg n, LowReg m);
 
     void ldrb(LowReg t, LowReg n, uint8_t imm);
 
@@ -115,6 +116,7 @@ public:
     void push(uint8_t regList, bool lr);
 
     void str(LowReg t, LowReg n, uint8_t imm);
+    void str(LowReg t, LowReg n, LowReg m);
 
     void strb(LowReg t, LowReg n, uint8_t imm);
 
