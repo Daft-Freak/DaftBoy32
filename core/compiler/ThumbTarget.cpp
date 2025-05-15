@@ -79,18 +79,6 @@ static void write8BitReg(ThumbBuilder &builder, ThumbTarget::RegInfo dst, Reg sr
     builder.orr(dst.reg, src);
 }
 
-// TODO: improve branch handling
-static int load16BitValueSize(uint16_t value)
-{
-    if(value <= 0xFF)
-        return 2; // mov
-    
-    if(value >> __builtin_ctz(value) <= 0xFF)
-        return 4; // mov + lsl
-
-    return 6; // mov + lsl + add
-}
-
 static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value)
 {
     if(value <= 0xFF || value >> __builtin_ctz(value) <= 0xFF)
