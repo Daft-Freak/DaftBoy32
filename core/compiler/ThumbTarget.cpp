@@ -2278,10 +2278,10 @@ void ThumbTarget::outputLiterals(ThumbBuilder &builder, bool reachable)
                 start++;
 
             // update LDR imm
-            auto index = *ptr & 0xFF;
+            unsigned index = *ptr & 0xFF;
             auto off = ((dataPtr + index * 2) - start) >> 1;
 
-            assert(index < 2);
+            assert(index < std::size(literals));
             assert(off <= 0xFF);
             *ptr = (*ptr & 0xFF00) | off;
         }
