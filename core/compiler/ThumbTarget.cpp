@@ -205,11 +205,18 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
         // we don't update cyclesToRun here, do it after returning instead
         auto cycleCountOff = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - cpuPtrInt;
-        assert(cycleCountOff <= 124);
+        assert(cycleCountOff <= 0xFF);
 
         // load to r3, add and store back
         builder.mov(Reg::R1, cpuPtrReg); // cpu ptr
 
+        // TODO: avoid this
+        if(cycleCountOff > 124)
+        {
+            builder.add(Reg::R1, cycleCountOff);
+            cycleCountOff = 0;
+        }
+        
         builder.ldr(Reg::R3, Reg::R1, cycleCountOff);
         builder.add(Reg::R3, u8Cycles);
         builder.str(Reg::R3, Reg::R1, cycleCountOff);
@@ -350,7 +357,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
         // first cycle (fetch)
         int instrCycles = instr.cycles;
-        if(instrCycles)
+        if(instrCycles && (blockInfo.flags & GenBlock_FirstCycleEarly))
         {
             cycleExecuted();
             instrCycles--;
@@ -1650,9 +1657,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         // need to sync cycles *before* the jump out
                         if(instrCycles)
                         {
-                            cycleExecuted();
-                            instrCycles--;
-                            assert(instrCycles == 0);
+                            assert(instrCycles == 1 || !(blockInfo.flags & GenBlock_StrictSync));
+                            while(instrCycles--)
+                                cycleExecuted();
                         }
                         syncCyclesExecuted();
 
@@ -1883,11 +1890,12 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             break;
         }
 
-        // additional cycle
+        // additional cycles
         if(instrCycles)
         {
-            cycleExecuted();
-            assert(instrCycles == 1);
+            assert(instrCycles == 1 || !(blockInfo.flags & GenBlock_StrictSync));
+            while(instrCycles--)
+                cycleExecuted();
         }
 
         // check if this is the end of the source instruction (pc incremented)
