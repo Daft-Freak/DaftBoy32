@@ -1,4 +1,5 @@
 #include <cassert>
+#include <functional>
 #include <cstdio>
 #include <variant>
 
@@ -109,6 +110,38 @@ static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value)
         builder.lsl(dst, dst, 8);
         builder.add(dst, value & 0xFF);
     }
+}
+
+static void branchOver(ThumbBuilder &builder, std::function<void(ThumbBuilder &)> func, Condition cond = Condition::AL)
+{
+    // do nothing if builder already in a bad state
+    if(builder.getError())
+        return;
+
+    // add placeholder branch
+    auto branchStart = builder.getPtr();
+    builder.b(0);
+    assert(builder.getPtr() - branchStart == 1);
+
+    // build code to branch over
+    func(builder);
+
+    // check we didn't run out of space
+    if(builder.getError())
+        return;
+
+    // patch in the real branch
+    int offset = (builder.getPtr() - branchStart - 1) * 2;
+
+    builder.patch(branchStart, branchStart + 1);
+
+    if(cond == Condition::AL)
+        builder.b(offset);
+    else
+        builder.b(cond, offset);
+
+    assert(!builder.getError()); // should be the same size as the placeholder, so no error can happen
+    builder.endPatch();
 }
 
 void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
@@ -275,14 +308,17 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             else
             {
                 // this is the first instruction, so make a cycle check for the branch to go to
-                auto loadSize = load16BitValueSize(pc);
-                builder.b(loadSize + 6);
-                lastInstrCycleCheck = builder.getPtr();
+                lastInstrCycleCheck = builder.getPtr() + 1; // skip the branch over it
 
-                // if <= 0 exit
-                builder.b(Condition::GT, loadSize + 4);
-                load16BitValue(builder, Reg::R1, pc + sourceInfo.pcPrefetch);
-                builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
+                branchOver(builder, [&](ThumbBuilder &builder)
+                {
+                    // if <= 0 exit
+                    branchOver(builder, [this, pc](ThumbBuilder &builder)
+                    {
+                        load16BitValue(builder, pcReg, pc + sourceInfo.pcPrefetch);
+                        builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
+                    }, Condition::GT);
+                });
 
                 branchTargets.emplace(pc, lastInstrCycleCheck);
             }
@@ -1933,13 +1969,11 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             lastInstrCycleCheck = builder.getPtr(); // save in case the next instr is a branch target
 
             // if <= 0 exit
-            auto loadSize = load16BitValueSize(pc + sourceInfo.pcPrefetch);
-
-            // if <= 0 exit
-            builder.b(Condition::GT, loadSize + 4);
-
-            load16BitValue(builder, pcReg, pc + sourceInfo.pcPrefetch);
-            builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
+            branchOver(builder, [this, pc](ThumbBuilder &builder)
+            {
+                load16BitValue(builder, pcReg, pc + sourceInfo.pcPrefetch);
+                builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
+            }, Condition::GT);
 
             cyclesThisInstr = 0;
             forceExitAfter = false;
