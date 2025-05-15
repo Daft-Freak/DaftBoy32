@@ -186,7 +186,7 @@ void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
     this->cpuPtr = cpuPtr;
 }
 
-bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, GenBlockInfo &blockInfo)
+bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, GenBlockInfo &blockInfo)
 {
     // don't handle HRAM for now
     if(pc >= 0xFF00)
