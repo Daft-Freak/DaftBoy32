@@ -145,6 +145,9 @@ void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
         if(allocOff == std::size(regList))
             continue;
 
+        if(it->type != SourceRegType::Temp && (regList[allocOff] == Reg::R2 || regList[allocOff] == Reg::R10))
+            continue;
+
         regAlloc.emplace(i, regList[allocOff]);
 
         allocOff++;
