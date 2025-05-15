@@ -11,6 +11,16 @@ void ThumbBuilder::adc(LowReg dn, LowReg m)
 }
 
 // imm
+void ThumbBuilder::add(LowReg d, LowReg n, uint8_t imm)
+{
+    int dReg = static_cast<int>(d.val);
+    int nReg = static_cast<int>(n.val);
+    assert(imm <= 7);
+
+    write(0x1C00 | imm << 6 | nReg << 3 | dReg);
+}
+
+// imm
 void ThumbBuilder::add(LowReg dn, uint8_t imm)
 {
     int dnReg = static_cast<int>(dn.val);
