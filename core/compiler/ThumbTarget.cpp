@@ -281,7 +281,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
 
                 // if <= 0 exit
                 builder.b(Condition::GT, loadSize + 4);
-                load16BitValue(builder, Reg::R1, pc);
+                load16BitValue(builder, Reg::R1, pc + sourceInfo.pcPrefetch);
                 builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
 
                 branchTargets.emplace(pc, lastInstrCycleCheck);
@@ -1667,7 +1667,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         // set pc if we're exiting
                         // ... or always as we might not be able to patch the branch
                         if(std::holds_alternative<uint32_t>(src))
-                            load16BitValue(builder, pcReg, std::get<uint32_t>(src));
+                            load16BitValue(builder, pcReg, std::get<uint32_t>(src) + sourceInfo.pcPrefetch);
+                        else if(sourceInfo.pcPrefetch)
+                            builder.add(pcReg, std::get<Reg>(src), sourceInfo.pcPrefetch);
                         else if(std::get<Reg>(src) != pcReg)
                             builder.mov(pcReg, std::get<Reg>(src));
                     
@@ -1884,7 +1886,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                     ++it;
             }
 
-            load16BitValue(builder, pcReg, pc - instr.len);
+            load16BitValue(builder, pcReg, pc - instr.len + sourceInfo.pcPrefetch);
             builder.bl((exitPtr - builder.getPtr()) * 2);
             outputLiterals(builder, false);
             break;
@@ -1922,12 +1924,12 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             lastInstrCycleCheck = builder.getPtr(); // save in case the next instr is a branch target
 
             // if <= 0 exit
-            auto loadSize = load16BitValueSize(pc);
+            auto loadSize = load16BitValueSize(pc + sourceInfo.pcPrefetch);
 
             // if <= 0 exit
             builder.b(Condition::GT, loadSize + 4);
 
-            load16BitValue(builder, pcReg, pc);
+            load16BitValue(builder, pcReg, pc + sourceInfo.pcPrefetch);
             builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
 
             cyclesThisInstr = 0;
