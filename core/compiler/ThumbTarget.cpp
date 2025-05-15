@@ -2297,10 +2297,33 @@ void ThumbTarget::outputLiterals(ThumbBuilder &builder, bool reachable)
 
 void ThumbTarget::loadPCValue(ThumbBuilder &builder, uint32_t val)
 {
+    val += sourceInfo.pcPrefetch;
+
     if(sourceInfo.pcSize == 16 || !(val >> 16))
-        load16BitValue(builder, pcReg, val + sourceInfo.pcPrefetch);
+        load16BitValue(builder, pcReg, val);
     else
-        loadLiteral(builder, pcReg, val + sourceInfo.pcPrefetch);
+    {
+        // look for an old literal to reuse
+        // an add is half the size of a new literal
+        // also we don't want to be emitting a literal for every instruction 
+        uint32_t oldLiteral = 0;
+        for(unsigned index = 0; index < curLiteral; index++)
+        {
+            if(val - literals[index] <= 0xFF)
+            {
+                oldLiteral = literals[index];
+                break;
+            }
+        }
+
+        if(oldLiteral)
+        {
+            loadLiteral(builder, pcReg, oldLiteral);
+            builder.add(pcReg, val - oldLiteral);
+        }
+        else
+            loadLiteral(builder, pcReg, val);
+    }
 }
 
 std::optional<Reg> ThumbTarget::mapReg(uint8_t index)
