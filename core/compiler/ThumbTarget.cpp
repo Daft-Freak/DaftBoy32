@@ -208,10 +208,10 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
     auto cycleExecuted = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted]()
     {
-        cyclesThisInstr += 4;
+        cyclesThisInstr += sourceInfo.cycleMul;
 
         // only the optimised not-HRAM path
-        delayedCyclesExecuted += 4;
+        delayedCyclesExecuted += sourceInfo.cycleMul;
     };
 
     auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted]()
