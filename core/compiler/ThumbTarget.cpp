@@ -1903,6 +1903,15 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
         // check if this is the end of the source instruction (pc incremented)
         newEmuOp = instr.len != 0;
 
+        if(instIt + 1 == endInstr && (instr.opcode != GenOpcode::Jump || static_cast<GenCondition>(instr.src[0]) != GenCondition::Always))
+        {
+            // ending on a non-jump probably means this was an incomplete block
+            // add an exit
+            syncCyclesExecuted();
+            load16BitValue(builder, pcReg, pc + sourceInfo.pcPrefetch);
+            builder.bl((exitPtr - builder.getPtr()) * 2);
+        }
+
         // check cycle count if this is the last part of en emulated op
         // ... but not on the last op, that should always exit anyway
         // ... or exits unless followed by a branch target
