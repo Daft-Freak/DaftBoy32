@@ -189,7 +189,7 @@ void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
 bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, GenBlockInfo &blockInfo)
 {
     // don't handle HRAM for now
-    if(pc >= 0xFF00)
+    if(blockInfo.flags & GenBlock_StrictSync)
         return false;
 
     auto codePtr16 = reinterpret_cast<uint16_t *>(codePtr);
