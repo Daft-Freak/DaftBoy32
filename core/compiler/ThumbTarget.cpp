@@ -2297,7 +2297,10 @@ void ThumbTarget::outputLiterals(ThumbBuilder &builder, bool reachable)
 
 void ThumbTarget::loadPCValue(ThumbBuilder &builder, uint32_t val)
 {
-    load16BitValue(builder, pcReg, val + sourceInfo.pcPrefetch);
+    if(sourceInfo.pcSize == 16 || !(val >> 16))
+        load16BitValue(builder, pcReg, val + sourceInfo.pcPrefetch);
+    else
+        loadLiteral(builder, pcReg, val + sourceInfo.pcPrefetch);
 }
 
 std::optional<Reg> ThumbTarget::mapReg(uint8_t index)
