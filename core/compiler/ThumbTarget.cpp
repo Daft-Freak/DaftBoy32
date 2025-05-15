@@ -2006,10 +2006,8 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     {
         if(reg.cpuOffset != 0xFFFF)
         {
-            assert(reg.size == 16);
-
-             if(auto mappedReg = mapReg(i))
-             {
+            if(auto mappedReg = mapReg(i))
+            {
                 // make offsets smaller
                 // assumes first reg is at lowest addr
                 if(reg.cpuOffset < firstRegOff)
@@ -2021,15 +2019,22 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
                 assert(reg.cpuOffset - firstRegOff <= 62);
 
-                fflush(stdout);
                 if(isLowReg(*mappedReg))
-                    builder.ldrh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
+                {
+                    if(reg.size == 32)
+                        builder.ldr(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
+                    else
+                        builder.ldrh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
+                }
                 else
                 {
-                    builder.ldrh(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
+                    if(reg.size == 32)
+                        builder.ldr(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff);
+                    else
+                        builder.ldrh(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff);
                     builder.mov(*mappedReg, Reg::R3);
                 }
-             }
+            }
         }
 
         i++;
@@ -2062,7 +2067,11 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     assert(pcOff <= 0xFF);
     builder.mov(Reg::R2, cpuPtrReg); // cpu ptr
     builder.mov(Reg::R0, pcOff);
-    builder.strh(pcReg, Reg::R2, Reg::R0);
+
+    if(sourceInfo.pcSize == 32)
+        builder.str(pcReg, Reg::R2, Reg::R0);
+    else
+        builder.strh(pcReg, Reg::R2, Reg::R0);
 
     // save emu regs
     if(firstRegOff)
@@ -2073,19 +2082,25 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     {
         if(reg.cpuOffset != 0xFFFF)
         {
-            assert(reg.size == 16);
-
-             if(auto mappedReg = mapReg(i))
-             {
+            if(auto mappedReg = mapReg(i))
+            {
                 assert(reg.cpuOffset - firstRegOff <= 62);
                 if(isLowReg(*mappedReg))
-                    builder.strh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
+                {
+                    if(reg.size == 32)
+                        builder.str(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
+                    else
+                        builder.strh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
+                }
                 else
                 {
                     builder.mov(Reg::R3, *mappedReg);
-                    builder.strh(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
+                    if(reg.size == 32)
+                        builder.str(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff);
+                    else
+                        builder.strh(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
                 }
-             }
+            }
         }
 
         i++;
