@@ -36,6 +36,8 @@ private:
     void loadLiteral(ThumbBuilder &builder, Reg reg, uint32_t val);
     void outputLiterals(ThumbBuilder &builder, bool reachable = true);
 
+    void loadPCValue(ThumbBuilder &builder, uint32_t val);
+
     std::optional<Reg> mapReg(uint8_t index);
     std::optional<RegInfo> mapReg8(uint8_t index);
 

@@ -303,7 +303,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                     // if <= 0 exit
                     branchOver(builder, [this, pc](ThumbBuilder &builder)
                     {
-                        load16BitValue(builder, pcReg, pc + sourceInfo.pcPrefetch);
+                        loadPCValue(builder, pc);
                         builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
                     }, Condition::GT);
                 });
@@ -1691,7 +1691,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                         // set pc if we're exiting
                         // ... or always as we might not be able to patch the branch
                         if(std::holds_alternative<uint32_t>(src))
-                            load16BitValue(builder, pcReg, std::get<uint32_t>(src) + sourceInfo.pcPrefetch);
+                            loadPCValue(builder, std::get<uint32_t>(src));
                         else if(sourceInfo.pcPrefetch)
                             builder.add(pcReg, std::get<Reg>(src), sourceInfo.pcPrefetch);
                         else if(std::get<Reg>(src) != pcReg)
@@ -1910,7 +1910,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
                     ++it;
             }
 
-            load16BitValue(builder, pcReg, pc - instr.len + sourceInfo.pcPrefetch);
+            loadPCValue(builder, pc - instr.len);
             builder.bl((exitPtr - builder.getPtr()) * 2);
             outputLiterals(builder, false);
             break;
@@ -1932,7 +1932,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             // ending on a non-jump probably means this was an incomplete block
             // add an exit
             syncCyclesExecuted();
-            load16BitValue(builder, pcReg, pc + sourceInfo.pcPrefetch);
+            loadPCValue(builder, pc);
             builder.bl((exitPtr - builder.getPtr()) * 2);
         }
 
@@ -1959,7 +1959,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint16_t pc, G
             // if <= 0 exit
             branchOver(builder, [this, pc](ThumbBuilder &builder)
             {
-                load16BitValue(builder, pcReg, pc + sourceInfo.pcPrefetch);
+                loadPCValue(builder, pc);
                 builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
             }, Condition::GT);
 
@@ -2293,6 +2293,11 @@ void ThumbTarget::outputLiterals(ThumbBuilder &builder, bool reachable)
 
     for(auto &literal : literals)
         literal = 0;
+}
+
+void ThumbTarget::loadPCValue(ThumbBuilder &builder, uint32_t val)
+{
+    load16BitValue(builder, pcReg, val + sourceInfo.pcPrefetch);
 }
 
 std::optional<Reg> ThumbTarget::mapReg(uint8_t index)
