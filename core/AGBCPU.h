@@ -301,6 +301,11 @@ private:
     uint16_t enabledInterrutps = 0;
     uint8_t interruptDelay = 0;
 
+    uint32_t cycleCount = 0;
+    int lastExtraCycles = 0; // used to keep runFrame in sync
+
+    uint32_t nextUpdateCycle = 0; // next cycle where something needs updated
+
     // dma
     uint8_t dmaTriggered = 0, dmaActive = 0;
     uint16_t dmaCount[4];          // internal values
@@ -308,11 +313,6 @@ private:
     uint16_t dmaCurCount[4]; // tmp values while DMA is in progress
     uint32_t dmaCurDst[4];   //
     uint32_t dmaLastVal = 0; // last value copied by any DMA
-
-    uint32_t cycleCount = 0;
-    int lastExtraCycles = 0; // used to keep runFrame in sync
-
-    uint32_t nextUpdateCycle = 0; // next cycle where something needs updated
 
     // timers
     uint32_t lastTimerUpdate = 0;
