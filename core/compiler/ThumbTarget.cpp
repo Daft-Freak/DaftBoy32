@@ -100,6 +100,27 @@ static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value)
     }
 }
 
+static void load32BitValue(ThumbBuilder &builder, Reg dst, uint32_t value)
+{
+    int trailingZeros = __builtin_ctz(value);
+
+    if(value <= 0xFFFF || builder.isValidModifiedImmediate(value))
+        builder.mov(dst, value);
+    else if(value >> trailingZeros <= 0xFFFF)
+    {
+        builder.mov(dst, value >> trailingZeros);
+        builder.lsl(dst, dst, trailingZeros);
+    }
+    else
+    {
+        builder.mov(dst, value & 0xFFFF);
+        if(value >> 15 == 0x1FFFF)
+            builder.sxth(dst, dst);
+        else
+            builder.movt(dst, value >> 16);
+    }
+}
+
 static void branchOver(ThumbBuilder &builder, std::function<void(ThumbBuilder &)> func, Condition cond = Condition::AL)
 {
     // do nothing if builder already in a bad state
@@ -555,8 +576,12 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
             case GenOpcode::LoadImm:
                 lastImmLoadStart = builder.getPtr();
-                assert(instr.imm <= 0xFFFF);
-                load16BitValue(builder, *mapReg(0), instr.imm);
+
+                if(sourceInfo.registers[0].size == 32)
+                    load32BitValue(builder, *mapReg(0), instr.imm); // TODO: use a literal here? (would require extra work if we remove it)
+                else
+                    load16BitValue(builder, *mapReg(0), instr.imm);
+ 
                 lastImmLoadEnd = builder.getPtr();
                 break;
 
