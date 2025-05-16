@@ -133,6 +133,8 @@ public:
 
     void sxtb(LowReg d, LowReg m);
 
+    void sxth(LowReg d, LowReg m);
+
     void uxtb(LowReg d, LowReg m);
 
     void uxth(LowReg d, LowReg m);

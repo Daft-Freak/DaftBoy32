@@ -383,6 +383,13 @@ void ThumbBuilder::sxtb(LowReg d, LowReg m)
     write(0xB240 | mReg << 3 | dReg);
 }
 
+void ThumbBuilder::sxth(LowReg d, LowReg m)
+{
+    int dReg = static_cast<int>(d.val);
+    int mReg = static_cast<int>(m.val);
+    write(0xB200 | mReg << 3 | dReg);
+}
+
 void ThumbBuilder::uxtb(LowReg d, LowReg m)
 {
     int dReg = static_cast<int>(d.val);
