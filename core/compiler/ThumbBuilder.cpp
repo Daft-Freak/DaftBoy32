@@ -120,7 +120,7 @@ void ThumbBuilder::and_(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, int sh
     }
 
     auto shiftVal = encodeShiftedRegister(shiftType, shift);
-    write(0xEB00 | (s ? (1 << 4) : 0) | nReg);
+    write(0xEA00 | (s ? (1 << 4) : 0) | nReg);
     write(shiftVal | dReg << 8 | mReg);
 }
 
