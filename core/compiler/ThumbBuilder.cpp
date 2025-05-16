@@ -27,6 +27,26 @@ void ThumbBuilder::add(LowReg dn, uint8_t imm)
     write(0x3000 | dnReg << 8 | imm);
 }
 
+// imm
+void ThumbBuilder::add(Reg d, Reg n, uint32_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+
+    // try to use shorter encodings
+    if(s && dReg < 8 && nReg < 8)
+    {
+        if(dReg == nReg && imm <= 0xFF)
+            return add(d, imm);
+        if(imm <= 7)
+            return add(d, n, imm);
+    }
+
+    auto exImm = encodeModifiedImmediate(imm);
+    write(0xF100 | (s ? (1 << 4) : 0) | exImm >> 16 | nReg);
+    write((exImm & 0xFFFF) | dReg << 8);
+}
+
 // reg
 void ThumbBuilder::add(Reg dn, Reg m)
 {
@@ -44,6 +64,27 @@ void ThumbBuilder::add(LowReg d, LowReg n, LowReg m)
     int mReg = static_cast<int>(m.val);
 
     write(0x1800 | mReg << 6 | nReg << 3 | dReg);
+}
+
+// shifted reg
+void ThumbBuilder::add(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, int shift)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    if(shiftType == ShiftType::LSL && shift == 0)
+    {
+        // try to use shorter encodings
+        if(!s && d == n)
+            return add(d, n);
+        if(s && dReg < 8 && nReg < 8 && mReg < 8)
+            return add(d, n, m);
+    }
+
+    auto shiftVal = encodeShiftedRegister(shiftType, shift);
+    write(0xEB00 | (s ? (1 << 4) : 0) | nReg);
+    write(shiftVal | dReg << 8 | mReg);
 }
 
 void ThumbBuilder::and_(LowReg dn, LowReg m)
@@ -520,4 +561,10 @@ uint32_t ThumbBuilder::encodeModifiedImmediate(uint32_t val)
 
     assert(false && "invalid modified immediate value");
     return ~0;
+}
+
+uint32_t ThumbBuilder::encodeShiftedRegister(ShiftType type, int shift)
+{
+    assert(shift < 32);
+    return (shift & 0x1C) << 10 | (shift & 3) << 6  | static_cast<int>(type) << 4;
 }

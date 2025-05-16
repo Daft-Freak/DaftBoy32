@@ -58,6 +58,14 @@ enum class Condition
     AL
 };
 
+enum class ShiftType
+{
+    LSL = 0,
+    LSR,
+    ASR,
+    ROR
+};
+
 class ThumbBuilder final
 {
 public:
@@ -67,8 +75,10 @@ public:
 
     void add(LowReg d, LowReg n, uint8_t imm);
     void add(LowReg dn, uint8_t imm);
+    void add(Reg d, Reg n, uint32_t imm, bool s);
     void add(Reg dn, Reg m);
     void add(LowReg d, LowReg n, LowReg m);
+    void add(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void and_(LowReg dn, LowReg m);
 
@@ -159,6 +169,7 @@ private:
     void write(uint16_t hw);
 
     uint32_t encodeModifiedImmediate(uint32_t val);
+    uint32_t encodeShiftedRegister(ShiftType type, int shift);
 
     uint16_t *ptr, *endPtr;
     uint16_t *savedPtr, *savedEndPtr;
