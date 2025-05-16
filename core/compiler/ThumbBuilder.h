@@ -103,7 +103,7 @@ public:
 
     void lsr(LowReg d, LowReg m, uint8_t imm);
 
-    void mov(LowReg r, uint8_t imm);
+    void mov(Reg r, uint32_t imm); // thumb2 if r >= 8 or imm > 0xFF
     void mov(Reg d, Reg m);
 
     void mvn(LowReg d, LowReg m);
