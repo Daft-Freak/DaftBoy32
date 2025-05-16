@@ -998,7 +998,30 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src0 = checkReg(instr.src[0]);
+                        auto src1 = checkRegOrImm(instr.src[1]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src0 && src1.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src1))
+                            {
+                                auto imm = std::get<uint32_t>(src1);
+                                assert(builder.isValidModifiedImmediate(imm));
+                                builder.and_(*dst, *src0, imm, true);
+                            }
+                            else
+                                builder.and_(*dst, *src0, std::get<Reg>(src1), true);
+                        }
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src0 = checkReg8(instr.src[0]);
                     auto src1 = checkReg8(instr.src[1]);
@@ -1082,7 +1105,30 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(regSize == 16)
+                if(regSize == 32)
+                {
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src0 = checkReg(instr.src[0]);
+                        auto src1 = checkRegOrImm(instr.src[1]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src0 && src1.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src1))
+                            {
+                                auto imm = std::get<uint32_t>(src1);
+                                assert(builder.isValidModifiedImmediate(imm));
+                                builder.orr(*dst, *src0, imm, true);
+                            }
+                            else
+                                builder.orr(*dst, *src0, std::get<Reg>(src1), true);
+                        }
+                    }
+                }
+                else if(regSize == 16)
                 {
                     // used for LDH, RET
                     if(instr.flags & GenOp_WriteFlags)
@@ -1144,7 +1190,30 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
             
-                if(regSize == 16)
+                if(regSize == 32)
+                {
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src0 = checkReg(instr.src[0]);
+                        auto src1 = checkRegOrImm(instr.src[1]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src0 && src1.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src1))
+                            {
+                                auto imm = std::get<uint32_t>(src1);
+                                assert(builder.isValidModifiedImmediate(imm));
+                                builder.sub(*dst, *src0, imm, true);
+                            }
+                            else
+                                builder.sub(*dst, *src0, std::get<Reg>(src1), true);
+                        }
+                    }
+                }
+                else if(regSize == 16)
                 {
                     // should be DEC, which sets no flags
                     if(instr.flags & (GenOp_PreserveFlags | GenOp_WriteFlags))
@@ -1310,7 +1379,30 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto src0 = checkReg(instr.src[0]);
+                        auto src1 = checkRegOrImm(instr.src[1]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src0 && src1.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src1))
+                            {
+                                auto imm = std::get<uint32_t>(src1);
+                                assert(builder.isValidModifiedImmediate(imm));
+                                builder.eor(*dst, *src0, imm, true);
+                            }
+                            else
+                                builder.eor(*dst, *src0, std::get<Reg>(src1), true);
+                        }
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src0 = checkReg8(instr.src[0]);
                     auto src1 = checkReg8(instr.src[1]);
@@ -1348,7 +1440,21 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        // shouldn't get these with immediate src
+                        auto src = checkReg(instr.src[0]);
+                        auto dst = checkReg(instr.dst[0]);
+
+                        if(src && dst)
+                            builder.mvn(*dst, *src, true);
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkReg8(instr.src[0]);
                     auto dst = checkReg8(instr.dst[0]);
