@@ -91,7 +91,7 @@ public:
     void eor(LowReg dn, LowReg m);
 
     void ldr(LowReg t, LowReg n, uint8_t imm);
-    void ldr(LowReg t, uint16_t imm);
+    void ldr(Reg t, int16_t imm);
     void ldr(LowReg t, LowReg n, LowReg m);
 
     void ldrb(LowReg t, LowReg n, uint8_t imm);
