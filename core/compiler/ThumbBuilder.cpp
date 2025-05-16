@@ -296,14 +296,23 @@ void ThumbBuilder::eor(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, int shi
 }
 
 // imm
-void ThumbBuilder::ldr(LowReg t, LowReg n, uint8_t imm)
+void ThumbBuilder::ldr(Reg t, Reg n, uint16_t imm)
 {
-    assert((imm & 3) == 0);
-    assert(imm <= 124);
+    int tReg = static_cast<int>(t);
+    int nReg = static_cast<int>(n);
 
-    int tReg = static_cast<int>(t.val);
-    int nReg = static_cast<int>(n.val);
-    write(0x6800 | (imm >> 2) << 6 | nReg << 3 | tReg);
+    if(tReg < 8 && nReg < 8 && !(imm & 0xFF83))
+        write(0x6800 | (imm >> 2) << 6 | nReg << 3 | tReg);
+    else if(tReg < 8 && n == Reg::SP && imm <= 1020 && !(imm & 3))
+        write(0x9800 | tReg << 8 | imm >> 2);
+    else
+    {
+        assert(n != Reg::PC);
+        assert(imm <= 4095);
+
+        write(0xF8D0 | nReg);
+        write(tReg << 12 | imm);
+    }
 }
 
 // literal
@@ -346,14 +355,20 @@ void ThumbBuilder::ldrb(LowReg t, LowReg n, uint8_t imm)
 }
 
 // imm
-void ThumbBuilder::ldrh(LowReg t, LowReg n, uint8_t imm)
+void ThumbBuilder::ldrh(Reg t, Reg n, uint16_t imm)
 {
-    assert((imm & 1) == 0);
-    assert(imm <= 62);
+    int tReg = static_cast<int>(t);
+    int nReg = static_cast<int>(n);
+    if(tReg < 8 && nReg < 8 && !(imm & 0xFFC1)) // <= 62, aligned
+        write(0x8800 | (imm >> 1) << 6 | nReg << 3 | tReg);
+    else
+    {
+        assert(n != Reg::PC);
+        assert(imm <= 4095);
 
-    int tReg = static_cast<int>(t.val);
-    int nReg = static_cast<int>(n.val);
-    write(0x8800 | (imm >> 1) << 6 | nReg << 3 | tReg);
+        write(0xF8B0 | nReg);
+        write(tReg << 12 | imm);
+    }
 }
 
 // reg
@@ -593,14 +608,21 @@ void ThumbBuilder::push(uint8_t regList, bool lr)
 }
 
 // imm
-void ThumbBuilder::str(LowReg t, LowReg n, uint8_t imm)
+void ThumbBuilder::str(Reg t, Reg n, uint16_t imm)
 {
-    assert((imm & 3) == 0);
-    assert(imm <= 124);
+    int tReg = static_cast<int>(t);
+    int nReg = static_cast<int>(n);
 
-    int tReg = static_cast<int>(t.val);
-    int nReg = static_cast<int>(n.val);
-    write(0x6000 | (imm >> 2) << 6 | nReg << 3 | tReg);
+    if(tReg < 8 && nReg < 8 && !(imm & 0xFF83))
+        write(0x6000 | (imm >> 2) << 6 | nReg << 3 | tReg);
+    else if(tReg < 8 && n == Reg::SP && imm <= 1020 && !(imm & 3))
+        write(0x9000 | tReg << 8 | imm >> 2);
+    else
+    {
+        assert(imm <= 4095);
+        write(0xF8C0 | nReg);
+        write(tReg << 12 | imm);
+    }
 }
 
 // reg
@@ -623,14 +645,21 @@ void ThumbBuilder::strb(LowReg t, LowReg n, uint8_t imm)
 }
 
 // imm
-void ThumbBuilder::strh(LowReg t, LowReg n, uint8_t imm)
+void ThumbBuilder::strh(Reg t, Reg n, uint16_t imm)
 {
-    assert((imm & 1) == 0);
-    assert(imm <= 62);
+    int tReg = static_cast<int>(t);
+    int nReg = static_cast<int>(n);
 
-    int tReg = static_cast<int>(t.val);
-    int nReg = static_cast<int>(n.val);
-    write(0x8000 | (imm >> 1) << 6 | nReg << 3 | tReg);
+    if(tReg < 8 && nReg < 8 && !(imm & 0xFFC1)) // <= 62, aligned
+        write(0x8000 | (imm >> 1) << 6 | nReg << 3 | tReg);
+    else
+    {
+        assert(n != Reg::PC);
+        assert(imm <= 4095);
+
+        write(0xF8A0 | nReg);
+        write(tReg << 12 | imm);
+    }
 }
 
 // reg
