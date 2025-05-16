@@ -2308,23 +2308,10 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
                         builder.add(Reg::R2, firstRegOff); // add to cpu ptr
                 }
 
-                assert(reg.cpuOffset - firstRegOff <= 62);
-
-                if(isLowReg(*mappedReg))
-                {
-                    if(reg.size == 32)
-                        builder.ldr(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
-                    else
-                        builder.ldrh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
-                }
+                if(reg.size == 32)
+                    builder.ldr(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
                 else
-                {
-                    if(reg.size == 32)
-                        builder.ldr(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff);
-                    else
-                        builder.ldrh(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff);
-                    builder.mov(*mappedReg, Reg::R3);
-                }
+                    builder.ldrh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
             }
         }
 
@@ -2375,22 +2362,10 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
         {
             if(auto mappedReg = mapReg(i))
             {
-                assert(reg.cpuOffset - firstRegOff <= 62);
-                if(isLowReg(*mappedReg))
-                {
-                    if(reg.size == 32)
-                        builder.str(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
-                    else
-                        builder.strh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
-                }
+                if(reg.size == 32)
+                    builder.str(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
                 else
-                {
-                    builder.mov(Reg::R3, *mappedReg);
-                    if(reg.size == 32)
-                        builder.str(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff);
-                    else
-                        builder.strh(Reg::R3, Reg::R2, reg.cpuOffset - firstRegOff); // FIXME: assumes 16 bit regs
-                }
+                    builder.strh(*mappedReg, Reg::R2, reg.cpuOffset - firstRegOff);
             }
         }
 
