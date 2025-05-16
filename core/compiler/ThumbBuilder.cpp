@@ -411,7 +411,7 @@ void ThumbBuilder::mvn(Reg d,Reg m, bool s, ShiftType shiftType, int shift)
     {
         // try to use shorter encodings
         if(s && dReg < 8 && mReg < 8)
-            return and_(d, m);
+            return mvn(d, m);
     }
 
     auto shiftVal = encodeShiftedRegister(shiftType, shift);
