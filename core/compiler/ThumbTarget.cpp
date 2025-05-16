@@ -587,11 +587,36 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
             case GenOpcode::Move:
             {
-                assert(!(instr.flags & GenOp_WriteFlags));
-
                 auto regSize = sourceInfo.registers[instr.dst[0]].size;
-                if(regSize == 16)
+                if(regSize == 32)
                 {
+                    if(instr.flags & GenOp_WriteFlags)
+                        unhandledFlags(instr.flags & GenOp_WriteFlags);
+                    else
+                    {
+                        auto dst = checkReg(instr.dst[0]);
+                        auto src = checkRegOrImm(instr.src[0]);
+                    
+                        if(src.index() && dst)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                            {
+                                // try to do a mov, fall back to literal load
+                                auto value = std::get<uint32_t>(src);
+                                if(value <= 0xFFFF || builder.isValidModifiedImmediate(value))
+                                    builder.mov(*dst, value);
+                                else
+                                    loadLiteral(builder, *dst, value);
+                            }
+                            else
+                                builder.mov(*dst, std::get<Reg>(src));
+                        }
+                    }
+                }
+                else if(regSize == 16)
+                {
+                    assert(!(instr.flags & GenOp_WriteFlags));
+
                     auto dst = checkReg(instr.dst[0]);
 
                     if(sourceInfo.registers[instr.src[0]].size == 8)
@@ -635,6 +660,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 }
                 else if(regSize == 8)
                 {
+                    assert(!(instr.flags & GenOp_WriteFlags));
+
                     auto src = checkRegOrImm8(instr.src[0]);
                     auto dst = checkReg8(instr.dst[0]);
                     if(src.index() && dst)
