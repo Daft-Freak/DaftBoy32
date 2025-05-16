@@ -80,7 +80,9 @@ public:
     void add(LowReg d, LowReg n, LowReg m);
     void add(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
+    void and_(Reg d, Reg n, uint32_t imm, bool s);
     void and_(LowReg dn, LowReg m);
+    void and_(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void asr(LowReg d, LowReg m, uint8_t imm);
 
@@ -98,7 +100,9 @@ public:
     void cmp(LowReg n, uint8_t imm);
     void cmp(Reg n, Reg m);
 
+    void eor(Reg d, Reg n, uint32_t imm, bool s);
     void eor(LowReg dn, LowReg m);
+    void eor(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void ldr(LowReg t, LowReg n, uint8_t imm);
     void ldr(Reg t, int16_t imm);
@@ -118,11 +122,15 @@ public:
 
     void movt(Reg d, uint16_t imm);
 
+    void mvn(Reg d, uint32_t imm, bool s);
     void mvn(LowReg d, LowReg m);
+    void mvn(Reg d, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void nop();
 
-    void orr(LowReg d, LowReg m);
+    void orr(Reg d, Reg n, uint32_t imm, bool s);
+    void orr(LowReg dn, LowReg m);
+    void orr(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void pop(uint8_t regList, bool pc);
 
@@ -139,7 +147,9 @@ public:
     void sbc(LowReg dn, LowReg m);
 
     void sub(LowReg dn, uint8_t imm);
+    void sub(Reg d, Reg n, uint32_t imm, bool s);
     void sub(LowReg d, LowReg n, LowReg m);
+    void sub(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void sxtb(LowReg d, LowReg m);
 
