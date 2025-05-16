@@ -85,6 +85,9 @@ public:
     void and_(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void asr(LowReg d, LowReg m, uint8_t imm);
+    void asr(Reg d, Reg m, uint8_t imm, bool s);
+    void asr(LowReg dn, LowReg m);
+    void asr(Reg d, Reg n, Reg m, bool s);
 
     void b(Condition cond, int imm);
     void b(int imm);
@@ -114,8 +117,14 @@ public:
     void ldrh(LowReg t, LowReg n, LowReg m);
 
     void lsl(LowReg d, LowReg m, uint8_t imm);
+    void lsl(Reg d, Reg m, uint8_t imm, bool s);
+    void lsl(LowReg dn, LowReg m);
+    void lsl(Reg d, Reg n, Reg m, bool s);
 
     void lsr(LowReg d, LowReg m, uint8_t imm);
+    void lsr(Reg d, Reg m, uint8_t imm, bool s);
+    void lsr(LowReg dn, LowReg m);
+    void lsr(Reg d, Reg n, Reg m, bool s);
 
     void mov(Reg r, uint32_t imm); // thumb2 if r >= 8 or imm > 0xFF
     void mov(Reg d, Reg m);

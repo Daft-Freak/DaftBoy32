@@ -134,6 +134,46 @@ void ThumbBuilder::asr(LowReg d, LowReg m, uint8_t imm)
     write(0x1000 | imm << 6 | mReg << 3 | dReg);
 }
 
+// imm
+void ThumbBuilder::asr(Reg d, Reg m, uint8_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int mReg = static_cast<int>(m);
+
+    // try to use shorter encodings
+    if(s && dReg < 8 && mReg < 8)
+        return asr(d, m, imm);
+
+    assert(imm < 32);
+
+    write(0xEA4F | (s ? (1 << 4) : 0));
+    write(0x0020 | (imm >> 2) << 12 | dReg << 8 | (imm & 3) << 6 | mReg);
+}
+
+// reg
+void ThumbBuilder::asr(LowReg dn, LowReg m)
+{
+    int dnReg = static_cast<int>(dn.val);
+    int mReg = static_cast<int>(m.val);
+
+    write(0x4100 | mReg << 3 | dnReg);
+}
+
+// reg
+void ThumbBuilder::asr(Reg d, Reg n, Reg m, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    // try to use shorter encodings
+    if(s && dReg < 8 && nReg == dReg && mReg < 8)
+        return asr(d, m);
+
+    write(0xFA40 | (s ? (1 << 4) : 0) | nReg);
+    write(0xF000 | dReg << 8 | mReg);
+}
+
 void ThumbBuilder::b(Condition cond, int imm)
 {
     assert(cond != Condition::AL);
@@ -336,6 +376,46 @@ void ThumbBuilder::lsl(LowReg d, LowReg m, uint8_t imm)
 }
 
 // imm
+void ThumbBuilder::lsl(Reg d, Reg m, uint8_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int mReg = static_cast<int>(m);
+
+    // try to use shorter encodings
+    if(s && dReg < 8 && mReg < 8)
+        return lsl(d, m, imm);
+
+    assert(imm < 32);
+
+    write(0xEA4F | (s ? (1 << 4) : 0));
+    write(0x0000 | (imm >> 2) << 12 | dReg << 8 | (imm & 3) << 6 | mReg);
+}
+
+// reg
+void ThumbBuilder::lsl(LowReg dn, LowReg m)
+{
+    int dnReg = static_cast<int>(dn.val);
+    int mReg = static_cast<int>(m.val);
+
+    write(0x4080 | mReg << 3 | dnReg);
+}
+
+// reg
+void ThumbBuilder::lsl(Reg d, Reg n, Reg m, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    // try to use shorter encodings
+    if(s && dReg < 8 && nReg == dReg && mReg < 8)
+        return lsl(d, m);
+
+    write(0xFA00 | (s ? (1 << 4) : 0) | nReg);
+    write(0xF000 | dReg << 8 | mReg);
+}
+
+// imm
 void ThumbBuilder::lsr(LowReg d, LowReg m, uint8_t imm)
 {
     assert(imm < 32);
@@ -343,6 +423,46 @@ void ThumbBuilder::lsr(LowReg d, LowReg m, uint8_t imm)
     int dReg = static_cast<int>(d.val);
     int mReg = static_cast<int>(m.val);
     write(0x0800 | imm << 6 | mReg << 3 | dReg);
+}
+
+// imm
+void ThumbBuilder::lsr(Reg d, Reg m, uint8_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int mReg = static_cast<int>(m);
+
+    // try to use shorter encodings
+    if(s && dReg < 8 && mReg < 8)
+        return lsr(d, m, imm);
+
+    assert(imm < 32);
+
+    write(0xEA4F | (s ? (1 << 4) : 0));
+    write(0x0010 | (imm >> 2) << 12 | dReg << 8 | (imm & 3) << 6 | mReg);
+}
+
+// reg
+void ThumbBuilder::lsr(LowReg dn, LowReg m)
+{
+    int dnReg = static_cast<int>(dn.val);
+    int mReg = static_cast<int>(m.val);
+
+    write(0x40C0 | mReg << 3 | dnReg);
+}
+
+// reg
+void ThumbBuilder::lsr(Reg d, Reg n, Reg m, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    // try to use shorter encodings
+    if(s && dReg < 8 && nReg == dReg && mReg < 8)
+        return lsr(d, m);
+
+    write(0xFA20 | (s ? (1 << 4) : 0) | nReg);
+    write(0xF000 | dReg << 8 | mReg);
 }
 
 // imm
