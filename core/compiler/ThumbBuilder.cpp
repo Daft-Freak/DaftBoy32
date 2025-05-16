@@ -380,6 +380,26 @@ void ThumbBuilder::data(uint16_t d)
     write(d);
 }
 
+bool ThumbBuilder::isValidModifiedImmediate(uint32_t val)
+{
+    if(val <= 0xFF) // 00 00 00 xx
+        return true;
+
+    if((val & 0xFFFF) == (val >> 16)) // repeated halfwords
+    {
+        if(!(val & 0xFF00)) // 00 xx 00 xx
+            return true;
+        
+        if(!(val & 0xFF)) // xx 00 xx 00
+            return true;
+
+        if((val & 0xFF) == ((val >> 8) & 0xFF)) // xx xx xx xx
+            return true;
+    }
+
+    return val >> __builtin_ctz(val) <= 0xFF; // shifted
+}
+
 void ThumbBuilder::resetPtr(uint16_t *oldPtr)
 {
     assert(oldPtr <= ptr);
@@ -428,4 +448,37 @@ void ThumbBuilder::write(uint16_t hw)
         *ptr++ = hw;
     else
         error = true;
+}
+
+uint32_t ThumbBuilder::encodeModifiedImmediate(uint32_t val)
+{
+    if(val <= 0xFF)
+        return val;
+
+    if((val & 0xFFFF) == (val >> 16)) // repeated halfwords
+    {
+        if(!(val & 0xFF00)) // 00 xx 00 xx
+            return 1 << 12 | (val & 0xFF);
+
+        if(!(val & 0xFF)) // xx 00 xx 00
+            return 2 << 12 | (val & 0xFF00) >> 8;
+
+        if((val & 0xFF) == ((val >> 8) & 0xFF)) // xx xx xx xx
+            return 3 << 12 | (val & 0xFF);
+    }
+
+    int shift = __builtin_ctz(val);
+
+    if(val >> shift <= 0xFF) // shifted
+    {
+        shift -= __builtin_clz(val >> shift) % 8;
+        val = (val >> shift) & 0x7F; // shift down and clear top bit
+
+        shift = 32 - shift;
+
+        return (shift & 0x10) << 22 | (shift & 0xE) << 11 | (shift & 1) << 7 | val;
+    }
+
+    assert(false && "invalid modified immediate value");
+    return ~0;
 }
