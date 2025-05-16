@@ -563,7 +563,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(instr.flags & GenOp_WriteFlags)
                 {
-                    builder.mov(Reg::R1, ~preserveMask);
+                    builder.mov(Reg::R1, ~preserveMask & 0xFF);
                     builder.bic(f->reg, Reg::R1); // clear flags
                 }
             }
