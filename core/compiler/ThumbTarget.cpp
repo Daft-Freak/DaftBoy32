@@ -2249,6 +2249,13 @@ void ThumbTarget::loadLiteral(ThumbBuilder &builder, Reg reg, uint32_t val)
             break;
     }
 
+    // use a MOV if the value will fit... and we would be using a 32bit instruction anyway
+    if(!isLowReg(reg) && (builder.isValidModifiedImmediate(val) || val <= 0xFFFF))
+    {
+        builder.mov(reg, val);
+        return;
+    }
+
     if(index == curLiteral)
     {
         assert(curLiteral < std::size(literals));
@@ -2298,17 +2305,37 @@ void ThumbTarget::outputLiterals(ThumbBuilder &builder, bool reachable)
         // patch
         for(auto &ptr : ldrLiteralInstrs)
         {
+            bool t2 = (*ptr & 0xFF7F) == 0xF85F;
+
             auto start = ptr + 1;
             if(reinterpret_cast<uintptr_t>(start) & 2)
                 start++;
 
-            // update LDR imm
-            unsigned index = *ptr & 0xFF;
-            auto off = ((dataPtr + index * 2) - start) >> 1;
+            // get back the index (we encoded it in the immediate value)
+            unsigned index;
 
+            if(t2)
+                index = (*(ptr + 1) & 0xFFF) >> 2;
+            else
+                index = *ptr & 0xFF;
+
+            // update LDR imm
+            auto off = ((dataPtr + index * 2) - start);
             assert(index < std::size(literals));
-            assert(off <= 0xFF);
-            *ptr = (*ptr & 0xFF00) | off;
+
+            if(t2)
+            {
+                off <<= 1;
+                assert(off < 0xFFF);
+                ptr++;
+                *ptr = (*ptr & 0xF000) | off;
+            }
+            else
+            {
+                off >>= 1;
+                assert(off <= 0xFF);
+                *ptr = (*ptr & 0xFF00) | off;
+            }
         }
     }
 
