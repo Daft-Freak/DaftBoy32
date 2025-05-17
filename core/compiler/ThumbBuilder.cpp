@@ -561,6 +561,21 @@ void ThumbBuilder::movt(Reg d, uint16_t imm)
     write((imm & 0x700) << 4 | reg << 8 | (imm & 0xFF));
 }
 
+void ThumbBuilder::mrs(Reg d, uint8_t sysm)
+{
+    int dReg = static_cast<int>(d);
+
+    write(0xF3EF);
+    write(0x8000 | (dReg << 8) | sysm);
+}
+
+void ThumbBuilder::msr(Reg n, uint8_t mask, uint8_t sysm)
+{
+    int nReg = static_cast<int>(n);
+    write(0xF380 | nReg);
+    write(0x8000 | mask << 10 | sysm);
+}
+
 // imm
 void ThumbBuilder::mvn(Reg d, uint32_t imm, bool s)
 {
