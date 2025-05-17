@@ -38,6 +38,8 @@ private:
 
     void loadPCValue(ThumbBuilder &builder, uint32_t val);
 
+    void setFlags32(ThumbBuilder &builder, uint8_t instrFlags);
+
     std::optional<Reg> mapReg(uint8_t index);
     std::optional<RegInfo> mapReg8(uint8_t index);
 

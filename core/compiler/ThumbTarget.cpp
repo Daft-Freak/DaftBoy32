@@ -2566,6 +2566,64 @@ void ThumbTarget::loadPCValue(ThumbBuilder &builder, uint32_t val)
     }
 }
 
+void ThumbTarget::setFlags32(ThumbBuilder &builder, uint8_t instrFlags)
+{
+    if(!(instrFlags & GenOp_WriteFlags))
+        return;
+
+    auto f = mapReg(flagsReg);
+    
+    if(!f)
+        return;
+
+    uint32_t writtenMask = 0;
+
+    for(int i = 0; i < 4; i++)
+    {
+        if(instrFlags & (4 << i))
+            writtenMask |= 1 << sourceInfo.flags[i].bit;
+    }
+    // clear flags
+    builder.bic(*f, *f, writtenMask, false);
+
+    assert(!writesFlag(instrFlags, SourceFlagType::HalfCarry));
+    assert(!writesFlag(instrFlags, SourceFlagType::WasSub));
+
+    // TODO: for multiple flags we can cheat for AGBRecompiler
+
+    if(writesFlag(instrFlags, SourceFlagType::Carry))
+    {
+        branchOver(builder, [this, &f](ThumbBuilder &builder)
+        {
+            builder.orr(*f, *f, 1 << getFlagInfo(SourceFlagType::Carry).bit, false);
+        }, Condition::CC);
+    }
+
+    if(writesFlag(instrFlags, SourceFlagType::Zero))
+    {
+        branchOver(builder, [this, &f](ThumbBuilder &builder)
+        {
+            builder.orr(*f, *f, 1 << getFlagInfo(SourceFlagType::Zero).bit, false);
+        }, Condition::NE);
+    }
+
+    if(writesFlag(instrFlags, SourceFlagType::Negative))
+    {
+        branchOver(builder, [this, &f](ThumbBuilder &builder)
+        {
+            builder.orr(*f, *f, 1 << getFlagInfo(SourceFlagType::Negative).bit, false);
+        }, Condition::PL);
+    }
+
+    if(writesFlag(instrFlags, SourceFlagType::Overflow))
+    {
+        branchOver(builder, [this, &f](ThumbBuilder &builder)
+        {
+            builder.orr(*f, *f, 1 << getFlagInfo(SourceFlagType::Overflow).bit, false);
+        }, Condition::VC);
+    }
+}
+
 std::optional<Reg> ThumbTarget::mapReg(uint8_t index)
 {
     if(sourceInfo.registers[index].alias)
