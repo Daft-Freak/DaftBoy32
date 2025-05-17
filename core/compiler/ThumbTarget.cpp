@@ -211,6 +211,10 @@ void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
     for(auto it = sourceInfo.flags.begin(); it != sourceInfo.flags.end(); ++it, i++)
         flagMap[static_cast<int>(it->type)] = i;
 
+    // allocate the flags register if it isn't an alias
+    if(!sourceInfo.registers[flagsReg].alias && !regAlloc.count(flagsReg))
+        regAlloc.emplace(flagsReg, Reg::R11);
+
     this->sourceInfo = std::move(sourceInfo);
     this->cpuPtr = cpuPtr;
 }
@@ -2272,7 +2276,7 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
     auto cpuPtrInt = reinterpret_cast<uintptr_t>(cpuPtr);
 
-    builder.push(0b0100011111110000); // R4-10, LR
+    builder.push(0b0100111111110000); // R4-11, LR
     
     // set the low bit so we stay in thumb mode
     builder.mov(Reg::R2, 1);
@@ -2368,7 +2372,7 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
 
     // restore regs and return
-    builder.pop(0b1000011111110000); // R4-10, PC
+    builder.pop(0b1000111111110000); // R4-11, PC
 
     // write cpu addr
     auto ptr = builder.getPtr();
