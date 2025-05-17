@@ -157,7 +157,8 @@ void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
 {
     static const Reg regList[]
     {
-        // from DMGRecompilerThumb
+        Reg::R3, // only if 32bit mode
+
         Reg::R4,
         Reg::R5,
         Reg::R6,
@@ -169,8 +170,15 @@ void ThumbTarget::init(SourceInfo sourceInfo, void *cpuPtr)
         Reg::R2, // the same as temp/0, should only get used where temp is removed
     };
 
+    // assume "32bit mode"/no 8/16 bit ops if both pc and temp are 32bit
+
+    bool is32Bit = sourceInfo.pcSize == 32 && sourceInfo.registers[0].size == 32;
+
     // alloc registers
     unsigned int allocOff = 0;
+
+    if(!is32Bit)
+        allocOff++; // skip R3
 
     regAlloc.emplace(0, Reg::R2); // temp
 
