@@ -946,7 +946,29 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
             
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    auto src0 = checkReg(instr.src[0]);
+                    auto src1 = checkRegOrImm(instr.src[1]);
+                    auto dst = checkReg(instr.dst[0]);
+
+                    if(src0 && src1.index() && dst)
+                    {
+                        carryIn32();
+
+                        if(std::holds_alternative<uint32_t>(src1))
+                        {
+                            auto imm = std::get<uint32_t>(src1);
+                            assert(builder.isValidModifiedImmediate(imm));
+                            builder.adc(*dst, *src0, imm, true);
+                        }
+                        else
+                            builder.adc(*dst, *src0, std::get<Reg>(src1), true);
+
+                        setFlags32(builder, instr.flags);
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkReg8(instr.src[1]);
                     auto dst = checkReg8(instr.src[0]);
@@ -1338,7 +1360,30 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
             
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    auto src0 = checkReg(instr.src[0]);
+                    auto src1 = checkRegOrImm(instr.src[1]);
+                    auto dst = checkReg(instr.dst[0]);
+
+                    if(src0 && src1.index() && dst)
+                    {
+                        // this is assuming arm "not borrow" logic for carry...
+                        carryIn32();
+
+                        if(std::holds_alternative<uint32_t>(src1))
+                        {
+                            auto imm = std::get<uint32_t>(src1);
+                            assert(builder.isValidModifiedImmediate(imm));
+                            builder.sbc(*dst, *src0, imm, true);
+                        }
+                        else
+                            builder.sbc(*dst, *src0, std::get<Reg>(src1), true);
+
+                        setFlags32(builder, instr.flags);
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkReg8(instr.src[1]);
                     auto dst = checkReg8(instr.src[0]);
