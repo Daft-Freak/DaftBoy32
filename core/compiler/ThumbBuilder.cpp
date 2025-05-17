@@ -127,7 +127,10 @@ void ThumbBuilder::and_(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, int sh
 // imm
 void ThumbBuilder::asr(LowReg d, LowReg m, uint8_t imm)
 {
-    assert(imm < 32);
+    assert(imm > 0 && imm <= 32);
+
+    if(imm == 32)
+        imm = 0;
 
     int dReg = static_cast<int>(d.val);
     int mReg = static_cast<int>(m.val);
@@ -144,7 +147,10 @@ void ThumbBuilder::asr(Reg d, Reg m, uint8_t imm, bool s)
     if(s && dReg < 8 && mReg < 8)
         return asr(d, m, imm);
 
-    assert(imm < 32);
+    assert(imm > 0 && imm <= 32);
+
+    if(imm == 32)
+        imm = 0;
 
     write(0xEA4F | (s ? (1 << 4) : 0));
     write(0x0020 | (imm >> 2) << 12 | dReg << 8 | (imm & 3) << 6 | mReg);
@@ -482,7 +488,10 @@ void ThumbBuilder::lsl(Reg d, Reg n, Reg m, bool s)
 // imm
 void ThumbBuilder::lsr(LowReg d, LowReg m, uint8_t imm)
 {
-    assert(imm < 32);
+    assert(imm > 0 && imm <= 32);
+
+    if(imm == 32)
+        imm = 0;
 
     int dReg = static_cast<int>(d.val);
     int mReg = static_cast<int>(m.val);
@@ -499,7 +508,10 @@ void ThumbBuilder::lsr(Reg d, Reg m, uint8_t imm, bool s)
     if(s && dReg < 8 && mReg < 8)
         return lsr(d, m, imm);
 
-    assert(imm < 32);
+    assert(imm > 0 && imm <= 32);
+
+    if(imm == 32)
+        imm = 0;
 
     write(0xEA4F | (s ? (1 << 4) : 0));
     write(0x0010 | (imm >> 2) << 12 | dReg << 8 | (imm & 3) << 6 | mReg);
