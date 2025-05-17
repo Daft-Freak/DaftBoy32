@@ -2569,7 +2569,7 @@ void ThumbTarget::setFlags32(ThumbBuilder &builder, uint8_t instrFlags)
 
     for(int i = 0; i < 4; i++)
     {
-        if(instrFlags & (4 << i))
+        if(instrFlags & (1 << (i + 4)))
             writtenMask |= 1 << sourceInfo.flags[i].bit;
     }
     // clear flags
