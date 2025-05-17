@@ -870,6 +870,21 @@ void ThumbBuilder::sxth(LowReg d, LowReg m)
     write(0xB200 | mReg << 3 | dReg);
 }
 
+void ThumbBuilder::tst(Reg n, Reg m, ShiftType shiftType, int shift)
+{
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    if(shiftType == ShiftType::LSL && shift == 0 && nReg < 8 && mReg < 8)
+        write(0x4200 | mReg << 3 | nReg);
+    else
+    {
+        auto shiftVal = encodeShiftedRegister(shiftType, shift);
+        write(0xEA00 | (1 << 4) | nReg);
+        write(0x0F00 | shiftVal | mReg);
+    }
+}
+
 void ThumbBuilder::uxtb(LowReg d, LowReg m)
 {
     int dReg = static_cast<int>(d.val);
