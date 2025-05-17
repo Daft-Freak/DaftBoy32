@@ -598,17 +598,23 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 
                     if(src.index() && dst)
                     {
+                        bool setFlags = instr.flags & GenOp_WriteFlags;
+    
                         if(std::holds_alternative<uint32_t>(src))
                         {
                             // try to do a mov, fall back to literal load
                             auto value = std::get<uint32_t>(src);
-                            if(value <= 0xFFFF || builder.isValidModifiedImmediate(value))
+                            if((value <= 0xFFFF && !setFlags) || builder.isValidModifiedImmediate(value))
                                 builder.mov(*dst, value);
                             else
+                            {
                                 loadLiteral(builder, *dst, value);
+                                // uhoh, no flags
+                                assert(!(instr.flags & GenOp_WriteFlags));
+                            }
                         }
                         else
-                            builder.mov(*dst, std::get<Reg>(src));
+                            builder.mov(*dst, std::get<Reg>(src), setFlags);
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Carry));
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
