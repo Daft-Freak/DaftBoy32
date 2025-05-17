@@ -578,7 +578,7 @@ void ThumbBuilder::orr(Reg d, Reg n, uint32_t imm, bool s)
     int nReg = static_cast<int>(n);
 
     auto exImm = encodeModifiedImmediate(imm);
-    write(0xF200 | (s ? (1 << 4) : 0) | exImm >> 16 | nReg);
+    write(0xF040 | (s ? (1 << 4) : 0) | exImm >> 16 | nReg);
     write((exImm & 0xFFFF) | dReg << 8);
 }
 
