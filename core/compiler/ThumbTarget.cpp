@@ -1049,7 +1049,26 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    auto src0 = checkReg(instr.src[0]);
+                    auto src1 = checkRegOrImm(instr.src[1]);
+
+                    if(src0 && src1.index())
+                    {
+                        if(std::holds_alternative<uint32_t>(src1))
+                        {
+                            auto imm = std::get<uint32_t>(src1);
+                            assert(builder.isValidModifiedImmediate(imm));
+                            builder.cmp(*src0, imm);
+                        }
+                        else
+                            builder.cmp(*src0, std::get<Reg>(src1));
+
+                        setFlags32(builder, instr.flags);
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src = checkRegOrImm8(instr.src[1]);
                     auto dst = checkReg8(instr.src[0]);
