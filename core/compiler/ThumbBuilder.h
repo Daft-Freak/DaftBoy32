@@ -154,6 +154,10 @@ public:
     void push(uint8_t regList, bool lr);
     void push(uint16_t regList);
 
+    void ror(Reg d, Reg m, uint8_t imm, bool s);
+    void ror(LowReg dn, LowReg m);
+    void ror(Reg d, Reg n, Reg m, bool s);
+
     void str(Reg t, Reg n, uint16_t imm); 
     void str(LowReg t, LowReg n, LowReg m);
 

@@ -730,6 +730,44 @@ void ThumbBuilder::push(uint16_t regList)
 }
 
 // imm
+void ThumbBuilder::ror(Reg d, Reg m, uint8_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int mReg = static_cast<int>(m);
+
+    assert(imm > 0 && imm < 32);
+
+    // imm == 0 would be RRX
+
+    write(0xEA4F | (s ? (1 << 4) : 0));
+    write(0x0030 | (imm >> 2) << 12 | dReg << 8 | (imm & 3) << 6 | mReg);
+}
+
+// reg
+void ThumbBuilder::ror(LowReg dn, LowReg m)
+{
+    int dnReg = static_cast<int>(dn.val);
+    int mReg = static_cast<int>(m.val);
+
+    write(0x41C0 | mReg << 3 | dnReg);
+}
+
+// reg
+void ThumbBuilder::ror(Reg d, Reg n, Reg m, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    // try to use shorter encodings
+    if(s && dReg < 8 && nReg == dReg && mReg < 8)
+        return ror(d, m);
+
+    write(0xFA60 | (s ? (1 << 4) : 0) | nReg);
+    write(0xF000 | dReg << 8 | mReg);
+}
+
+// imm
 void ThumbBuilder::str(Reg t, Reg n, uint16_t imm)
 {
     int tReg = static_cast<int>(t);
