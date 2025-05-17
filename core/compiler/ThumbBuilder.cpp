@@ -199,11 +199,41 @@ void ThumbBuilder::b(int imm)
     write(0xE000 | ((imm >> 1) & 0x7FF));
 }
 
+// imm
+void ThumbBuilder::bic(Reg d, Reg n, uint32_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+
+    auto exImm = encodeModifiedImmediate(imm);
+    write(0xF020 | (s ? (1 << 4) : 0) | exImm >> 16 | nReg);
+    write((exImm & 0xFFFF) | dReg << 8);
+}
+
 void ThumbBuilder::bic(LowReg dn, LowReg m)
 {
     int mReg = static_cast<int>(m.val);
     int dnReg = static_cast<int>(dn.val);
     write(0x4380 | mReg << 3 | dnReg);
+}
+
+// shifted reg
+void ThumbBuilder::bic(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, int shift)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    if(shiftType == ShiftType::LSL && shift == 0)
+    {
+        // try to use shorter encodings
+        if(s && dReg < 8 && nReg == dReg && mReg < 8)
+            return bic(d, m);
+    }
+
+    auto shiftVal = encodeShiftedRegister(shiftType, shift);
+    write(0xEA20 | (s ? (1 << 4) : 0) | nReg);
+    write(shiftVal | dReg << 8 | mReg);
 }
 
 void ThumbBuilder::bl(int32_t off)

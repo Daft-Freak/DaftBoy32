@@ -92,7 +92,9 @@ public:
     void b(Condition cond, int imm);
     void b(int imm);
 
+    void bic(Reg d, Reg n, uint32_t imm, bool s);
     void bic(LowReg dn, LowReg m);
+    void bic(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void bl(int32_t off);
 
