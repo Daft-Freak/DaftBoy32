@@ -551,13 +551,20 @@ void ThumbBuilder::mov(Reg d, uint32_t imm)
 }
 
 // reg
-void ThumbBuilder::mov(Reg d, Reg m)
+void ThumbBuilder::mov(Reg d, Reg m, bool s)
 {
     int dReg = static_cast<int>(d);
     int mReg = static_cast<int>(m);
 
-    // there's another encoding that sets flags, but only does r0-7
-    write(0x4600 | (dReg & 8) << 4 | mReg << 3 | (dReg & 7));
+    if(!s)
+        write(0x4600 | (dReg & 8) << 4 | mReg << 3 | (dReg & 7));
+    else if(dReg < 8 && mReg < 8)
+        write(mReg << 3 | dReg); // all the other bits are zeros
+    else
+    {
+        write(0xEA4F | (s ? (1 << 4) : 0)); // S will always be one here anyway...
+        write(dReg << 8 | mReg); // huh, it happened again
+    }
 }
 
 // imm to top half

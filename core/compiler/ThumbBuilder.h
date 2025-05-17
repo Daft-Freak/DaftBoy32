@@ -131,7 +131,7 @@ public:
     void lsr(Reg d, Reg n, Reg m, bool s);
 
     void mov(Reg r, uint32_t imm); // thumb2 if r >= 8 or imm > 0xFF
-    void mov(Reg d, Reg m);
+    void mov(Reg d, Reg m, bool s = false);
 
     void movt(Reg d, uint16_t imm);
 
