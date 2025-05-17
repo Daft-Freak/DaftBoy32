@@ -295,6 +295,18 @@ void ThumbBuilder::eor(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, int shi
     write(shiftVal | dReg << 8 | mReg);
 }
 
+void ThumbBuilder::ldm(uint16_t regList, Reg n, bool w)
+{
+    // TODO: 16-bit encoding?
+    assert(!(regList & (1 << 13))); // no SP
+    assert(!(regList & (1 << 15)) || !(regList & (1 << 14))); // no PC + LR
+
+    int nReg = static_cast<int>(n);
+
+    write(0xE890 | (w ? (1 << 5) : 0) | nReg);
+    write(regList);
+}
+
 // imm
 void ThumbBuilder::ldr(Reg t, Reg n, uint16_t imm)
 {
@@ -602,9 +614,48 @@ void ThumbBuilder::pop(uint8_t regList, bool pc)
     write(0xBC00 | (pc ? (1 << 8) : 0) | regList);
 }
 
+void ThumbBuilder::pop(uint16_t regList)
+{
+    assert(regList);
+
+    // try to use shorter encodings
+    if(!(regList & 0b0111111100000000))
+        return pop(regList, regList & (1 << 15));
+
+    if(!(regList & (regList - 1))) // one bit set / power of two
+    {
+        write(0xF85D);
+        write(0x0B04 | __builtin_ctz(regList) << 12);
+    }
+    else
+        ldm(regList, Reg::SP, true);
+}
+
 void ThumbBuilder::push(uint8_t regList, bool lr)
 {
     write(0xB400 | (lr ? (1 << 8) : 0) | regList);
+}
+
+void ThumbBuilder::push(uint16_t regList)
+{
+    assert(regList);
+    assert(!(regList & (1 << 13)) && !(regList & (1 << 15))); // no SP or PC
+
+    // try to use shorter encodings
+    if(!(regList & 0b1011111100000000))
+        return push(regList, regList & (1 << 14));
+
+    if(!(regList & (regList - 1))) // one bit set / power of two
+    {
+        write(0xF84D);
+        write(0x0D04 | __builtin_ctz(regList) << 12);
+    }
+    else
+    {
+        // STMDB SP! ...
+        write(0xE92D);
+        write(regList);
+    }
 }
 
 // imm

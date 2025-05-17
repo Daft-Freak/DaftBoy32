@@ -107,6 +107,8 @@ public:
     void eor(LowReg dn, LowReg m);
     void eor(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
+    void ldm(uint16_t regList, Reg n, bool w = false);
+
     void ldr(Reg t, Reg n, uint16_t imm);
     void ldr(Reg t, int16_t imm);
     void ldr(LowReg t, LowReg n, LowReg m);
@@ -142,8 +144,10 @@ public:
     void orr(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void pop(uint8_t regList, bool pc);
+    void pop(uint16_t regList);
 
     void push(uint8_t regList, bool lr);
+    void push(uint16_t regList);
 
     void str(Reg t, Reg n, uint16_t imm); 
     void str(LowReg t, LowReg n, LowReg m);
