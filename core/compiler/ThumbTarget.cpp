@@ -1157,6 +1157,36 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 break;
             }
 
+            case GenOpcode::Multiply:
+            {
+                auto regSize = sourceInfo.registers[instr.src[0]].size;
+
+                if(regSize == 32)
+                {
+                    auto src0 = checkReg(instr.src[0]);
+                    auto src1 = checkReg(instr.src[1]);
+                    auto dst = checkReg(instr.dst[0]);
+
+                    if(src0 && src1 && dst)
+                    {
+                        builder.mul(*dst, *src0, *src1);
+
+                        // thumb2 MUL doesn't set flags, so do a MOV to get Z/N
+                        if(instr.flags & GenOp_WriteFlags)
+                            builder.mov(*dst, *dst, true);
+
+                        // TODO: technically does write C on AGB, but we don't handle this properly in AGBCPU either
+                        assert(!writesFlag(instr.flags, SourceFlagType::Carry));
+                        assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
+                        setFlags32(builder, instr.flags);
+                    }
+                }
+                else
+                    badRegSize(regSize);
+    
+                break;
+            }
+
             case GenOpcode::Or:
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
