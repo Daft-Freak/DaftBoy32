@@ -2272,12 +2272,7 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
     auto cpuPtrInt = reinterpret_cast<uintptr_t>(cpuPtr);
 
-    builder.mov(Reg::R2, Reg::R8);
-    builder.mov(Reg::R3, Reg::R9);
-    builder.push(0b11111100, true); // R2-7, LR
-
-    builder.mov(Reg::R2, Reg::R10);
-    builder.push(0b100, false); // R2
+    builder.push(0b0100011111110000); // R4-10, LR
     
     // set the low bit so we stay in thumb mode
     builder.mov(Reg::R2, 1);
@@ -2373,14 +2368,7 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
 
     // restore regs and return
-    builder.pop(0b100, false); // R2
-    builder.mov(Reg::R10, Reg::R2);
-
-    builder.pop(0b11111100, false); // R2-7
-    builder.mov(Reg::R8, Reg::R2);
-    builder.mov(Reg::R9, Reg::R3);
-
-    builder.pop(0, true); // PC
+    builder.pop(0b1000011111110000); // R4-10, PC
 
     // write cpu addr
     auto ptr = builder.getPtr();
