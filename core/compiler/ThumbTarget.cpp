@@ -1602,7 +1602,31 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto regSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(regSize == 8)
+                if(regSize == 32)
+                {
+                    // might need to preserve carry
+                    if(writesFlag(instr.flags, SourceFlagType::Carry))
+                        carryIn32();
+
+                    auto src0 = checkReg(instr.src[0]);
+                    auto src1 = checkRegOrImm(instr.src[1]);
+                    auto dst = checkReg(instr.dst[0]);
+
+                    if(src0 && src1.index() && dst)
+                    {
+                        if(std::holds_alternative<uint32_t>(src1))
+                        {
+                            auto imm = std::get<uint32_t>(src1);
+                            builder.ror(*dst, *src0, imm, true);
+                        }
+                        else
+                            builder.ror(*dst, *src0, std::get<Reg>(src1), true);
+
+                        assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
+                        setFlags32(builder, instr.flags);
+                    }
+                }
+                else if(regSize == 8)
                 {
                     auto src0 = checkReg8(instr.src[0]);
                     auto src1 = checkRegOrImm8(instr.src[1]);
