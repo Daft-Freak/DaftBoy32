@@ -71,7 +71,9 @@ class ThumbBuilder final
 public:
     ThumbBuilder(uint16_t *ptr, uint16_t *endPtr) : ptr(ptr), endPtr(endPtr){}
 
+    void adc(Reg d, Reg n, uint32_t imm, bool s);
     void adc(LowReg dn, LowReg m);
+    void adc(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void add(LowReg d, LowReg n, uint8_t imm);
     void add(LowReg dn, uint8_t imm);
@@ -166,7 +168,9 @@ public:
     void strh(Reg t, Reg n, uint16_t imm);
     void strh(LowReg t, LowReg n, LowReg m);
 
+    void sbc(Reg d, Reg n, uint32_t imm, bool s);
     void sbc(LowReg dn, LowReg m);
+    void sbc(Reg d, Reg n, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void sub(LowReg dn, uint8_t imm);
     void sub(Reg d, Reg n, uint32_t imm, bool s);

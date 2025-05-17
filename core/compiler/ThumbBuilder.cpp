@@ -3,11 +3,41 @@
 
 #include "ThumbBuilder.h"
 
+// imm
+void ThumbBuilder::adc(Reg d, Reg n, uint32_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+
+    auto exImm = encodeModifiedImmediate(imm);
+    write(0xF140 | (s ? (1 << 4) : 0) | exImm >> 16 | nReg);
+    write((exImm & 0xFFFF) | dReg << 8);
+}
+
 void ThumbBuilder::adc(LowReg dn, LowReg m)
 {
     int dnReg = static_cast<int>(dn.val);
     int mReg = static_cast<int>(m.val);
     write(0x4140 | mReg << 3 | dnReg);
+}
+
+// shifted reg
+void ThumbBuilder::adc(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, int shift)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    if(shiftType == ShiftType::LSL && shift == 0)
+    {
+        // try to use shorter encodings
+        if(s && dReg < 8 && nReg == dReg && mReg < 8)
+            return adc(d, m);
+    }
+
+    auto shiftVal = encodeShiftedRegister(shiftType, shift);
+    write(0xEB40 | (s ? (1 << 4) : 0) | nReg);
+    write(shiftVal | dReg << 8 | mReg);
 }
 
 // imm
@@ -831,11 +861,41 @@ void ThumbBuilder::strh(LowReg t, LowReg n, LowReg m)
     write(0x5200 | mReg << 6 | nReg << 3 | tReg);
 }
 
+// imm
+void ThumbBuilder::sbc(Reg d, Reg n, uint32_t imm, bool s)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+
+    auto exImm = encodeModifiedImmediate(imm);
+    write(0xF160 | (s ? (1 << 4) : 0) | exImm >> 16 | nReg);
+    write((exImm & 0xFFFF) | dReg << 8);
+}
+
 void ThumbBuilder::sbc(LowReg dn, LowReg m)
 {
     int dnReg = static_cast<int>(dn.val);
     int mReg = static_cast<int>(m.val);
     write(0x4180 | mReg << 3 | dnReg);
+}
+
+// shifted reg
+void ThumbBuilder::sbc(Reg d, Reg n, Reg m, bool s, ShiftType shiftType, int shift)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    if(shiftType == ShiftType::LSL && shift == 0)
+    {
+        // try to use shorter encodings
+        if(s && dReg < 8 && nReg == dReg && mReg < 8)
+            return sbc(d, m);
+    }
+
+    auto shiftVal = encodeShiftedRegister(shiftType, shift);
+    write(0xEB60 | (s ? (1 << 4) : 0) | nReg);
+    write(shiftVal | dReg << 8 | mReg);
 }
 
 // imm
