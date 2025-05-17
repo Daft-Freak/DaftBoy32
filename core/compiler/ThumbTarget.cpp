@@ -395,6 +395,17 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 builder.add(mapReg8(flagsReg)->reg, 1 << getFlagInfo(flag).bit);
         };
 
+        const auto carryIn32 = [this, &builder]()
+        {
+            int carryBit = getFlagInfo(SourceFlagType::Carry).bit;
+
+            auto f = mapReg(flagsReg);
+
+            // we don't care about the result here, just using the shift to set carry
+            if(f)
+                builder.tst(*f, *f, ShiftType::LSL, 32 - carryBit);
+        };
+
         // branch targets
 
         pc += instr.len;
@@ -1682,24 +1693,26 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(regSize == 32)
                 {
-                    if(instr.flags & GenOp_WriteFlags)
-                        unhandledFlags(instr.flags & GenOp_WriteFlags);
-                    else
-                    {
-                        auto src0 = checkReg(instr.src[0]);
-                        auto src1 = checkRegOrImm(instr.src[1]);
-                        auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0]);
+                    auto src1 = checkRegOrImm(instr.src[1]);
+                    auto dst = checkReg(instr.dst[0]);
 
-                        if(src0 && src1.index() && dst)
+                    if(src0 && src1.index() && dst)
+                    {
+                        // might need to preserve carry
+                        if(writesFlag(instr.flags, SourceFlagType::Carry))
+                            carryIn32();
+
+                        if(std::holds_alternative<uint32_t>(src1))
                         {
-                            if(std::holds_alternative<uint32_t>(src1))
-                            {
-                                auto imm = std::get<uint32_t>(src1);
-                                builder.lsl(*dst, *src0, imm, true);
-                            }
-                            else
-                                builder.lsl(*dst, *src0, std::get<Reg>(src1), true);
+                            auto imm = std::get<uint32_t>(src1);
+                            builder.lsl(*dst, *src0, imm, true);
                         }
+                        else
+                            builder.lsl(*dst, *src0, std::get<Reg>(src1), true);
+
+                        assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
+                        setFlags32(builder, instr.flags);
                     }
                 }
                 else if(regSize == 16)
@@ -1761,25 +1774,28 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(regSize == 32)
                 {
-                    if(instr.flags & GenOp_WriteFlags)
-                        unhandledFlags(instr.flags & GenOp_WriteFlags);
-                    else
-                    {
-                        auto src0 = checkReg(instr.src[0]);
-                        auto src1 = checkRegOrImm(instr.src[1]);
-                        auto dst = checkReg(instr.dst[0]);
+                    // might need to preserve carry
+                    if(writesFlag(instr.flags, SourceFlagType::Carry))
+                        carryIn32();
 
-                        if(src0 && src1.index() && dst)
+                    auto src0 = checkReg(instr.src[0]);
+                    auto src1 = checkRegOrImm(instr.src[1]);
+                    auto dst = checkReg(instr.dst[0]);
+
+                    if(src0 && src1.index() && dst)
+                    {
+                        if(std::holds_alternative<uint32_t>(src1))
                         {
-                            if(std::holds_alternative<uint32_t>(src1))
-                            {
-                                auto imm = std::get<uint32_t>(src1);
-                                builder.asr(*dst, *src0, imm, true);
-                            }
-                            else
-                                builder.asr(*dst, *src0, std::get<Reg>(src1), true);
+                            auto imm = std::get<uint32_t>(src1);
+                            builder.asr(*dst, *src0, imm, true);
                         }
+                        else
+                            builder.asr(*dst, *src0, std::get<Reg>(src1), true);
+
+                        assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
+                        setFlags32(builder, instr.flags);
                     }
+
                 }
                 else if(regSize == 8)
                 {
@@ -1822,24 +1838,26 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(regSize == 32)
                 {
-                    if(instr.flags & GenOp_WriteFlags)
-                        unhandledFlags(instr.flags & GenOp_WriteFlags);
-                    else
-                    {
-                        auto src0 = checkReg(instr.src[0]);
-                        auto src1 = checkRegOrImm(instr.src[1]);
-                        auto dst = checkReg(instr.dst[0]);
+                    // might need to preserve carry
+                    if(writesFlag(instr.flags, SourceFlagType::Carry))
+                        carryIn32();
 
-                        if(src0 && src1.index() && dst)
+                    auto src0 = checkReg(instr.src[0]);
+                    auto src1 = checkRegOrImm(instr.src[1]);
+                    auto dst = checkReg(instr.dst[0]);
+
+                    if(src0 && src1.index() && dst)
+                    {
+                        if(std::holds_alternative<uint32_t>(src1))
                         {
-                            if(std::holds_alternative<uint32_t>(src1))
-                            {
-                                auto imm = std::get<uint32_t>(src1);
-                                builder.lsr(*dst, *src0, imm, true);
-                            }
-                            else
-                                builder.lsr(*dst, *src0, std::get<Reg>(src1), true);
+                            auto imm = std::get<uint32_t>(src1);
+                            builder.lsr(*dst, *src0, imm, true);
                         }
+                        else
+                            builder.lsr(*dst, *src0, std::get<Reg>(src1), true);
+
+                        assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
+                        setFlags32(builder, instr.flags);
                     }
                 }
                 else if(regSize == 16)
