@@ -249,19 +249,10 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
         auto cycleCountOff = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - cpuPtrInt;
         assert(cycleCountOff <= 0xFF);
 
-        // load to r3, add and store back
-        builder.mov(Reg::R1, cpuPtrReg); // cpu ptr
-
-        // TODO: avoid this
-        if(cycleCountOff > 124)
-        {
-            builder.add(Reg::R1, cycleCountOff);
-            cycleCountOff = 0;
-        }
-        
-        builder.ldr(Reg::R3, Reg::R1, cycleCountOff);
-        builder.add(Reg::R3, u8Cycles);
-        builder.str(Reg::R3, Reg::R1, cycleCountOff);
+        // load to r1, add and store back
+        builder.ldr(Reg::R1, cpuPtrReg, cycleCountOff);
+        builder.add(Reg::R1, u8Cycles);
+        builder.str(Reg::R1, cpuPtrReg, cycleCountOff);
 
         delayedCyclesExecuted = 0;
     };
