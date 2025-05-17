@@ -270,10 +270,17 @@ void ThumbBuilder::bx(Reg r)
 }
 
 // imm
-void ThumbBuilder::cmp(LowReg n, uint8_t imm)
+void ThumbBuilder::cmp(Reg n, uint32_t imm)
 {
-    int nReg = static_cast<int>(n.val);
-    write(0x2800 | nReg << 8 | imm);
+    int nReg = static_cast<int>(n);
+    if(nReg < 8 && imm <= 0xFF)
+        write(0x2800 | nReg << 8 | imm);
+    else
+    {
+        auto exImm = encodeModifiedImmediate(imm);
+        write(0xF1B0 | exImm >> 16 | nReg);
+        write(0x0F00 | (exImm & 0xFFFF));
+    }
 }
 
 // reg

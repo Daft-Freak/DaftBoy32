@@ -102,7 +102,7 @@ public:
 
     void bx(Reg r);
 
-    void cmp(LowReg n, uint8_t imm);
+    void cmp(Reg n, uint32_t imm);
     void cmp(Reg n, Reg m);
 
     void eor(Reg d, Reg n, uint32_t imm, bool s);
