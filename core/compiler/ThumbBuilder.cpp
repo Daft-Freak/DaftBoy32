@@ -632,6 +632,22 @@ void ThumbBuilder::msr(Reg n, uint8_t mask, uint8_t sysm)
     write(0x8000 | mask << 10 | sysm);
 }
 
+void ThumbBuilder::mul(Reg d, Reg n, Reg m)
+{
+    int dReg = static_cast<int>(d);
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    if(dReg < 8 && nReg < 8 && mReg == dReg)
+        write(0x4340 | nReg << 3 | dReg); // this one sets flags
+    else
+    {
+        // this one doesn't
+        write(0xFB00 | nReg);
+        write(0xF000 | dReg << 8 | mReg);
+    }
+}
+
 // imm
 void ThumbBuilder::mvn(Reg d, uint32_t imm, bool s)
 {

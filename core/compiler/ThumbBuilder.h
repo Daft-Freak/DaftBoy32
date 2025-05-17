@@ -140,6 +140,8 @@ public:
     void mrs(Reg d, uint8_t sysm);
     void msr(Reg n, uint8_t mask, uint8_t sysm);
 
+    void mul(Reg d, Reg n, Reg m);
+
     void mvn(Reg d, uint32_t imm, bool s);
     void mvn(LowReg d, LowReg m);
     void mvn(Reg d, Reg m, bool s, ShiftType shiftType = ShiftType::LSL, int shift = 0);
