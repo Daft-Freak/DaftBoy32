@@ -2155,7 +2155,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
         }
 
         // additional cycles
-        if(instrCycles)
+        if(instrCycles > 0)
         {
             assert(instrCycles == 1 || !(blockInfo.flags & GenBlock_StrictSync));
             while(instrCycles--)
