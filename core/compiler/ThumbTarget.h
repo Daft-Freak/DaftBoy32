@@ -51,7 +51,7 @@ private:
     std::map<uint8_t, Reg> regAlloc;
 
     uint8_t flagsReg = 0;
-    uint8_t flagMap[4]; // map from SourceFlagType to flags bit
+    uint8_t flagMap[6]; // map from SourceFlagType to flags bit
 
     uint16_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;
 
