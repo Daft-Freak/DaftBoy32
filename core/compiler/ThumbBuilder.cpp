@@ -339,6 +339,23 @@ void ThumbBuilder::cmp(Reg n, Reg m)
         write(0x4500 | (nReg & 8) << 4 | mReg << 3 | (nReg & 7));
 }
 
+// shifted reg
+void ThumbBuilder::cmp(Reg n, Reg m, ShiftType shiftType, int shift)
+{
+    int nReg = static_cast<int>(n);
+    int mReg = static_cast<int>(m);
+
+    if(shiftType == ShiftType::LSL && shift == 0)
+    {
+        // try to use shorter encodings
+        return cmp(n, m);
+    }
+
+    auto shiftVal = encodeShiftedRegister(shiftType, shift);
+    write(0xEBA0 | (1 << 4) | nReg);
+    write(0x0F00 | shiftVal | mReg);
+}
+
 // imm
 void ThumbBuilder::eor(Reg d, Reg n, uint32_t imm, bool s)
 {

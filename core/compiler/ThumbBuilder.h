@@ -106,6 +106,7 @@ public:
 
     void cmp(Reg n, uint32_t imm);
     void cmp(Reg n, Reg m);
+    void cmp(Reg n, Reg m, ShiftType shiftType, int shift = 0);
 
     void eor(Reg d, Reg n, uint32_t imm, bool s);
     void eor(LowReg dn, LowReg m);
