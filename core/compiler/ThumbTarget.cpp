@@ -2270,6 +2270,17 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                                 case GenCondition::CarryClear:
                                     builder.tst(f, 1 << getFlagInfo(SourceFlagType::Carry).bit);
                                     break;
+
+                                case GenCondition::Negative:
+                                case GenCondition::Positive:
+                                    builder.tst(f, 1 << getFlagInfo(SourceFlagType::Negative).bit);
+                                    break;
+
+                                case GenCondition::OverflowSet:
+                                case GenCondition::OverflowClear:
+                                    builder.tst(f, 1 << getFlagInfo(SourceFlagType::Overflow).bit);
+                                    break;
+
                                 default:
                                     printf("unhandled cond %i\n", static_cast<int>(condition));
                                     err = true;
