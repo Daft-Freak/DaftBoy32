@@ -2281,6 +2281,66 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                                     builder.tst(f, 1 << getFlagInfo(SourceFlagType::Overflow).bit);
                                     break;
 
+                                case GenCondition::Higher:
+                                case GenCondition::LowerSame:
+                                {
+                                    // C && !Z (higher)
+                                    int zBit = getFlagInfo(SourceFlagType::Zero).bit;
+                                    int cBit = getFlagInfo(SourceFlagType::Carry).bit;
+
+                                    // flags & (C | Z) == C 
+                                    builder.and_(Reg::R12, f, 1 << zBit | 1 << cBit, false);
+                                    builder.cmp(Reg::R12, 1 << cBit);
+
+                                    flagSet = !flagSet; // oops, backwards
+                                    break;
+                                }
+
+                                case GenCondition::GreaterEqual:
+                                case GenCondition::LessThan:
+                                {
+                                    // N == V (greater equal)
+                                    // N != V (less than)
+                                    int nBit = getFlagInfo(SourceFlagType::Negative).bit;
+                                    int vBit = getFlagInfo(SourceFlagType::Overflow).bit;
+                                    assert(nBit > vBit);
+
+                                    // TODO: use the fact that N is the sign bit?
+
+                                    // flags & (N | V) 
+                                    builder.and_(Reg::R12, f, 1 << nBit | 1 << vBit, false);
+
+                                    // shift v up to where N is and compare
+                                    builder.cmp(Reg::R12, Reg::R12, ShiftType::LSL, nBit - vBit);
+
+                                    flagSet = !flagSet; // oops, backwards
+                                    break;
+                                }
+
+                                case GenCondition::GreaterThan:
+                                case GenCondition::LessThanEqual:
+                                {
+                                    // N == V && !Z (greater than)
+                                    // N != V || Z (less than equal)
+                                    int nBit = getFlagInfo(SourceFlagType::Negative).bit;
+                                    int vBit = getFlagInfo(SourceFlagType::Overflow).bit;
+                                    int zBit = getFlagInfo(SourceFlagType::Zero).bit;
+                                    assert(nBit > vBit);
+
+                                    // flags & (N | Z | V) 
+                                    builder.and_(Reg::R12, f, 1 << nBit | 1 << vBit | 1 << zBit, false);
+
+                                    // shift v up to where N is and xor
+                                    builder.eor(Reg::R12, Reg::R12, Reg::R12, false, ShiftType::LSL, nBit - vBit);
+
+                                    // now we have N != V where N was
+                                    // test if N or Z are set
+                                    builder.tst(Reg::R12, 1 << nBit | 1 << zBit);
+
+                                    flagSet = !flagSet; // oops, backwards
+                                    break;
+                                }
+
                                 default:
                                     printf("unhandled cond %i\n", static_cast<int>(condition));
                                     err = true;
