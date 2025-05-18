@@ -453,11 +453,26 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
         bool err = false;
 
         // validating wrappers
-        auto checkReg = [this, &builder, &err, &instr](uint8_t index)
+        auto checkReg = [this, &builder, &err, &instr](uint8_t index, std::optional<Reg> loadStoreReg = {}, bool isDst = false)
         {
             auto reg = mapReg(index);
             if(!reg)
             {
+                if(loadStoreReg)
+                {
+                    assert(sourceInfo.registers[index].cpuOffset != 0xFFFF || sourceInfo.getRegOffset);
+                    if(!isDst)
+                    {
+                        // get offset and load
+                        int offset = sourceInfo.registers[index].cpuOffset;
+                        if(offset == 0xFFFF)
+                            offset = sourceInfo.getRegOffset(cpuPtr, index);
+
+                        builder.ldr(*loadStoreReg, cpuPtrReg, offset);
+                    }
+                    return loadStoreReg;
+                }
+
                 // TODO: opcode labels
                 printf("unhandled reg %s in op %i\n", sourceInfo.registers[index].label, int(instr.opcode));
                 err = true;
@@ -495,7 +510,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             return {};
         };
 
-        auto checkRegOrImm = [&checkReg, &getLastImmLoad](uint8_t index) -> std::variant<std::monostate, Reg, uint32_t>
+        auto checkRegOrImm = [&checkReg, &getLastImmLoad](uint8_t index, std::optional<Reg> loadReg = {}) -> std::variant<std::monostate, Reg, uint32_t>
         {
             if(index == 0)
             {
@@ -504,7 +519,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                     return *imm;
             }
 
-            if(auto reg = checkReg(index))
+            if(auto reg = checkReg(index, loadReg))
                 return *reg;
 
             return {};
@@ -526,6 +541,20 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 return *reg;
 
             return {};
+        };
+
+        auto storeUnmappedReg = [this, &builder](uint8_t index, Reg reg)
+        {
+            // make sure we actually need to do this
+            if(regAlloc.count(index))
+                return;
+
+            // get offset and store
+            int offset = sourceInfo.registers[index].cpuOffset;
+            if(offset == 0xFFFF)
+                offset = sourceInfo.getRegOffset(cpuPtr, index);
+
+            builder.str(reg, cpuPtrReg, offset);
         };
 
         // error handling
@@ -604,8 +633,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 auto regSize = sourceInfo.registers[instr.dst[0]].size;
                 if(regSize == 32)
                 {
-                    auto dst = checkReg(instr.dst[0]);
-                    auto src = checkRegOrImm(instr.src[0]);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto src = checkRegOrImm(instr.src[0], Reg::R2);
                 
                     if(src.index() && dst)
                     {
@@ -630,6 +659,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         assert(!writesFlag(instr.flags, SourceFlagType::Carry));
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 16)
@@ -788,9 +819,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -804,6 +835,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                             builder.add(*dst, *src0, std::get<Reg>(src1), true);
 
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 16)
@@ -948,9 +981,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -966,6 +999,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                             builder.adc(*dst, *src0, std::get<Reg>(src1), true);
 
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 8)
@@ -1038,9 +1073,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1056,6 +1091,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         assert(!writesFlag(instr.flags, SourceFlagType::Carry));
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 8)
@@ -1090,8 +1127,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
 
                     if(src0 && src1.index())
                     {
@@ -1163,9 +1200,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkReg(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkReg(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1 && dst)
                     {
@@ -1179,6 +1216,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         assert(!writesFlag(instr.flags, SourceFlagType::Carry));
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else
@@ -1193,9 +1232,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1211,6 +1250,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         assert(!writesFlag(instr.flags, SourceFlagType::Carry));
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 16)
@@ -1277,9 +1318,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1293,6 +1334,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                             builder.sub(*dst, *src0, std::get<Reg>(src1), true);
 
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 16)
@@ -1392,9 +1435,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1411,6 +1454,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                             builder.sbc(*dst, *src0, std::get<Reg>(src1), true);
 
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 8)
@@ -1486,9 +1531,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1504,6 +1549,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         assert(!writesFlag(instr.flags, SourceFlagType::Carry));
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 8)
@@ -1547,8 +1594,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 if(regSize == 32)
                 {
                     // shouldn't get these with immediate src
-                    auto src = checkReg(instr.src[0]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src = checkReg(instr.src[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src && dst)
                         builder.mvn(*dst, *src, true);
@@ -1556,6 +1603,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                     assert(!writesFlag(instr.flags, SourceFlagType::Carry));
                     assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                     setFlags32(builder, instr.flags);
+
+                    storeUnmappedReg(instr.dst[0], *dst);
                 }
                 else if(regSize == 8)
                 {
@@ -1683,9 +1732,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                     if(writesFlag(instr.flags, SourceFlagType::Carry))
                         carryIn32();
 
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1699,6 +1748,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 8)
@@ -1792,9 +1843,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1812,6 +1863,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 16)
@@ -1877,9 +1930,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                     if(writesFlag(instr.flags, SourceFlagType::Carry))
                         carryIn32();
 
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1893,6 +1946,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
 
                 }
@@ -1941,9 +1996,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                     if(writesFlag(instr.flags, SourceFlagType::Carry))
                         carryIn32();
 
-                    auto src0 = checkReg(instr.src[0]);
-                    auto src1 = checkRegOrImm(instr.src[1]);
-                    auto dst = checkReg(instr.dst[0]);
+                    auto src0 = checkReg(instr.src[0], Reg::R12);
+                    auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    auto dst = checkReg(instr.dst[0], Reg::R2);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1957,6 +2012,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                         assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
                         setFlags32(builder, instr.flags);
+
+                        storeUnmappedReg(instr.dst[0], *dst);
                     }
                 }
                 else if(regSize == 16)
