@@ -274,15 +274,15 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
         delayedCyclesExecuted = 0;
     };
 
-    auto writeCycleCountToStack = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted, &stackCycleCount](int &instrCycles, int offset)
+    auto writeCycleCountToStack = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted, &stackCycleCount](int &instrCycles, int offset, Reg tempReg)
     {
         if(!stackCycleCount)
         {
             assert(cyclesThisInstr == delayedCyclesExecuted);
             assert(cyclesThisInstr + instrCycles <= 0xFF);
-            // called after setupMemAddr, so R1 isn't free, but R2 should be
-            builder.mov(Reg::R2, cyclesThisInstr + instrCycles);
-            builder.str(Reg::R2, Reg::SP, offset);
+
+            builder.mov(tempReg, cyclesThisInstr + instrCycles);
+            builder.str(tempReg, Reg::SP, offset);
 
             cyclesThisInstr = delayedCyclesExecuted = 0;
             instrCycles = 0;
@@ -789,7 +789,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         {
                             // cycle count
                             assert(pushMask == 0b11001);
-                            writeCycleCountToStack(instrCycles, 12);
+                            writeCycleCountToStack(instrCycles, 12, Reg::R2);
                             builder.add(Reg::R2, Reg::SP, 12, false);
 
                             builder.mov(Reg::R3, instr.flags >> 8);
@@ -860,37 +860,92 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             }
 
             case GenOpcode::Store:
+            case GenOpcode::Store2:
+            case GenOpcode::Store4:
             {
                 auto addrSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(addrSize == 16)
+                if(addrSize == 16 || addrSize == 32)
                 {
-                    auto addr = checkRegOrImm(instr.src[0]);
-                    auto data = checkRegOrImm8(instr.src[1]);
+                    auto addr = checkRegOrImm(instr.src[0], Reg::R12);
 
-                    if(addr.index() && data.index())
+                    if(addr.index())
                     {
                         int pushMask = 1 << 4; // R4
+
+                        if(addrSize == 32)
+                            pushMask |= 1 << 3 ; // assume that we're using R3
 
                         builder.push(pushMask, false);
 
                         // if the address is in a high reg and the last op was an sub to it, the value should still be in R1
                         // this allows us to skip the mov (for stack pushes)
                         bool skipMov = false;
-                        bool addrIsHighReg = std::holds_alternative<Reg>(addr) && !isLowReg(std::get<Reg>(addr));
-                        if(!newEmuOp && addrIsHighReg && instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::Subtract && (instIt - 1)->dst[0] == instr.src[0])
-                            skipMov = true;
+                        if(addrSize == 16)
+                        {
+                            bool addrIsHighReg = std::holds_alternative<Reg>(addr) && !isLowReg(std::get<Reg>(addr));
+                            if(!newEmuOp && addrIsHighReg && instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::Subtract && (instIt - 1)->dst[0] == instr.src[0])
+                                skipMov = true;
+                        }
+
+                        // the sized version have two additional args
+                        bool needCyclesFlags = sourceInfo.readMem8 != nullptr;
 
                         setupMemAddr(addr, instr.src[0], skipMov);
-                        get8BitValue(builder, Reg::R2, data);
-                        builder.mov(Reg::R3, cycleCountReg);
+ 
+                        if(needCyclesFlags)
+                        {
+                            // setup 5th and 6th args
+                            builder.push(1 << 0); // R0 (cycle count)
+                            builder.mov(Reg::R0, instr.flags >> 8);
+                            builder.push(1 << 0); // flags
+
+                            // get data (not expecting immediates here)
+                            // might get one if storing PC though
+                            // TODO: convert that to a literal?
+                            auto data = checkReg(instr.src[1], Reg::R2);
+
+                            if(data != Reg::R2)
+                                builder.mov(Reg::R2, *data);
+
+                            // cycle count
+                            assert(pushMask == 0b11000);
+                            writeCycleCountToStack(instrCycles, 16, Reg::R0);
+                            builder.add(Reg::R3, Reg::SP, 16, false);
+                        }
+                        else
+                        {
+                            auto data = checkRegOrImm8(instr.src[1]);
+                            assert(data.index());
+                            get8BitValue(builder, Reg::R2, data);
+                        
+                            builder.mov(Reg::R3, cycleCountReg);
+                        }
 
                         builder.mov(Reg::R0, cpuPtrReg);
 
                         // get func ptr
-                        loadLiteral(builder, Reg::R4, reinterpret_cast<uintptr_t>(sourceInfo.writeMem));
+                        uintptr_t func = 0;
+                        if(instr.opcode == GenOpcode::Store)
+                        {
+                            if(sourceInfo.readMem)
+                                func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem);
+                            else
+                                func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem8);
+                        }
+                        else if(instr.opcode == GenOpcode::Store2)
+                            func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem16);
+                        else if(instr.opcode == GenOpcode::Store4)
+                            func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem32);
+
+                        assert(func);
+
+                        loadLiteral(builder, Reg::R4, func);
 
                         builder.blx(Reg::R4); // do call
+
+                        if(needCyclesFlags)
+                            builder.add(Reg::SP, Reg::SP, 8, false); // space for args
 
                         // new cycle count is already in R0
 
