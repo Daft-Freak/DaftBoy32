@@ -183,6 +183,7 @@ public:
 
     void sxth(LowReg d, LowReg m);
 
+    void tst(Reg n, uint32_t imm);
     void tst(Reg n, Reg m, ShiftType shiftType = ShiftType::LSL, int shift = 0);
 
     void uxtb(LowReg d, LowReg m);

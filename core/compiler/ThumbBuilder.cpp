@@ -994,6 +994,15 @@ void ThumbBuilder::sxth(LowReg d, LowReg m)
     write(0xB200 | mReg << 3 | dReg);
 }
 
+void ThumbBuilder::tst(Reg n, uint32_t imm)
+{
+    int nReg = static_cast<int>(n);
+
+    auto exImm = encodeModifiedImmediate(imm);
+    write(0xF000 | (1 << 4) | exImm >> 16 | nReg);
+    write(0x0F00 | (exImm & 0xFFFF));
+}
+
 void ThumbBuilder::tst(Reg n, Reg m, ShiftType shiftType, int shift)
 {
     int nReg = static_cast<int>(n);
