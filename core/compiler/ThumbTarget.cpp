@@ -292,6 +292,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             if(!sourceInfo.shouldSyncForAddress || sourceInfo.shouldSyncForAddress(immAddr))
                 syncCyclesExecuted();
 
+            assert(immAddr <= 0xFFFF);
             load16BitValue(builder, Reg::R1, immAddr);
         }
     };
@@ -727,40 +728,106 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             }
 
             case GenOpcode::Load:
+            case GenOpcode::Load2:
+            case GenOpcode::Load4:
             {
                 auto addrSize = sourceInfo.registers[instr.src[0]].size;
 
-                if(addrSize == 16)
+                if(addrSize == 16 || addrSize == 32)
                 {
-                    auto addr = checkRegOrImm(instr.src[0]);
-                    auto dst = checkReg8(instr.dst[0]);
+                    auto addr = checkRegOrImm(instr.src[0], Reg::R2);
+                    auto dst = addrSize == 16 ? checkReg8(instr.dst[0]) : RegInfo{*checkReg(instr.dst[0], Reg::R2, true), 0};
 
                     if(addr.index() && dst)
                     {
                         int pushMask = 1 << 0; // R0
+
+                        if(addrSize == 32)
+                            pushMask |= 1 << 3 | 1 << 4; // assume that we're using R3 and save R4 so we have somewhere to put the func addr
 
                         builder.push(pushMask, false);
 
                         // if the address is in a high reg and the last op was an add to it, the value should still be in R1
                         // this allows us to skip the mov (for stack pops)
                         bool skipMov = false;
-                        bool addrIsHighReg = std::holds_alternative<Reg>(addr) && !isLowReg(std::get<Reg>(addr));
-                        if(!newEmuOp && addrIsHighReg && instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::Add && (instIt - 1)->dst[0] == instr.src[0] && !((instIt - 1)->flags & GenOp_WriteFlags))                        
-                            skipMov = true;
+                        if(addrSize == 16)
+                        {
+                            bool addrIsHighReg = std::holds_alternative<Reg>(addr) && !isLowReg(std::get<Reg>(addr));
+                            if(!newEmuOp && addrIsHighReg && instIt != beginInstr && (instIt - 1)->opcode == GenOpcode::Add && (instIt - 1)->dst[0] == instr.src[0] && !((instIt - 1)->flags & GenOp_WriteFlags))                        
+                                skipMov = true;
+                        }
+
+                        // the sized version have two additional args
+                        bool needCyclesFlags = sourceInfo.readMem8 != nullptr;
 
                         setupMemAddr(addr, instr.src[0], skipMov);
+
+                        if(needCyclesFlags)
+                        {
+                            // cycle count
+                            assert(pushMask == 0b11001);
+                            builder.add(Reg::R2, Reg::SP, 12, false);
+                            // FIXME: actually store the thing
+
+                            builder.mov(Reg::R3, instr.flags >> 8);
+                        }
 
                         builder.mov(Reg::R0, cpuPtrReg);
 
                         // get func ptr
-                        loadLiteral(builder, Reg::R2, reinterpret_cast<uintptr_t>(sourceInfo.readMem));
+                        uintptr_t func = 0;
+                        auto funcAddrReg = needCyclesFlags ? Reg::R4 : Reg::R2;
 
-                        builder.blx(Reg::R2); // do call
+                        if(instr.opcode == GenOpcode::Load)
+                        {
+                            if(sourceInfo.readMem)
+                                func = reinterpret_cast<uintptr_t>(sourceInfo.readMem);
+                            else
+                                func = reinterpret_cast<uintptr_t>(sourceInfo.readMem8);
+                        }
+                        else if(instr.opcode == GenOpcode::Load2)
+                            func = reinterpret_cast<uintptr_t>(sourceInfo.readMem16);
+                        else if(instr.opcode == GenOpcode::Load4)
+                            func = reinterpret_cast<uintptr_t>(sourceInfo.readMem32);
+
+                        assert(func);
+
+                        loadLiteral(builder, funcAddrReg, func);
+
+                        builder.blx(funcAddrReg); // do call
 
                         // move to dest
-                        write8BitReg(builder, *dst, Reg::R0);
+                        if(dst->mask)
+                            write8BitReg(builder, *dst, Reg::R0);
+                        else if(instr.opcode == GenOpcode::Load && (instr.flags & GenOp_SignExtend))
+                            builder.sxtb(dst->reg, Reg::R0);
+                        else if(instr.opcode == GenOpcode::Load2 && (instr.flags & GenOp_SignExtend))
+                            builder.sxth(dst->reg, Reg::R0);
+                        else
+                            builder.mov(dst->reg, Reg::R0);
 
-                        builder.pop(pushMask, false);
+                        // masked register can't possibly be unmapped
+                        if(!dst->mask)
+                            storeUnmappedReg(instr.dst[0], dst->reg);
+
+                        // avoid popping reg the result is in
+                        // assumes we never push R1-2 or 5+
+                        if(dst->reg == Reg::R3 && (pushMask & (1 << 3)))
+                        {
+                            builder.pop(1 << 0);
+                            builder.add(Reg::SP, Reg::SP, 4, false);
+                            
+                            pushMask &= ~0b1001;
+                        }
+                        else if(dst->reg == Reg::R4 && (pushMask & (1 << 4)))
+                        {
+                            builder.pop(pushMask & ~(1 << 4));
+                            builder.add(Reg::SP, Reg::SP, 4, false);
+                            pushMask = 0;
+                        }
+
+                        if(pushMask)
+                            builder.pop(pushMask);
                     }
                 }
                 else
@@ -2464,7 +2531,16 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
     auto cpuPtrInt = reinterpret_cast<uintptr_t>(cpuPtr);
 
+    // push/reserve stack space
+    int extraStack = 0;
+
+    if(sourceInfo.readMem8)
+        extraStack += 4;
+
     builder.push(0b0100111111110000); // R4-11, LR
+
+    if(extraStack)
+        builder.sub(Reg::SP, Reg::SP, extraStack, false);
     
     // set the low bit so we stay in thumb mode
     builder.mov(Reg::R2, 1);
@@ -2560,6 +2636,9 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
 
 
     // restore regs and return
+    if(extraStack)
+        builder.add(Reg::SP, Reg::SP, extraStack, false);
+
     builder.pop(0b1000111111110000); // R4-11, PC
 
     // write cpu addr
