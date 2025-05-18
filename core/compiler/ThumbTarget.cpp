@@ -2283,7 +2283,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         if(std::holds_alternative<uint32_t>(src))
                             loadPCValue(builder, std::get<uint32_t>(src));
                         else if(sourceInfo.pcPrefetch)
-                            builder.add(pcReg, std::get<Reg>(src), sourceInfo.pcPrefetch);
+                            builder.add(pcReg, std::get<Reg>(src), sourceInfo.pcPrefetch, true);
                         else if(std::get<Reg>(src) != pcReg)
                             builder.mov(pcReg, std::get<Reg>(src));
                     
