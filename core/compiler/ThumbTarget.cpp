@@ -2545,7 +2545,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
         // ... but not on the last op, that should always exit anyway
         // ... or exits unless followed by a branch target
         auto nextInstr = instIt + 1;
-        bool shouldSkip = nextInstr == endInstr || ((instr.flags & GenOp_Exit) && !(nextInstr->flags & GenOp_BranchTarget));
+        bool isCond = instr.opcode == GenOpcode::Jump && static_cast<GenCondition>(instr.src[0]) != GenCondition::Always;
+        bool shouldSkip = nextInstr == endInstr || ((instr.flags & GenOp_Exit) && !isCond && !(nextInstr->flags & GenOp_BranchTarget));
         if(newEmuOp && !shouldSkip)
         {
             // might exit, sync
