@@ -2247,25 +2247,38 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         assert(isExit || std::holds_alternative<uint32_t>(src)); // shouldn't be any non-exit jumps with unknown addr
 
                         uint16_t *branchPtr = nullptr;
-                        bool flagSet = false;
+                        Condition nativeCond = Condition::EQ;
 
                         // condition
                         if(condition != GenCondition::Always)
                         {
-                            auto f = checkReg8(flagsReg);
+                            bool flagSet = false;
 
                             syncCyclesExecuted();
 
-                            flagSet = condition == GenCondition::Equal || condition == GenCondition::CarrySet;
-                            auto flag = (condition == GenCondition::Equal || condition == GenCondition::NotEqual) ? SourceFlagType::Zero : SourceFlagType::Carry;
+                            flagSet = !(static_cast<int>(condition) & 1); // even conds are set, odd are clear
 
-                            if(f)
+                            auto f = regSize == 32 ? *checkReg(flagsReg) : checkReg8(flagsReg)->reg;
+
+                            switch(condition)
                             {
-                                builder.mov(Reg::R1, 1 << getFlagInfo(flag).bit);
-                                builder.and_(Reg::R1, f->reg);
-                                branchPtr = builder.getPtr();
-                                builder.b(Condition::EQ, 0); // patch later
+                                case GenCondition::Equal:
+                                case GenCondition::NotEqual:
+                                    builder.tst(f, 1 << getFlagInfo(SourceFlagType::Zero).bit);
+                                    break;
+                                case GenCondition::CarrySet:
+                                case GenCondition::CarryClear:
+                                    builder.tst(f, 1 << getFlagInfo(SourceFlagType::Carry).bit);
+                                    break;
+                                default:
+                                    printf("unhandled cond %i\n", static_cast<int>(condition));
+                                    err = true;
                             }
+
+                            branchPtr = builder.getPtr();
+                            builder.b(Condition::EQ, 0); // patch later
+
+                            nativeCond = flagSet ? Condition::EQ : Condition::NE;
                         }
 
                         // need to sync cycles *before* the jump out
@@ -2322,7 +2335,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         {
                             int off = (builder.getPtr() - (branchPtr + 1)) * 2;
                             builder.patch(branchPtr, branchPtr + 2);
-                            builder.b(flagSet ? Condition::EQ : Condition::NE, off);
+                            builder.b(nativeCond, off);
                             builder.endPatch();
                         }
                     }
