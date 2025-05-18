@@ -2516,7 +2516,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
         // output literals if ~close to the limit or this is the last instruction
         // this was definitely NOT set by decreasing until it didn't abort...
         // don't output after a LoadImm as it might get removed by the next op
-        if(instr.opcode != GenOpcode::LoadImm && !ldrLiteralInstrs.empty() && (nextInstr == endInstr || builder.getPtr() - ldrLiteralInstrs[0] >= 440))
+        const int minLiterals = 3; // load/store can use 2 + possibly one from esit
+        if(instr.opcode != GenOpcode::LoadImm && !ldrLiteralInstrs.empty() && (nextInstr == endInstr || builder.getPtr() - ldrLiteralInstrs[0] >= 440 || curLiteral + minLiterals > std::size(literals)))
         {
             // calls might return here
             bool exited = shouldSkip && !(instr.flags & GenOp_Call);
