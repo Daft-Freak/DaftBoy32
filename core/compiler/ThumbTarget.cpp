@@ -238,19 +238,24 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
     // cycle executed sync
     int cyclesThisInstr = 0;
     int delayedCyclesExecuted = 0;
+    bool stackCycleCount = false; // cycle count stored to stack
 
-    auto cycleExecuted = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted]()
+    auto cycleExecuted = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted, &stackCycleCount]()
     {
+        assert(!stackCycleCount);
+
         cyclesThisInstr += sourceInfo.cycleMul;
 
         // only the optimised not-HRAM path
         delayedCyclesExecuted += sourceInfo.cycleMul;
     };
 
-    auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted]()
+    auto syncCyclesExecuted = [this, &builder, &delayedCyclesExecuted, &stackCycleCount]()
     {
         if(!delayedCyclesExecuted)
             return;
+
+        assert(!stackCycleCount);
 
         assert(delayedCyclesExecuted < 0xFF);
         auto cpuPtrInt = reinterpret_cast<uintptr_t>(cpuPtr);
@@ -267,6 +272,24 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
         builder.str(Reg::R1, cpuPtrReg, cycleCountOff);
 
         delayedCyclesExecuted = 0;
+    };
+
+    auto writeCycleCountToStack = [this, &builder, &cyclesThisInstr, &delayedCyclesExecuted, &stackCycleCount](int &instrCycles, int offset)
+    {
+        if(!stackCycleCount)
+        {
+            assert(cyclesThisInstr == delayedCyclesExecuted);
+            assert(cyclesThisInstr + instrCycles <= 0xFF);
+            // called after setupMemAddr, so R1 isn't free, but R2 should be
+            builder.mov(Reg::R2, cyclesThisInstr + instrCycles);
+            builder.str(Reg::R2, Reg::SP, offset);
+
+            cyclesThisInstr = delayedCyclesExecuted = 0;
+            instrCycles = 0;
+            stackCycleCount = true;
+        }
+        else
+            assert(!cyclesThisInstr && !delayedCyclesExecuted);
     };
 
     auto setupMemAddr = [this, &blockInfo, &builder, &syncCyclesExecuted](std::variant<std::monostate, Reg, uint32_t> addr, uint8_t addrIndex, bool skipMov = false)
@@ -766,8 +789,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         {
                             // cycle count
                             assert(pushMask == 0b11001);
+                            writeCycleCountToStack(instrCycles, 12);
                             builder.add(Reg::R2, Reg::SP, 12, false);
-                            // FIXME: actually store the thing
 
                             builder.mov(Reg::R3, instr.flags >> 8);
                         }
@@ -2419,6 +2442,21 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             builder.bl((exitPtr - builder.getPtr()) * 2);
             outputLiterals(builder, false);
             break;
+        }
+
+        // sync cycle count from stack at the end of the op, or if something updates cycles before that
+        if(stackCycleCount && (instrCycles || instr.len || (instIt + 1)->opcode == GenOpcode::Jump))
+        {
+            // add/sub the cycles from the stack
+            builder.ldr(Reg::R1, Reg::SP, 0); // should be at top of stack
+
+            int offset = reinterpret_cast<uintptr_t>(sourceInfo.cycleCount) - reinterpret_cast<uintptr_t>(cpuPtr);
+            builder.ldr(Reg::R12, cpuPtrReg, offset);
+            builder.add(Reg::R12, Reg::R1);
+            builder.str(Reg::R12, cpuPtrReg, offset);
+
+            builder.sub(Reg::R0, Reg::R0, Reg::R1);
+            stackCycleCount = false;
         }
 
         // additional cycles
