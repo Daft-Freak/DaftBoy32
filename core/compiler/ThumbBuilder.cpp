@@ -64,7 +64,15 @@ void ThumbBuilder::add(Reg d, Reg n, uint32_t imm, bool s)
     int nReg = static_cast<int>(n);
 
     // try to use shorter encodings
-    if(s && dReg < 8 && nReg < 8)
+    if(!s && n == Reg::SP && !(imm & 3)) // stack related
+    {
+        if(dReg < 8 && imm <= 1020)
+            return write(0xA800 | dReg << 8 | imm >> 2);
+        if(nReg == dReg && imm <= 508)
+            return write(0xB000 | imm >> 2);
+    }
+
+    if(s && dReg < 8 && nReg < 8) // low regs
     {
         if(dReg == nReg && imm <= 0xFF)
             return add(d, imm);
@@ -928,6 +936,8 @@ void ThumbBuilder::sub(Reg d, Reg n, uint32_t imm, bool s)
     int nReg = static_cast<int>(n);
 
     // try to use shorter encodings
+    if(!s && n == Reg::SP && nReg == dReg && !(imm & 3) && imm <= 508)
+        return write(0xB080 | imm >> 2);
     if(s && dReg < 8 && nReg < 8)
     {
         if(dReg == nReg && imm <= 0xFF)
