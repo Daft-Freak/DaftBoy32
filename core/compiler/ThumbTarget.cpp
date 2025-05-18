@@ -2304,7 +2304,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                                 forwardBranchesToPatch.emplace(std::get<uint32_t>(src), builder.getPtr());
 
                             // forwards branch or exit
-                            if(isExit && (instr.flags & GenOp_Call))
+                            if(isExit && (instr.flags & GenOp_Call) && instIt + 1 != endInstr)
                                 builder.bl((exitForCallPtr - builder.getPtr()) * 2); // call, save when exiting
                             else
                                 builder.bl((exitPtr - builder.getPtr()) * 2); // patched later if not exit
