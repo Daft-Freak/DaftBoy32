@@ -1227,8 +1227,15 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         if(std::holds_alternative<uint32_t>(src1))
                         {
                             auto imm = std::get<uint32_t>(src1);
-                            assert(builder.isValidModifiedImmediate(imm));
-                            builder.and_(*dst, *src0, imm, true);
+                            
+                            if(builder.isValidModifiedImmediate(imm))
+                                builder.and_(*dst, *src0, imm, true);
+                            else
+                            {
+                                // handle a few more cases (usually big masks)
+                                assert(builder.isValidModifiedImmediate(~imm));
+                                builder.bic(*dst, *src0, ~imm, true);
+                            }
                         }
                         else
                             builder.and_(*dst, *src0, std::get<Reg>(src1), true);
