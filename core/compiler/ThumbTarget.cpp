@@ -2239,9 +2239,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 bool isExit = instr.flags & GenOp_Exit;
 
-                if(regSize == 16)
+                if(regSize == 16 || regSize == 32)
                 {
-                    auto src = checkRegOrImm(instr.src[1]);
+                    auto src = checkRegOrImm(instr.src[1], Reg::R2);
                     if(src.index())
                     {
                         assert(isExit || std::holds_alternative<uint32_t>(src)); // shouldn't be any non-exit jumps with unknown addr
