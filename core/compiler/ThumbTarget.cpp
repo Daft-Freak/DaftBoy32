@@ -130,7 +130,7 @@ static void branchOver(ThumbBuilder &builder, std::function<void(ThumbBuilder &)
     // add placeholder branch
     auto branchStart = builder.getPtr();
     builder.b(0);
-    assert(builder.getPtr() - branchStart == 1);
+    assert(builder.getPtr() - branchStart <= 1); // only going to be 0 if out of space
 
     // build code to branch over
     func(builder);
