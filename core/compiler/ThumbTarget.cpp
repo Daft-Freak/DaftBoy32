@@ -633,7 +633,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 auto regSize = sourceInfo.registers[instr.dst[0]].size;
                 if(regSize == 32)
                 {
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
                     auto src = checkRegOrImm(instr.src[0], Reg::R2);
                 
                     if(src.index() && dst)
@@ -821,7 +821,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -983,7 +983,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1075,7 +1075,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1202,7 +1202,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkReg(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1 && dst)
                     {
@@ -1234,7 +1234,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1320,7 +1320,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1437,7 +1437,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1533,7 +1533,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1595,7 +1595,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     // shouldn't get these with immediate src
                     auto src = checkReg(instr.src[0], Reg::R2);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src && dst)
                         builder.mvn(*dst, *src, true);
@@ -1734,7 +1734,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1845,7 +1845,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 {
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1932,7 +1932,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
@@ -1998,7 +1998,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                     auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
-                    auto dst = checkReg(instr.dst[0], Reg::R2);
+                    auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
                     {
