@@ -366,13 +366,11 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             {
                 auto off = (lastInstrCycleCheck - (it->second + 1)) * 2;
 
-                if(off > 2048)
-                    continue; // it's too far away
-
-                // replace BL with B+NOP
+                // replace BL with B, padded with NOP if shorter
                 builder.patch(it->second, it->second + 2);
                 builder.b(off);
-                builder.nop();
+                if(off <= 2048)
+                    builder.nop();
                 builder.endPatch();
             }
             forwardBranchesToPatch.erase(jumps.first, jumps.second);
@@ -2374,15 +2372,16 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
 
                         // set pc if we're exiting
-                        // ... or always as we might not be able to patch the branch
-                        if(std::holds_alternative<uint32_t>(src))
-                            loadPCValue(builder, std::get<uint32_t>(src));
-                        else if(sourceInfo.pcPrefetch)
-                            builder.add(pcReg, std::get<Reg>(src), sourceInfo.pcPrefetch, true);
-                        else if(std::get<Reg>(src) != pcReg)
-                            builder.mov(pcReg, std::get<Reg>(src));
-                    
-                        if(!isExit)
+                        if(isExit)
+                        {
+                            if(std::holds_alternative<uint32_t>(src))
+                                loadPCValue(builder, std::get<uint32_t>(src));
+                            else if(sourceInfo.pcPrefetch)
+                                builder.add(pcReg, std::get<Reg>(src), sourceInfo.pcPrefetch, true);
+                            else if(std::get<Reg>(src) != pcReg)
+                                builder.mov(pcReg, std::get<Reg>(src));
+                        }
+                        else
                             builder.sub(cycleCountReg, cyclesThisInstr);
 
                         // don't update twice for unconditional branches
@@ -2395,10 +2394,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         {
                             // backwards branch
                             int off = (it->second - builder.getPtr()) * 2;
-                            if(off >= -2044)
-                                builder.b(off);
-                            else
-                                builder.bl((exitPtr - builder.getPtr()) * 2); // too far, give up
+                            builder.b(off);
                         }
                         else
                         {
