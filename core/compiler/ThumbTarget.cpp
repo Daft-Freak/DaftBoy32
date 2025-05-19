@@ -664,25 +664,42 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                     {
                         bool setFlags = instr.flags & GenOp_WriteFlags;
     
+                        assert(!writesFlag(instr.flags, SourceFlagType::Carry));
+                        assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
+
                         if(std::holds_alternative<uint32_t>(src))
                         {
                             // try to do a mov, fall back to literal load
                             auto value = std::get<uint32_t>(src);
-                            if((value <= 0xFFFF && !setFlags) || builder.isValidModifiedImmediate(value))
+                            if(value <= 0xFFFF || builder.isValidModifiedImmediate(value))
                                 builder.mov(*dst, value);
                             else
-                            {
                                 loadLiteral(builder, *dst, value);
-                                // uhoh, no flags
-                                assert(!(instr.flags & GenOp_WriteFlags));
+
+                            // this is a constant, so we can simplify setting flags
+                            auto f = mapReg(flagsReg);
+
+                            if(f && writesFlag(instr.flags, SourceFlagType::Zero))
+                            {
+                                if(value == 0)
+                                    builder.orr(*f, *f, 1 << getFlagInfo(SourceFlagType::Zero).bit, false);
+                                else
+                                    builder.bic(*f, *f, 1 << getFlagInfo(SourceFlagType::Zero).bit, false);
+                            }
+
+                            if(f && writesFlag(instr.flags, SourceFlagType::Negative))
+                            {
+                                if(value & 0x80000000)
+                                    builder.orr(*f, *f, 1 << getFlagInfo(SourceFlagType::Negative).bit, false);
+                                else
+                                    builder.bic(*f, *f, 1 << getFlagInfo(SourceFlagType::Negative).bit, false);
                             }
                         }
                         else
+                        {
                             builder.mov(*dst, std::get<Reg>(src), setFlags);
-
-                        assert(!writesFlag(instr.flags, SourceFlagType::Carry));
-                        assert(!writesFlag(instr.flags, SourceFlagType::Overflow));
-                        setFlags32(builder, instr.flags);
+                            setFlags32(builder, instr.flags);
+                        }
 
                         storeUnmappedReg(instr.dst[0], *dst);
                     }
