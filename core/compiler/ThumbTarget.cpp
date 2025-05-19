@@ -748,8 +748,10 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                     {
                         int pushMask = 1 << 0; // R0
 
-                        if(addrSize == 32)
-                            pushMask |= 1 << 3; // assume that we're using R3
+                        // assume that we're using R3 if addr is 32bit
+                        // though if it's the destination we don't care about preserving it
+                        if(addrSize == 32 && dst->reg != Reg::R3)
+                            pushMask |= 1 << 3;
 
                         builder.push(pushMask, false);
 
@@ -771,9 +773,10 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         if(needCyclesFlags)
                         {
                             // cycle count
-                            assert(pushMask == 0b1001);
-                            writeCycleCountToStack(instrCycles, 8, Reg::R2);
-                            builder.add(Reg::R2, Reg::SP, 8, false);
+                            assert(pushMask == 0b1001 || pushMask == 1);
+                            int offset = pushMask == 1 ? 4 : 8;
+                            writeCycleCountToStack(instrCycles, offset, Reg::R2);
+                            builder.add(Reg::R2, Reg::SP, offset, false);
 
                             builder.mov(Reg::R3, instr.flags >> 8);
                         }
@@ -815,16 +818,6 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         // masked register can't possibly be unmapped
                         if(!dst->mask)
                             storeUnmappedReg(instr.dst[0], dst->reg);
-
-                        // avoid popping reg the result is in
-                        // assumes we never push R1-2 or 5+
-                        if(dst->reg == Reg::R3 && (pushMask & (1 << 3)))
-                        {
-                            builder.pop(1 << 0);
-                            builder.add(Reg::SP, Reg::SP, 4, false);
-                            
-                            pushMask &= ~0b1001;
-                        }
 
                         if(pushMask)
                             builder.pop(pushMask);
