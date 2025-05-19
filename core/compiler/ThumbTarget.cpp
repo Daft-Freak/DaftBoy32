@@ -79,27 +79,6 @@ static void write8BitReg(ThumbBuilder &builder, ThumbTarget::RegInfo dst, Reg sr
     builder.orr(dst.reg, src);
 }
 
-static void load16BitValue(ThumbBuilder &builder, Reg dst, uint16_t value)
-{
-    if(value <= 0xFF || value >> __builtin_ctz(value) <= 0xFF)
-    {
-        int shift = 0;
-        if(value > 0xFF)
-            shift = __builtin_ctz(value);
-
-        builder.mov(dst, value >> shift);
-        if(shift)
-            builder.lsl(dst, dst, shift);
-    }
-    else
-    {
-        // high << 8 + low
-        builder.mov(dst, value >> 8);
-        builder.lsl(dst, dst, 8);
-        builder.add(dst, value & 0xFF);
-    }
-}
-
 static void load32BitValue(ThumbBuilder &builder, Reg dst, uint32_t value)
 {
     int trailingZeros = __builtin_ctz(value);
@@ -316,7 +295,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 syncCyclesExecuted();
 
             assert(immAddr <= 0xFFFF);
-            load16BitValue(builder, Reg::R1, immAddr);
+            builder.mov(Reg::R1, immAddr);
         }
     };
 
@@ -642,10 +621,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             case GenOpcode::LoadImm:
                 lastImmLoadStart = builder.getPtr();
 
-                if(sourceInfo.registers[0].size == 32)
-                    load32BitValue(builder, *mapReg(0), instr.imm); // TODO: use a literal here? (would require extra work if we remove it)
-                else
-                    load16BitValue(builder, *mapReg(0), instr.imm);
+                load32BitValue(builder, *mapReg(0), instr.imm); // TODO: use a literal here? (would require extra work if we remove it)
  
                 lastImmLoadEnd = builder.getPtr();
                 break;
@@ -732,15 +708,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                             {
                                 auto value = std::get<uint32_t>(src);
                                 assert(!(value & 0xFFFF0000));
-                                // avoid a mov if possible
-                                if(isLowReg(*dst))
-                                    load16BitValue(builder, *dst, value);
-                                else
-                                {
-                                    // effectively re-emit the LoadImm we just removed, at least we tried....
-                                    load16BitValue(builder, Reg::R2, value);
-                                    builder.mov(*dst, Reg::R2);
-                                }
+                                builder.mov(*dst, value);
                             }
                             else
                                 builder.mov(*dst, std::get<Reg>(src));
@@ -1057,7 +1025,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         if(writesFlag(instr.flags, SourceFlagType::HalfCarry))
                         {
                             // & 0xFFF == & ~0xF000
-                            load16BitValue(builder, Reg::R2, 0xF000);
+                            builder.mov(Reg::R2, 0xF000);
 
                             if(resultReg != Reg::R1)
                                 builder.mov(Reg::R1, resultReg);
@@ -1777,8 +1745,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         assert(dst->mask);
 
                         // xor by reg mask
-                        load16BitValue(builder, Reg::R1, dst->mask);
-                        builder.eor(dst->reg, Reg::R1);
+                        builder.eor(dst->reg, dst->reg, dst->mask, false);
 
                         // flags (sets H and N to 1)
                         if((instr.flags & GenOp_WriteFlags))
@@ -2537,7 +2504,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                 // exit
                 syncCyclesExecuted();
-                load16BitValue(builder, Reg::R1, pc); // exits need to set PC themselves
+                loadPCValue(builder, pc); // exits need to set PC themselves
                 builder.bl((saveAndExitPtr - builder.getPtr()) * 2);
 
                 break;
@@ -3000,7 +2967,7 @@ void ThumbTarget::loadPCValue(ThumbBuilder &builder, uint32_t val)
     val += sourceInfo.pcPrefetch;
 
     if(sourceInfo.pcSize == 16 || !(val >> 16))
-        load16BitValue(builder, pcReg, val);
+        builder.mov(pcReg, val);
     else
     {
         // look for an old literal to reuse
