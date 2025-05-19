@@ -759,14 +759,14 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                 if(addrSize == 16 || addrSize == 32)
                 {
                     auto addr = checkRegOrImm(instr.src[0], Reg::R2);
-                    auto dst = addrSize == 16 ? checkReg8(instr.dst[0]) : RegInfo{*checkReg(instr.dst[0], Reg::R2, true), 0};
+                    auto dst = addrSize == 16 ? checkReg8(instr.dst[0]) : RegInfo{*checkReg(instr.dst[0], Reg::R0, true), 0};
 
                     if(addr.index() && dst)
                     {
                         int pushMask = 1 << 0; // R0
 
                         if(addrSize == 32)
-                            pushMask |= 1 << 3 | 1 << 4; // assume that we're using R3 and save R4 so we have somewhere to put the func addr
+                            pushMask |= 1 << 3; // assume that we're using R3
 
                         builder.push(pushMask, false);
 
@@ -788,9 +788,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         if(needCyclesFlags)
                         {
                             // cycle count
-                            assert(pushMask == 0b11001);
-                            writeCycleCountToStack(instrCycles, 12, Reg::R2);
-                            builder.add(Reg::R2, Reg::SP, 12, false);
+                            assert(pushMask == 0b1001);
+                            writeCycleCountToStack(instrCycles, 8, Reg::R2);
+                            builder.add(Reg::R2, Reg::SP, 8, false);
 
                             builder.mov(Reg::R3, instr.flags >> 8);
                         }
@@ -799,7 +799,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                         // get func ptr
                         uintptr_t func = 0;
-                        auto funcAddrReg = needCyclesFlags ? Reg::R4 : Reg::R2;
+                        auto funcAddrReg = needCyclesFlags ? Reg::R12 : Reg::R2;
 
                         if(instr.opcode == GenOpcode::Load)
                         {
@@ -826,7 +826,7 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                             builder.sxtb(dst->reg, Reg::R0);
                         else if(instr.opcode == GenOpcode::Load2 && (instr.flags & GenOp_SignExtend))
                             builder.sxth(dst->reg, Reg::R0);
-                        else
+                        else if(dst->reg != Reg::R0)
                             builder.mov(dst->reg, Reg::R0);
 
                         // masked register can't possibly be unmapped
@@ -841,12 +841,6 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                             builder.add(Reg::SP, Reg::SP, 4, false);
                             
                             pushMask &= ~0b1001;
-                        }
-                        else if(dst->reg == Reg::R4 && (pushMask & (1 << 4)))
-                        {
-                            builder.pop(pushMask & ~(1 << 4));
-                            builder.add(Reg::SP, Reg::SP, 4, false);
-                            pushMask = 0;
                         }
 
                         if(pushMask)
