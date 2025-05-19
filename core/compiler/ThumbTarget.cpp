@@ -934,8 +934,11 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
             
                 if(regSize == 32)
                 {
-                    auto src0 = checkReg(instr.src[0], Reg::R12);
                     auto src1 = checkRegOrImm(instr.src[1], Reg::R14);
+                    // if src1 isn't the temp register, or we have the immediate value it's safe to use temp to load the unmapped value
+                    // this helps multi load/store
+                    bool canUseTmp = instr.src[1] != 0 || std::holds_alternative<uint32_t>(src1);
+                    auto src0 = checkReg(instr.src[0], canUseTmp ? Reg::R2 : Reg::R12);
                     auto dst = checkReg(instr.dst[0], Reg::R2, true);
 
                     if(src0 && src1.index() && dst)
