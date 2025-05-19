@@ -2798,10 +2798,8 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     builder.pop(0b1000111111110000); // R4-11, PC
 
     // write cpu addr
-    auto ptr = builder.getPtr();
-
-    if((ptr - codePtr16) & 1)
-        *ptr++ = 0; // align
+    if((builder.getPtr() - codePtr16) & 1)
+        builder.data(0); // align
 
     auto patchLoad = [&builder](uint16_t *curPtr, uint16_t *loadPtr)
     {
@@ -2812,25 +2810,24 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
         builder.endPatch();
     };
 
-    patchLoad(ptr, cpuPtrLoadPtr);
-    *ptr++ = cpuPtrInt;
-    *ptr++ = cpuPtrInt >> 16;
+    patchLoad(builder.getPtr(), cpuPtrLoadPtr);
+    builder.data(cpuPtrInt);
+    builder.data(cpuPtrInt >> 16);
 
     // write addr of exitCallFlag
-    patchLoad(ptr, callFlagPtrLoadPtr);
+    patchLoad(builder.getPtr(), callFlagPtrLoadPtr);
     auto addr = reinterpret_cast<uintptr_t>(sourceInfo.exitCallFlag);
-    *ptr++ = addr;
-    *ptr++ = addr >> 16;
+    builder.data(addr);
+    builder.data(addr >> 16);
 
     // write addr of tmpSavedPtr
-    patchLoad(ptr, exitPtrLoadPtr);
+    patchLoad(builder.getPtr(), exitPtrLoadPtr);
     addr = reinterpret_cast<uintptr_t>(sourceInfo.savedExitPtr);
-    *ptr++ = addr;
-    *ptr++ = addr >> 16;
-
+    builder.data(addr);
+    builder.data(addr >> 16);
 
 #ifdef RECOMPILER_DEBUG
-    int len = ptr - codePtr16;
+    int len = builder.getPtr() - codePtr16;
 
     //debug
     printf("generated %i halfwords for entry/exit\ncode:", len);
@@ -2841,11 +2838,11 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     printf("\n");
 #endif
 
-    __builtin___clear_cache(codeBuf, ptr);
+    __builtin___clear_cache(codeBuf, builder.getPtr());
 
     auto ret = codeBuf + 1; // thumb bit
 
-    codeBuf = reinterpret_cast<uint8_t *>(ptr);
+    codeBuf = reinterpret_cast<uint8_t *>(builder.getPtr());
 
     return ret;
 }
