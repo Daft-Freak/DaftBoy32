@@ -857,15 +857,14 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                         // the sized version have two additional args
                         bool needCyclesFlags = sourceInfo.readMem8 != nullptr;
-
-                        setupMemAddr(addr, instr.src[0], skipMov);
  
                         if(needCyclesFlags)
                         {
                             // setup 5th and 6th args
-                            builder.push(1 << 0); // R0 (cycle count)
-                            builder.mov(Reg::R0, instr.flags >> 8);
-                            builder.push(1 << 0); // flags
+                            builder.mov(Reg::R1, instr.flags >> 8);
+                            builder.push(0b11); // R0 (cycle count), R1 (flags)
+
+                            setupMemAddr(addr, instr.src[0], skipMov);
 
                             // get data (not expecting immediates here)
                             // might get one if storing PC though
@@ -882,6 +881,8 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         }
                         else
                         {
+                            setupMemAddr(addr, instr.src[0], skipMov);
+
                             auto data = checkRegOrImm8(instr.src[1]);
                             assert(data.index());
                             get8BitValue(builder, Reg::R2, data);
