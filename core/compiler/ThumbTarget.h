@@ -57,6 +57,12 @@ private:
 
     uint16_t *exitPtr = nullptr, *saveAndExitPtr = nullptr, *exitForCallPtr = nullptr;
 
+    // everything we might call
+    uint16_t *cycleExecutedPtr = nullptr;
+    uint16_t *readMemPtr = nullptr, *writeMemPtr = nullptr;
+    uint16_t *readMem8Ptr = nullptr, *readMem16Ptr = nullptr, *readMem32Ptr = nullptr;
+    uint16_t *writeMem8Ptr = nullptr, *writeMem16Ptr = nullptr, *writeMem32Ptr = nullptr;
+
     // literals
     uint32_t literals[8]{};
 

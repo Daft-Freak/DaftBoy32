@@ -784,26 +784,22 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         builder.mov(Reg::R0, cpuPtrReg);
 
                         // get func ptr
-                        uintptr_t func = 0;
-                        auto funcAddrReg = needCyclesFlags ? Reg::R12 : Reg::R2;
-
+                        uint16_t *func = nullptr;
                         if(instr.opcode == GenOpcode::Load)
                         {
                             if(sourceInfo.readMem)
-                                func = reinterpret_cast<uintptr_t>(sourceInfo.readMem);
+                                func = readMemPtr;
                             else
-                                func = reinterpret_cast<uintptr_t>(sourceInfo.readMem8);
+                                func = readMem8Ptr;
                         }
                         else if(instr.opcode == GenOpcode::Load2)
-                            func = reinterpret_cast<uintptr_t>(sourceInfo.readMem16);
+                            func = readMem16Ptr;
                         else if(instr.opcode == GenOpcode::Load4)
-                            func = reinterpret_cast<uintptr_t>(sourceInfo.readMem32);
+                            func = readMem32Ptr;
 
                         assert(func);
 
-                        loadLiteral(builder, funcAddrReg, func);
-
-                        builder.blx(funcAddrReg); // do call
+                        builder.bl((func - builder.getPtr()) * 2); // do call
 
                         // move to dest
                         if(dst->mask)
@@ -841,12 +837,13 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
 
                     if(addr.index())
                     {
-                        int pushMask = 1 << 4; // R4
+                        int pushMask = 0;
 
                         if(addrSize == 32)
                             pushMask |= 1 << 3 ; // assume that we're using R3
 
-                        builder.push(pushMask, false);
+                        if(pushMask)
+                            builder.push(pushMask, false);
 
                         // if the address is in a high reg and the last op was an sub to it, the value should still be in R1
                         // this allows us to skip the mov (for stack pushes)
@@ -879,9 +876,9 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                                 builder.mov(Reg::R2, *data);
 
                             // cycle count
-                            assert(pushMask == 0b11000);
-                            writeCycleCountToStack(instrCycles, 16, Reg::R0);
-                            builder.add(Reg::R3, Reg::SP, 16, false);
+                            assert(pushMask == 0b1000);
+                            writeCycleCountToStack(instrCycles, 12, Reg::R0);
+                            builder.add(Reg::R3, Reg::SP, 12, false);
                         }
                         else
                         {
@@ -895,31 +892,30 @@ bool ThumbTarget::compile(uint8_t *&codePtr, uint8_t *codeBufEnd, uint32_t pc, G
                         builder.mov(Reg::R0, cpuPtrReg);
 
                         // get func ptr
-                        uintptr_t func = 0;
+                        uint16_t *func = nullptr;
                         if(instr.opcode == GenOpcode::Store)
                         {
                             if(sourceInfo.readMem)
-                                func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem);
+                                func = writeMemPtr;
                             else
-                                func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem8);
+                                func = writeMem8Ptr;
                         }
                         else if(instr.opcode == GenOpcode::Store2)
-                            func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem16);
+                            func = writeMem16Ptr;
                         else if(instr.opcode == GenOpcode::Store4)
-                            func = reinterpret_cast<uintptr_t>(sourceInfo.writeMem32);
+                            func = writeMem32Ptr;
 
                         assert(func);
 
-                        loadLiteral(builder, Reg::R4, func);
-
-                        builder.blx(Reg::R4); // do call
+                        builder.bl((func - builder.getPtr()) * 2); // do call
 
                         if(needCyclesFlags)
                             builder.add(Reg::SP, Reg::SP, 8, false); // space for args
 
                         // new cycle count is already in R0
 
-                        builder.pop(pushMask, false);
+                        if(pushMask)
+                            builder.pop(pushMask, false);
                     }
                 }
                 else
@@ -2825,6 +2821,32 @@ uint8_t *ThumbTarget::compileEntry(uint8_t *&codeBuf, unsigned int codeBufSize)
     addr = reinterpret_cast<uintptr_t>(sourceInfo.savedExitPtr);
     builder.data(addr);
     builder.data(addr >> 16);
+
+    // generate trampolines for calls
+    auto bounce = [&builder](auto *func)
+    {
+        uint16_t *ret = nullptr;
+        if(func)
+        {
+            ret = builder.getPtr();
+            builder.ldr(Reg::R12, 4);
+            builder.bx(Reg::R12);
+            builder.nop(); // restore alignment
+            builder.data(reinterpret_cast<uintptr_t>(func));
+            builder.data(reinterpret_cast<uintptr_t>(func) >> 16);
+        }
+        return ret;
+    };
+
+    cycleExecutedPtr = bounce(sourceInfo.cycleExecuted);
+    readMemPtr = bounce(sourceInfo.readMem);
+    writeMemPtr = bounce(sourceInfo.writeMem);
+    readMem8Ptr = bounce(sourceInfo.readMem8);
+    readMem16Ptr = bounce(sourceInfo.readMem16);
+    readMem32Ptr = bounce(sourceInfo.readMem32);
+    writeMem8Ptr = bounce(sourceInfo.writeMem8);
+    writeMem16Ptr = bounce(sourceInfo.writeMem16);
+    writeMem32Ptr = bounce(sourceInfo.writeMem32);
 
 #ifdef RECOMPILER_DEBUG
     int len = builder.getPtr() - codePtr16;
