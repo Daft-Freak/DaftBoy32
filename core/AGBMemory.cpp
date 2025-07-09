@@ -611,7 +611,28 @@ void AGBMemory::doSRAMWrite(uint32_t addr, uint8_t data)
     if(saveType == SaveType::Unknown)
     {
         if(addr == 0xE005555 && data == 0xAA)
+        {
             saveType = SaveType::Flash_128K;
+
+            // scan ROM for save type marker
+            for(uint32_t off = 0; off < cartROMSize - 10; off++)
+            {
+                auto ptr = cartROM + off;
+                if(*ptr != 'F')
+                    continue;
+
+                // override to smaller size
+                if(memcmp(ptr, "FLASH_V", 7) == 0 || memcmp(ptr, "FLASH512_V", 10) == 0)
+                {
+                    saveType = SaveType::Flash_64K;
+                    break;
+                }
+
+                // stop searching if we can confirm the larger size
+                if(memcmp(ptr, "FLASH1M_V", 9) == 0)
+                    break;
+            }
+        }
         else
             saveType = SaveType::RAM;
     }
