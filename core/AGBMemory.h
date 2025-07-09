@@ -206,6 +206,9 @@ private:
 
     void writeFlash(uint32_t addr, uint8_t data);
 
+    uint8_t readCartIO(uint32_t addr) const;
+    void writeCartIO(uint32_t addr, uint8_t data);
+
     AGBCPU &cpu;
 
     // prefetch state
@@ -237,6 +240,8 @@ private:
     uint8_t flashCmdState = 0;
     uint8_t flashBank = 0;
     uint8_t flashID[2];
+
+    bool cartIOReadEnable = false;
 
     uint32_t dummy = 0xBADADD55;
 

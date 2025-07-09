@@ -71,6 +71,8 @@ void AGBMemory::reset()
     flashState = FlashState::Read;
     flashBank = 0;
 
+    cartIOReadEnable = false;
+
     memset(cartSaveData, 0xFF, sizeof(cartSaveData));
 
     cartAccessN[0] = 5;
@@ -191,6 +193,9 @@ void AGBMemory::write(uint32_t addr, T data, int &cycles, bool sequential)
         case Region_ROMWait2L:
             cycles += (sequential ? cartAccessS[(addr >> 25) - 4] : cartAccessN[(addr >> 25) - 4])
                    + (sizeof(T) == 4 ? cartAccessS[(addr >> 25) - 4] : 0);
+
+            if(addr >= 0x80000C4 && addr <= 0x80000C8)
+                writeCartIO(addr, data); // the regs have at most 4 bits, so we don't care about the size here
             return;
         case Region_ROMWait2H:
             cycles += (sequential ? cartAccessS[2] : cartAccessN[2]) + (sizeof(T) == 4 ? cartAccessS[2] : 0);
@@ -470,6 +475,9 @@ void AGBMemory::doOAMWrite(uint32_t addr, uint8_t data)
 template<class T>
 T AGBMemory::doROMRead(uint32_t addr) const
 {
+    if(cartIOReadEnable && addr >= 0x80000C4 && addr <= 0x80000C8)
+        return readCartIO(addr);
+
     addr &= (0x2000000 - sizeof(T));
     if(addr >= cartROMSize)
     {
@@ -716,4 +724,23 @@ void AGBMemory::writeFlash(uint32_t addr, uint8_t data)
     }
     else
         flashCmdState = 0;
+}
+
+uint8_t AGBMemory::readCartIO(uint32_t addr) const
+{
+    printf("cart IO R %08X\n", addr);
+    return 0;
+}
+
+void AGBMemory::writeCartIO(uint32_t addr, uint8_t data)
+{
+    switch(addr & 0xF)
+    {
+        case 8:
+            cartIOReadEnable = data & 1;
+            break;
+
+        default:
+            printf("cart IO W %08X = %02X\n", addr, data);
+    }
 }
