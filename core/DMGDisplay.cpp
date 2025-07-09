@@ -193,6 +193,9 @@ void DMGDisplay::update()
                                 statInterruptActive |= (stat & (STAT_VBlankInt | STAT_OAMInt));
                             }
                             statInterruptActive &= ~STAT_HBlankInt;
+
+                            if(vBlankCallback)
+                                vBlankCallback();
                         }
 
                         // line 153 has some additional wierdness... (switches to y = 0 early)
