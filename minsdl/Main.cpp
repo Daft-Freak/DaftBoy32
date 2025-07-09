@@ -25,6 +25,8 @@ static uint8_t agbBIOSROM[0x4000];
 
 static std::ifstream romFile;
 
+static SDL_Texture *texture; // display texture
+
 static const std::unordered_map<SDL_Keycode, int> dmgKeyMap {
     {SDLK_RIGHT,  1 << 0},
 	{SDLK_LEFT,   1 << 1},
@@ -110,6 +112,11 @@ static uint8_t *readSave(const std::string &savePath, size_t &saveSize)
     std::cout << "Read " << saveSize << " bytes from " << savePath << "\n";
 
     return saveData;
+}
+
+static void dmgVBlankCallback()
+{
+    SDL_UpdateTexture(texture, nullptr, screenData, 160 * 2);
 }
 
 static void pollEvents()
@@ -260,6 +267,7 @@ int main(int argc, char *argv[])
     else
     {
         dmgCPU.getDisplay().setFramebuffer(screenData);
+        dmgCPU.getDisplay().setVBlankCallback(dmgVBlankCallback);
 
         auto &mem = dmgCPU.getMem();
         mem.setROMBankCallback(getROMBank);
@@ -293,7 +301,7 @@ int main(int argc, char *argv[])
     SDL_RenderSetLogicalSize(renderer, screenWidth, screenHeight);
     SDL_RenderSetIntegerScale(renderer, SDL_TRUE);
 
-    auto texture = SDL_CreateTexture(renderer, isAGB ? SDL_PIXELFORMAT_BGR565 : SDL_PIXELFORMAT_BGR555, SDL_TEXTUREACCESS_STREAMING, screenWidth, screenHeight);
+    texture = SDL_CreateTexture(renderer, isAGB ? SDL_PIXELFORMAT_BGR565 : SDL_PIXELFORMAT_BGR555, SDL_TEXTUREACCESS_STREAMING, screenWidth, screenHeight);
 
     // audio
     SDL_AudioSpec spec{};
@@ -370,6 +378,9 @@ int main(int argc, char *argv[])
                     agbCPU.getDisplay().update();
                 }
             }
+
+            // should be at vblank if not turbo mode, otherwise we don't care
+            SDL_UpdateTexture(texture, nullptr, screenData, screenWidth * 2);
         }
         else
         {
@@ -402,12 +413,12 @@ int main(int argc, char *argv[])
                 dmgCPU.getAPU().update();
                 dmgCPU.getDisplay().update();
             }
+
+            // we'll update the texture in the vblank callback, so it's synced
         }
 
         lastTick = now;
 
-        // TODO: sync
-        SDL_UpdateTexture(texture, nullptr, screenData, screenWidth * 2);
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, nullptr, nullptr);
         SDL_RenderPresent(renderer);
