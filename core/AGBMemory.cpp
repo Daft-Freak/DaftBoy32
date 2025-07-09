@@ -689,9 +689,18 @@ void AGBMemory::writeFlash(uint32_t addr, uint8_t data)
             flashState = FlashState::Erase; // actual erase happens later
         else if(data == 0x90 && addr == 0xE005555)
         {
-            // TODO: ids - this is the 128k sanyo one
-            flashID[0] = 0x62;
-            flashID[1] = 0x13;
+            if(saveType == SaveType::Flash_64K)
+            {
+                // 64k sst
+                flashID[0] = 0xBF;
+                flashID[1] = 0xD4;
+            }
+            else
+            {
+                // 128k sanyo
+                flashID[0] = 0x62;
+                flashID[1] = 0x13;
+            }
             flashState = FlashState::ID;
         }
         else if(data == 0xA0 && addr == 0xE005555)
