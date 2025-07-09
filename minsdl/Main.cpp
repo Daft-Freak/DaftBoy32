@@ -4,7 +4,7 @@
 #include <thread>
 #include <unordered_map>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "AGBCPU.h"
 #include "DMGCPU.h"
@@ -33,10 +33,10 @@ static const std::unordered_map<SDL_Keycode, int> dmgKeyMap {
 	{SDLK_UP,     1 << 2},
     {SDLK_DOWN,   1 << 3},
 
-    {SDLK_z,      1 << 4},
-	{SDLK_x,      1 << 5},
-	{SDLK_c,      1 << 6},
-    {SDLK_v,      1 << 7},
+    {SDLK_Z,      1 << 4},
+	{SDLK_X,      1 << 5},
+	{SDLK_C,      1 << 6},
+    {SDLK_V,      1 << 7},
 };
 
 // maybe swap dpad/buttons on DMG to share mappings?
@@ -46,13 +46,13 @@ static const std::unordered_map<SDL_Keycode, int> agbKeyMap {
     {SDLK_UP,     1 << 6},
     {SDLK_DOWN,   1 << 7},
 
-    {SDLK_z,      1 << 0},
-    {SDLK_x,      1 << 1},
-    {SDLK_c,      1 << 2},
-    {SDLK_v,      1 << 3},
+    {SDLK_Z,      1 << 0},
+    {SDLK_X,      1 << 1},
+    {SDLK_C,      1 << 2},
+    {SDLK_V,      1 << 3},
 
-    {SDLK_q,      1 << 9},
-    {SDLK_e,      1 << 8},
+    {SDLK_Q,      1 << 9},
+    {SDLK_E,      1 << 8},
 };
 
 static void getROMBank(uint8_t bank, uint8_t *ptr)
@@ -63,32 +63,33 @@ static void getROMBank(uint8_t bank, uint8_t *ptr)
     romFile.read((char *)ptr, 0x4000);
 }
 
-static void audioCallback(void *userdata, Uint8 *stream, int len)
+static void audioCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
 {
+    // TODO: refactor core so we can push data directly
     if(isAGB)
     {
         auto &apu = agbCPU.getAPU();
 
-        auto ptr = reinterpret_cast<int16_t *>(stream);
-        for(int i = 0; i < len / 2; i++)
+        for(int i = 0; i < additional_amount; i++)
         {
-            while(!quit && !apu.hasSample())
-                std::this_thread::yield();
+            if(!apu.hasSample())
+                break;
 
-            *ptr++ = apu.getSample();
+            int16_t v = apu.getSample();
+            SDL_PutAudioStreamData(stream, &v, 2);
         }
     }
     else
     {
         auto &apu = dmgCPU.getAPU();
 
-        auto ptr = reinterpret_cast<int16_t *>(stream);
-        for(int i = 0; i < len / 2; i++)
+        for(int i = 0; i < additional_amount; i++)
         {
-            while(!quit && !apu.getNumSamples())
-                std::this_thread::yield();
+            if(!apu.getNumSamples())
+                break;
 
-            *ptr++ = apu.getSample();
+            int16_t v = apu.getSample();
+            SDL_PutAudioStreamData(stream, &v, 2);
         }
     }
 }
@@ -128,22 +129,22 @@ static void pollEvents()
     {
         switch(event.type)
         {
-            case SDL_KEYDOWN:
+            case SDL_EVENT_KEY_DOWN:
             {
-                auto it = keyMap.find(event.key.keysym.sym);
+                auto it = keyMap.find(event.key.key);
                 if(it != keyMap.end())
                     inputs |= it->second;
                 break;
             }
-            case SDL_KEYUP:
+            case SDL_EVENT_KEY_UP:
             {
-                auto it = keyMap.find(event.key.keysym.sym);
+                auto it = keyMap.find(event.key.key);
                 if(it != keyMap.end())
                     inputs &= ~it->second;
                 break;
             }
 
-            case SDL_QUIT:
+            case SDL_EVENT_QUIT:
                 quit = true;
                 break;
         }
@@ -192,10 +193,7 @@ int main(int argc, char *argv[])
     std::string basePath;
     auto tmp = SDL_GetBasePath();
     if(tmp)
-    {
         basePath = tmp;
-        SDL_free(tmp);
-    }
 
     romFilename = argv[i];
 
@@ -287,41 +285,40 @@ int main(int argc, char *argv[])
     }
 
     // SDL init
-    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0)
+    if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
     {
         std::cerr << "Failed to init SDL!\n";
         return 1;
     }
 
-    auto window = SDL_CreateWindow("DaftBoySDL", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                   screenWidth * screenScale, screenHeight * screenScale,
+    auto window = SDL_CreateWindow("DaftBoySDL", screenWidth * screenScale, screenHeight * screenScale,
                                    SDL_WINDOW_RESIZABLE);
 
-    auto renderer = SDL_CreateRenderer(window, -1, turbo ? 0 : SDL_RENDERER_PRESENTVSYNC);
-    SDL_RenderSetLogicalSize(renderer, screenWidth, screenHeight);
-    SDL_RenderSetIntegerScale(renderer, SDL_TRUE);
+    auto renderer = SDL_CreateRenderer(window, nullptr);
+    if(!turbo)
+        SDL_SetRenderVSync(renderer, 1);
+    SDL_SetRenderLogicalPresentation(renderer, screenWidth, screenHeight, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 
-    texture = SDL_CreateTexture(renderer, isAGB ? SDL_PIXELFORMAT_BGR565 : SDL_PIXELFORMAT_BGR555, SDL_TEXTUREACCESS_STREAMING, screenWidth, screenHeight);
+    texture = SDL_CreateTexture(renderer, isAGB ? SDL_PIXELFORMAT_BGR565 : SDL_PIXELFORMAT_XBGR1555, SDL_TEXTUREACCESS_STREAMING, screenWidth, screenHeight);
+    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
 
     // audio
     SDL_AudioSpec spec{};
 
     spec.freq = isAGB ? 32768 : 22050;
-    spec.format = AUDIO_S16;
+    spec.format = SDL_AUDIO_S16LE;
     spec.channels = 1;
-    spec.samples = 512;
-    spec.callback = audioCallback;
 
-    auto dev = SDL_OpenAudioDevice(nullptr, false, &spec, nullptr, 0);
+    auto stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, audioCallback, nullptr);
 
-    if(!dev)
+    if(!stream)
     {
         std::cerr << "Failed to open audio: " << SDL_GetError() << "\n";
         quit = true;
     }
 
     if(!turbo)
-        SDL_PauseAudioDevice(dev, 0);
+        SDL_ResumeAudioDevice(SDL_GetAudioStreamDevice(stream));
 
     auto lastTick = SDL_GetTicks();
     auto startTime = SDL_GetTicks();
@@ -420,7 +417,7 @@ int main(int argc, char *argv[])
         lastTick = now;
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+        SDL_RenderTexture(renderer, texture, nullptr, nullptr);
         SDL_RenderPresent(renderer);
     }
 
@@ -469,7 +466,7 @@ int main(int argc, char *argv[])
         printf("Ran for %ums\n", runTime);
     }
 
-    SDL_CloseAudioDevice(dev);
+    SDL_DestroyAudioStream(stream);
 
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);

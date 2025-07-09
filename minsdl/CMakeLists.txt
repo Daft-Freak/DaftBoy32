@@ -2,13 +2,12 @@
 
 add_executable(DaftBoySDL Main.cpp)
 
+find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3)
+
+target_link_libraries(DaftBoySDL DaftBoyCore DaftBoyAdvanceCore SDL3::SDL3)
+
 if(EMSCRIPTEN)
     # Emscripten-specific magic
-    add_library(SDL2::SDL2 INTERFACE IMPORTED)
-    set_target_properties(SDL2::SDL2 PROPERTIES
-        INTERFACE_COMPILE_OPTIONS "SHELL:-s USE_SDL=2"
-        INTERFACE_LINK_LIBRARIES "-s USE_SDL=2"
-    )
 
     set(EMSCRIPTEN_SHELL ${CMAKE_CURRENT_LIST_DIR}/emscripten-shell.html)
 
@@ -17,12 +16,4 @@ if(EMSCRIPTEN)
         LINK_FLAGS "-s ENVIRONMENT=web -s ASYNCIFY=1 --shell-file ${EMSCRIPTEN_SHELL}"
         LINK_DEPENDS ${EMSCRIPTEN_SHELL}
     )
-else()
-    find_package(SDL2 REQUIRED)
-endif()
-
-target_link_libraries(DaftBoySDL DaftBoyCore DaftBoyAdvanceCore SDL2::SDL2)
-
-if(SDL2_SDL2main_FOUND)
-    target_link_libraries(DaftBoySDL SDL2::SDL2main)
 endif()
