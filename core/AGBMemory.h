@@ -13,7 +13,7 @@ public:
         EEPROM_512,
         EEPROM_8K,
         RAM,
-        Flash
+        Flash_128K
     };
 
     AGBMemory(AGBCPU &cpu);

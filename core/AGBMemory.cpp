@@ -60,7 +60,7 @@ void AGBMemory::loadCartridgeSave(const uint8_t *data, uint32_t len)
     else if(len == 32 * 1024)
         saveType = SaveType::RAM;
     else if(len == 64 * 1024 || len == 128 * 1024)
-        saveType = SaveType::Flash;
+        saveType = SaveType::Flash_128K;
 }
 
 void AGBMemory::reset()
@@ -585,7 +585,7 @@ uint8_t AGBMemory::doSRAMRead(uint32_t addr) const
             return 0xFF;
         case SaveType::RAM:
             return cartSaveData[addr & 0x7FFF]; // SRAM is 32k
-        case SaveType::Flash:
+        case SaveType::Flash_128K:
             if(flashState == FlashState::ID)
                 return flashID[addr & 1];
             
@@ -608,12 +608,12 @@ void AGBMemory::doSRAMWrite(uint32_t addr, uint8_t data)
     if(saveType == SaveType::Unknown)
     {
         if(addr == 0xE005555 && data == 0xAA)
-            saveType = SaveType::Flash;
+            saveType = SaveType::Flash_128K;
         else
             saveType = SaveType::RAM;
     }
 
-    if(saveType == SaveType::Flash)
+    if(saveType == SaveType::Flash_128K)
         writeFlash(addr, data);
     else if(saveType == SaveType::RAM)
         cartSaveData[addr & 0x7FFF] = data;
