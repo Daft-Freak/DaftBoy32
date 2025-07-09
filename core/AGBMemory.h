@@ -13,6 +13,7 @@ public:
         EEPROM_512,
         EEPROM_8K,
         RAM,
+        Flash_64K,
         Flash_128K
     };
 

@@ -438,8 +438,11 @@ int main(int argc, char *argv[])
             case AGBMemory::SaveType::RAM:
                 size = 32 * 1024;
                 break;
+            case AGBMemory::SaveType::Flash_64K:
+                size = 64 * 1024;
+                break;
             case AGBMemory::SaveType::Flash_128K:
-                size = 128 * 1024; // TODO: possibly 64k
+                size = 128 * 1024;
                 break;
         }
         if(size && !turbo)
