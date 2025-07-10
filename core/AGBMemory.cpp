@@ -73,6 +73,10 @@ void AGBMemory::reset()
 
     cartIOReadEnable = false;
 
+    // 0 is not a valid day/month
+    rtcRegs[2] = 1;
+    rtcRegs[3] = 1;
+
     memset(cartSaveData, 0xFF, sizeof(cartSaveData));
 
     cartAccessN[0] = 5;
@@ -728,6 +732,13 @@ void AGBMemory::writeFlash(uint32_t addr, uint8_t data)
 
 uint8_t AGBMemory::readCartIO(uint32_t addr) const
 {
+    if(addr == 0x80000C4)
+    {
+        // RTC data read
+        if(!(cartIODir & (1 << 1)/*SIO*/))
+            return (rtcData & 1) << 1;
+    }
+
     printf("cart IO R %08X\n", addr);
     return 0;
 }
@@ -736,11 +747,104 @@ void AGBMemory::writeCartIO(uint32_t addr, uint8_t data)
 {
     switch(addr & 0xF)
     {
-        case 8:
+        case 4: // data
+        {
+            writeRTC(cartIOData, data);
+
+            cartIOData = data;
+            break;
+        }
+
+        case 6: // direction
+            cartIODir = data;
+            break;
+
+        case 8: // read enable
             cartIOReadEnable = data & 1;
             break;
 
         default:
             printf("cart IO W %08X = %02X\n", addr, data);
+    }
+}
+
+void AGBMemory::writeRTC(uint8_t oldData, uint8_t data)
+{
+    uint8_t changed = oldData ^ data;
+    uint8_t falling = changed & oldData;
+
+    // RTC handling
+    if((data & (1 << 2)/*CS*/) && (falling & (1 << 0))/*SCK*/)
+    {
+        if(cartIODir & (1 << 1)/*SIO*/)
+        {
+            // RTC write
+            bool bit = data & (1 << 1);
+
+            // commands are MSB first, data LSB first
+            if(rtcCommand == -1)
+                rtcData = rtcData << 1 | (bit ? 1 : 0);
+            else
+                rtcData = rtcData >> 1 | (bit ? 0x80 : 0);
+
+            if(++rtcDataBit == 8)
+            {
+                rtcDataBit = 0;
+
+                if(rtcCommand == -1)
+                {
+                    // high bits should be 0110
+                    rtcCommand = rtcData & 0xF;
+                    rtcFirstRead = true;
+
+                    // command -> register offset
+                    switch(rtcCommand >> 1)
+                    {
+                        case 1: rtcRegOffset = 0; break; // status
+                        case 2: rtcRegOffset = 1; break; // year...
+                        case 3: rtcRegOffset = 5; break; // hour...
+                        case 4: rtcRegOffset = 8; break; // alarm 1
+                        case 5: rtcRegOffset = 9; break; // alarm 2
+
+                        default: rtcRegOffset = 0xFF;
+                    }
+
+                    if((rtcCommand & 1) && rtcRegOffset != 0xFF) // reading
+                        rtcData = rtcRegs[rtcRegOffset];
+                }
+                else if(rtcRegOffset == 0) // write status
+                    rtcRegs[0] = rtcData & 0x6A;
+                else if(rtcRegOffset < 10) // other regs
+                    rtcRegs[rtcRegOffset++] = rtcData;
+                else
+                    printf("RTC write byte %02X (cmd %i)\n", rtcData, rtcCommand >> 1);
+            }
+        }
+        else
+        {
+            // RTC read
+            // ignore first edge
+            if(!rtcFirstRead && rtcRegOffset != 0xFF)
+            {
+                rtcData >>= 1;
+
+                // next reg
+                if(++rtcDataBit == 8)
+                {
+                    rtcDataBit = 0;
+                    rtcRegOffset++;
+                    rtcData = rtcRegs[rtcRegOffset];
+                }
+            }
+
+            rtcFirstRead = false;
+        }
+    }
+    else if(falling & (1 << 2)/*CS*/)
+    {
+        rtcCommand = -1;
+        rtcDataBit = 0;
+        rtcData = 0;
+        rtcFirstRead = false;
     }
 }

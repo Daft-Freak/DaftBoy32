@@ -209,6 +209,8 @@ private:
     uint8_t readCartIO(uint32_t addr) const;
     void writeCartIO(uint32_t addr, uint8_t data);
 
+    void writeRTC(uint8_t oldData, uint8_t data);
+
     AGBCPU &cpu;
 
     // prefetch state
@@ -242,6 +244,16 @@ private:
     uint8_t flashID[2];
 
     bool cartIOReadEnable = false;
+    uint8_t cartIODir = 0;
+    uint8_t cartIOData = 0; // last value written
+
+    // RTC
+    int8_t rtcCommand = -1;
+    uint8_t rtcDataBit = 0;
+    uint8_t rtcData = 0;
+    bool rtcFirstRead = false;
+    uint8_t rtcRegs[10]; // status, year, month, month day, week day, hour, minute, second, alarm
+    uint8_t rtcRegOffset = 0;
 
     uint32_t dummy = 0xBADADD55;
 
