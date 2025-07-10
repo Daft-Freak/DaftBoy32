@@ -770,6 +770,13 @@ void AGBMemory::writeCartIO(uint32_t addr, uint8_t data)
 
 void AGBMemory::writeRTC(uint8_t oldData, uint8_t data)
 {
+    // if CS is low, RTC sees SCK/SIO as high
+    if(!(oldData & (1 << 2)))
+        oldData |= 3;
+
+    if(!(data & (1 << 2)))
+        data |= 3;
+
     uint8_t changed = oldData ^ data;
     uint8_t falling = changed & oldData;
 
@@ -791,7 +798,7 @@ void AGBMemory::writeRTC(uint8_t oldData, uint8_t data)
             {
                 rtcDataBit = 0;
 
-                if(rtcCommand == -1)
+                if(rtcCommand == -1 && (rtcData >> 4) == 0x6)
                 {
                     // high bits should be 0110
                     rtcCommand = rtcData & 0xF;
@@ -832,7 +839,10 @@ void AGBMemory::writeRTC(uint8_t oldData, uint8_t data)
                 if(++rtcDataBit == 8)
                 {
                     rtcDataBit = 0;
-                    rtcRegOffset++;
+                    // repeat status
+                    // TODO: others should also repeat after seconds
+                    if(rtcRegOffset != 0)
+                        rtcRegOffset++;
                     rtcData = rtcRegs[rtcRegOffset];
                 }
             }
@@ -846,5 +856,6 @@ void AGBMemory::writeRTC(uint8_t oldData, uint8_t data)
         rtcDataBit = 0;
         rtcData = 0;
         rtcFirstRead = false;
+        rtcRegOffset = 0xFF;
     }
 }
