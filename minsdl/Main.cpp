@@ -275,7 +275,8 @@ int main(int argc, char *argv[])
 
         // attempt to read save
         size_t size;
-        auto saveData = readSave(romFilename + ".ram", size);
+        auto saveFilename = romFilename.substr(0, romFilename.find_last_of('.') + 1) + "sav";
+        auto saveData = readSave(saveFilename, size);
     
         if(saveData)
         {
@@ -459,7 +460,8 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::ofstream saveFile(romFilename + ".ram", std::ios::out | std::ios::binary);
+        auto saveFilename = romFilename.substr(0, romFilename.find_last_of('.') + 1) + "sav";
+        std::ofstream saveFile(saveFilename, std::ios::out | std::ios::binary);
         saveFile.write(reinterpret_cast<char *>(dmgCPU.getMem().getCartridgeRAM()), dmgCPU.getMem().getCartridgeRAMSize());
     }
 
