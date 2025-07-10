@@ -144,6 +144,7 @@ void DMGMemory::reset()
         case 5:
         case 6: // + Battery
             mbcType = MBCType::MBC2;
+            cartRamSize = 512;
             break;
 
         case 0x0F: // + Timer + Battery
@@ -169,7 +170,7 @@ void DMGMemory::reset()
     }
 
     // use spare RAM as rom cache
-    if(cartRamSize == 0 && mbcType != MBCType::MBC2)
+    if(cartRamSize == 0)
         cachedROMBanks.emplace_back(ROMCacheEntry{cartRam, 0});
     if(cartRamSize <= 0x4000)
         cachedROMBanks.emplace_back(ROMCacheEntry{cartRam + 0x4000, 0});
