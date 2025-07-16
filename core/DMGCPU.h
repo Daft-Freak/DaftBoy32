@@ -26,6 +26,9 @@ public:
         CGB
     };
 
+    using LinkPortDataCallback = void(*)(uint32_t, uint8_t, uint8_t);
+    using LinkPortSyncCallback = uint8_t(*)(uint32_t, bool);
+
     DMGCPU();
 
     void reset();
@@ -58,6 +61,8 @@ public:
 
     void setInputs(uint8_t newInputs);
 
+    void setLinkPortCallbacks(LinkPortDataCallback dataCb, LinkPortSyncCallback syncCb);
+    void doExternalLinkPortTransfer(uint8_t data);
 private:
     enum class Reg
     {
@@ -155,4 +160,7 @@ private:
     DMGAPU apu;
     DMGDisplay display;
     uint8_t inputs = 0;
+
+    LinkPortDataCallback linkPortDataCb = nullptr;
+    LinkPortSyncCallback linkPortSyncCb = nullptr;
 };

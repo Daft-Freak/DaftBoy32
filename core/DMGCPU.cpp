@@ -571,10 +571,15 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
 
     switch(addr & 0xFF)
     {
+        case IO_SB:
+            if(linkPortDataCb && (mem.getIOReg(IO_SC) & SC_StartTransfer))
+                linkPortDataCb(cycleCount, data, mem.getIOReg(IO_SC));
+            return false;
+
         case IO_SC:
             updateSerial();
 
-            serialMaster = data &  SC_IntClock;
+            serialMaster = data & SC_IntClock;
             serialStart = data & SC_StartTransfer;
 
             if(serialStart)
@@ -584,6 +589,10 @@ bool DMGCPU::writeReg(uint16_t addr, uint8_t data)
             calculateNextSerialUpdate();
 
             mem.writeIOReg(IO_SC, data | (isGBC ? 0x7C : 0x7E)); // extra bit for GBC
+
+            if(linkPortDataCb)
+                linkPortDataCb(cycleCount, mem.getIOReg(IO_SB), mem.getIOReg(IO_SC));
+
             return true;
 
         case IO_DIV:
@@ -754,6 +763,25 @@ void DMGCPU::setInputs(uint8_t newInputs)
         flagInterrupt(Int_Joypad);
 
     inputs = newInputs;
+}
+
+// dataCb is callend when SB/SC change, syncCb is called when the master finishes a transfer
+void DMGCPU::setLinkPortCallbacks(LinkPortDataCallback dataCb, LinkPortSyncCallback syncCb)
+{
+    linkPortDataCb = dataCb;
+    linkPortSyncCb = syncCb;
+}
+
+void DMGCPU::doExternalLinkPortTransfer(uint8_t data)
+{
+    if(serialMaster || !serialStart)
+        return;
+
+    mem.getIOReg(IO_SB) = data;
+
+    mem.getIOReg(IO_SC) &= ~SC_StartTransfer;
+    flagInterrupt(Int_Serial);
+    serialStart = false;
 }
 
 uint8_t DMGCPU::readMem(uint16_t addr) const
@@ -2979,6 +3007,14 @@ void DMGCPU::updateSerial()
 
     auto cyclesPassed = cycleCount - lastSerialUpdate - 52; // offset to align clock
 
+    // poll for external data
+    if(!serialMaster && serialStart)
+    {
+        if(linkPortSyncCb)
+            linkPortSyncCb(cycleCount, false);
+        calculateNextSerialUpdate();
+    }
+
     if(!serialMaster || !serialStart)
     {
         lastSerialUpdate += cyclesPassed & ~(clockDiv - 1);
@@ -3002,6 +3038,9 @@ void DMGCPU::updateSerial()
 
     if(serialBits == 0)
     {
+        if(linkPortSyncCb)
+            sb = linkPortSyncCb(lastSerialUpdate + bits * clockDiv, true);
+
         // clear start and trigger interrupt
         mem.getIOReg(IO_SC) &= ~SC_StartTransfer;
         flagInterrupt(Int_Serial);
@@ -3016,7 +3055,7 @@ void DMGCPU::calculateNextSerialUpdate()
 {
     int clockDiv = clockSpeed / 8192; // TODO
 
-    if(!serialMaster || !serialStart)
+    if((!serialMaster && !linkPortSyncCb) || !serialStart)
     {
         nextSerialBitCycle = 0;
         return;
