@@ -9,6 +9,8 @@
 #include "AGBCPU.h"
 #include "DMGCPU.h"
 
+#include "DMGLinkSocket.h"
+
 static bool quit = false;
 static bool turbo = false;
 
@@ -16,6 +18,8 @@ static bool isAGB = false;
 
 static DMGCPU dmgCPU;
 static AGBCPU agbCPU;
+
+static DMGLinkSocket dmgLinkSocket(dmgCPU);
 
 static uint16_t inputs = 0;
 static uint16_t screenData[240 * 160];
@@ -118,6 +122,16 @@ static uint8_t *readSave(const std::string &savePath, size_t &saveSize)
 static void dmgVBlankCallback()
 {
     SDL_UpdateTexture(texture, nullptr, screenData, 160 * 2);
+}
+
+static void dmgLinkPortDataCallback(uint32_t cycle, uint8_t sb, uint8_t sc)
+{
+    dmgLinkSocket.setLocalState(sb, sc, cycle);
+}
+
+static uint8_t dmgLinkPortSyncCallback(uint32_t cycle, bool isInternalClock)
+{
+    return dmgLinkSocket.sync(cycle, isInternalClock);
 }
 
 static void pollEvents()
@@ -271,6 +285,15 @@ int main(int argc, char *argv[])
         mem.setROMBankCallback(getROMBank);
         mem.addROMCache(romBankCache, sizeof(romBankCache));
 
+        // link cable
+        dmgCPU.setLinkPortCallbacks(dmgLinkPortDataCallback, dmgLinkPortSyncCallback);
+
+        if(!dmgLinkSocket.listen())
+        {
+            // okay let's try to connect to localhost instead...
+            if(!dmgLinkSocket.connect("::1"))
+                std::cerr << "Failed to listen on or connect to link cable socket!\n";
+        }
         dmgCPU.reset();
 
         // attempt to read save
@@ -411,6 +434,8 @@ int main(int argc, char *argv[])
                 dmgCPU.getAPU().update();
                 dmgCPU.getDisplay().update();
             }
+
+            dmgLinkSocket.update();
 
             // we'll update the texture in the vblank callback, so it's synced
         }

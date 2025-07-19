@@ -1,6 +1,10 @@
 # minimal SDL shell
 
-add_executable(DaftBoySDL Main.cpp)
+add_executable(DaftBoySDL
+    DMGLinkSocket.cpp
+    Main.cpp
+    Socket.cpp
+)
 
 find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3)
 
