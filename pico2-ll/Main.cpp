@@ -139,6 +139,24 @@ static void initEmulator()
 
     cpu.getDisplay().setFramebuffer(framebuffer);
 
+    // load ROM
+    // TODO: detect if ROM is too big for PSRAM
+    auto psramPtr = reinterpret_cast<uint8_t *>(PSRAM_LOCATION);
+    FIL f;
+    if(f_open(&f, "AMKP.gba", FA_READ | FA_OPEN_EXISTING) == FR_OK)
+    {
+        printf("Loading ROM...\n");
+
+        UINT bytesRead = 0;
+        f_read(&f, psramPtr, psram_detect_size(), &bytesRead);
+
+        printf("Read %u bytes\n", bytesRead);
+        cpu.getMem().setCartROM(psramPtr, bytesRead);
+    
+        f_close(&f);
+    }
+
+    // reset CPU (and everything else)
     cpu.reset();
 
     multicore_launch_core1(core1Main);
