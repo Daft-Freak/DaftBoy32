@@ -236,7 +236,13 @@ private:
 
     uint64_t eepromCommandData[2]; // max 81 bits
     uint64_t eepromReadData;
+
+#ifdef PICO_BUILD
+    // FIXME: temporarily breaking flash saves
+    uint8_t cartSaveData[32 * 1024]; // RAM/flash
+#else
     uint8_t cartSaveData[128 * 1024]; // RAM/flash
+#endif
 
     FlashState flashState = FlashState::Read;
     uint8_t flashCmdState = 0;
