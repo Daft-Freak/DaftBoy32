@@ -1,14 +1,13 @@
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <forward_list>
-#include <string>
-#include <string_view>
 
 #include "hardware/clocks.h"
 #include "hardware/i2c.h"
 #include "hardware/psram.h"
 #include "hardware/vreg.h"
 #include "pico/multicore.h"
+#include <pico/time.h>
 #include "pico/stdlib.h"
 
 
@@ -32,6 +31,11 @@ static FATFS fs;
 
 static uint16_t framebuffer[240 * 160];
 
+// sync and speed measurement
+static volatile bool waitSync = false;
+static uint32_t emuTime = 0;
+static uint32_t emuFrames = 0;
+
 static const I2CDriver *i2cDrivers[]
 {
 };
@@ -44,6 +48,13 @@ void __not_in_flash_func(display_draw_line)(void *, int line, uint16_t *buf)
     {
         for(int x = 0; x < 240; x++)
             *buf++ = 0;
+
+        if(line == 200)
+        {
+            waitSync = false;
+            __sev();
+        }
+        
         return;
     }
 
@@ -56,13 +67,20 @@ static void core1Main()
 {
     while(true)
     {
-        // FIXME: sync
+        auto start = get_absolute_time();
         cpu.runFrame();
+        emuTime += absolute_time_diff_us(start, get_absolute_time());
 
         // don't have audio yet
         auto &apu = cpu.getAPU();
         while(apu.hasSample())
             apu.getSample();
+
+        emuFrames++;
+
+        // wait for next frame
+        waitSync = true;
+        while(waitSync) __wfe();
     }
 }
 
@@ -136,6 +154,21 @@ int main()
     while(true)
     {
         update_display();
+
+        auto frames = emuFrames;
+        auto time = emuTime;
+
+        if(frames >= 60)
+        {
+            emuFrames = 0;
+            emuTime = 0;
+
+            auto realTime = frames * 1000000 / 60;
+
+            int percent = realTime * 100 / time;
+
+            printf("%lu frames in %luus (%i%%)\n", frames, time, percent);
+        }
     }
 
     return 0;
