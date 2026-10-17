@@ -1214,6 +1214,16 @@ void AGBDisplay::drawScanLine(int y)
         return;
     }
 
+#ifdef PICO_BUILD
+    // basic frameskip
+    static unsigned frameCounter = 0;
+    if(y == 0)
+        frameCounter++;
+
+    if(frameCounter & 1)
+        return;
+#endif
+
     uint16_t bgData[4][screenWidth];
     uint16_t objData[5][screenWidth]; // four priority levels for objs +1 for obj window
     uint8_t objMask[240]; // 1 = sprite here, 2 = semi-transparent sprite
