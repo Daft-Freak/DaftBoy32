@@ -52,6 +52,20 @@ void __not_in_flash_func(display_draw_line)(void *, int line, uint16_t *buf)
         *buf++ = *in++;
 }
 
+static void core1Main()
+{
+    while(true)
+    {
+        // FIXME: sync
+        cpu.runFrame();
+
+        // don't have audio yet
+        auto &apu = cpu.getAPU();
+        while(apu.hasSample())
+            apu.getSample();
+    }
+}
+
 static void initHardware()
 {
     vreg_set_voltage(VREG_VOLTAGE_1_30);
@@ -106,6 +120,8 @@ static void initEmulator()
     cpu.getDisplay().setFramebuffer(framebuffer);
 
     cpu.reset();
+
+    multicore_launch_core1(core1Main);
 }
 
 int main()
@@ -117,13 +133,6 @@ int main()
 
     while(true)
     {
-        cpu.runFrame();
-
-        // don't have audio yet
-        auto &apu = cpu.getAPU();
-        while(apu.hasSample())
-            apu.getSample();
-
         update_display();
     }
 
