@@ -114,8 +114,10 @@ static void initHardware()
 
 static void initEmulator()
 {
+#ifndef NO_BIOS
     extern char _binary_bios_gba_start[];
     cpu.getMem().setBIOSROM(reinterpret_cast<const uint8_t *>(_binary_bios_gba_start));
+#endif
 
     cpu.getDisplay().setFramebuffer(framebuffer);
 

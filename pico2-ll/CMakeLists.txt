@@ -26,7 +26,12 @@ function(generate_bios TARGET_NAME OBJCOPY_TARGET OBJCOPY_ARCH)
     set_target_properties(${TARGET_NAME} PROPERTIES LINKER_LANGUAGE C)
 endfunction()
 
-generate_bios(DaftBoyBIOS elf32-littlearm armv6s-m)
+if(NO_BIOS)
+    add_library(DaftBoyBIOS INTERFACE)
+    target_compile_definitions(DaftBoyBIOS INTERFACE NO_BIOS)
+else()
+    generate_bios(DaftBoyBIOS elf32-littlearm armv6s-m)
+endif()
 
 add_executable(DaftBoyAdvanceP2
     Main.cpp
