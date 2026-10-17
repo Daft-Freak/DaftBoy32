@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.13.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(BUILD_PICO)
+    include(pico2-ll/pico_sdk_import.cmake)
+endif()
+
 project(gameblit)
 
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
@@ -15,6 +19,7 @@ endif()
 
 option(BUILD_32BLIT "Build 32blit UI" ON)
 option(BUILD_SDL "Build minimal SDL UI" OFF)
+option(BUILD_PICO "Build lower-level pico-sdk UI" OFF)
 option(BUILD_TESTS "Build test runner" OFF)
 
 #add_definitions("-DPROFILER")
@@ -44,6 +49,10 @@ endif()
 
 if(BUILD_TESTS)
     add_subdirectory(tests)
+endif()
+
+if(BUILD_PICO)
+    add_subdirectory(pico2-ll)
 endif()
 
 # setup release packages
