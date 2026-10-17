@@ -21,11 +21,16 @@
 // drivers
 #include "i2c.h"
 
+#include "AGBCPU.h"
+
 
 #define PSRAM_LOCATION (XIP_BASE + _u(0x1000000))
 
+static AGBCPU cpu;
 
 static FATFS fs;
+
+static uint16_t framebuffer[240 * 160];
 
 static const I2CDriver *i2cDrivers[]
 {
@@ -33,10 +38,18 @@ static const I2CDriver *i2cDrivers[]
 
 void __not_in_flash_func(display_draw_line)(void *, int line, uint16_t *buf)
 {
-    for(int x = 0; x < 240; x++)
+    // FIXME: presto-specific v padding
+    // also could be more efficient here
+    if(line < 40 || line >= 200)
     {
-        *buf++ = (x / 8) | (line / 4) << 5;
+        for(int x = 0; x < 240; x++)
+            *buf++ = 0;
+        return;
     }
+
+    auto in = framebuffer + (line - 40) * 240;
+    for(int x = 0; x < 240; x++)
+        *buf++ = *in++;
 }
 
 static void initHardware()
@@ -85,6 +98,12 @@ static void initHardware()
 
 static void initEmulator()
 {
+    extern char _binary_bios_gba_start[];
+    cpu.getMem().setBIOSROM(reinterpret_cast<const uint8_t *>(_binary_bios_gba_start));
+
+    cpu.getDisplay().setFramebuffer(framebuffer);
+
+    cpu.reset();
 }
 
 int main()
@@ -96,8 +115,14 @@ int main()
 
     while(true)
     {
-        update_display();
+        cpu.runFrame();
 
+        // don't have audio yet
+        auto &apu = cpu.getAPU();
+        while(apu.hasSample())
+            apu.getSample();
+
+        update_display();
     }
 
     return 0;
