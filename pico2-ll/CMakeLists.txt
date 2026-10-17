@@ -3,7 +3,30 @@ enable_language(ASM)
 pico_sdk_init()
 
 #embed BIOS
-#generate_bios(PACEPicoBIOS elf32-littlearm armv6s-m)
+function(generate_bios TARGET_NAME OBJCOPY_TARGET OBJCOPY_ARCH)
+    #embed BIOS
+    set(BIOS_FILE bios.gba)
+    set(BIOS_PATH ${CMAKE_CURRENT_LIST_DIR}/../)
+    set(BIOS_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
+
+    if(NOT EXISTS ${BIOS_PATH}${BIOS_FILE})
+        # TODO: fall back to bios emulation
+        message(FATAL_ERROR "Could not find ${BIOS_FILE}")
+    endif()
+
+    add_custom_command(
+        OUTPUT bios.o
+        WORKING_DIRECTORY ${BIOS_PATH}
+        COMMAND ${CMAKE_OBJCOPY} -I binary -O ${OBJCOPY_TARGET} -B ${OBJCOPY_ARCH} --rename-section .data=.rodata,alloc,load,readonly,data,contents ${BIOS_FILE} ${CMAKE_CURRENT_BINARY_DIR}/bios.o
+        DEPENDS ${BIOS_PATH}${BIOS_FILE}
+    )
+
+    add_library(${TARGET_NAME} bios.o)
+    target_include_directories(${TARGET_NAME} INTERFACE ${CMAKE_CURRENT_LIST_DIR})
+    set_target_properties(${TARGET_NAME} PROPERTIES LINKER_LANGUAGE C)
+endfunction()
+
+generate_bios(DaftBoyBIOS elf32-littlearm armv6s-m)
 
 add_executable(DaftBoyAdvanceP2
     Main.cpp
@@ -62,6 +85,7 @@ pico_add_linker_script_override_path(DaftBoyAdvanceP2 ${CMAKE_CURRENT_LIST_DIR})
 # usual setup
 target_link_libraries(DaftBoyAdvanceP2
     DaftBoyAdvanceCore
+    DaftBoyBIOS
 
     hardware_dma
     hardware_i2c
