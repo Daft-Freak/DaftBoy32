@@ -116,7 +116,7 @@ enum ST7701Reg {
 // DMA logic
 
 #define DPI_DMA_CH_BASE 0
-#define DPI_NUM_DMA_CHANNELS 4
+#define DPI_NUM_DMA_CHANNELS 2
 
 static uint8_t cur_dma_ch = DPI_DMA_CH_BASE;
 
@@ -148,7 +148,7 @@ static uint32_t vblank_line_timings[4];
 static uint32_t vsync_line_timings[4];
 
 // framebuffer/palette
-static constexpr int buffer_line_size = DPI_MODE_H_ACTIVE_PIXELS;
+static constexpr int buffer_line_size = (DPI_MODE_H_ACTIVE_PIXELS / 2); // never going to do full res here
 static uint16_t temp_buffer[buffer_line_size * DPI_NUM_DMA_CHANNELS];
 
 static void pio_timing_irq_handler();
