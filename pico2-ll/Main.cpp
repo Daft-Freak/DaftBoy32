@@ -5,9 +5,10 @@
 #include "hardware/clocks.h"
 #include "hardware/i2c.h"
 #include "hardware/psram.h"
+#include "hardware/pwm.h"
 #include "hardware/vreg.h"
 #include "pico/multicore.h"
-#include <pico/time.h>
+#include "pico/time.h"
 #include "pico/stdlib.h"
 
 
@@ -35,6 +36,8 @@ static uint16_t framebuffer[240 * 160];
 static volatile bool waitSync = false;
 static uint32_t emuTime = 0;
 static uint32_t emuFrames = 0;
+
+static repeating_timer_t audioTimer;
 
 static const I2CDriver *i2cDrivers[]
 {
@@ -71,17 +74,27 @@ static void core1Main()
         cpu.runFrame();
         emuTime += absolute_time_diff_us(start, get_absolute_time());
 
-        // don't have audio yet
-        auto &apu = cpu.getAPU();
-        while(apu.hasSample())
-            apu.getSample();
-
         emuFrames++;
 
         // wait for next frame
         waitSync = true;
         while(waitSync) __wfe();
     }
+}
+
+
+static bool audioTimerCallback(__unused struct repeating_timer *t)
+{
+    auto apu = reinterpret_cast<AGBAPU *>(t->user_data);
+
+    auto sample = apu->getSample();
+
+#ifdef PWM_AUDIO_SLICE
+    uint16_t pwm_sample = (int(sample) + 0x8000) >> (16 - PWM_AUDIO_BITS);
+    pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, pwm_sample);
+#endif
+
+    return true;
 }
 
 static void initHardware()
@@ -128,6 +141,16 @@ static void initHardware()
     }
 
     //init_audio();
+#ifdef PWM_AUDIO_SLICE
+    pwm_config c = pwm_get_default_config();
+    pwm_config_set_wrap(&c, (1 << PWM_AUDIO_BITS) - 1);
+    //pwm_config_set_clkdiv_int(&c, 2);
+    pwm_init(PWM_AUDIO_SLICE, &c, true);
+    pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, 1 << (PWM_AUDIO_BITS - 1));
+
+    gpio_set_function(PWM_AUDIO_PIN, GPIO_FUNC_PWM);
+#endif
+    add_repeating_timer_us(((1000000 * 2) / 32768 + 1) / 2, audioTimerCallback, &cpu.getAPU(), &audioTimer);
 }
 
 static void initEmulator()

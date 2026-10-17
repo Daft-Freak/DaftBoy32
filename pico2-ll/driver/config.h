@@ -23,6 +23,11 @@
 
 #define DPI_BIT_REVERSE
 
+//#define PWM_AUDIO_PIN PRESTO_BUZZER_PIN //  GPIO 43
+//#define PWM_AUDIO_SLICE 9
+//#define PWM_AUDIO_CHAN 1
+//#define PWM_AUDIO_BITS 12
+
 #define FT6236_I2C i2c1
 #define FT6236_SDA_PIN 30
 #define FT6236_SCL_PIN 31
