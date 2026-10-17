@@ -41,7 +41,9 @@
 #define SD_MISO 36
 #define SD_CS   39
 
+#if PICO_DEFAULT_UART_TX_PIN != PICO_DEFAULT_I2C_SDA_PIN
 #define DEFAULT_I2C_CLOCK 100000
+#endif
 
 #else
 #error "No board configuration!"
