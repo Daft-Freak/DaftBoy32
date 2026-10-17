@@ -105,3 +105,10 @@ pico_add_extra_outputs(DaftBoyAdvanceP2)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/DaftBoyAdvanceP2.uf2
 	DESTINATION bin
 )
+
+
+# gonna go fast
+pico_define_boot_stage2(flash_clkdiv3 ${PICO_DEFAULT_BOOT_STAGE2_FILE})
+target_compile_definitions(flash_clkdiv3 PRIVATE PICO_FLASH_SPI_CLKDIV=3 PICO_FLASH_SPI_RXDELAY=3)
+
+pico_set_boot_stage2(DaftBoyAdvanceP2 flash_clkdiv3)

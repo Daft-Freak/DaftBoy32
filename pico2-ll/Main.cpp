@@ -54,7 +54,9 @@ void __not_in_flash_func(display_draw_line)(void *, int line, uint16_t *buf)
 
 static void initHardware()
 {
-    set_sys_clock_khz(252000, false);
+    vreg_set_voltage(VREG_VOLTAGE_1_30);
+    sleep_ms(10);
+    set_sys_clock_khz(378000, false);
 
     stdio_init_all();
 
