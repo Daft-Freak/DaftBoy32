@@ -26,20 +26,19 @@ option(BUILD_TESTS "Build test runner" OFF)
 
 add_subdirectory(core)
 
+if(32BLIT_HW OR 32BLIT_PICO OR BUILD_PICO)
+    if(BUILD_SDL)
+        message(WARNING "Disabling SDL UI for 32blit/pico hardware build")
+        set(BUILD_SDL OFF)
+    endif()
+    if(BUILD_TESTS)
+        message(WARNING "Disabling test runner for 32blit/pico hardware build")
+        set(BUILD_TESTS OFF)
+    endif()
+endif()
+
 if(BUILD_32BLIT)
     find_package (32BLIT CONFIG REQUIRED PATHS ../32blit-sdk)
-
-    if(32BLIT_HW OR 32BLIT_PICO)
-        if(BUILD_SDL)
-          message(WARNING "Disabling SDL UI for 32blit hardware build")
-          set(BUILD_SDL OFF)
-        endif()
-        if(BUILD_TESTS)
-          message(WARNING "Disabling test runner for 32blit hardware build")
-          set(BUILD_TESTS OFF)
-        endif()
-    endif()
-
     add_subdirectory(32blit DaftBoy32)
 endif()
 
