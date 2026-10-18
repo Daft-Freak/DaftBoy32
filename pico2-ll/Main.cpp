@@ -33,7 +33,7 @@ static FATFS fs;
 static uint16_t framebuffer[240 * 160];
 
 // sync and speed measurement
-static volatile bool waitSync = false;
+static volatile int lastScanline = 0;
 static uint32_t emuTime = 0;
 static uint32_t emuFrames = 0;
 
@@ -51,15 +51,11 @@ void __not_in_flash_func(display_draw_line)(void *, int line, uint16_t *buf)
     {
         for(int x = 0; x < 240; x++)
             *buf++ = 0;
-
-        if(line == 200)
-        {
-            waitSync = false;
-            __sev();
-        }
         
         return;
     }
+
+    lastScanline = line - 40;
 
     auto in = framebuffer + (line - 40) * 240;
     for(int x = 0; x < 240; x++)
@@ -70,15 +66,15 @@ static void core1Main()
 {
     while(true)
     {
+        // make sure scanout is ahead of us
+        while(lastScanline < 80){}
+
         auto start = get_absolute_time();
+        
         cpu.runFrame();
         emuTime += absolute_time_diff_us(start, get_absolute_time());
 
         emuFrames++;
-
-        // wait for next frame
-        waitSync = true;
-        while(waitSync) __wfe();
     }
 }
 
@@ -150,7 +146,7 @@ static void initHardware()
 
     gpio_set_function(PWM_AUDIO_PIN, GPIO_FUNC_PWM);
 #endif
-    add_repeating_timer_us(((1000000 * 2) / 32768 + 1) / 2, audioTimerCallback, &cpu.getAPU(), &audioTimer);
+    add_repeating_timer_us(1000000 / 32768, audioTimerCallback, &cpu.getAPU(), &audioTimer);
 }
 
 static void initEmulator()
