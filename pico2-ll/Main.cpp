@@ -83,7 +83,7 @@ static void core1Main()
 }
 
 
-static bool audioTimerCallback(__unused struct repeating_timer *t)
+static bool audioTimerCallback(struct repeating_timer *t)
 {
     auto apu = reinterpret_cast<AGBAPU *>(t->user_data);
 
