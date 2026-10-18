@@ -140,7 +140,7 @@ static void initHardware()
 #ifdef PWM_AUDIO_SLICE
     pwm_config c = pwm_get_default_config();
     pwm_config_set_wrap(&c, (1 << PWM_AUDIO_BITS) - 1);
-    //pwm_config_set_clkdiv_int(&c, 2);
+    pwm_config_set_clkdiv_int(&c, clock_get_hz(clk_sys) / (1 << 24));
     pwm_init(PWM_AUDIO_SLICE, &c, true);
     pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, 1 << (PWM_AUDIO_BITS - 1));
 
