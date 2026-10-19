@@ -51,15 +51,19 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 {
     auto validDataEnd = vram + 0x10000;
 
+    // screen base pointing past first 64k is invalid
+    if(reinterpret_cast<uint8_t *>(screenPtr) >= validDataEnd)
+        screenPtr = nullptr;
+
     bool hasData = false;
 
     auto getTileRow = [ty, screenPtr, charPtr, palRam, validDataEnd, &hasData](int bx, uint16_t *&tilePal)
     {
         uint16_t tileMeta = 0;
     
-        // screen base pointing past first 64k is invalid
+        // screen base was set to null if it was invalid
         // reading as zero matches what the DS does
-        if(reinterpret_cast<uint8_t *>(screenPtr) < validDataEnd)
+        if(screenPtr)
             tileMeta = screenPtr[bx];
 
         // v flip
@@ -77,6 +81,9 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         //else
         //    tileRow = (tileMeta & 0x3FF) | (tileMeta & 0x3FF) << 16;
 
+        if(!tileRow)
+            return uint32_t(0);
+
         tilePal = palRam + ((tileMeta & 0xF000) >> 8);
 
         // h flip
@@ -86,8 +93,7 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
             tileRow = ((tileRow & 0xF0F0F0F0) >> 4) | ((tileRow & 0x0F0F0F0F) << 4);
         }
 
-        if(tileRow)
-            hasData = true;
+        hasData = true;
 
         return tileRow;
     };
@@ -182,15 +188,19 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 {
     auto validDataEnd = vram + 0x10000;
 
+    // screen base pointing past first 64k is invalid
+    if(reinterpret_cast<uint8_t *>(screenPtr) >= validDataEnd)
+        screenPtr = nullptr;
+
     bool hasData = false;
 
     auto getTileRow = [ty, screenPtr, charPtr, validDataEnd, &hasData](int bx)
     {
         uint16_t tileMeta = 0;
     
-        // screen base pointing past first 64k is invalid
+        // screen base was set to null if it was invalid
         // reading as zero matches what the DS does
-        if(reinterpret_cast<uint8_t *>(screenPtr) < validDataEnd)
+        if(screenPtr)
             tileMeta = screenPtr[bx];
 
         // v flip
