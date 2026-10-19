@@ -92,12 +92,17 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         return tileRow;
     };
 
+    int tx = (x + xOffset) & 7;
+    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
+
+    int xEnd = std::min(240, (screenBlockTiles - bx) * 8 - tx);
+
     // mosaic
     // TODO: optimise
     if(xMosaic)
     {
         int alignX = x + xOffset - (x % (xMosaic + 1));
-        for(; x < 240; x += xMosaic + 1, alignX += xMosaic + 1)
+        for(; x < xEnd; x += xMosaic + 1, alignX += xMosaic + 1)
         {
             int bx = (alignX >> 3) & (screenBlockTiles - 1);
 
@@ -111,14 +116,11 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
                 *scanLine = 0;
 
             auto v = *scanLine++;
-            for(int m = 0; m < xMosaic; m++)
+            for(int m = 0; m < std::min(xMosaic, xEnd - x - 1); m++)
                 *scanLine++ = v;
         }
         return hasData;
     }
-
-    int tx = (x + xOffset) & 7;
-    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
     // left edge
     if(tx)
@@ -139,7 +141,7 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     }
 
     // full tiles
-    for(; x <= 240 - 8 && bx < screenBlockTiles; bx++)
+    for(; x <= xEnd - 8; bx++)
     {
         uint16_t *tilePal;
         uint32_t tileRow = getTileRow(bx, tilePal);
@@ -215,12 +217,17 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 
     auto tilePal = palRam;
 
+    int tx = (x + xOffset) & 7;
+    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
+
+    int xEnd = std::min(240, (screenBlockTiles - bx) * 8 - tx);
+
     // mosaic
     // TODO: optimise
     if(xMosaic)
     {
         int alignX = x + xOffset - (x % (xMosaic + 1));
-        for(; x < 240; x += xMosaic + 1, alignX += xMosaic + 1)
+        for(; x < xEnd; x += xMosaic + 1, alignX += xMosaic + 1)
         {
             int bx = (alignX >> 3) & (screenBlockTiles - 1);
 
@@ -234,14 +241,11 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
                 *scanLine = 0;
 
             auto v = *scanLine++;
-            for(int m = 0; m < xMosaic; m++)
+            for(int m = 0; m < std::min(xMosaic, xEnd - x - 1); m++)
                 *scanLine++ = v;
         }
         return hasData;
     }
-
-    int tx = (x + xOffset) & 7;
-    int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
     // left edge
     if(tx)
@@ -262,7 +266,7 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     }
 
     // full tiles
-    for(; x <= 240 - 8 && bx < screenBlockTiles; bx++)
+    for(; x <= xEnd - 8 && bx < screenBlockTiles; bx++)
     {
         uint64_t tileRow = getTileRow(bx);
         auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow);
