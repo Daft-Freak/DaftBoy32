@@ -108,7 +108,7 @@ jobs:
       if: runner.os == 'Windows'
       shell: bash
       run: |
-        python -m pip install 32blit
+        python3 -m pip install 32blit
 
     # Set up the cmake build environment
     - name: Create Build Environment
