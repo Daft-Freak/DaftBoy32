@@ -1533,6 +1533,10 @@ void AGBDisplay::drawScanLine(int y)
                 else if(!(blendControl & mask))
                     curBlendMode = 0;
 
+                int srcR = (col >> 10) & 0x1F;
+                int srcG = (col >> 5) & 0x1F;
+                int srcB = col & 0x1F;
+
                 if(curBlendMode == 1 && data && (blendSrcAlpha < 16 || blendDstAlpha)) // alpha, ignore if backdrop (nothing to blend with)
                 {
                     // get next layer
@@ -1551,16 +1555,12 @@ void AGBDisplay::drawScanLine(int y)
                     // check if its a dst target
                     if(!(blendControl & nextMask))
                     {
-                        scanLine[x] = (col & 0x1F) | (col & 0x7FE0) << 1;
+                        scanLine[x] = srcR << 11 | srcG << 6 | srcB;
                         break;
                     }
 
                     // do blend
                     auto dstCol = nextData ? nextData[x] : palRAM[0]; // handle backdrop
-
-                    int srcR = (col >> 10) & 0x1F;
-                    int srcG = (col >> 5) & 0x1F;
-                    int srcB = col & 0x1F;
 
                     int dstR = (dstCol >> 10) & 0x1F;
                     int dstG = (dstCol >> 5) & 0x1F;
@@ -1576,10 +1576,6 @@ void AGBDisplay::drawScanLine(int y)
                 {
                     int evy = blendY;
 
-                    int srcR = (col >> 10) & 0x1F;
-                    int srcG = (col >> 5) & 0x1F;
-                    int srcB = col & 0x1F;
-
                     int r = srcR + ((31 - srcR) * evy) / 16;
                     int g = srcG + ((31 - srcG) * evy) / 16;
                     int b = srcB + ((31 - srcB) * evy) / 16;
@@ -1590,10 +1586,6 @@ void AGBDisplay::drawScanLine(int y)
                 {
                     int evy = blendY;
 
-                    int srcR = (col >> 10) & 0x1F;
-                    int srcG = (col >> 5) & 0x1F;
-                    int srcB = col & 0x1F;
-
                     int r = srcR - (srcR * evy) / 16;
                     int g = srcG - (srcG * evy) / 16;
                     int b = srcB - (srcB * evy) / 16;
@@ -1601,7 +1593,7 @@ void AGBDisplay::drawScanLine(int y)
                     scanLine[x] = r << 11 | g << 6 | b;
                 }
                 else
-                    scanLine[x] = (col & 0x1F) | (col & 0x7FE0) << 1;
+                    scanLine[x] = srcR << 11 | srcG << 6 | srcB;
 
                 break;
             }
