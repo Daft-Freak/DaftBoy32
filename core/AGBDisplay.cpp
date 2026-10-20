@@ -816,10 +816,10 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
         else
         {
             // regular sprite
-            bool hFlip = mode == 0 && (attr1 & Attr1_HFlip);
+            bool hFlip = attr1 & Attr1_HFlip;
 
             // v flip
-            if(mode == 0 && (attr1 & Attr1_VFlip))
+            if(attr1 & Attr1_VFlip)
                 sy = (spriteH - 1) - sy;
 
             if(dispControl & DISPCNT_OBJChar1D)
