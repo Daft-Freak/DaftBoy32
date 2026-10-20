@@ -596,7 +596,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
     const int entrySize = 4; // * 16 bit
 
     // height, flip the shape bits for widths
-    static const int sizes[][4]
+    static const uint8_t sizes[][4]
     {
         { 8, 16, 32, 64}, // square
         { 8,  8, 16, 32}, // tall
