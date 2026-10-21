@@ -468,6 +468,7 @@ template<class T>
 void AGBMemory::doOAMWrite(uint32_t addr, T data)
 {
     doWrite(oam, addr, data);
+    oamDirty = true;
 }
 
 template<>

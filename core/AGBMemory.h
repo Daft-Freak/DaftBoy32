@@ -41,6 +41,9 @@ public:
     uint8_t *getPalRAM() {return palRAM;}
     uint8_t *getVRAM() {return vram;}
     uint8_t *getOAM() {return oam;}
+
+    bool getOAMDirty() const {return oamDirty;}
+    void clearOAMDirty() {oamDirty = false;}
   
     uint8_t *getCartridgeSave() {return cartSaveData;}
     SaveType getCartridgeSaveType() {return saveType;}
@@ -264,6 +267,8 @@ private:
     uint32_t dummy = 0xBADADD55;
 
     int8_t cartAccessN[4], cartAccessS[4]; // ROM and RAM
+
+    bool oamDirty = false;
 
     //CartRamUpdateCallback cartRamUpdateCallback;
 };
