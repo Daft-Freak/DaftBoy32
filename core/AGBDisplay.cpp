@@ -771,7 +771,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                 {
                     *out = *(out - 1);
                     if(!isWin)
-                        *outMask = 1 + effect;
+                        *outMask = effect;
 
                     continue;
                 }
@@ -788,7 +788,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         if(*tilePtr)
                         {
                             *out = spritePal[*tilePtr] | 0x8000;
-                            *outMask = 1 + effect;
+                            *outMask = effect;
                         }
                     }
                 }
@@ -805,7 +805,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         if(tileRow & 0xF)
                         {
                             *out = spritePal[tileRow & 0xF] | 0x8000;
-                            *outMask = 1 + effect;
+                            *outMask = effect;
                         }
                     }
                 }
@@ -865,12 +865,12 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                             if(xMosaic && (out - scanLine[0]) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
                             {
                                 *out = *(out - 1);
-                                *outMask = 1 + effect;
+                                *outMask = effect;
                             }
                             else if(palIndex)
                             {
                                 *out = spritePal[palIndex] | 0x8000;
-                                *outMask = 1 + effect;
+                                *outMask = effect;
                             }
                         }
 
@@ -916,12 +916,12 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                             if(xMosaic && (out - scanLine[0]) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
                             {
                                 *out = *(out - 1);
-                                *outMask = 1 + effect;
+                                *outMask = effect;
                             }
                             else if(tileRow & 0xF)
                             {
                                 *out = spritePal[tileRow & 0xF] | 0x8000;
-                                *outMask = 1 + effect;
+                                *outMask = effect;
                             }
                         }
                     }
@@ -1240,7 +1240,7 @@ void AGBDisplay::drawScanLine(int y)
 
     uint16_t bgData[4][screenWidth];
     uint16_t objData[5][screenWidth]; // four priority levels for objs +1 for obj window
-    uint8_t objMask[240]; // 1 = sprite here, 2 = semi-transparent sprite
+    uint8_t objMask[240]; // 1 = semi-transparent sprite
 
     int layerEnables = dispControl >> 8;
     bool windowEnabled = false;
@@ -1527,7 +1527,7 @@ void AGBDisplay::drawScanLine(int y)
                 int curBlendMode = blendMode;
 
                 // forced blend for objects
-                if(mask == Layer_OBJ && objMask[x] == 2)
+                if(mask == Layer_OBJ && objMask[x])
                     curBlendMode = 1;
                 // make sure layer is src (masks conveniently line up)
                 else if(!(blendControl & mask))
