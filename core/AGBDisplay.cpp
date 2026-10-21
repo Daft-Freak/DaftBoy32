@@ -589,7 +589,7 @@ static bool drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
     return false;
 }
 
-static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t objMask[240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t mosaic)
+static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t objMask[240], uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t mosaic, int maxActiveObj)
 {
     int usedPriorities = 0;
     auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
@@ -616,7 +616,7 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
     // TODO: the offscreen test is still slightly off
     const int inactiveCycles = 2;
 
-    for(int i = 0; i < 128 && cyclesRemaining > 0; i++)
+    for(int i = 0; i < maxActiveObj && cyclesRemaining > 0; i++)
     {
         const uint16_t attr0 = oam[i * entrySize + 0];
         const uint16_t attr1 = oam[i * entrySize + 1];
@@ -1293,7 +1293,14 @@ void AGBDisplay::drawScanLine(int y)
         if(dispControl & DISPCNT_OBJWindowOn)
             memset(objData[4], 0, screenWidth * 2);
 
-        spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl, mosaic);
+        // recalculate cached info if oam was modified
+        if(mem.getOAMDirty())
+        {
+            recalcObjCache();
+            mem.clearOAMDirty();
+        }
+
+        spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl, mosaic, maxActiveObj);
     }
     else
         spritePriorities = 0;
@@ -1613,5 +1620,21 @@ void AGBDisplay::drawScanLine(int y)
                 break;
             }
         }
+    }
+}
+
+void AGBDisplay::recalcObjCache()
+{
+    auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
+    const int entrySize = 4; // * 16 bit
+
+    for(int i = 0; i < 128; i++)
+    {
+        const uint16_t attr0 = oam[i * entrySize + 0];
+
+        auto mode = (attr0 & Attr0_Mode) >> 8;
+
+        if(mode != 2/*disable*/)
+            maxActiveObj = i + 1;
     }
 }

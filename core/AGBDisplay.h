@@ -22,6 +22,8 @@ public:
 private:
     void drawScanLine(int y);
 
+    void recalcObjCache();
+
     AGBCPU &cpu;
     AGBMemory &mem;
 
@@ -40,4 +42,6 @@ private:
     unsigned int remainingModeDots = screenWidth;
     uint16_t *screenData; // rgb555
     uint16_t lastBGData[4][screenWidth]; // used for mosaic
+
+    int maxActiveObj = 128;
 };
