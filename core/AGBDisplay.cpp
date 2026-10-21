@@ -145,16 +145,27 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     if(xMosaic)
     {
         int alignX = x + xOffset - (x % (xMosaic + 1));
+        alignX &= (screenBlockTiles << 3) - 1;
+
+        int bx = (alignX >> 3);
+
+        // get start row
+        uint16_t *tilePal;
+        uint32_t tileRow = getTileRow(bx, tilePal);
+
         for(; x < xEnd; x += xMosaic + 1, alignX += xMosaic + 1)
         {
-            int bx = (alignX >> 3) & (screenBlockTiles - 1);
+            // load next row when needed
+            if((alignX >> 3) != bx)
+            {
+                bx = (alignX >> 3);
+                tileRow = getTileRow(bx, tilePal);
+            }
 
-            uint16_t *tilePal;
-            uint32_t tileRow = getTileRow(bx, tilePal);
-            tileRow >>= ((alignX & 7) * 4);
+            auto pixel = (tileRow >> ((alignX & 7) * 4)) & 0xF;
 
-            if(tileRow & 0xF)
-                *scanLine = tilePal[tileRow & 0xF] | 0x8000;
+            if(pixel)
+                *scanLine = tilePal[pixel] | 0x8000;
             else
                 *scanLine = 0;
 
@@ -293,11 +304,22 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     if(xMosaic)
     {
         int alignX = x + xOffset - (x % (xMosaic + 1));
+        alignX &= (screenBlockTiles << 3) - 1;
+
+        int bx = (alignX >> 3);
+
+        // get start row
+        uint64_t tileRow = getTileRow(bx);
+
         for(; x < xEnd; x += xMosaic + 1, alignX += xMosaic + 1)
         {
-            int bx = (alignX >> 3) & (screenBlockTiles - 1);
+            // load next row when needed
+            if((alignX >> 3) != bx)
+            {
+                bx = (alignX >> 3);
+                tileRow = getTileRow(bx);
+            }
 
-            uint64_t tileRow = getTileRow(bx);
             auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow);
             tilePtr += (alignX & 7);
 
