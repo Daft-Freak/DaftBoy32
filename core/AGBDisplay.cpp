@@ -700,6 +700,13 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
 
         if(effect == 2 /*window*/)
             priority = 4; // fake extra priority level
+        else if(effect == 1 /*blend*/)
+        {
+            // clear effect if current alpha setup would do nothing
+            auto alpha = mem.readIOReg(IO_BLDALPHA);
+            if(!(alpha >> 8) && (alpha & 0xFF) >= 16)
+                effect = 0;
+        }
 
         bool isWin = priority == 4;
 
@@ -1411,6 +1418,10 @@ void AGBDisplay::drawScanLine(int y)
 
         int blendMode = (blendControl & BLDCNT_Effect) >> 6;
 
+        // disable alpha if no-op
+        if(blendMode == 1 && !(blendSrcAlpha < 16 || blendDstAlpha))
+            blendMode = 0;
+
         // attempt to draw as many pixels as possible before checking window again
         int end = screenWidth;
 
@@ -1506,11 +1517,17 @@ void AGBDisplay::drawScanLine(int y)
 
                 uint16_t col;
 
+                int curBlendMode = blendMode;
+
                 // backdrop
                 if(!data)
                 {
                     col = palRAM[0];
                     mask = BLDCNT_SrcBackdrop; // for blending check
+
+                    // ignore alpha blend (nothing to blend with)
+                    if(curBlendMode == 1)
+                        curBlendMode = 0;
                 }
                 else
                 {
@@ -1524,8 +1541,6 @@ void AGBDisplay::drawScanLine(int y)
                     col = data[x];
                 }
 
-                int curBlendMode = blendMode;
-
                 // forced blend for objects
                 if(mask == Layer_OBJ && objMask[x])
                     curBlendMode = 1;
@@ -1537,7 +1552,7 @@ void AGBDisplay::drawScanLine(int y)
                 int srcG = (col >> 5) & 0x1F;
                 int srcB = col & 0x1F;
 
-                if(curBlendMode == 1 && data && (blendSrcAlpha < 16 || blendDstAlpha)) // alpha, ignore if backdrop (nothing to blend with)
+                if(curBlendMode == 1) // alpha
                 {
                     // get next layer
                     uint16_t *nextData;
