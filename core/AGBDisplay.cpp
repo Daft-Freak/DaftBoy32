@@ -1570,7 +1570,7 @@ void AGBDisplay::drawScanLine(int y)
                     // check if its a dst target
                     if(!(blendControl & nextMask))
                     {
-                        scanLine[x] = srcR << 11 | srcG << 6 | srcB;
+                        *scanLine++ = srcR << 11 | srcG << 6 | srcB;
                         break;
                     }
 
@@ -1585,7 +1585,7 @@ void AGBDisplay::drawScanLine(int y)
                     int g = std::min(31, (srcG * blendSrcAlpha + dstG * blendDstAlpha) / 16);
                     int b = std::min(31, (srcB * blendSrcAlpha + dstB * blendDstAlpha) / 16);
 
-                    scanLine[x] = r << 11 | g << 6 | b;
+                    *scanLine++ = r << 11 | g << 6 | b;
                 }
                 else if(curBlendMode == 2) // lighten
                 {
@@ -1595,7 +1595,7 @@ void AGBDisplay::drawScanLine(int y)
                     int g = srcG + ((31 - srcG) * evy) / 16;
                     int b = srcB + ((31 - srcB) * evy) / 16;
 
-                    scanLine[x] = r << 11 | g << 6 | b;
+                    *scanLine++ = r << 11 | g << 6 | b;
                 }
                 else if(curBlendMode == 3) // darken
                 {
@@ -1605,10 +1605,10 @@ void AGBDisplay::drawScanLine(int y)
                     int g = srcG - (srcG * evy) / 16;
                     int b = srcB - (srcB * evy) / 16;
 
-                    scanLine[x] = r << 11 | g << 6 | b;
+                    *scanLine++ = r << 11 | g << 6 | b;
                 }
                 else
-                    scanLine[x] = srcR << 11 | srcG << 6 | srcB;
+                    *scanLine++ = srcR << 11 | srcG << 6 | srcB;
 
                 break;
             }
