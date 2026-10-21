@@ -2,6 +2,11 @@
 #include <cstring>
 #include <tuple>
 
+#ifdef PICO_BUILD
+#include "hardware/interp.h"
+#define PICO_INTERP
+#endif
+
 #include "AGBDisplay.h"
 
 #include "AGBCPU.h"
@@ -57,6 +62,24 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 
     bool hasData = false;
 
+#ifdef PICO_INTERP
+    auto config = interp_default_config();
+    // configure lane 0 for char pointer calc
+    interp_config_set_shift(&config, 32 - 5); // * 32 -> left shift 5 -> rotate right 32 - 5
+    interp_config_set_mask(&config, 5, 14); // & 0x3FF * 32
+    interp_set_config(interp0, 0, &config);
+
+    // configure lane 1 for palette pointer calc
+    config = interp_default_config();
+    interp_config_set_shift(&config, 8 - 1); // >> 8 * 2
+    interp_config_set_mask(&config, 5, 8); // & 0xF000 (pre-shift)
+    interp_config_set_cross_input(&config, true); // use same input as lane 0
+    interp_set_config(interp0, 1, &config);
+
+    interp0->base[0] = uintptr_t(charPtr);
+    interp0->base[1] = uintptr_t(palRam);
+#endif
+
     auto getTileRow = [ty, screenPtr, charPtr, palRam, validDataEnd, &hasData](int bx, uint16_t *&tilePal)
     {
         uint16_t tileMeta = 0;
@@ -66,14 +89,24 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         if(screenPtr)
             tileMeta = screenPtr[bx];
 
+        // 4bit tiles
+        uint32_t tileRow = 0;
+
+#ifdef PICO_INTERP
+        // v flip
+        int tty = ty ^ (((tileMeta >> 11) & 1) * 7);
+
+        interp0->accum[0] = tileMeta;
+        auto thisTilePtr = reinterpret_cast<uint8_t *>(interp0->peek[0]);
+#else
         // v flip
         int tty = ty;
         if(tileMeta & (1 << 11))
             tty = 7 - ty;
 
-        // 4bit tiles
-        uint32_t tileRow = 0;
         auto thisTilePtr = charPtr + (tileMeta & 0x3FF) * 32;
+#endif
+
         // char base pointing past first 64k is invalid
         if(thisTilePtr < validDataEnd)
             tileRow = reinterpret_cast<uint32_t *>(thisTilePtr)[tty];
@@ -84,7 +117,11 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         if(!tileRow)
             return uint32_t(0);
 
+#ifdef PICO_INTERP
+        tilePal = reinterpret_cast<uint16_t *>(interp0->peek[1]);
+#else
         tilePal = palRam + ((tileMeta & 0xF000) >> 8);
+#endif
 
         // h flip
         if(tileMeta & (1 << 10))
@@ -194,6 +231,16 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 
     bool hasData = false;
 
+#ifdef PICO_INTERP
+    auto config = interp_default_config();
+    // configure lane 0 for char pointer calc
+    interp_config_set_shift(&config, 32 - 6); // * 64 -> left shift 6 -> rotate right 32 - 6
+    interp_config_set_mask(&config, 6, 15); // & 0x3FF * 64
+    interp_set_config(interp0, 0, &config);
+
+    interp0->base[0] = uintptr_t(charPtr);
+#endif
+
     auto getTileRow = [ty, screenPtr, charPtr, validDataEnd, &hasData](int bx)
     {
         uint16_t tileMeta = 0;
@@ -203,14 +250,23 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         if(screenPtr)
             tileMeta = screenPtr[bx];
 
+        // 8bit tiles
+        uint64_t tileRow = 0;
+    
+#ifdef PICO_INTERP
+        // v flip
+        int tty = ty ^ (((tileMeta >> 11) & 1) * 7);
+
+        interp0->accum[0] = tileMeta;
+        auto thisTilePtr = reinterpret_cast<uint8_t *>(interp0->peek[0]);
+#else
         // v flip
         int tty = ty;
         if(tileMeta & (1 << 11))
             tty = 7 - ty;
 
-        // 8bit tiles
-        uint64_t tileRow = 0;
         auto thisTilePtr = charPtr + (tileMeta & 0x3FF) * 64;
+#endif
 
         if(thisTilePtr < validDataEnd)
             tileRow = reinterpret_cast<uint64_t *>(thisTilePtr)[tty];
