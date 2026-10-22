@@ -203,12 +203,11 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     }
 
     // full tiles
-    for(; x <= xEnd - 8;)
+    for(; x <= xEnd - 8; x += 8)
     {
         uint16_t *tilePal;
         uint32_t tileRow = getTileRow(tilePal);
 
-        x += 8;
         for(int tx = 0; tx < 8; tx++, tileRow >>= 4, scanLine++)
         {
             if(tileRow & 0xF)
@@ -370,12 +369,10 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     }
 
     // full tiles
-    for(; x <= xEnd - 8;)
+    for(; x <= xEnd - 8; x += 8)
     {
         uint64_t tileRow = getTileRow();
         auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow);
-
-        x += 8;
 
         for(int tx = 0; tx < 8; tx++, scanLine++)
         {
