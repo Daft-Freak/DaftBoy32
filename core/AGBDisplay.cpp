@@ -1335,7 +1335,9 @@ void AGBDisplay::drawScanLine(int y)
     if(layerEnables & Layer_OBJ)
     {
         memset(objData[0], 0, screenWidth * 2);
-        memset(objMask, 0, screenWidth);
+
+        if(hasBlendedObjs)
+            memset(objMask, 0, screenWidth);
 
         if(dispControl & DISPCNT_OBJWindowOn)
             memset(objData[4], 0, screenWidth * 2);
@@ -1592,7 +1594,7 @@ void AGBDisplay::drawScanLine(int y)
                 }
 
                 // forced blend for objects
-                if(mask == Layer_OBJ && objMask[x])
+                if(mask == Layer_OBJ && hasBlendedObjs && objMask[x])
                     curBlendMode = 1;
                 // make sure layer is src (masks conveniently line up)
                 else if(!(blendControl & mask))
@@ -1671,6 +1673,8 @@ void AGBDisplay::recalcObjCache()
     auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
     const int entrySize = 4; // * 16 bit
 
+    hasBlendedObjs = false;
+
     for(int i = 0; i < 128; i++)
     {
         const uint16_t attr0 = oam[i * entrySize + 0];
@@ -1679,6 +1683,13 @@ void AGBDisplay::recalcObjCache()
 
         if(mode != 2/*disable*/)
             maxActiveObj = i + 1;
+        else
+            continue;
+
+        int effect = (attr0 & Attr0_Effect) >> 10;
+
+        if(effect == 1)
+            hasBlendedObjs = true;
     }
 }
 

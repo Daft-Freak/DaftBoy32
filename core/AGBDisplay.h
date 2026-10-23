@@ -45,6 +45,7 @@ private:
     uint16_t lastBGData[4][screenWidth]; // used for mosaic
 
     int maxActiveObj = 128;
+    bool hasBlendedObjs = false;
 
     uint16_t blendControl;
     uint32_t blendAlpha; // and y
