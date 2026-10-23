@@ -1232,7 +1232,7 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
 
         case IO_BLDCNT:
             mem.writeIOReg(addr, data & 0x3FFF);
-            blendControl = data;
+            checkBlendState(data);
             return true;
         case IO_BLDALPHA:
             data &= 0x1F1F; // upper three bits aren't writable and this saves some masking later
@@ -1245,6 +1245,7 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
                 data = (data & 0x1F) | 16 << 8; 
 
             blendAlpha = data | (blendAlpha & 0xFF0000);
+            checkBlendState(mem.readIOReg(IO_BLDCNT));
             return true;
         case IO_BLDY:
             // not readable, saves some work later
@@ -1254,6 +1255,7 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
             mem.writeIOReg(addr, data);
 
             blendAlpha = data << 16 | (blendAlpha & 0xFFFF);
+            checkBlendState(mem.readIOReg(IO_BLDCNT));
             return true;
     }
 
@@ -1470,10 +1472,6 @@ void AGBDisplay::drawScanLine(int y)
 
         int blendMode = (blendControl & BLDCNT_Effect) >> 6;
 
-        // disable alpha if no-op
-        if(blendMode == 1 && !(blendSrcAlpha < 16 || blendDstAlpha))
-            blendMode = 0;
-
         // attempt to draw as many pixels as possible before checking window again
         int end = screenWidth;
 
@@ -1681,5 +1679,22 @@ void AGBDisplay::recalcObjCache()
 
         if(mode != 2/*disable*/)
             maxActiveObj = i + 1;
+    }
+}
+
+void AGBDisplay::checkBlendState(uint16_t control)
+{
+    int blendMode = (control & BLDCNT_Effect) >> 6;
+
+    blendControl = control;
+
+    // clear effect if no-op
+    if(blendMode == 1 && (blendAlpha & 0xFF) == 16 && !(blendAlpha & 0xFF00)) // alpha with src == 16, dst == 0
+    {
+        blendControl &= ~BLDCNT_Effect;
+    }
+    else if(blendMode >= 2 && !(blendAlpha >> 16)) // lighten/darken with y==0
+    {
+        blendControl &= ~BLDCNT_Effect;
     }
 }

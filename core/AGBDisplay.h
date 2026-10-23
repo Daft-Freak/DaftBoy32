@@ -23,6 +23,7 @@ private:
     void drawScanLine(int y);
 
     void recalcObjCache();
+    void checkBlendState(uint16_t control);
 
     AGBCPU &cpu;
     AGBMemory &mem;
