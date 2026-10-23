@@ -1232,9 +1232,19 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
 
         case IO_BLDCNT:
             mem.writeIOReg(addr, data & 0x3FFF);
+            blendControl = data;
             return true;
         case IO_BLDALPHA:
-            mem.writeIOReg(addr, data & 0x1F1F); // upper three bits aren't writable and this saves some masking later
+            data &= 0x1F1F; // upper three bits aren't writable and this saves some masking later
+            mem.writeIOReg(addr, data);
+
+            // store clamped value locally
+            if((data & 0x1F) > 16)
+                data = (data & 0x1F00) | 16;
+            if((data >> 8) > 16)
+                data = (data & 0x1F) | 16 << 8; 
+
+            blendAlpha = data | (blendAlpha & 0xFF0000);
             return true;
         case IO_BLDY:
             // not readable, saves some work later
@@ -1242,6 +1252,8 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
             if(data > 16)
                 data = 16;
             mem.writeIOReg(addr, data);
+
+            blendAlpha = data << 16 | (blendAlpha & 0xFFFF);
             return true;
     }
 
@@ -1438,17 +1450,17 @@ void AGBDisplay::drawScanLine(int y)
     bool xInWin0 = yInWin0 && (win0h & 0xFF) < (win0h >> 8), xInWin1 = yInWin1 && (win1h & 0xFF) < (win1h >> 8);
 
     // blending setup
-    auto blendControl = mem.readIOReg(IO_BLDCNT);
-    uint16_t blendAlpha = mem.readIOReg(IO_BLDALPHA);
-    uint16_t blendY = mem.readIOReg(IO_BLDY);
+    auto blendControl = this->blendControl;
+    uint16_t blendAlpha = this->blendAlpha;
+    uint16_t blendY = this->blendAlpha >> 16;
 
     int blendSrcAlpha = 0;
     int blendDstAlpha = 0;
 
     if(blendAlpha)
     {
-        blendSrcAlpha = std::min(16, blendAlpha & 0xFF);
-        blendDstAlpha = std::min(16, blendAlpha >> 8);
+        blendSrcAlpha = blendAlpha & 0xFF;
+        blendDstAlpha = blendAlpha >> 8;
     }
 
     // merge layers
