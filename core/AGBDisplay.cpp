@@ -1231,31 +1231,44 @@ bool AGBDisplay::writeReg(uint32_t addr, uint16_t data)
         }
 
         case IO_BLDCNT:
-            mem.writeIOReg(addr, data & 0x3FFF);
-            checkBlendState(data);
+            data &= 0x3FFF;
+            if(mem.readIOReg(addr) != data)
+            {
+                mem.writeIOReg(addr, data);
+                checkBlendState(data);
+            }
             return true;
         case IO_BLDALPHA:
             data &= 0x1F1F; // upper three bits aren't writable and this saves some masking later
-            mem.writeIOReg(addr, data);
+            if(mem.readIOReg(addr) != data)
+            {
+                mem.writeIOReg(addr, data);
 
-            // store clamped value locally
-            if((data & 0x1F) > 16)
-                data = (data & 0x1F00) | 16;
-            if((data >> 8) > 16)
-                data = (data & 0x1F) | 16 << 8; 
+                // store clamped value locally
+                if((data & 0x1F) > 16)
+                    data = (data & 0x1F00) | 16;
+                if((data >> 8) > 16)
+                    data = (data & 0x1F) | 16 << 8; 
 
-            blendAlpha = data | (blendAlpha & 0xFF0000);
-            checkBlendState(mem.readIOReg(IO_BLDCNT));
+                blendAlpha = data | (blendAlpha & 0xFF0000);
+                checkBlendState(mem.readIOReg(IO_BLDCNT));
+            }
+
             return true;
         case IO_BLDY:
             // not readable, saves some work later
             data &= 0x1F;
             if(data > 16)
                 data = 16;
-            mem.writeIOReg(addr, data);
 
-            blendAlpha = data << 16 | (blendAlpha & 0xFFFF);
-            checkBlendState(mem.readIOReg(IO_BLDCNT));
+            if(mem.readIOReg(addr) != data)
+            {
+                mem.writeIOReg(addr, data);
+
+                blendAlpha = data << 16 | (blendAlpha & 0xFFFF);
+                checkBlendState(mem.readIOReg(IO_BLDCNT));
+            }
+
             return true;
     }
 
