@@ -135,12 +135,10 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         return tileRow;
     };
 
-    int tx = (x + xOffset) & 7;
     int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
-    int xEnd = std::min(240, (screenBlockTiles - bx) * 8 - tx);
+    int xEnd = std::min(240, x + (screenBlockTiles - bx) * 8);
 
-    auto screenPtrEnd = screenPtr + screenBlockTiles;
     if(screenPtr)
         screenPtr += bx;
 
@@ -148,8 +146,11 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     // TODO: optimise
     if(xMosaic)
     {
-        // first block is always at 0, second should be aligned by first
-        assert((x % (xMosaic + 1)) == 0);
+        if(x < 0)
+        {
+            scanLine -= x;
+            x = 0;
+        }
 
         int alignX = x + xOffset;
         alignX &= (screenBlockTiles << 3) - 1;
@@ -186,24 +187,8 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         return hasData;
     }
 
-    // left edge
-    if(tx)
-    {
-        uint16_t *tilePal;
-        uint32_t tileRow = getTileRow(tilePal);
-        tileRow >>= (tx * 4);
-
-        for(; tx < 8 && x < 240; tx++, x++, tileRow >>= 4, scanLine++)
-        {
-            if(tileRow & 0xF)
-                *scanLine = tilePal[tileRow & 0xF] | 0x8000;
-            else
-                *scanLine = 0;
-        }
-    }
-
-    // full tiles
-    for(; x <= xEnd - 8; x += 8)
+    // drawTextBG aligns us, so we only ever need to draw full tiles
+    for(; x < xEnd; x += 8)
     {
         uint16_t *tilePal;
         uint32_t tileRow = getTileRow(tilePal);
@@ -217,24 +202,7 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         }
     }
 
-    // right edge
-    if(screenPtr < screenPtrEnd)
-    {
-        uint16_t *tilePal;
-        uint32_t tileRow = getTileRow(tilePal);
-
-        int w = 240 - x;
-        
-        for(int tx = 0; tx < w; tx++, tileRow >>= 4, scanLine++)
-        {
-            if(tileRow & 0xF)
-                *scanLine = tilePal[tileRow & 0xF] | 0x8000;
-            else
-                *scanLine = 0;
-        }
-
-        x = 240;
-    }
+    x = xEnd;
 
     return hasData;
 }
@@ -301,12 +269,10 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
 
     auto tilePal = palRam;
 
-    int tx = (x + xOffset) & 7;
     int bx = ((x + xOffset) >> 3) & (screenBlockTiles - 1);
 
-    int xEnd = std::min(240, (screenBlockTiles - bx) * 8 - tx);
+    int xEnd = std::min(240, x + (screenBlockTiles - bx) * 8);
 
-    auto screenPtrEnd = screenPtr + screenBlockTiles;
     if(screenPtr)
         screenPtr += bx;
 
@@ -314,8 +280,11 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     // TODO: optimise
     if(xMosaic)
     {
-        // first block is always at 0, second should be aligned by first
-        assert((x % (xMosaic + 1)) == 0);
+        if(x < 0)
+        {
+            scanLine -= x;
+            x = 0;
+        }
 
         int alignX = x + xOffset;
         alignX &= (screenBlockTiles << 3) - 1;
@@ -352,24 +321,8 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         return hasData;
     }
 
-    // left edge
-    if(tx)
-    {
-        uint64_t tileRow = getTileRow();
-        auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow) + tx;
-
-        for(; tx < 8 && x < 240; tx++, x++, scanLine++)
-        {
-            auto palIndex = *tilePtr++;
-            if(palIndex)
-                *scanLine = tilePal[palIndex] | 0x8000;
-            else
-                *scanLine = 0;
-        }
-    }
-
     // full tiles
-    for(; x <= xEnd - 8; x += 8)
+    for(; x < xEnd; x += 8)
     {
         uint64_t tileRow = getTileRow();
         auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow);
@@ -384,25 +337,7 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
         }
     }
 
-    // right edge
-    if(screenPtr < screenPtrEnd)
-    {
-        uint64_t tileRow = getTileRow();
-        auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow);
-
-        int w = 240 - x;
-        
-        for(int tx = 0; tx < w; tx++, scanLine++)
-        {
-            auto palIndex = *tilePtr++;
-            if(palIndex)
-                *scanLine = tilePal[palIndex] | 0x8000;
-            else
-                *scanLine = 0;
-        }
-
-        x = 240;
-    }
+    x = xEnd;
 
     return hasData;
 }
@@ -442,6 +377,10 @@ static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
         xMosaic = mosaic & 0xF;
 
     int x = 0;
+    // adjust offset to align to tiles
+    scanLine -= xOffset & 7;
+    x = -(xOffset & 7);
+
     bool hasData;
     if(control & BGCNT_SinglePal)
         hasData = drawScreenBlock8(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xMosaic, xOffset);
@@ -454,6 +393,9 @@ static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
         // first block wasn't the second column, so second block is
         if((xOffset >> 3) < screenBlockTiles && (screenSize & 1))  // 2x1, 2x2
             screenPtr += screenBlockTiles * screenBlockTiles;
+
+        // remove offset for second block
+        scanLine += xOffset & 7;
 
         if(control & BGCNT_SinglePal)
             hasData = drawScreenBlock8(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xMosaic, xOffset) || hasData;
@@ -1336,7 +1278,7 @@ void AGBDisplay::drawScanLine(int y)
         return;
 #endif
 
-    uint16_t bgData[4][screenWidth];
+    uint16_t bgData[4][screenWidth + 14]; // 7 pixels buffer on each side (TODO: can merge the padding on each side, but that requires restructuring the array)
     uint16_t objData[5][screenWidth]; // four priority levels for objs +1 for obj window
     uint8_t objMask[240]; // 1 = semi-transparent sprite
 
@@ -1423,46 +1365,46 @@ void AGBDisplay::drawScanLine(int y)
     if(layerEnables & Layer_BG0)
     {
         if((bg0Control & BGCNT_Mosaic) && bgYMosaic && y % (bgYMosaic + 1))
-            memcpy(bgData[0], lastBGData[0], screenWidth * 2); // TODO: check all 0s?
-        else if(!drawBG0(mem, y, bgData[0], palRAM, vram, dispControl, bg0Control, mosaic))
+            memcpy(bgData[0] + 7, lastBGData[0], screenWidth * 2); // TODO: check all 0s?
+        else if(!drawBG0(mem, y, bgData[0] + 7, palRAM, vram, dispControl, bg0Control, mosaic))
             layerEnables &= ~Layer_BG0; // pretend it's not enabled if there's nothing in it
 
         // TODO: may need to force extra draws for mosaic + window
         if((bg0Control & BGCNT_Mosaic) && (mosaic & 0xFF))
-            memcpy(lastBGData[0], bgData[0], screenWidth * 2);
+            memcpy(lastBGData[0], bgData[0] + 7, screenWidth * 2);
     }
 
     if(layerEnables & Layer_BG1)
     {
         if((bg1Control & BGCNT_Mosaic) && bgYMosaic && y % (bgYMosaic + 1))
-            memcpy(bgData[1], lastBGData[1], screenWidth * 2);
-        else if(!drawBG1(mem, y, bgData[1], palRAM, vram, dispControl, bg1Control, mosaic))
+            memcpy(bgData[1] + 7, lastBGData[1], screenWidth * 2);
+        else if(!drawBG1(mem, y, bgData[1] + 7, palRAM, vram, dispControl, bg1Control, mosaic))
             layerEnables &= ~Layer_BG1;
 
         if((bg1Control & BGCNT_Mosaic) && (mosaic & 0xFF))
-            memcpy(lastBGData[1], bgData[1], screenWidth * 2);
+            memcpy(lastBGData[1], bgData[1] + 7, screenWidth * 2);
     }
 
     if(layerEnables & Layer_BG2)
     {
         if((bg2Control & BGCNT_Mosaic) && bgYMosaic && y % (bgYMosaic + 1))
-            memcpy(bgData[2], lastBGData[2], screenWidth * 2);
-        else if(!drawBG2(mem, y, bgData[2], palRAM, vram, dispControl, bg2Control, mosaic, refPointX[0], refPointY[0]))
+            memcpy(bgData[2] + 7, lastBGData[2], screenWidth * 2);
+        else if(!drawBG2(mem, y, bgData[2] + 7, palRAM, vram, dispControl, bg2Control, mosaic, refPointX[0], refPointY[0]))
             layerEnables &= ~Layer_BG2;
 
         if((bg2Control & BGCNT_Mosaic) && (mosaic & 0xFF))
-            memcpy(lastBGData[2], bgData[2], screenWidth * 2);
+            memcpy(lastBGData[2], bgData[2] + 7, screenWidth * 2);
     }
 
     if(layerEnables & Layer_BG3)
     {
         if((bg3Control & BGCNT_Mosaic) && bgYMosaic && y % (bgYMosaic + 1))
-            memcpy(bgData[3], lastBGData[3], screenWidth * 2);
-        else if(!drawBG3(mem, y, bgData[3], palRAM, vram, dispControl, bg3Control, mosaic, refPointX[1], refPointY[1]))
+            memcpy(bgData[3] + 7, lastBGData[3], screenWidth * 2);
+        else if(!drawBG3(mem, y, bgData[3] + 7, palRAM, vram, dispControl, bg3Control, mosaic, refPointX[1], refPointY[1]))
             layerEnables &= ~Layer_BG3;
 
         if((bg3Control & BGCNT_Mosaic) && (mosaic & 0xFF))
-            memcpy(lastBGData[3], bgData[3], screenWidth * 2);
+            memcpy(lastBGData[3], bgData[3] + 7, screenWidth * 2);
     }
 
     // get priority/active layers
@@ -1486,7 +1428,7 @@ void AGBDisplay::drawScanLine(int y)
         for(int l = 0; l < 4; l++)
         {
             if((layerEnables & (1 << l)) && layerPriority[l] == priority)
-                layers[numActiveLayers++] = {bgData[l], 1 << l};
+                layers[numActiveLayers++] = {bgData[l] + 7, 1 << l};
         }
     }
 
