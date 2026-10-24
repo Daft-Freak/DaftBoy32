@@ -1347,22 +1347,27 @@ void AGBDisplay::drawScanLine(int y)
     int spritePriorities;
     if(layerEnables & Layer_OBJ)
     {
-        memset(objData[0], 0, screenWidth * 2);
-
-        if(hasBlendedObjs)
-            memset(objMask, 0, screenWidth);
-
-        if(dispControl & DISPCNT_OBJWindowOn)
-            memset(objData[4], 0, screenWidth * 2);
-
         // recalculate cached info if oam was modified
         if(mem.getOAMDirty())
         {
             recalcObjCache();
             mem.clearOAMDirty();
         }
+        
+        if(y >= minObjY && y <= maxObjY)
+        {
+            memset(objData[0], 0, screenWidth * 2);
 
-        spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl, mosaic, maxActiveObj);
+            if(hasBlendedObjs)
+                memset(objMask, 0, screenWidth);
+
+            if(dispControl & DISPCNT_OBJWindowOn)
+                memset(objData[4], 0, screenWidth * 2);
+
+            spritePriorities = drawOBJs(mem, y, objData, objMask, palRAM, vram, dispControl, mosaic, maxActiveObj);
+        }
+        else
+            spritePriorities = 0;
     }
     else
         spritePriorities = 0;
@@ -1686,11 +1691,21 @@ void AGBDisplay::recalcObjCache()
     auto oam = reinterpret_cast<uint16_t *>(mem.getOAM());
     const int entrySize = 4; // * 16 bit
 
+    // height, flip the shape bits for widths
+    static const uint8_t sizes[][4]
+    {
+        { 8, 16, 32, 64}, // square
+        { 8,  8, 16, 32}, // tall
+        {16, 32, 32, 64}, // wide
+    };
+
     hasBlendedObjs = false;
+    int minY = 240, maxY = 0;
 
     for(int i = 0; i < 128; i++)
     {
         const uint16_t attr0 = oam[i * entrySize + 0];
+        const uint16_t attr1 = oam[i * entrySize + 1];
 
         auto mode = (attr0 & Attr0_Mode) >> 8;
 
@@ -1699,11 +1714,43 @@ void AGBDisplay::recalcObjCache()
         else
             continue;
 
+        // check if there are any blended objects
         int effect = (attr0 & Attr0_Effect) >> 10;
 
         if(effect == 1)
             hasBlendedObjs = true;
+
+        // check y
+        int spriteY = attr0 & Attr0_Y;
+
+        auto shape = (attr0 & Attr0_Shape) >> 14;
+        int size = ((attr1 & Attr1_Size) >> 14);
+        int spriteH = sizes[shape][size];
+
+        // possibly doubled size (mode 3)
+        int doubledH = mode == 3 ? spriteH * 2 : spriteH;
+
+        // wrap
+        if(spriteY + doubledH > 256)
+            spriteY -= 256;
+
+        int bottomY = spriteY + doubledH;
+
+        // clamp to screen
+        if(spriteY < 0)
+            spriteY = 0;
+
+        if(bottomY > 240)
+            bottomY = 240;
+
+        if(spriteY < minY)
+            minY = spriteY;
+        if(bottomY > maxY)
+            maxY = bottomY;
     }
+
+    minObjY = minY;
+    maxObjY = maxY;
 }
 
 void AGBDisplay::checkBlendState(uint16_t control)

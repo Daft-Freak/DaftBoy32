@@ -46,6 +46,7 @@ private:
 
     int maxActiveObj = 128;
     bool hasBlendedObjs = false;
+    uint8_t minObjY = 0, maxObjY = 240;
 
     uint16_t blendControl;
     uint32_t blendAlpha; // and y
