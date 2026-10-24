@@ -652,8 +652,10 @@ void AGBMemory::doSRAMWrite(uint32_t addr, uint8_t data)
 
     if(saveType == SaveType::Flash_64K || saveType == SaveType::Flash_128K)
         writeFlash(addr, data);
+#ifndef PICO_BUILD // FIXME
     else if(saveType == SaveType::RAM)
         cartSaveData[addr & 0x7FFF] = data;
+#endif
 }
 
 template<class T>

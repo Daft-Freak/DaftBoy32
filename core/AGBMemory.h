@@ -241,8 +241,8 @@ private:
     uint64_t eepromReadData;
 
 #ifdef PICO_BUILD
-    // FIXME: temporarily breaking flash saves
-    uint8_t cartSaveData[32 * 1024]; // RAM/flash
+    // FIXME: temporarily breaking flash/ram saves
+    uint8_t cartSaveData[8 * 1024];
 #else
     uint8_t cartSaveData[128 * 1024]; // RAM/flash
 #endif
