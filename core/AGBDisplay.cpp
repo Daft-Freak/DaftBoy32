@@ -1709,9 +1709,7 @@ void AGBDisplay::recalcObjCache()
 
         auto mode = (attr0 & Attr0_Mode) >> 8;
 
-        if(mode != 2/*disable*/)
-            maxActiveObj = i + 1;
-        else
+        if(mode == 2/*disable*/)
             continue;
 
         // check if there are any blended objects
@@ -1734,6 +1732,10 @@ void AGBDisplay::recalcObjCache()
         if(spriteY + doubledH > 256)
             spriteY -= 256;
 
+        // offscreen
+        if(spriteY >= 160)
+            continue;
+
         int bottomY = spriteY + doubledH;
 
         // clamp to screen
@@ -1747,6 +1749,8 @@ void AGBDisplay::recalcObjCache()
             minY = spriteY;
         if(bottomY > maxY)
             maxY = bottomY;
+
+        maxActiveObj = i + 1;
     }
 
     minObjY = minY;
