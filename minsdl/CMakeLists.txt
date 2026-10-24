@@ -1,6 +1,9 @@
 # minimal SDL shell
 
-add_executable(DaftBoySDL Main.cpp)
+add_executable(DaftBoySDL
+    InputRecorder.cpp
+    Main.cpp
+)
 
 find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3)
 

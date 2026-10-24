@@ -9,6 +9,8 @@
 #include "AGBCPU.h"
 #include "DMGCPU.h"
 
+#include "InputRecorder.h"
+
 static bool quit = false;
 static bool turbo = false;
 
@@ -160,7 +162,10 @@ int main(int argc, char *argv[])
 
     uint32_t timeToRun = 0; // in us
     bool timeLimit = false;
+    uint32_t frameCount = 0;
     std::string romFilename;
+
+    InputRecorder rec;
 
     int i = 1;
 
@@ -179,6 +184,10 @@ int main(int argc, char *argv[])
         }
         else if(arg == "--no-bios")
             useBIOS = false;
+        else if(arg == "--record" && i + 1 < argc)
+            rec.setFile(argv[++i], false);
+        else if(arg == "--replay" && i + 1 < argc)
+            rec.setFile(argv[++i], true);
         else
             break;
     }
@@ -351,7 +360,8 @@ int main(int argc, char *argv[])
 
         if(isAGB)
         {
-            agbCPU.setInputs(inputs);
+            if(!rec.isReplay())
+                agbCPU.setInputs(inputs);
 
             // run frames until there isn't any room left for audio
             while(true)
@@ -362,6 +372,10 @@ int main(int argc, char *argv[])
 
                 if(turbo)
                 {
+                    // update record/replay
+                    if(rec.update(frameCount++, inputs))
+                        agbCPU.setInputs(rec.getInputs());
+
                     agbCPU.runFrame();
 
                     agbCPU.getAPU().update();
@@ -375,7 +389,12 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
+                    // update record/replay
+                    if(rec.update(frameCount++, inputs))
+                        agbCPU.setInputs(rec.getInputs());
+
                     agbCPU.runFrame();
+
                     agbCPU.getAPU().update();
                     agbCPU.getDisplay().update();
                 }
