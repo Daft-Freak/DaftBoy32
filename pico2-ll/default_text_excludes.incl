@@ -1,0 +1,2 @@
+# move CPU to RAM, except BIOS emulation
+*(EXCLUDE_FILE(*libgcc.a: *libm.a: *AGBCPU.cpp.o*) .text* .text._ZN6AGBCPU*swi*  .text._ZN6AGBCPU*SWI*)
