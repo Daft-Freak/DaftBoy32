@@ -94,6 +94,7 @@ target_link_libraries(DaftBoyAdvanceP2
 
     hardware_dma
     hardware_i2c
+    hardware_interp
     hardware_pio
     hardware_psram
     hardware_pwm
