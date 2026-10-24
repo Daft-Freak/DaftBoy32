@@ -20,6 +20,9 @@ void AGBCPU::reset()
     for(auto &reg: regs)
         reg = 0;
 
+    for(int i = 0; i < 16; i++)
+        regMap[i] = i;
+
     cpsr = Flag_I | Flag_F | 0x13 /*supervisor mode*/;
     modeChanged();
     
@@ -1243,7 +1246,7 @@ int AGBCPU::doALUOp(int op, Reg destReg, uint32_t op1, uint32_t op2, bool carry)
     if(destReg == Reg::PC)
     {
         // don't attempt to restore in user/system mode as SPSR doesn't exist (a test ends up doing this...)
-        if(regBankOffset)
+        if(curSP != Reg::SP)
             cpsr = getSPSR(); // restore
 
         int ret = doALUOpNoCond(op, destReg, op1, op2);

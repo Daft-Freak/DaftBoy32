@@ -120,13 +120,7 @@ private:
     Reg mapReg(Reg r) const
     {
         int iReg = static_cast<int>(r);
-        if(!regBankOffset || iReg < 8 || r == Reg::PC)
-            return r;
-
-        if(regBankOffset != 8/*FIQ*/ && iReg < 13)
-            return r;
-
-        return static_cast<Reg>(iReg + regBankOffset);
+        return static_cast<Reg>(regMap[iReg]);
     }
 
     uint32_t reg(Reg r) const {return regs[static_cast<int>(mapReg(r))];}
@@ -164,25 +158,39 @@ private:
         {
             case 0x10: // User
             case 0x1F: // System
-                regBankOffset = 0;
+                regMap[13] = static_cast<int>(Reg::R13);
+                regMap[14] = static_cast<int>(Reg::R14);
                 break;
             case 0x11: // FIQ
-                regBankOffset = static_cast<int>(Reg::R8_fiq) - static_cast<int>(Reg::R8);
+                regMap[13] = static_cast<int>(Reg::R13_fiq);
+                regMap[14] = static_cast<int>(Reg::R14_fiq);
                 break;
             case 0x13: // SVC
-                regBankOffset = static_cast<int>(Reg::R13_svc) - static_cast<int>(Reg::R13);
+                regMap[13] = static_cast<int>(Reg::R13_svc);
+                regMap[14] = static_cast<int>(Reg::R14_svc);
                 break;
             case 0x17: // ABT
-                regBankOffset = static_cast<int>(Reg::R13_abt) - static_cast<int>(Reg::R13);
+                regMap[13] = static_cast<int>(Reg::R13_abt);
+                regMap[14] = static_cast<int>(Reg::R14_abt);
                 break;
             case 0x12: // IRQ
-                regBankOffset = static_cast<int>(Reg::R13_irq) - static_cast<int>(Reg::R13);
+                regMap[13] = static_cast<int>(Reg::R13_irq);
+                regMap[14] = static_cast<int>(Reg::R14_irq);
                 break;
             case 0x1B: // UND
-                regBankOffset = static_cast<int>(Reg::R13_und) - static_cast<int>(Reg::R13);
+                regMap[13] = static_cast<int>(Reg::R13_svc);
+                regMap[14] = static_cast<int>(Reg::R14_svc);
                 break;
             default:
                 assert(!"Bad CPSR mode");
+        }
+
+        bool isFIQ = regMap[13] == static_cast<int>(Reg::R13_fiq);
+        if(isFIQ != (regMap[8] == static_cast<int>(Reg::R8_fiq)))
+        {
+            // remap R8-12 on FIQ entry/exit
+            for(int i = 8; i < 13; i++)
+                regMap[i] = isFIQ ? (static_cast<int>(Reg::R8_fiq) + (i - 8)) : i;
         }
 
         curSP = mapReg(Reg::SP);
@@ -276,7 +284,7 @@ private:
     uint32_t spsr[6]; // fiq, svc, abt, irq, und
 
     Reg curSP = Reg::SP, curLR = Reg::LR;
-    int regBankOffset = 0;
+    uint8_t regMap[16];
 
     const uint8_t *pcPtr = nullptr;
     int pcSCycles = 0, pcNCycles = 0;
