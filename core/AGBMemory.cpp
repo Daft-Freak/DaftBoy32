@@ -674,7 +674,9 @@ void AGBMemory::writeFlash(uint32_t addr, uint8_t data)
     // write a byte
     else if(flashState == FlashState::Write)
     {
+#ifndef PICO_BUILD // FIXME
         cartSaveData[(addr & 0xFFFF) + (flashBank << 16)] = data;
+#endif
         flashState = FlashState::Read;
         return;
     }
@@ -689,13 +691,16 @@ void AGBMemory::writeFlash(uint32_t addr, uint8_t data)
         if(data == 0x10 && addr == 0xE005555 && flashState == FlashState::Erase)
         {
             // erase all
+            // FIXME: also broken in pico build
             memset(cartSaveData, 0xFF, sizeof(cartSaveData));
             flashState = FlashState::Read;
         }
         else if(data == 0x30 && flashState == FlashState::Erase)
         {
             // erase 4k sector
+#ifndef PICO_BUILD // FIXME
             memset(cartSaveData + (addr & 0xF000) + (flashBank << 16), 0xFF, 0x1000);
+#endif
             flashState = FlashState::Read;
         }
         else if(data == 0x80 && addr == 0xE005555)
