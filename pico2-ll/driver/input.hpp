@@ -18,3 +18,5 @@ struct InputDriver {
     void (*init)();
     void (*update)(uint32_t &);
 };
+
+extern const InputDriver tca9555_driver;
