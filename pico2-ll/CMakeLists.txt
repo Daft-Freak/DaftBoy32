@@ -39,6 +39,8 @@ add_executable(DaftBoyAdvanceP2
     Filesystem.cpp
     Storage.cpp
 
+    driver/tca9555.cpp
+
     fatfs/ff.c
     fatfs/ffunicode.c
 )
