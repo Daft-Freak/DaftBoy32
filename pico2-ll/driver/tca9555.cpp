@@ -68,16 +68,16 @@ void update_tca9555(uint32_t &new_buttons) {
     new_buttons |= Button::B;
 
   if(!(gpio & (1 << TCA9555_X_IO)))
-    new_buttons |= Button::X;
+    new_buttons |= Button::L;
 
   if(!(gpio & (1 << TCA9555_Y_IO)))
-    new_buttons |= Button::Y;
+    new_buttons |= Button::R;
 
   if(!(gpio & (1 << TCA9555_START_IO)))
-    new_buttons |= Button::HOME;
+    new_buttons |= Button::START;
 
   if(!(gpio & (1 << TCA9555_SELECT_IO)))
-    new_buttons |= Button::MENU;
+    new_buttons |= Button::SELECT;
 }
 
 extern const InputDriver tca9555_driver {

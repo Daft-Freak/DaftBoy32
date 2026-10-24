@@ -2,20 +2,19 @@
 #include <cstdint>
 
 enum Button : unsigned int {
-    DPAD_LEFT = 1,
-    DPAD_RIGHT = 2,
-    DPAD_UP = 4,
-    DPAD_DOWN = 8,
-    A = 16,
-    B = 32,
-    X = 64,
-    Y = 128,
-    MENU = 256,
-    HOME = 512,
-    JOYSTICK = 1024
+    A          = 1 << 0,
+    B          = 1 << 1,
+    SELECT     = 1 << 2,
+    START      = 1 << 3,
+    DPAD_RIGHT = 1 << 4,
+    DPAD_LEFT  = 1 << 5,
+    DPAD_UP    = 1 << 6,
+    DPAD_DOWN  = 1 << 7,
+    L          = 1 << 9,
+    R          = 1 << 8,
 };
 
 struct InputDriver {
-  void (*init)();
-  void (*update)(uint32_t &);
+    void (*init)();
+    void (*update)(uint32_t &);
 };
