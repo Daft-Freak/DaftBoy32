@@ -1738,12 +1738,17 @@ void AGBDisplay::recalcObjCache()
 
         int bottomY = spriteY + doubledH;
 
-        // clamp to screen
-        if(spriteY < 0)
-            spriteY = 0;
+        // get X/W
+        int spriteX = attr1 & Attr1_X;
+        const int spriteW = sizes[shape ? shape ^ 3 : 0][size];
 
-        if(bottomY > 240)
-            bottomY = 240;
+        // wrap
+        if(((spriteX + spriteW) & 0x1FF) < spriteX)
+            spriteX -= 512;
+
+        // offscreen again
+        if(spriteX >= 240)
+            continue;
 
         if(spriteY < minY)
             minY = spriteY;
@@ -1752,6 +1757,13 @@ void AGBDisplay::recalcObjCache()
 
         maxActiveObj = i + 1;
     }
+
+    // clamp to screen
+    if(minY < 0)
+        minY = 0;
+
+    if(maxY > 160)
+        maxY = 160;
 
     minObjY = minY;
     maxObjY = maxY;
