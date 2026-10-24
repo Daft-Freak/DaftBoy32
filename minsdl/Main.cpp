@@ -158,7 +158,7 @@ int main(int argc, char *argv[])
     int screenScale = 5;
     bool useBIOS = true;
 
-    uint32_t timeToRun = 0;
+    uint32_t timeToRun = 0; // in us
     bool timeLimit = false;
     std::string romFilename;
 
@@ -175,7 +175,7 @@ int main(int argc, char *argv[])
         else if(arg == "--time" && i + 1 < argc)
         {
             timeLimit = true;
-            timeToRun = std::stoi(argv[++i]) * 1000;
+            timeToRun = std::stoi(argv[++i]) * 1000000;
         }
         else if(arg == "--no-bios")
             useBIOS = false;
@@ -329,7 +329,11 @@ int main(int argc, char *argv[])
         // fixed length benchmark
         if(timeLimit)
         {
-            timeToRun -= 10;
+            if(isAGB)
+                timeToRun -= std::min(uint32_t(16742), timeToRun); // ~16.742ms per frame
+            else
+                timeToRun -= 10000;
+
             if(timeToRun == 0)
             {
                 quit = true;
@@ -358,7 +362,7 @@ int main(int argc, char *argv[])
 
                 if(turbo)
                 {
-                    agbCPU.run(10);
+                    agbCPU.runFrame();
 
                     agbCPU.getAPU().update();
                     while(agbCPU.getAPU().getNumSamples())
@@ -377,7 +381,7 @@ int main(int argc, char *argv[])
                 }
             }
 
-            // should be at vblank if not turbo mode, otherwise we don't care
+            // should be at vblank
             SDL_UpdateTexture(texture, nullptr, screenData, screenWidth * 2);
         }
         else
