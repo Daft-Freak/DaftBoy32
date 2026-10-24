@@ -19,7 +19,7 @@
 //#include "BIOS.h"
 #include "Display.h"
 // drivers
-#include "i2c.h"
+#include "input.hpp"
 
 #include "AGBCPU.h"
 
@@ -39,9 +39,12 @@ static uint32_t emuFrames = 0;
 
 static repeating_timer_t audioTimer;
 
-static const I2CDriver *i2cDrivers[]
+static const InputDriver *inputDrivers[]
 {
+    &tca9555_driver
 };
+
+static volatile uint16_t inputs = 0;
 
 void __not_in_flash_func(display_draw_line)(void *, int line, uint16_t *buf)
 {
@@ -70,7 +73,8 @@ static void core1Main()
         while(lastScanline < 80){}
 
         auto start = get_absolute_time();
-        
+
+        cpu.setInputs(inputs);
         cpu.runFrame();
         emuTime += absolute_time_diff_us(start, get_absolute_time());
 
@@ -108,7 +112,7 @@ static void initHardware()
     gpio_set_function(PICO_DEFAULT_I2C_SCL_PIN, GPIO_FUNC_I2C);
 
     // init i2c drivers
-    for(auto &driver : i2cDrivers)
+    for(auto &driver : inputDrivers)
         driver->init();
 #endif
 
@@ -190,6 +194,14 @@ int main()
 
     while(true)
     {
+        // sync inputs
+        uint32_t newInputs = 0;
+
+        for(auto &driver : inputDrivers)
+            driver->update(newInputs);
+
+        inputs = newInputs;
+
         update_display();
 
         auto frames = emuFrames;
@@ -206,6 +218,8 @@ int main()
 
             printf("%lu frames in %luus (%i%%)\n", frames, time, percent);
         }
+
+        sleep_ms(10);
     }
 
     return 0;
