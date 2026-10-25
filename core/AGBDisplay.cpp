@@ -871,17 +871,22 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
             auto out = scanLine[isWin ? priority : 0] + (spriteX + sx);
             auto outMask = objMask + (spriteX + sx);
             auto outPrio = objPriority + (spriteX + sx);
-            auto outEnd = scanLine[isWin ? priority : 0] + 240;
+            // regular sprites use one cycle per pixel, clamp the end pointer
+            auto outEnd = scanLine[isWin ? priority : 0] + std::min(240, spriteX + sx + cyclesRemaining);
+
+            cyclesRemaining -= (spriteW - xOff);
 
             int tilesX = spriteW >> 3;
 
             if(attr0 & Attr0_SinglePal)
             {
                 // 8bit tiles
-                for(int stx = sx >> 3; stx < tilesX && out != outEnd && cyclesRemaining; stx++)
+                auto ptr = charPtr + startTile * 32 + (sy & 7) * 8;
+
+                for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
                 {
                     int tileX = hFlip ? (tilesX - 1) - stx : stx;
-                    auto tilePtr = charPtr + startTile * 32 + tileX * 64 + (sy & 7) * 8;
+                    auto tilePtr = ptr + tileX * 64;
 
                     if(hFlip)
                         tilePtr += 7 - xOff;
@@ -889,35 +894,47 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                         tilePtr += xOff;
 
                     // pixels in tile
-                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, out++, outMask++, outPrio++)
+                    if(isWin)
                     {
-                        cyclesRemaining--;
-
-                        auto palIndex = *tilePtr;
-                        
-                        if(isWin)
-                            *out = *out || palIndex;
-                        else if(!*out || *outPrio > priority)
+                        for(int x = xOff; x < 8 && out != outEnd; x++, out++)
                         {
-                            *outPrio = priority;
+                            auto palIndex = *tilePtr;
+                            *out = *out | palIndex;
 
-                            // horizontal mosaic
-                            if(xMosaic && (out - scanLine[0]) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
-                            {
-                                *out = *(out - 1);
-                                *outMask = effect;
-                            }
-                            else if(palIndex)
-                            {
-                                *out = spritePal[palIndex] | 0x8000;
-                                *outMask = effect;
-                            }
+                            if(hFlip)
+                                --tilePtr;
+                            else
+                                ++tilePtr;
                         }
+                    }
+                    else
+                    {
+                        for(int x = xOff; x < 8 && out != outEnd; x++, out++, outMask++, outPrio++)
+                        {
+                            auto palIndex = *tilePtr;
+                            
+                            if(!*out || *outPrio > priority)
+                            {
+                                *outPrio = priority;
 
-                        if(hFlip)
-                            --tilePtr;
-                        else
-                            ++tilePtr;
+                                // horizontal mosaic
+                                if(xMosaic && (out - scanLine[0]) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
+                                {
+                                    *out = *(out - 1);
+                                    *outMask = effect;
+                                }
+                                else if(palIndex)
+                                {
+                                    *out = spritePal[palIndex] | 0x8000;
+                                    *outMask = effect;
+                                }
+                            }
+
+                            if(hFlip)
+                                --tilePtr;
+                            else
+                                ++tilePtr;
+                        }
                     }
 
                     xOff = 0;
@@ -927,11 +944,12 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
             {
                 // 4bit tiles
                 spritePal += ((attr2 & Attr2_Pal) >> 8);
+                auto ptr = charPtr + startTile * 32 + (sy & 7) * 4;
 
-                for(int stx = sx >> 3; stx < tilesX && out != outEnd && cyclesRemaining; stx++)
+                for(int stx = sx >> 3; stx < tilesX && out != outEnd; stx++)
                 {
                     int tileX = hFlip ? (tilesX - 1) - stx : stx;
-                    uint32_t tileRow = reinterpret_cast<uint32_t *>(charPtr + (startTile + tileX) * 32)[sy & 7];
+                    uint32_t tileRow = *reinterpret_cast<uint32_t *>(ptr + tileX * 32);
 
                     if(hFlip)
                     {
@@ -943,25 +961,30 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
                     if(xOff)
                         tileRow >>= (xOff * 4);
 
-                    for(int x = xOff; x < 8 && out != outEnd && cyclesRemaining; x++, tileRow >>= 4, out++, outMask++, outPrio++)
+                    if(isWin)
                     {
-                        cyclesRemaining--;
-                        if(isWin)
-                            *out = *out || (tileRow & 0xF);
-                        else if(!*out || *outPrio > priority)
+                        for(int x = xOff; x < 8 && out != outEnd; x++, tileRow >>= 4, out++)
+                            *out = *out | (tileRow & 0xF);
+                    }
+                    else
+                    {
+                        for(int x = xOff; x < 8 && out != outEnd; x++, tileRow >>= 4, out++, outMask++, outPrio++)
                         {
-                            *outPrio = priority;
+                            if(!*out || *outPrio > priority)
+                            {
+                                *outPrio = priority;
 
-                            // horizontal mosaic
-                            if(xMosaic && (out - scanLine[0]) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
-                            {
-                                *out = *(out - 1);
-                                *outMask = effect;
-                            }
-                            else if(tileRow & 0xF)
-                            {
-                                *out = spritePal[tileRow & 0xF] | 0x8000;
-                                *outMask = effect;
+                                // horizontal mosaic
+                                if(xMosaic && (out - scanLine[0]) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
+                                {
+                                    *out = *(out - 1);
+                                    *outMask = effect;
+                                }
+                                else if(tileRow & 0xF)
+                                {
+                                    *out = spritePal[tileRow & 0xF] | 0x8000;
+                                    *outMask = effect;
+                                }
                             }
                         }
                     }
