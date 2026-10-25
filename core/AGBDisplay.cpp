@@ -406,6 +406,161 @@ static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
     return hasData;
 }
 
+#ifdef PICO_INTERP
+static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t mosaic, int32_t xOffset, int32_t yOffset, int16_t a, int16_t c)
+{
+    int screenSize = (control & BGCNT_ScreenSize) >> 14;
+
+    // apply vertical mosaic
+    int xMosaic = 0;
+    if(control & BGCNT_Mosaic)
+        xMosaic = mosaic & 0xF;
+
+    auto blockBase = (control & BGCNT_ScreenBase) << 3; // >> 8 * 0x800
+    auto screenPtr = reinterpret_cast<uint8_t *>(vram + blockBase);
+
+    auto charBase = ((control & BGCNT_CharBase) >> 2) * 0x4000;
+    auto charPtr = vram + charBase;
+    auto validDataEnd = vram + 0x10000;
+
+    bool wrap = control & BGCNT_Wrap;
+
+    bool ret = false;
+
+    const int tileFracBits = 8;
+    const int tileSizeBits = 3;
+
+    const int blockFracBits = tileFracBits + tileSizeBits;
+    const int blockSizeBits = 4 + screenSize; // 4-7 bits (16-128)
+
+    // block X
+    auto config = interp_default_config();
+    interp_config_set_add_raw(&config, true);
+    interp_config_set_shift(&config, blockFracBits);
+
+    if(wrap)
+        interp_config_set_mask(&config, 0, blockSizeBits - 1);
+    else
+    {
+        // sign extend from shifted value if not wrapping
+        interp_config_set_mask(&config, 0, 31 - blockFracBits);
+        interp_config_set_signed(&config, true);
+    }
+    interp_set_config(interp0, 0, &config);
+
+    // block Y
+    const int yShift = blockFracBits - blockSizeBits;
+    interp_config_set_shift(&config, yShift);
+
+    if(wrap)
+        interp_config_set_mask(&config, blockSizeBits, (blockSizeBits * 2) - 1);
+    else
+        interp_config_set_mask(&config, blockSizeBits, 31 - yShift);
+
+    interp_set_config(interp0, 1, &config);
+
+    // tile X
+    config = interp_default_config();
+    interp_config_set_add_raw(&config, true);
+    interp_config_set_shift(&config, tileFracBits);
+    interp_config_set_mask(&config, 0, tileSizeBits - 1);
+    interp_set_config(interp1, 0, &config);
+
+    // tile Y
+    interp_config_set_shift(&config, tileFracBits - tileSizeBits);
+    interp_config_set_mask(&config, tileSizeBits, (tileSizeBits * 2) - 1);
+    interp_set_config(interp1, 1, &config);
+
+    interp0->base[2] = uintptr_t(screenPtr);
+    interp1->base[2] = uintptr_t(charPtr);
+
+    // setup base/accum
+    interp0->accum[0] = xOffset;
+    interp0->accum[1] = yOffset;
+    interp0->base[0] = a;
+    interp0->base[1] = c;
+
+    interp1->accum[0] = xOffset;
+    interp1->accum[1] = yOffset;
+    interp1->base[0] = a;
+    interp1->base[1] = c;
+
+    if(!wrap)
+    {
+        for(int x = 0; x < 240; x++, scanLine++)
+        {
+            auto bx = interp0->add_raw[0];
+            auto by = interp0->add_raw[1];
+
+            auto tilePtr = reinterpret_cast<uint8_t *>(interp0->pop[2]);
+            auto charPtr = reinterpret_cast<uint8_t *>(interp1->pop[2]);
+
+            if(xMosaic && x % (xMosaic + 1))
+            {
+                *scanLine = *(scanLine - 1);
+                continue;
+            }
+
+            // clamp
+            // bx < 0 || bx >= (1 << blockSizeBits)
+            if(bx >> blockSizeBits || by >> blockSizeBits * 2)
+            {
+                *scanLine = 0;
+                continue;
+            }
+
+            uint8_t tileIndex = 0;
+            
+            if(tilePtr < validDataEnd)
+                tileIndex = *tilePtr;
+
+            // 8bit tiles
+            uint8_t palIndex = *(charPtr + tileIndex * 64);
+
+            if(palIndex)
+            {
+                *scanLine = palRam[palIndex] | 0x8000;
+                ret = true;
+            }
+            else
+                *scanLine = 0;
+        }
+    }
+    else
+    {
+        for(int x = 0; x < 240; x++, scanLine++)
+        {
+            auto tilePtr = reinterpret_cast<uint8_t *>(interp0->pop[2]);
+            auto charPtr = reinterpret_cast<uint8_t *>(interp1->pop[2]);
+
+            if(xMosaic && x % (xMosaic + 1))
+            {
+                *scanLine = *(scanLine - 1);
+                continue;
+            }
+
+            uint8_t tileIndex = 0;
+            
+            if(tilePtr < validDataEnd)
+                tileIndex = *tilePtr;
+
+            // 8bit tiles
+            uint8_t palIndex = *(charPtr + tileIndex * 64);
+
+            if(palIndex)
+            {
+                *scanLine = palRam[palIndex] | 0x8000;
+                ret = true;
+            }
+            else
+                *scanLine = 0;
+        }
+    }
+
+    return ret;
+}
+
+#else
 static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t mosaic, int32_t xOffset, int32_t yOffset, int16_t a, int16_t c)
 {
     int screenSize = (control & BGCNT_ScreenSize) >> 14;
@@ -489,6 +644,7 @@ static bool drawAffineBG(uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, ui
 
     return ret;
 }
+#endif
 
 // these two are always "text" mode
 static bool drawBG0(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vram, uint16_t dispControl, uint16_t control, uint16_t mosaic)
