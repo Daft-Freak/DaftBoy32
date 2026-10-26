@@ -948,17 +948,18 @@ static void drawAffineOBJ(
     auto out = scanLine + (spriteX + sx);
     auto outMask = objMask + (spriteX + sx);
     auto outPrio = objPriority + (spriteX + sx);
-    auto outEnd = scanLine + 240;
+    // regular sprites use two cycles per pixel, clamp the end pointer
+    auto outEnd = scanLine + std::min(240, spriteX + sx + cyclesRemaining / 2);
+
+    cyclesRemaining -= (halfW * 2 - sx) * 2;
 
     if(!(attr0 & Attr0_SinglePal))
         spritePal += ((attr2 & Attr2_Pal) >> 8);
 
     bool validData = false;
 
-    for(int x = sx; x < halfW * 2 && out != outEnd && cyclesRemaining > 1; x++, out++, outMask++, outPrio++, tx += a, ty += c)
+    for(int x = sx; x < halfW * 2 && out != outEnd; x++, out++, outMask++, outPrio++, tx += a, ty += c)
     {
-        cyclesRemaining -= 2;
-
         if(tx < 0 || ty < 0 || tx >= (spriteW << 8) || ty >= (spriteH << 8))
             continue;
 
