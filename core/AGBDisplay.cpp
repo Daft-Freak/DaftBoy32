@@ -778,7 +778,7 @@ static bool drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
     return false;
 }
 
-template<bool isWin>
+template<bool isWin, bool isMosaic>
 static void drawRegularOBJ(
     int sx, int sy, int spriteX, int spriteW, int spriteH, int startTile, int &cyclesRemaining, int effect, int priority,
     uint16_t scanLine[240], uint8_t objMask[240], uint8_t objPriority[240],
@@ -849,7 +849,7 @@ static void drawRegularOBJ(
                         *outPrio = priority;
 
                         // horizontal mosaic
-                        if(xMosaic && (out - scanLine) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
+                        if(isMosaic && (out - scanLine) % (xMosaic + 1) && (stx * 8 + x) != xOff /*not first pixel*/)
                         {
                             *out = *(out - 1);
                             *outMask = effect;
@@ -925,7 +925,7 @@ static void drawRegularOBJ(
     }
 }
 
-template<bool isWin>
+template<bool isWin, bool isMosaic>
 static void drawAffineOBJ(
     int sx, int sy, int spriteX, int spriteW, int spriteH, int startTile, int &cyclesRemaining, int effect, int priority, int mode,
     uint16_t scanLine[240], uint8_t objMask[240], uint8_t objPriority[240],
@@ -977,7 +977,7 @@ static void drawAffineOBJ(
             tile += (ty >> 11) * 32;
 
         // horizontal mosaic
-        if(xMosaic && (out - scanLine) % (xMosaic + 1) && validData)
+        if(isMosaic && (out - scanLine) % (xMosaic + 1) && validData)
         {
             *out = *(out - 1);
             if(!isWin)
@@ -1167,7 +1167,9 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
             c = oam[(affineIndex * 4 + 2) * entrySize + 3];
             d = oam[(affineIndex * 4 + 3) * entrySize + 3];
 
-            auto draw = isWin ? &drawAffineOBJ<true> : &drawAffineOBJ<false>;
+            auto draw = isWin ? 
+                (xMosaic ? &drawAffineOBJ< true, true>: &drawAffineOBJ< true, false>) :
+                (xMosaic ? &drawAffineOBJ<false, true>: &drawAffineOBJ<false, false>);
 
             draw(
                 sx, sy, spriteX, spriteW, spriteH, startTile, cyclesRemaining, effect, priority, mode,
@@ -1179,7 +1181,9 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
         }
         else
         {
-            auto draw = isWin ? &drawRegularOBJ<true> : &drawRegularOBJ<false>;
+            auto draw = isWin ? 
+                (xMosaic ? &drawRegularOBJ< true, true>: &drawRegularOBJ< true, false>) :
+                (xMosaic ? &drawRegularOBJ<false, true>: &drawRegularOBJ<false, false>);
 
             draw(
                 sx, sy, spriteX, spriteW, spriteH, startTile, cyclesRemaining, effect, priority,
