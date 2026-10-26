@@ -960,7 +960,8 @@ static void drawAffineOBJ(
 
     for(int x = sx; x < halfW * 2 && out != outEnd; x++, out++, outMask++, outPrio++, tx += a, ty += c)
     {
-        if(tx < 0 || ty < 0 || tx >= (spriteW << 8) || ty >= (spriteH << 8))
+        //if(tx < 0 || ty < 0 || tx >= (spriteW << 8) || ty >= (spriteH << 8))
+        if((unsigned(tx) >> 8) >= unsigned(spriteW) || (unsigned(ty) >> 8) >= unsigned(spriteH))
             continue;
 
         if(*out && (isWin || *outPrio <= priority))
