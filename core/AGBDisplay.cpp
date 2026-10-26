@@ -778,8 +778,9 @@ static bool drawBG3(AGBMemory &mem, int y, uint16_t *scanLine, uint16_t *palRam,
     return false;
 }
 
+template<bool isWin>
 static void drawRegularOBJ(
-    int sx, int sy, int spriteX, int spriteW, int spriteH, int startTile, int &cyclesRemaining, bool isWin, int effect, int priority,
+    int sx, int sy, int spriteX, int spriteW, int spriteH, int startTile, int &cyclesRemaining, int effect, int priority,
     uint16_t scanLine[240], uint8_t objMask[240], uint8_t objPriority[240],
     uint16_t attr0, uint16_t attr1, uint16_t attr2,
     uint16_t *spritePal, uint8_t *charPtr,
@@ -924,8 +925,9 @@ static void drawRegularOBJ(
     }
 }
 
+template<bool isWin>
 static void drawAffineOBJ(
-    int sx, int sy, int spriteX, int spriteW, int spriteH, int startTile, int &cyclesRemaining, bool isWin, int effect, int priority, int mode,
+    int sx, int sy, int spriteX, int spriteW, int spriteH, int startTile, int &cyclesRemaining, int effect, int priority, int mode,
     uint16_t scanLine[240], uint8_t objMask[240], uint8_t objPriority[240],
     uint16_t attr0, uint16_t attr1, uint16_t attr2, int16_t a, int16_t b, int16_t c, int16_t d,
     uint16_t *spritePal, uint8_t *charPtr,
@@ -1165,8 +1167,10 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
             c = oam[(affineIndex * 4 + 2) * entrySize + 3];
             d = oam[(affineIndex * 4 + 3) * entrySize + 3];
 
-           drawAffineOBJ(
-                sx, sy, spriteX, spriteW, spriteH, startTile, cyclesRemaining, isWin, effect, priority, mode,
+            auto draw = isWin ? &drawAffineOBJ<true> : &drawAffineOBJ<false>;
+
+            draw(
+                sx, sy, spriteX, spriteW, spriteH, startTile, cyclesRemaining, effect, priority, mode,
                 scanLine[isWin ? priority : 0], objMask, objPriority,
                 attr0, attr1, attr2, a, b, c, d,
                 spritePal, charPtr,
@@ -1175,8 +1179,10 @@ static int drawOBJs(AGBMemory &mem, int y, uint16_t scanLine[5][240], uint8_t ob
         }
         else
         {
-            drawRegularOBJ(
-                sx, sy, spriteX, spriteW, spriteH, startTile, cyclesRemaining, isWin, effect, priority,
+            auto draw = isWin ? &drawRegularOBJ<true> : &drawRegularOBJ<false>;
+
+            draw(
+                sx, sy, spriteX, spriteW, spriteH, startTile, cyclesRemaining, effect, priority,
                 scanLine[isWin ? priority : 0], objMask, objPriority,
                 attr0, attr1, attr2,
                 spritePal, charPtr,
