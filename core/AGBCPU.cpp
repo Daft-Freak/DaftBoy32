@@ -1416,6 +1416,68 @@ int AGBCPU::doALUOpNoCond(int op, Reg destReg, uint32_t op1, uint32_t op2)
     return mem.prefetchTiming32(pcSCycles);
 }
 
+#ifdef SELF_MODIFYING
+
+int AGBCPU::doTHUMB01MoveShifted(uint16_t opcode, uint32_t pc)
+{
+    auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    // zero out the registers in the opcode
+    opcode &= ~0x3F;
+
+    loReg(dstReg) = doTHUMBPassthrough1SrcDst(opcode, loReg(srcReg));
+    return mem.prefetchTiming16(pcSCycles);
+}
+
+int AGBCPU::doTHUMB0102(uint16_t opcode, uint32_t pc)
+{
+    auto instOp = (opcode >> 11) & 0x3;
+    auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    if(instOp == 3) // format 2, add/sub
+    {
+        bool isImm = opcode & (1 << 10);
+
+        if(isImm)
+            return doTHUMB01MoveShifted(opcode, pc); // has similar enough encoding and does the right thing
+        else
+        {
+            uint32_t op1 = loReg(srcReg), op2 = loReg(static_cast<Reg>((opcode >> 6) & 7));
+
+            // zero out the registers in the opcode
+            // and replace 2nd src with R1
+            opcode = (opcode & ~0x1FF) | 1 << 6;
+
+            loReg(dstReg) = doTHUMBPassthrough2SrcDst(opcode, op1, op2);
+        }
+    }
+    else // format 1, move shifted register
+        return doTHUMB01MoveShifted(opcode, pc);
+
+    return mem.prefetchTiming16(pcSCycles);
+}
+
+int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t pc)
+{
+    auto dstReg = static_cast<Reg>((opcode >> 8) & 7);
+
+    // zero out the registers in the opcode
+    opcode &= ~0x0700;
+
+    auto res = doTHUMBPassthrough1SrcDst(opcode, loReg(dstReg));
+
+    auto instOp = (opcode >> 11) & 0x3;
+
+    if(instOp != 1) // CMP
+        loReg(dstReg) = res;
+
+    return mem.prefetchTiming16(pcSCycles);
+}
+
+#else
+
 int AGBCPU::doTHUMB01MoveShifted(uint16_t opcode, uint32_t pc)
 {
     auto instOp = (opcode >> 11) & 0x1;
@@ -1571,6 +1633,7 @@ int AGBCPU::doTHUMB03(uint16_t opcode, uint32_t pc)
 
     return mem.prefetchTiming16(pcSCycles);
 }
+#endif
 
 int AGBCPU::doTHUMB040506(uint16_t opcode, uint32_t pc)
 {
@@ -1581,6 +1644,67 @@ int AGBCPU::doTHUMB040506(uint16_t opcode, uint32_t pc)
     else // format 4, alu
         return doTHUMB04ALU(opcode, pc);
 }
+
+#ifdef SELF_MODIFYING
+
+int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t pc)
+{
+    auto instOp = (opcode >> 6) & 0xF;
+    auto srcReg = static_cast<Reg>((opcode >> 3) & 7);
+    auto dstReg = static_cast<Reg>(opcode & 7);
+
+    auto op1 = loReg(dstReg);
+    auto op2 = loReg(srcReg);
+
+    uint32_t res;
+
+    opcode = (opcode & ~0x3F) | 1 << 3;
+
+    res = doTHUMBPassthrough2SrcDst(opcode, op1, op2);
+
+    switch(instOp)
+    {
+        case 0x0: // AND
+        case 0x1: // EOR
+        case 0x5: // ADC
+        case 0x6: // SBC
+        case 0x9: // NEG
+        case 0xC: // ORR
+        case 0xE: // BIC
+        case 0xF: // MVN
+            loReg(dstReg) = res;
+            return mem.prefetchTiming16(pcSCycles);
+
+        case 0x2: // LSL
+        case 0x3: // LSR
+        case 0x4: // ASR
+        case 0x7: // ROR
+            loReg(dstReg) = res;
+            return mem.iCycle() + mem.prefetchTiming16(pcSCycles); // +1I for shift by register
+
+        case 0x8: // TST
+        case 0xA: // CMP
+        case 0xB: // CMN
+            return mem.prefetchTiming16(pcSCycles);
+
+        case 0xD:
+        {
+            loReg(dstReg) = res;
+
+            // leading 0s or 1s
+            int tmp = op1 & (1 << 31) ? ~op1 : op1;
+            int prefix = tmp ? __builtin_clz(tmp) : 32;
+
+            // more cycles the more bytes are non 0/ff
+            int iCycles = prefix == 32 ? 1 : (4 - prefix / 8);
+            return mem.iCycle(iCycles) + mem.prefetchTiming16(pcSCycles, pcNCycles);
+        }
+        default:
+            __builtin_unreachable();
+    }
+}
+
+#else
 
 int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t pc)
 {
@@ -1756,6 +1880,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t pc)
 
     return mem.prefetchTiming16(pcSCycles);
 }
+#endif
 
 int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t pc)
 {
@@ -1784,6 +1909,10 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t pc)
         {
             auto dst = reg(dstReg);
 
+#ifdef SELF_MODIFYING
+            opcode = (opcode & 0xFF00) | 1 << 3;
+            doTHUMBPassthrough2SrcDst(opcode, dst, src);
+#else
             auto res = dst - src;
             bool carry = !(src > dst);
 
@@ -1792,6 +1921,7 @@ int AGBCPU::doTHUMB05HiReg(uint16_t opcode, uint32_t pc)
                     | (res == 0 ? Flag_Z : 0)
                     | (carry ? Flag_C : 0)
                     | (((dst ^ src) & signBit) && ((dst ^ res) & signBit) ? Flag_V : 0);
+#endif
             break;
         }
         case 2: // MOV
@@ -2199,6 +2329,40 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t pc)
     bool condVal = false;
     switch(cond)
     {
+#ifdef SELF_MODIFYING
+        case 0x0:
+        case 0x1:
+        case 0x2:
+        case 0x3:
+        case 0x4:
+        case 0x5:
+        case 0x6:
+        case 0x7:
+        case 0x8:
+        case 0x9:
+        case 0xA:
+        case 0xB:
+        case 0xC:
+        case 0xD:
+        {
+            // ITE cond
+            opcode = 0xBF04 | cond << 4 | (~cond & 1) << 3;
+            asm(
+                "adr r2, 1f\n"                  /* get address */
+                "strh %[opcode], [r2]\n"        /* write the modified opcode */
+                "isb\n"                         /* flush pipeline */
+                "msr APSR_nzcvq, %[cpsr]\n"     /* copy flags in */
+                "1:\n" 
+                "ite eq\n"                      /* placeholder for opcode */
+                "moveq %[res], #1\n"
+                "movne %[res], #0\n"
+                : [res] "=r" (condVal)
+                : [opcode] "r" (opcode), [cpsr] "r" (cpsr)
+                : "r2"
+            );
+            break;
+        }
+#else
         case 0x0: // BEQ
             condVal = cpsr & Flag_Z;
             break;
@@ -2241,7 +2405,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t pc)
         case 0xD: // BLE
             condVal = (cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
             break;
-
+#endif
         // E undefined
 
         case 0xF: // format 17, SWI
@@ -2302,6 +2466,50 @@ int AGBCPU::doTHUMB19LongBranchLink(uint16_t opcode, uint32_t pc)
         return pcNCycles + pcSCycles * 2;
     }
 }
+
+#ifdef SELF_MODIFYING
+
+uint32_t AGBCPU::doTHUMBPassthrough1SrcDst(uint16_t opcode, uint32_t op1)
+{
+    uint32_t rawCPSROut;
+
+    asm(
+        "adr r1, 1f\n"                  /* get address */
+        "strh %[opcode], [r1]\n"        /* write the modified opcode */
+        "isb\n"                         /* flush pipeline */
+        "msr APSR_nzcvq, %[cpsr]\n"     /* copy flags in */
+        "1:\n" 
+        "adds %[op1], #4\n"             /* placeholder for opcode */
+        "mrs %[cpsrOut], APSR\n"        /* copy flags out */
+        : [op1] "+{r0}" (op1), [cpsrOut] "=r" (rawCPSROut)
+        : [opcode] "r" (opcode), [cpsr] "r" (cpsr)
+        : "r1"
+    );
+    cpsr = (cpsr & ~0xF0000000) | (rawCPSROut & 0xF0000000);
+    return op1;
+}
+
+uint32_t AGBCPU::doTHUMBPassthrough2SrcDst(uint16_t opcode, uint32_t op1, uint32_t op2)
+{
+    uint32_t rawCPSROut;
+
+    asm(
+        "adr r2, 1f\n"                  /* get address */
+        "strh %[opcode], [r2]\n"        /* write the modified opcode */
+        "isb\n"                         /* flush pipeline */
+        "msr APSR_nzcvq, %[cpsr]\n"     /* copy flags in */
+        "1:\n" 
+        "adds %[op1], #4\n"             /* placeholder for opcode */
+        "mrs %[cpsrOut], APSR\n"        /* copy flags out */
+        : [op1] "+{r0}" (op1), [cpsrOut] "=r" (rawCPSROut)
+        : [op2] "{r1}" (op2), [opcode] "r" (opcode), [cpsr] "r" (cpsr)
+        : "r2"
+    );
+    cpsr = (cpsr & ~0xF0000000) | (rawCPSROut & 0xF0000000);
+    return op1;
+}
+
+#endif
 
 void AGBCPU::updateARMPC(uint32_t pc)
 {

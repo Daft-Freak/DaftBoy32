@@ -5,6 +5,10 @@
 #include "AGBDisplay.h"
 #include "AGBMemory.h"
 
+#ifdef PICO_BUILD
+#define SELF_MODIFYING
+#endif
+
 class AGBCPU final
 {
 public:
@@ -244,6 +248,11 @@ private:
     int doTHUMB1617(uint16_t opcode, uint32_t pc);
     int doTHUMB18UncondBranch(uint16_t opcode, uint32_t pc);
     int doTHUMB19LongBranchLink(uint16_t opcode, uint32_t pc);
+
+#ifdef SELF_MODIFYING
+    uint32_t doTHUMBPassthrough1SrcDst(uint16_t opcode, uint32_t op1);
+    uint32_t doTHUMBPassthrough2SrcDst(uint16_t opcode, uint32_t op1, uint32_t op2);
+#endif
 
     void updateARMPC(uint32_t pc);
     void updateTHUMBPC(uint32_t pc);
