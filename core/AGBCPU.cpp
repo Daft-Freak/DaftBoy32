@@ -1700,7 +1700,7 @@ int AGBCPU::doTHUMB04ALU(uint16_t opcode, uint32_t pc)
                 carry = res & (1 << 31) ? Flag_C : 0;
 
             cpsr = (cpsr & ~(Flag_C | Flag_N | Flag_Z)) | (res & signBit) | (res == 0 ? Flag_Z : 0) | carry;
-            return pcSCycles + 1;
+            return mem.iCycle() + mem.prefetchTiming16(pcSCycles);
         }
         case 0x8: // TST
             res = op1 & op2;
