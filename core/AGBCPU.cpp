@@ -2348,17 +2348,16 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t pc)
             // ITE cond
             opcode = 0xBF04 | cond << 4 | (~cond & 1) << 3;
             asm(
-                "adr r2, 1f\n"                  /* get address */
-                "strh %[opcode], [r2]\n"        /* write the modified opcode */
+                "adr %[res], 1f\n"              /* get address */
+                "strh %[opcode], [%[res]]\n"    /* write the modified opcode */
                 "isb\n"                         /* flush pipeline */
                 "msr APSR_nzcvq, %[cpsr]\n"     /* copy flags in */
                 "1:\n" 
                 "ite eq\n"                      /* placeholder for opcode */
                 "moveq %[res], #1\n"
                 "movne %[res], #0\n"
-                : [res] "=r" (condVal)
+                : [res] "=&r" (condVal)
                 : [opcode] "r" (opcode), [cpsr] "r" (cpsr)
-                : "r2"
             );
             break;
         }
@@ -2406,6 +2405,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t pc)
             condVal = (cpsr & Flag_Z) || !!(cpsr & Flag_N) != !!(cpsr & Flag_V);
             break;
 #endif
+
         // E undefined
 
         case 0xF: // format 17, SWI
@@ -2474,16 +2474,15 @@ uint32_t AGBCPU::doTHUMBPassthrough1SrcDst(uint16_t opcode, uint32_t op1)
     uint32_t rawCPSROut;
 
     asm(
-        "adr r1, 1f\n"                  /* get address */
-        "strh %[opcode], [r1]\n"        /* write the modified opcode */
+        "adr %[cpsrOut], 1f\n"          /* get address */
+        "strh %[opcode], [%[cpsrOut]]\n"/* write the modified opcode */
         "isb\n"                         /* flush pipeline */
         "msr APSR_nzcvq, %[cpsr]\n"     /* copy flags in */
         "1:\n" 
         "adds %[op1], #4\n"             /* placeholder for opcode */
         "mrs %[cpsrOut], APSR\n"        /* copy flags out */
-        : [op1] "+{r0}" (op1), [cpsrOut] "=r" (rawCPSROut)
+        : [op1] "+{r0}" (op1), [cpsrOut] "=&r" (rawCPSROut)
         : [opcode] "r" (opcode), [cpsr] "r" (cpsr)
-        : "r1"
     );
     cpsr = (cpsr & ~0xF0000000) | (rawCPSROut & 0xF0000000);
     return op1;
@@ -2494,16 +2493,15 @@ uint32_t AGBCPU::doTHUMBPassthrough2SrcDst(uint16_t opcode, uint32_t op1, uint32
     uint32_t rawCPSROut;
 
     asm(
-        "adr r2, 1f\n"                  /* get address */
-        "strh %[opcode], [r2]\n"        /* write the modified opcode */
+        "adr %[cpsrOut], 1f\n"          /* get address */
+        "strh %[opcode], [%[cpsrOut]]\n"/* write the modified opcode */
         "isb\n"                         /* flush pipeline */
         "msr APSR_nzcvq, %[cpsr]\n"     /* copy flags in */
         "1:\n" 
         "adds %[op1], #4\n"             /* placeholder for opcode */
         "mrs %[cpsrOut], APSR\n"        /* copy flags out */
-        : [op1] "+{r0}" (op1), [cpsrOut] "=r" (rawCPSROut)
+        : [op1] "+{r0}" (op1), [cpsrOut] "=&r" (rawCPSROut)
         : [op2] "{r1}" (op2), [opcode] "r" (opcode), [cpsr] "r" (cpsr)
-        : "r2"
     );
     cpsr = (cpsr & ~0xF0000000) | (rawCPSROut & 0xF0000000);
     return op1;
