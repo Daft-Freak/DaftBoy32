@@ -2352,6 +2352,7 @@ int AGBCPU::doTHUMB1617(uint16_t opcode, uint32_t pc)
                 "strh %[opcode], [%[res]]\n"    /* write the modified opcode */
                 "isb\n"                         /* flush pipeline */
                 "msr APSR_nzcvq, %[cpsr]\n"     /* copy flags in */
+                ".align 2\n"
                 "1:\n" 
                 "ite eq\n"                      /* placeholder for opcode */
                 "moveq %[res], #1\n"
@@ -2478,6 +2479,7 @@ uint32_t AGBCPU::doTHUMBPassthrough1SrcDst(uint16_t opcode, uint32_t op1)
         "strh %[opcode], [%[cpsrOut]]\n"/* write the modified opcode */
         "isb\n"                         /* flush pipeline */
         "msr APSR_nzcvq, %[cpsr]\n"     /* copy flags in */
+        ".align 2\n"
         "1:\n" 
         "adds %[op1], #4\n"             /* placeholder for opcode */
         "mrs %[cpsrOut], APSR\n"        /* copy flags out */
@@ -2497,6 +2499,7 @@ uint32_t AGBCPU::doTHUMBPassthrough2SrcDst(uint16_t opcode, uint32_t op1, uint32
         "strh %[opcode], [%[cpsrOut]]\n"/* write the modified opcode */
         "isb\n"                         /* flush pipeline */
         "msr APSR_nzcvq, %[cpsr]\n"     /* copy flags in */
+        ".align 2\n"
         "1:\n" 
         "adds %[op1], #4\n"             /* placeholder for opcode */
         "mrs %[cpsrOut], APSR\n"        /* copy flags out */
