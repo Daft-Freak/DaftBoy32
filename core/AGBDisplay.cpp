@@ -1528,7 +1528,6 @@ void AGBDisplay::drawScanLine(int y)
         return;
 #endif
 
-    uint16_t bgData[4][screenWidth + 14]; // 7 pixels buffer on each side (TODO: can merge the padding on each side, but that requires restructuring the array)
     uint16_t objData[5][screenWidth]; // four priority levels for objs +1 for obj window
     uint8_t objMask[240]; // 1 = semi-transparent sprite
 
@@ -1622,46 +1621,35 @@ void AGBDisplay::drawScanLine(int y)
     if(layerEnables & Layer_BG0)
     {
         if((bg0Control & BGCNT_Mosaic) && bgYMosaic && y % (bgYMosaic + 1))
-            memcpy(bgData[0] + 7, lastBGData[0], screenWidth * 2); // TODO: check all 0s?
+        {} // reuse the data from last time
         else if(!drawBG0(mem, y, bgData[0] + 7, palRAM, vram, dispControl, bg0Control, mosaic))
             layerEnables &= ~Layer_BG0; // pretend it's not enabled if there's nothing in it
 
         // TODO: may need to force extra draws for mosaic + window
-        if((bg0Control & BGCNT_Mosaic) && (mosaic & 0xFF))
-            memcpy(lastBGData[0], bgData[0] + 7, screenWidth * 2);
     }
 
     if(layerEnables & Layer_BG1)
     {
         if((bg1Control & BGCNT_Mosaic) && bgYMosaic && y % (bgYMosaic + 1))
-            memcpy(bgData[1] + 7, lastBGData[1], screenWidth * 2);
+        {} // reuse the data from last time
         else if(!drawBG1(mem, y, bgData[1] + 7, palRAM, vram, dispControl, bg1Control, mosaic))
             layerEnables &= ~Layer_BG1;
-
-        if((bg1Control & BGCNT_Mosaic) && (mosaic & 0xFF))
-            memcpy(lastBGData[1], bgData[1] + 7, screenWidth * 2);
     }
 
     if(layerEnables & Layer_BG2)
     {
         if((bg2Control & BGCNT_Mosaic) && bgYMosaic && y % (bgYMosaic + 1))
-            memcpy(bgData[2] + 7, lastBGData[2], screenWidth * 2);
+        {} // reuse the data from last time
         else if(!drawBG2(mem, y, bgData[2] + 7, palRAM, vram, dispControl, bg2Control, mosaic, refPointX[0], refPointY[0]))
             layerEnables &= ~Layer_BG2;
-
-        if((bg2Control & BGCNT_Mosaic) && (mosaic & 0xFF))
-            memcpy(lastBGData[2], bgData[2] + 7, screenWidth * 2);
     }
 
     if(layerEnables & Layer_BG3)
     {
         if((bg3Control & BGCNT_Mosaic) && bgYMosaic && y % (bgYMosaic + 1))
-            memcpy(bgData[3] + 7, lastBGData[3], screenWidth * 2);
+        {} // reuse the data from last time
         else if(!drawBG3(mem, y, bgData[3] + 7, palRAM, vram, dispControl, bg3Control, mosaic, refPointX[1], refPointY[1]))
             layerEnables &= ~Layer_BG3;
-
-        if((bg3Control & BGCNT_Mosaic) && (mosaic & 0xFF))
-            memcpy(lastBGData[3], bgData[3] + 7, screenWidth * 2);
     }
 
     // get priority/active layers

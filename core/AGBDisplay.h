@@ -42,7 +42,8 @@ private:
     unsigned int remainingScanlineDots = scanlineDots;
     unsigned int remainingModeDots = screenWidth;
     uint16_t *screenData; // rgb555
-    uint16_t lastBGData[4][screenWidth]; // used for mosaic
+    // 7 pixels buffer on each side (TODO: can merge the padding on each side, but that requires restructuring the array)
+    uint16_t bgData[4][screenWidth + 14];
 
     int maxActiveObj = 128;
     bool hasBlendedObjs = false;
