@@ -984,18 +984,25 @@ int AGBCPU::doARMSwap(uint32_t opcode)
 // op2 is only for the immediate version
 int AGBCPU::doARMPSRTransfer(uint32_t opcode, uint32_t op2)
 {
-    if(opcode & (1 << 25)) // immediate
-    {
-        bool isSPSR = opcode & (1 << 22);
+    bool isSPSR = opcode & (1 << 22);
 
-        assert((opcode & 0xF000) == 0xF000);
-        assert(opcode & (1 << 21));
+    if(opcode & (1 << 21)) // MSR
+    {
+        uint32_t val;
+        if(opcode & (1 << 25)) // immediate
+        {
+            assert((opcode & 0xF000) == 0xF000);
+            val = op2;
+        }
+        else
+        {
+            assert((opcode & 0xFFF0) == 0xF000);
+            val = reg(static_cast<Reg>(opcode & 0xF));
+        }
 
         bool wF = opcode & (1 << 19);
         // 17/18 should be 0
         bool wC = opcode & (1 << 16);
-        auto val = op2;
-
         uint32_t mask = (wF ? 0xFF000000 : 0) |
                         (wC ? 0x000000FF : 0);
 
@@ -1009,47 +1016,20 @@ int AGBCPU::doARMPSRTransfer(uint32_t opcode, uint32_t op2)
             cpsr = (cpsr & ~mask) | (val & mask);
             modeChanged();
         }
-
-        return mem.prefetchTiming32(pcSCycles);
     }
-    else
+    else // MRS
     {
-        bool isSPSR = opcode & (1 << 22);
-        if(opcode & (1 << 21)) // MSR
-        {
-            assert((opcode & 0xFFF0) == 0xF000);
+        assert(!(opcode & (1 << 25)));
+        assert((opcode & 0xF0FFF) == 0xF0000);
 
-            bool wF = opcode & (1 << 19);
-            // 17/18 should be 0
-            bool wC = opcode & (1 << 16);
-            auto val = reg(static_cast<Reg>(opcode & 0xF));
-
-            uint32_t mask = (wF ? 0xFF000000 : 0) |
-                            (wC ? 0x000000FF : 0);
-
-            if(isSPSR)
-            {
-                auto &spsr = getSPSR();
-                spsr = (spsr & ~mask) | (val & mask);
-            }
-            else
-            {
-                cpsr = (cpsr & ~mask) | (val & mask);
-                modeChanged();
-            }
-        }
-        else // MRS
-        {
-            assert((opcode & 0xF0FFF) == 0xF0000);
-            auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
-            if(isSPSR)
-                reg(destReg) = getSPSR();
-            else
-                reg(destReg) = cpsr;
-        }
-
-        return mem.prefetchTiming32(pcSCycles);
+        auto destReg = static_cast<Reg>((opcode >> 12) & 0xF);
+        if(isSPSR)
+            reg(destReg) = getSPSR();
+        else
+            reg(destReg) = cpsr;
     }
+
+    return mem.prefetchTiming32(pcSCycles);
 }
 
 int AGBCPU::doARMSingleDataTransfer(uint32_t opcode, bool isReg, bool isPre)
