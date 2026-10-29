@@ -52,7 +52,7 @@ enum OAMAttr2Bits
 static const int screenBlockTiles = 32; // 32x32
 
 // draw screen block 4/8 helpers
-static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, int xMosaic, uint16_t xOffset)
+static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
 {
     auto validDataEnd = vram + 0x10000;
 
@@ -142,51 +142,6 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     if(screenPtr)
         screenPtr += bx;
 
-    // mosaic
-    // TODO: optimise
-    if(xMosaic)
-    {
-        if(x < 0)
-        {
-            scanLine -= x;
-            x = 0;
-        }
-
-        int alignX = x + xOffset;
-        alignX &= (screenBlockTiles << 3) - 1;
-
-        // get start row
-        uint16_t *tilePal;
-        uint32_t tileRow = getTileRow(tilePal);
-
-        for(; x < xEnd; x += xMosaic + 1, alignX += xMosaic + 1)
-        {
-            // load next row when needed
-            if((alignX >> 3) != bx)
-            {
-                // if mosaic is > 8 we might need to skip a tile
-                if(screenPtr && (alignX >> 3) != bx + 1)
-                    screenPtr++;
-
-                bx = (alignX >> 3);
-                tileRow = getTileRow(tilePal);
-            }
-
-            auto pixel = (tileRow >> ((alignX & 7) * 4)) & 0xF;
-
-            if(pixel)
-                *scanLine = tilePal[pixel] | 0x8000;
-            else
-                *scanLine = 0;
-
-            auto v = *scanLine++;
-            // deliberately going past xEnd so second block is aligned
-            for(int m = 0; m < std::min(xMosaic, 240 - x - 1); m++)
-                *scanLine++ = v;
-        }
-        return hasData;
-    }
-
     // drawTextBG aligns us, so we only ever need to draw full tiles
     for(; x < xEnd; x += 8)
     {
@@ -207,7 +162,7 @@ static bool drawScreenBlock4(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     return hasData;
 }
 
-static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, int xMosaic, uint16_t xOffset)
+static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *screenPtr, uint8_t *charPtr, uint16_t *palRam, uint8_t *vram, uint16_t xOffset)
 {
     auto validDataEnd = vram + 0x10000;
 
@@ -276,51 +231,6 @@ static bool drawScreenBlock8(int &x, int ty, uint16_t *scanLine, uint16_t *scree
     if(screenPtr)
         screenPtr += bx;
 
-    // mosaic
-    // TODO: optimise
-    if(xMosaic)
-    {
-        if(x < 0)
-        {
-            scanLine -= x;
-            x = 0;
-        }
-
-        int alignX = x + xOffset;
-        alignX &= (screenBlockTiles << 3) - 1;
-
-        // get start row
-        uint64_t tileRow = getTileRow();
-
-        for(; x < xEnd; x += xMosaic + 1, alignX += xMosaic + 1)
-        {
-            // load next row when needed
-            if((alignX >> 3) != bx)
-            {
-                // if mosaic is > 8 we might need to skip a tile
-                if(screenPtr && (alignX >> 3) != bx + 1)
-                    screenPtr++;
-
-                bx = (alignX >> 3);
-                tileRow = getTileRow();
-            }
-
-            auto tilePtr = reinterpret_cast<uint8_t *>(&tileRow);
-            tilePtr += (alignX & 7);
-
-            if(*tilePtr)
-                *scanLine = tilePal[*tilePtr] | 0x8000;
-            else
-                *scanLine = 0;
-
-            auto v = *scanLine++;
-            // deliberately going past xEnd so second block is aligned
-            for(int m = 0; m < std::min(xMosaic, 240 - x - 1); m++)
-                *scanLine++ = v;
-        }
-        return hasData;
-    }
-
     // full tiles
     for(; x < xEnd; x += 8)
     {
@@ -378,14 +288,14 @@ static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
 
     int x = 0;
     // adjust offset to align to tiles
-    scanLine -= xOffset & 7;
+    auto offsetScanLine = scanLine - (xOffset & 7);
     x = -(xOffset & 7);
 
     bool hasData;
     if(control & BGCNT_SinglePal)
-        hasData = drawScreenBlock8(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xMosaic, xOffset);
+        hasData = drawScreenBlock8(x, ty, offsetScanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
     else
-        hasData = drawScreenBlock4(x, ty, scanLine, firstBlockPtr, charPtr, palRam, vram, xMosaic, xOffset);
+        hasData = drawScreenBlock4(x, ty, offsetScanLine, firstBlockPtr, charPtr, palRam, vram, xOffset);
 
     // possible second block
     if(x < 240)
@@ -394,13 +304,20 @@ static bool drawTextBG(int y, uint16_t *scanLine, uint16_t *palRam, uint8_t *vra
         if((xOffset >> 3) < screenBlockTiles && (screenSize & 1))  // 2x1, 2x2
             screenPtr += screenBlockTiles * screenBlockTiles;
 
-        // remove offset for second block
-        scanLine += xOffset & 7;
-
         if(control & BGCNT_SinglePal)
-            hasData = drawScreenBlock8(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xMosaic, xOffset) || hasData;
+            hasData = drawScreenBlock8(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset) || hasData;
         else
-            hasData = drawScreenBlock4(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xMosaic, xOffset) || hasData;
+            hasData = drawScreenBlock4(x, ty, scanLine + x, screenPtr, charPtr, palRam, vram, xOffset) || hasData;
+    }
+
+    // apply mosaic
+    if(xMosaic)
+    {
+        for(int x = 0; x < 240; x += (xMosaic + 1))
+        {
+            for(int m = 0; m < xMosaic && x + m + 1 < 240; m++)
+                scanLine[x + m + 1] = scanLine[x];
+        }
     }
 
     return hasData;
